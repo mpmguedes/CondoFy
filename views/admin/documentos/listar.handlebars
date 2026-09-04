@@ -1,12 +1,16 @@
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-  <h1 class="h3 mb-0"><i class="bi bi-folder2-open me-2"></i>Documentos</h1>
-  <a href="/admin/documentos/nova" class="btn btn-primary"><i class="bi bi-upload me-1"></i>Novo documento</a>
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Documentos</h1>
+    <p class="subtitle">Repositório documental do condomínio</p>
+  </div>
+  <a href="/admin/documentos/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">upload</span>Novo documento</a>
 </div>
 
 {{#unless driveLigado}}
-<div class="alert alert-warning"><i class="bi bi-info-circle me-1"></i>Google Drive não configurado — o upload de ficheiros ficará indisponível até configurar o <code>.env</code>.</div>
+<div class="alert alert-warning"><span class="material-symbols-outlined me-1">info</span>Google Drive não configurado — o upload de ficheiros ficará indisponível até configurar o <code>.env</code>.</div>
 {{/unless}}
 
+{{#if documentos}}
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
@@ -43,14 +47,15 @@
           </td>
           <td class="text-end">
             <form action="/admin/documentos/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar este documento?');">
-              <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              <button class="btn btn-sm btn-outline-danger" title="Eliminar"><span class="material-symbols-outlined">delete</span></button>
             </form>
           </td>
         </tr>
-        {{else}}
-        <tr><td colspan="6" class="text-center text-muted py-4">Sem documentos.</td></tr>
         {{/each}}
       </tbody>
     </table>
   </div>
 </div>
+{{else}}
+{{> _empty-state icon="folder" titulo="Sem documentos" descricao="Carregue documentos (atas, faturas, contratos…) para o repositório." link="/admin/documentos/nova" linkTexto="Novo documento"}}
+{{/if}}

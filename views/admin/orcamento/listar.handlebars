@@ -1,8 +1,12 @@
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-  <h1 class="h3 mb-0"><i class="bi bi-graph-up me-2"></i>Orçamentos</h1>
-  <a href="/admin/orcamento/nova" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Novo orçamento</a>
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Orçamentos</h1>
+    <p class="subtitle">Orçamentos anuais, rubricas e distribuição</p>
+  </div>
+  <a href="/admin/orcamento/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">add</span>Novo orçamento</a>
 </div>
 
+{{#if orcamentos}}
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
@@ -29,13 +33,14 @@
           </td>
           <td class="text-end fw-semibold">{{eur total}}</td>
           <td class="text-end">
-            <a href="/admin/orcamento/{{id}}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-eye"></i></a>
+            <a href="/admin/orcamento/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
           </td>
         </tr>
-        {{else}}
-        <tr><td colspan="5" class="text-center text-muted py-4">Sem orçamentos. <a href="/admin/orcamento/nova">Criar orçamento</a>.</td></tr>
         {{/each}}
       </tbody>
     </table>
   </div>
 </div>
+{{else}}
+{{> _empty-state icon="account_balance_wallet" titulo="Sem orçamentos" descricao="Crie o primeiro orçamento anual para distribuir e emitir quotas." link="/admin/orcamento/nova" linkTexto="Novo orçamento"}}
+{{/if}}
