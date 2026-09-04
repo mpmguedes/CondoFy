@@ -352,6 +352,12 @@ a:hover { color: var(--c-primary-dark); }
 
 .section-title { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--c-text-muted); margin: var(--sp-5) 0 var(--sp-3); }
 
+/* ── Empty state ─────────────────────────────────────────────────── */
+.empty-state { text-align: center; padding: var(--sp-7) var(--sp-4); }
+.empty-state-icon { font-size: 52px; color: var(--c-text-muted); opacity: 0.45; }
+.empty-state-title { font-size: 1.1rem; font-weight: 600; margin: var(--sp-3) 0 var(--sp-1); }
+.empty-state-text { color: var(--c-text-muted); margin: 0 0 var(--sp-4); max-width: 420px; margin-left: auto; margin-right: auto; }
+
 /* ── Auth card ───────────────────────────────────────────────────── */
 .auth-wrap { min-height: 80vh; display: flex; align-items: center; justify-content: center; }
 .auth-card { width: 100%; max-width: 420px; border-radius: 16px; box-shadow: var(--elev-3); }

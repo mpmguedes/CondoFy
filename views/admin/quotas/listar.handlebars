@@ -1,6 +1,9 @@
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-  <h1 class="h3 mb-0"><i class="bi bi-receipt me-2"></i>Quotas</h1>
-  <a href="/admin/quotas/gerar" class="btn btn-primary"><i class="bi bi-magic me-1"></i>Gerar quotas</a>
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Quotas</h1>
+    <p class="subtitle">Quotas emitidas por fração e período</p>
+  </div>
+  <a href="/admin/quotas/gerar" class="btn btn-primary"><span class="material-symbols-outlined me-1">auto_awesome</span>Gerar quotas</a>
 </div>
 
 <div class="card mb-4">
@@ -32,12 +35,13 @@
         </select>
       </div>
       <div class="col-12 col-md-2 d-grid">
-        <button type="submit" class="btn btn-outline-primary"><i class="bi bi-funnel me-1"></i>Filtrar</button>
+        <button type="submit" class="btn btn-outline-primary"><span class="material-symbols-outlined me-1">filter_list</span>Filtrar</button>
       </div>
     </form>
   </div>
 </div>
 
+{{#if quotas}}
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
@@ -72,18 +76,19 @@
             {{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}
           </td>
           <td class="text-end text-nowrap">
-            <a href="/admin/quotas/{{id}}/aviso" target="_blank" class="btn btn-sm btn-outline-primary" title="Aviso PDF"><i class="bi bi-file-earmark-pdf"></i></a>
-            <a href="/admin/quotas/{{id}}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-eye"></i></a>
-            <a href="/admin/quotas/{{id}}/editar" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+            <a href="/admin/quotas/{{id}}/aviso" target="_blank" class="btn btn-sm btn-outline-primary" title="Aviso PDF"><span class="material-symbols-outlined">picture_as_pdf</span></a>
+            <a href="/admin/quotas/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
+            <a href="/admin/quotas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
             <form action="/admin/quotas/{{id}}/anular" method="POST" class="d-inline" onsubmit="return confirm('Anular esta quota?');">
-              <button class="btn btn-sm btn-outline-danger"><i class="bi bi-slash-circle"></i></button>
+              <button class="btn btn-sm btn-outline-danger" title="Anular"><span class="material-symbols-outlined">block</span></button>
             </form>
           </td>
         </tr>
-        {{else}}
-        <tr><td colspan="9" class="text-center text-muted py-4">Sem quotas.</td></tr>
         {{/each}}
       </tbody>
     </table>
   </div>
 </div>
+{{else}}
+{{> _empty-state icon="receipt_long" titulo="Sem quotas" descricao="Ainda não há quotas para os filtros selecionados."}}
+{{/if}}

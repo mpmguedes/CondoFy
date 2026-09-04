@@ -1,25 +1,27 @@
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-  <h1 class="h3 mb-0"><i class="bi bi-bank me-2"></i>Contas bancárias</h1>
-  <a href="/admin/contas/nova" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Nova conta</a>
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Contas bancárias</h1>
+    <p class="subtitle">Contas do condomínio e saldos</p>
+  </div>
+  <a href="/admin/contas/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">add</span>Nova conta</a>
 </div>
 
 <div class="row g-3 mb-4">
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-4 col-lg-3">
     <div class="card stat-card h-100"><div class="card-body">
-      <div class="stat-icon"><i class="bi bi-cash-stack"></i></div>
-      <div class="stat-value">{{eur resumo.saldoContas}}</div>
       <div class="stat-label">Saldo total</div>
+      <div class="stat-value">{{eur resumo.saldoContas}}</div>
     </div></div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-4 col-lg-3">
     <div class="card stat-card h-100"><div class="card-body">
-      <div class="stat-icon"><i class="bi bi-shield-check"></i></div>
-      <div class="stat-value">{{eur resumo.fundoReserva}}</div>
       <div class="stat-label">Fundo de reserva</div>
+      <div class="stat-value">{{eur resumo.fundoReserva}}</div>
     </div></div>
   </div>
 </div>
 
+{{#if contas}}
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
@@ -49,16 +51,17 @@
           <td class="text-end fw-semibold">{{eur saldo}}</td>
           <td>{{#if ativa}}<span class="badge text-bg-success">Ativa</span>{{else}}<span class="badge text-bg-secondary">Inativa</span>{{/if}}</td>
           <td class="text-end">
-            <a href="/admin/contas/{{id}}/editar" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+            <a href="/admin/contas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
             <form action="/admin/contas/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar esta conta?');">
-              <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              <button class="btn btn-sm btn-outline-danger" title="Eliminar"><span class="material-symbols-outlined">delete</span></button>
             </form>
           </td>
         </tr>
-        {{else}}
-        <tr><td colspan="7" class="text-center text-muted py-4">Sem contas bancárias.</td></tr>
         {{/each}}
       </tbody>
     </table>
   </div>
 </div>
+{{else}}
+{{> _empty-state icon="account_balance" titulo="Sem contas bancárias" descricao="Adicione as contas do condomínio para acompanhar saldos e movimentos." link="/admin/contas/nova" linkTexto="Nova conta"}}
+{{/if}}

@@ -1,8 +1,12 @@
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-  <h1 class="h3 mb-0"><i class="bi bi-people me-2"></i>Condóminos</h1>
-  <a href="/admin/condominos/nova" class="btn btn-primary"><i class="bi bi-person-plus me-1"></i>Novo condómino</a>
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Condóminos</h1>
+    <p class="subtitle">Proprietários e arrendatários das frações</p>
+  </div>
+  <a href="/admin/condominos/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">person_add</span>Novo condómino</a>
 </div>
 
+{{#if pessoas}}
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
@@ -37,16 +41,17 @@
             {{/each}}
           </td>
           <td class="text-end">
-            <a href="/admin/condominos/{{id}}/editar" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+            <a href="/admin/condominos/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
             <form action="/admin/condominos/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar este condómino?');">
-              <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              <button class="btn btn-sm btn-outline-danger" title="Eliminar"><span class="material-symbols-outlined">delete</span></button>
             </form>
           </td>
         </tr>
-        {{else}}
-        <tr><td colspan="7" class="text-center text-muted py-4">Ainda não há condóminos registados.</td></tr>
         {{/each}}
       </tbody>
     </table>
   </div>
 </div>
+{{else}}
+{{> _empty-state icon="groups" titulo="Ainda não existem condóminos" descricao="Adicione o primeiro condómino (proprietário ou arrendatário) e associe-o às frações." link="/admin/condominos/nova" linkTexto="Novo condómino"}}
+{{/if}}

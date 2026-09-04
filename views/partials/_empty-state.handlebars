@@ -1,0 +1,8 @@
+<div class="empty-state">
+  <span class="material-symbols-outlined empty-state-icon">{{icon}}</span>
+  <h3 class="empty-state-title">{{titulo}}</h3>
+  <p class="empty-state-text">{{descricao}}</p>
+  {{#if link}}
+  <a href="{{link}}" class="btn btn-primary">{{#if linkTexto}}{{linkTexto}}{{else}}Adicionar{{/if}}</a>
+  {{/if}}
+</div>

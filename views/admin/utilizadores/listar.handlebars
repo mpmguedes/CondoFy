@@ -1,8 +1,12 @@
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-  <h1 class="h3 mb-0"><i class="bi bi-person-gear me-2"></i>Utilizadores</h1>
-  <a href="/admin/utilizadores/nova" class="btn btn-primary"><i class="bi bi-person-plus me-1"></i>Novo utilizador</a>
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Utilizadores</h1>
+    <p class="subtitle">Contas de acesso à aplicação</p>
+  </div>
+  <a href="/admin/utilizadores/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">person_add</span>Novo utilizador</a>
 </div>
 
+{{#if users}}
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
@@ -30,16 +34,17 @@
             {{#if ativo}}<span class="badge text-bg-success">Ativo</span>{{else}}<span class="badge text-bg-secondary">Inativo</span>{{/if}}
           </td>
           <td class="text-end">
-            <a href="/admin/utilizadores/{{id}}/editar" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+            <a href="/admin/utilizadores/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
             <form action="/admin/utilizadores/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar este utilizador?');">
-              <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              <button class="btn btn-sm btn-outline-danger" title="Eliminar"><span class="material-symbols-outlined">delete</span></button>
             </form>
           </td>
         </tr>
-        {{else}}
-        <tr><td colspan="6" class="text-center text-muted py-4">Ainda não há utilizadores.</td></tr>
         {{/each}}
       </tbody>
     </table>
   </div>
 </div>
+{{else}}
+{{> _empty-state icon="manage_accounts" titulo="Ainda não existem utilizadores" descricao="Crie contas de acesso para os condóminos ou administradores." link="/admin/utilizadores/nova" linkTexto="Novo utilizador"}}
+{{/if}}
