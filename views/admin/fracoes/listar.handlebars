@@ -23,7 +23,7 @@
       <tbody>
         {{#each fracoes}}
         <tr>
-          <td class="fw-semibold">{{designacao}}</td>
+          <td class="fw-semibold"><a href="/admin/fracoes/{{id}}">{{designacao}}</a></td>
           <td>{{#if permilagem}}{{permilagem}} ‰{{else}}—{{/if}}</td>
           <td>{{#if andar}}{{andar}}{{else}}—{{/if}}</td>
           <td>
@@ -37,6 +37,7 @@
             {{#if (eq estado 'ativo')}}<span class="badge text-bg-success">Ativa</span>{{else}}<span class="badge text-bg-secondary">Inativa</span>{{/if}}
           </td>
           <td class="text-end">
+            <a href="/admin/fracoes/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
             <a href="/admin/fracoes/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
             <form action="/admin/fracoes/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar esta fração?');">
               <button class="btn btn-sm btn-outline-danger" title="Eliminar"><span class="material-symbols-outlined">delete</span></button>

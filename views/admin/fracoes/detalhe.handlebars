@@ -1,0 +1,149 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Fração {{fracao.designacao}}</h1>
+    <p class="subtitle">
+      {{#if fracao.permilagem}}Permilagem {{fracao.permilagem}}‰{{/if}}
+      {{#if fracao.andar}} · {{fracao.andar}}{{/if}}
+    </p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/admin/fracoes/{{fracao.id}}/editar" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">edit</span>Editar</a>
+    <a href="/admin/fracoes" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
+  </div>
+</div>
+
+<ul class="nav nav-tabs" role="tablist">
+  <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#resumo" type="button" role="tab">Resumo</button></li>
+  <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pessoas" type="button" role="tab">Proprietários</button></li>
+  <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#quotas" type="button" role="tab">Quotas</button></li>
+  <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pagamentos" type="button" role="tab">Pagamentos</button></li>
+  <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#documentos" type="button" role="tab">Documentos</button></li>
+  <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#comunicacoes" type="button" role="tab">Comunicações</button></li>
+</ul>
+
+<div class="tab-content mt-4">
+  <div class="tab-pane fade show active" id="resumo" role="tabpanel">
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Saldo</div><div class="stat-value {{#if (lt resumo.emDivida 0)}}text-success{{else if (gt resumo.emDivida 0)}}text-danger{{/if}}">{{eur resumo.emDivida}}</div></div></div></div>
+      <div class="col-6 col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Quotas pagas</div><div class="stat-value">{{resumo.quotasPagas}}</div></div></div></div>
+      <div class="col-6 col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Quotas pendentes</div><div class="stat-value">{{resumo.quotasPendentes}}</div></div></div></div>
+      <div class="col-6 col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Último pagamento</div><div class="stat-value">{{#if resumo.ultimoPagamento}}{{eur resumo.ultimoPagamento.valor}}{{else}}—{{/if}}</div><div class="stat-sub">{{#if resumo.ultimoPagamento}}{{formatDate resumo.ultimoPagamento.data}}{{/if}}</div></div></div></div>
+    </div>
+
+    {{#if fracao.observacoes}}
+    <div class="card mb-4"><div class="card-body"><p class="mb-0 text-muted">{{fracao.observacoes}}</p></div></div>
+    {{/if}}
+  </div>
+
+  <div class="tab-pane fade" id="pessoas" role="tabpanel">
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light"><tr><th>Nome</th><th>Vínculo</th><th>Email</th><th>Telefone</th></tr></thead>
+          <tbody>
+            {{#each fracao.pessoas}}
+            <tr>
+              <td class="fw-semibold">{{nome}}</td>
+              <td><span class="badge text-bg-light border">{{this.FracaoPessoa.vinculo}}</span></td>
+              <td>{{#if email}}{{email}}{{else}}—{{/if}}</td>
+              <td>{{#if telefone}}{{telefone}}{{else}}—{{/if}}</td>
+            </tr>
+            {{else}}
+            <tr><td colspan="4" class="text-center text-muted py-4">Sem pessoas associadas.</td></tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-pane fade" id="quotas" role="tabpanel">
+    {{#if quotas}}
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light"><tr><th>N.º</th><th>Período</th><th>Vencimento</th><th class="text-end">Valor</th><th>Estado</th></tr></thead>
+          <tbody>
+            {{#each quotas}}
+            <tr>
+              <td class="font-monospace small">{{numero_documento}}</td>
+              <td>{{monthName mes}} {{ano}}</td>
+              <td>{{formatDate data_vencimento}}</td>
+              <td class="text-end">{{eur valor}}</td>
+              <td>
+                {{#if (eq estadoEfetivo 'paga')}}<span class="badge text-bg-success">Paga</span>
+                {{else if (eq estadoEfetivo 'parcialmente_paga')}}<span class="badge text-bg-info">Parcial</span>
+                {{else if (eq estadoEfetivo 'vencida')}}<span class="badge text-bg-danger">Vencida</span>
+                {{else if (eq estadoEfetivo 'anulada')}}<span class="badge text-bg-secondary">Anulada</span>
+                {{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}
+              </td>
+            </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {{else}}
+    {{> _empty-state icon="receipt_long" titulo="Sem quotas" descricao="Esta fração ainda não tem quotas emitidas."}}
+    {{/if}}
+  </div>
+
+  <div class="tab-pane fade" id="pagamentos" role="tabpanel">
+    {{#if pagamentos}}
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light"><tr><th>Recibo</th><th>Data</th><th>Método</th><th class="text-end">Valor</th><th>Estado</th></tr></thead>
+          <tbody>
+            {{#each pagamentos}}
+            <tr>
+              <td class="font-monospace small">{{numero_documento}}</td>
+              <td>{{formatDate data_pagamento}}</td>
+              <td>{{#if metodo_pagamento}}{{metodo_pagamento.nome}}{{else}}—{{/if}}</td>
+              <td class="text-end fw-semibold">{{eur valor}}</td>
+              <td>{{#if (eq estado 'confirmado')}}<span class="badge text-bg-success">Confirmado</span>{{else}}<span class="badge text-bg-secondary">Anulado</span>{{/if}}</td>
+            </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {{else}}
+    {{> _empty-state icon="payments" titulo="Sem pagamentos" descricao="Esta fração ainda não tem pagamentos registados."}}
+    {{/if}}
+  </div>
+
+  <div class="tab-pane fade" id="documentos" role="tabpanel">
+    {{#if documentos}}
+    <div class="card">
+      <ul class="list-group list-group-flush">
+        {{#each documentos}}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span><span class="material-symbols-outlined me-2 text-muted">description</span>{{nome}}</span>
+          <span class="text-muted small">{{formatDate data}}</span>
+        </li>
+        {{/each}}
+      </ul>
+    </div>
+    {{else}}
+    {{> _empty-state icon="folder" titulo="Sem documentos" descricao="Esta fração ainda não tem documentos associados."}}
+    {{/if}}
+  </div>
+
+  <div class="tab-pane fade" id="comunicacoes" role="tabpanel">
+    {{#if avisos}}
+    <div class="card">
+      <ul class="list-group list-group-flush">
+        {{#each avisos}}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span><span class="material-symbols-outlined me-2 text-muted">campaign</span>{{#if aviso}}{{aviso.assunto}}{{else}}—{{/if}}</span>
+          <span class="text-muted small">{{#if aviso}}{{formatDateTime aviso.createdAt}}{{/if}}</span>
+        </li>
+        {{/each}}
+      </ul>
+    </div>
+    {{else}}
+    {{> _empty-state icon="campaign" titulo="Sem comunicações" descricao="Esta fração ainda não recebeu avisos."}}
+    {{/if}}
+  </div>
+</div>

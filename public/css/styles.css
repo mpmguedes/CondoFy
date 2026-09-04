@@ -352,6 +352,19 @@ a:hover { color: var(--c-primary-dark); }
 
 .section-title { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--c-text-muted); margin: var(--sp-5) 0 var(--sp-3); }
 
+/* ── Tabs ────────────────────────────────────────────────────────── */
+.nav-tabs { border-bottom: 1px solid var(--c-border); gap: var(--sp-1); }
+.nav-tabs .nav-link {
+  border: none;
+  color: var(--c-text-muted);
+  font-weight: 500;
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+}
+.nav-tabs .nav-link:hover { color: var(--c-text); }
+.nav-tabs .nav-link.active { color: var(--c-primary); border-bottom: 2px solid var(--c-primary); background: transparent; }
+
 /* ── Empty state ─────────────────────────────────────────────────── */
 .empty-state { text-align: center; padding: var(--sp-7) var(--sp-4); }
 .empty-state-icon { font-size: 52px; color: var(--c-text-muted); opacity: 0.45; }

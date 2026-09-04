@@ -12,6 +12,9 @@ const {
   Quota,
   Pagamento,
   Despesa,
+  Documento,
+  Aviso,
+  AvisoDestinatario,
   BackupLog,
   EmailFila,
 } = require('../models');
@@ -19,7 +22,7 @@ const { eAdmin } = require('../helpers/eAdmin');
 const { toCents, fromCents } = require('../helpers/money');
 const { audit } = require('../helpers/audit');
 const { getCondominio } = require('../helpers/condominio');
-const { resumoCondominio, estadoEfetivo } = require('../helpers/saldos');
+const { resumoCondominio, resumoFracao, estadoEfetivo } = require('../helpers/saldos');
 const drive = require('../helpers/drive');
 const { smtpConfigured } = require('../helpers/mailer');
 
@@ -227,6 +230,45 @@ router.post('/fracoes/:id/pessoas/:vinculoId/eliminar', async (req, res) => {
   await audit({ userId: req.user.id, acao: 'desvincular_pessoa_fração', entidade: 'FracaoPessoa' });
   req.flash('success_msg', 'Associação removida.');
   res.redirect(`/admin/fracoes/${req.params.id}/editar`);
+});
+
+// Detalhe da fração (tabs)
+router.get('/fracoes/:id', async (req, res) => {
+  const fracao = await Fracao.findByPk(req.params.id, {
+    include: [{ model: Pessoa, as: 'pessoas', through: { attributes: ['id', 'vinculo', 'data_inicio', 'data_fim'] } }],
+  });
+  if (!fracao) {
+    req.flash('error_msg', 'Fração não encontrada.');
+    return res.redirect('/admin/fracoes');
+  }
+
+  const [quotas, pagamentos, documentos, avisosDest, resumo] = await Promise.all([
+    Quota.findAll({ where: { fracao_id: fracao.id }, order: [['ano', 'DESC'], ['mes', 'DESC']] }),
+    Pagamento.findAll({
+      where: { fracao_id: fracao.id },
+      include: [{ model: MetodoPagamento, as: 'metodo_pagamento' }],
+      order: [['data_pagamento', 'DESC'], ['id', 'DESC']],
+    }),
+    Documento.findAll({ where: { entidade_tipo: 'Fracao', entidade_id: fracao.id }, order: [['data', 'DESC']] }),
+    AvisoDestinatario.findAll({
+      where: { fracao_id: fracao.id },
+      include: [{ model: Aviso, as: 'aviso' }],
+      order: [['id', 'DESC']],
+    }),
+    resumoFracao(fracao.id),
+  ]);
+
+  const quotasComEstado = quotas.map((q) => ({ ...q.toJSON(), estadoEfetivo: estadoEfetivo(q) }));
+
+  res.render('admin/fracoes/detalhe', {
+    titulo: `Fração ${fracao.designacao}`,
+    fracao: fracao.toJSON(),
+    quotas: quotasComEstado,
+    pagamentos: pagamentos.map((p) => p.toJSON()),
+    documentos: documentos.map((d) => d.toJSON()),
+    avisos: avisosDest.map((a) => a.toJSON()),
+    resumo,
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════
