@@ -1,145 +1,140 @@
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-  <div>
-    <h1 class="h3 mb-1">Painel de administração</h1>
-    <p class="text-muted mb-0">{{condominio.designacao}}</p>
-  </div>
+<div class="page-heading">
+  <h1>{{saudacao}}, {{user.nome}}</h1>
+  <p class="subtitle">Painel do Administrador de Condomínio · {{condominio.designacao}}</p>
 </div>
 
+<div class="quick-actions">
+  <a class="quick-action" href="/admin/fracoes/nova"><span class="material-symbols-outlined">add</span>Nova fração</a>
+  <a class="quick-action" href="/admin/quotas/gerar"><span class="material-symbols-outlined">euro</span>Gerar quotas</a>
+  <a class="quick-action" href="/admin/assembleias/nova"><span class="material-symbols-outlined">groups</span>Nova assembleia</a>
+  <a class="quick-action" href="/admin/documentos/nova"><span class="material-symbols-outlined">note_add</span>Novo documento</a>
+  <a class="quick-action" href="/admin/pagamentos/nova"><span class="material-symbols-outlined">payments</span>Registar pagamento</a>
+  <a class="quick-action" href="/admin/despesas/nova"><span class="material-symbols-outlined">credit_card</span>Nova despesa</a>
+  <a class="quick-action" href="/admin/avisos/nova"><span class="material-symbols-outlined">campaign</span>Novo aviso</a>
+</div>
+
+<div class="section-title">Finanças</div>
 <div class="row g-3">
-  <div class="col-6 col-md-4 col-lg-3">
-    <div class="card stat-card h-100">
-      <div class="card-body">
-        <div class="stat-icon"><i class="bi bi-cash-stack"></i></div>
-        <div class="stat-value">{{eur resumo.saldoContas}}</div>
-        <div class="stat-label">Saldo das contas</div>
+  <div class="col-6 col-md-4 col-lg">
+    <div class="card stat-card"><div class="card-body">
+      <div class="stat-label">Saldo das contas</div>
+      <div class="stat-value">{{eur resumo.saldoContas}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-4 col-lg">
+    <div class="card stat-card"><div class="card-body">
+      <div class="stat-label">Fundo de reserva</div>
+      <div class="stat-value">{{eur resumo.fundoReserva}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-4 col-lg">
+    <div class="card stat-card"><div class="card-body">
+      <div class="stat-label">Receitas</div>
+      <div class="stat-value text-success">{{eur resumo.receitas}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-4 col-lg">
+    <div class="card stat-card"><div class="card-body">
+      <div class="stat-label">Despesas</div>
+      <div class="stat-value">{{eur resumo.despesas}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-4 col-lg">
+    <div class="card stat-card"><div class="card-body">
+      <div class="stat-label">Em dívida</div>
+      <div class="stat-value {{#if (gt resumo.emDividaGlobal 0)}}text-danger{{/if}}">{{eur resumo.emDividaGlobal}}</div>
+    </div></div>
+  </div>
+</div>
+
+<div class="section-title">Operação</div>
+<div class="row g-3">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card"><div class="card-body">
+      <div class="stat-label">Frações &amp; Condóminos</div>
+      <div class="stat-value">{{nFracoes}} <span class="text-muted small">frações</span></div>
+      <div class="stat-sub">{{nPessoas}} condóminos</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card"><div class="card-body">
+      <div class="stat-label">Quotas</div>
+      <div class="stat-value">{{nPagas}} <span class="text-muted small">pagas</span></div>
+      <div class="stat-sub">{{nPendentes}} pendentes · {{nVencidas}} vencidas</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card"><div class="card-body">
+      <div class="stat-label">Backup</div>
+      {{#if sistema.ultimoBackup}}
+        {{#if (eq sistema.ultimoBackup.estado 'concluido')}}
+        <div class="stat-value text-success">Concluído</div>
+        {{else if (eq sistema.ultimoBackup.estado 'erro')}}
+        <div class="stat-value text-danger">Erro</div>
+        {{else}}
+        <div class="stat-value text-warning">Em curso</div>
+        {{/if}}
+        <div class="stat-sub">{{formatDateTime sistema.ultimoBackup.data}}</div>
+      {{else}}
+        <div class="stat-value">—</div>
+        <div class="stat-sub">Sem backups</div>
+      {{/if}}
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card"><div class="card-body">
+      <div class="stat-label">Serviços</div>
+      <div class="stat-sub">
+        Google Drive: {{#if sistema.driveLigado}}<span class="text-success">ligado</span>{{else}}<span class="text-muted">desligado</span>{{/if}}
       </div>
+      <div class="stat-sub">
+        Email: {{#if sistema.smtp}}<span class="text-success">configurado</span>{{else}}<span class="text-muted">não configurado</span>{{/if}}
+      </div>
+    </div></div>
+  </div>
+</div>
+
+<div class="section-title">Análise {{anoAtual}}</div>
+<div class="row g-3">
+  <div class="col-12 col-lg-7">
+    <div class="card h-100">
+      <div class="card-header"><span class="material-symbols-outlined me-2">bar_chart</span>Receitas vs Despesas</div>
+      <div class="card-body"><canvas id="chartFinanceiro" height="120"></canvas></div>
     </div>
   </div>
-  <div class="col-6 col-md-4 col-lg-3">
-    <div class="card stat-card h-100">
-      <div class="card-body">
-        <div class="stat-icon"><i class="bi bi-shield-check"></i></div>
-        <div class="stat-value">{{eur resumo.fundoReserva}}</div>
-        <div class="stat-label">Fundo de reserva</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-lg-3">
-    <div class="card stat-card h-100">
-      <div class="card-body">
-        <div class="stat-icon"><i class="bi bi-arrow-down-circle"></i></div>
-        <div class="stat-value">{{eur resumo.receitas}}</div>
-        <div class="stat-label">Receitas</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-lg-3">
-    <div class="card stat-card h-100">
-      <div class="card-body">
-        <div class="stat-icon"><i class="bi bi-arrow-up-circle"></i></div>
-        <div class="stat-value">{{eur resumo.despesas}}</div>
-        <div class="stat-label">Despesas</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-lg-3">
-    <div class="card stat-card h-100">
-      <div class="card-body">
-        <div class="stat-icon"><i class="bi bi-exclamation-circle"></i></div>
-        <div class="stat-value">{{eur resumo.emDividaGlobal}}</div>
-        <div class="stat-label">Em dívida</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-lg-3">
-    <div class="card stat-card h-100">
-      <div class="card-body">
-        <div class="stat-icon text-success"><i class="bi bi-check-circle"></i></div>
-        <div class="stat-value">{{nPagas}}</div>
-        <div class="stat-label">Quotas pagas</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-lg-3">
-    <div class="card stat-card h-100">
-      <div class="card-body">
-        <div class="stat-icon text-warning"><i class="bi bi-hourglass-split"></i></div>
-        <div class="stat-value">{{nPendentes}}</div>
-        <div class="stat-label">Quotas pendentes</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-lg-3">
-    <div class="card stat-card h-100">
-      <div class="card-body">
-        <div class="stat-icon text-danger"><i class="bi bi-exclamation-triangle"></i></div>
-        <div class="stat-value">{{nVencidas}}</div>
-        <div class="stat-label">Quotas vencidas</div>
-      </div>
+  <div class="col-12 col-lg-5">
+    <div class="card h-100">
+      <div class="card-header"><span class="material-symbols-outlined me-2">pie_chart</span>Despesas por categoria</div>
+      <div class="card-body"><canvas id="chartCategorias" height="200"></canvas></div>
     </div>
   </div>
 </div>
 
-<div class="row g-3 mt-1">
-  <div class="col-12 col-md-4">
-    <div class="card h-100">
-      <div class="card-header bg-white"><i class="bi bi-building me-1"></i>Gestão</div>
-      <div class="card-body">
-        <p class="mb-2"><span class="text-muted">Frações:</span> <strong>{{nFracoes}}</strong></p>
-        <p class="mb-2"><span class="text-muted">Condóminos:</span> <strong>{{nPessoas}}</strong></p>
-        <p class="mb-0"><span class="text-muted">Utilizadores:</span> <strong>{{nUsers}}</strong></p>
-      </div>
-    </div>
-  </div>
-  <div class="col-12 col-md-8">
-    <div class="card h-100">
-      <div class="card-header bg-white"><i class="bi bi-list-check me-1"></i>Ações rápidas</div>
-      <div class="card-body">
-        <div class="row g-2">
-          <div class="col-12 col-md-6"><a href="/admin/quotas/gerar" class="btn btn-outline-primary w-100"><i class="bi bi-magic me-1"></i>Gerar quotas</a></div>
-          <div class="col-12 col-md-6"><a href="/admin/pagamentos/nova" class="btn btn-outline-primary w-100"><i class="bi bi-cash-coin me-1"></i>Registar pagamento</a></div>
-          <div class="col-12 col-md-6"><a href="/admin/despesas/nova" class="btn btn-outline-primary w-100"><i class="bi bi-credit-card me-1"></i>Nova despesa</a></div>
-          <div class="col-12 col-md-6"><a href="/admin/fracoes/nova" class="btn btn-outline-primary w-100"><i class="bi bi-plus-lg me-1"></i>Nova fração</a></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+  (function () {
+    const financeiro = {{{chartFinanceiro}}};
+    const categorias = {{{chartCategorias}}};
 
-<div class="row g-3 mt-1">
-  <div class="col-12">
-    <div class="card">
-      <div class="card-header bg-white"><i class="bi bi-diagram-3 me-1"></i>Sistema</div>
-      <div class="card-body">
-        <div class="row g-3">
-          <div class="col-6 col-md-3">
-            <div class="stat-label">Google Drive</div>
-            {{#if sistema.driveLigado}}<span class="badge text-bg-success">🟢 Ligado</span>{{else}}<span class="badge text-bg-secondary">⚪ Não configurado</span>{{/if}}
-          </div>
-          <div class="col-6 col-md-3">
-            <div class="stat-label">Email (SMTP)</div>
-            {{#if sistema.smtp}}<span class="badge text-bg-success">🟢 Configurado</span>{{else}}<span class="badge text-bg-secondary">⚪ Não configurado</span>{{/if}}
-          </div>
-          <div class="col-6 col-md-3">
-            <div class="stat-label">Último backup</div>
-            {{#if sistema.ultimoBackup}}
-              <span class="text-muted small">{{formatDateTime sistema.ultimoBackup.data}}</span>
-              {{#if (eq sistema.ultimoBackup.estado 'concluido')}}<span class="badge text-bg-success">Concluído</span>
-              {{else if (eq sistema.ultimoBackup.estado 'erro')}}<span class="badge text-bg-danger">🔴 Erro</span>
-              {{else}}<span class="badge text-bg-warning">Em curso</span>{{/if}}
-            {{else}}
-              <span class="text-muted small">Sem backups</span>
-            {{/if}}
-          </div>
-          <div class="col-6 col-md-3">
-            <div class="stat-label">Fila de email</div>
-            <span class="text-muted small">{{sistema.filaPendentes}} pendentes · {{sistema.filaErros}} erros</span>
-            <form action="/admin/sistema/backup" method="POST" class="mt-2">
-              <button class="btn btn-sm btn-outline-primary">Backup manual</button>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+    new Chart(document.getElementById('chartFinanceiro'), {
+      type: 'bar',
+      data: {
+        labels: financeiro.labels,
+        datasets: [
+          { label: 'Receitas', data: financeiro.receitas, backgroundColor: '#188038', borderRadius: 4 },
+          { label: 'Despesas', data: financeiro.despesas, backgroundColor: '#d93025', borderRadius: 4 },
+        ],
+      },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } },
+    });
+
+    new Chart(document.getElementById('chartCategorias'), {
+      type: 'doughnut',
+      data: {
+        labels: categorias.labels,
+        datasets: [{ data: categorias.valores, backgroundColor: ['#1a73e8', '#188038', '#f9ab00', '#9aa0a6', '#d93025', '#7c4dff'] }],
+      },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } }, cutout: '60%' },
+    });
+  })();
+</script>

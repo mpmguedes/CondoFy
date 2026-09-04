@@ -1,6 +1,6 @@
 // Efeito ripple (Material) em botões
 document.addEventListener('click', (e) => {
-  const btn = e.target.closest('.btn');
+  const btn = e.target.closest('.btn, .quick-action');
   if (!btn) return;
   const rect = btn.getBoundingClientRect();
   const diameter = Math.max(rect.width, rect.height);
@@ -21,3 +21,33 @@ document.querySelectorAll('.alert-dismissible').forEach((a) => {
     if (btn) btn.click();
   }, 5000);
 });
+
+// Sidebar: recolher (desktop) / drawer (mobile)
+(function () {
+  const shell = document.getElementById('appShell');
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  const toggle = document.getElementById('sidebarToggle');
+  if (!shell || !toggle) return;
+
+  if (localStorage.getItem('condofy_sidebar_collapsed') === '1' && window.innerWidth > 991) {
+    shell.classList.add('collapsed');
+  }
+
+  toggle.addEventListener('click', () => {
+    if (window.innerWidth <= 991) {
+      const open = sidebar.classList.toggle('open');
+      if (backdrop) backdrop.classList.toggle('show', open);
+    } else {
+      shell.classList.toggle('collapsed');
+      localStorage.setItem('condofy_sidebar_collapsed', shell.classList.contains('collapsed') ? '1' : '0');
+    }
+  });
+
+  if (backdrop) {
+    backdrop.addEventListener('click', () => {
+      sidebar.classList.remove('open');
+      backdrop.classList.remove('show');
+    });
+  }
+})();

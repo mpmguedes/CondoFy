@@ -23,6 +23,17 @@ const smoke = {
   titulo: 'Teste',
 };
 
+// Regista os partials (views/partials/*.handlebars)
+const partialsDir = path.join(viewsDir, 'partials');
+if (fs.existsSync(partialsDir)) {
+  for (const entry of fs.readdirSync(partialsDir)) {
+    if (entry.endsWith('.handlebars')) {
+      const name = entry.replace('.handlebars', '');
+      handlebars.registerPartial(name, fs.readFileSync(path.join(partialsDir, entry), 'utf8'));
+    }
+  }
+}
+
 let failed = 0;
 
 function walk(dir) {

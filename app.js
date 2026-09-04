@@ -68,6 +68,7 @@ app.use(async (req, res, next) => {
   res.locals.condominio = condominio ? condominio.toJSON() : null;
   res.locals.appName = 'Condofy';
   res.locals.currentYear = new Date().getFullYear();
+  res.locals.currentPath = req.path || '';
   next();
 });
 

@@ -10,10 +10,13 @@ const {
   MetodoPagamento,
   ContaBancaria,
   Quota,
+  Pagamento,
+  Despesa,
   BackupLog,
   EmailFila,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
+const { toCents, fromCents } = require('../helpers/money');
 const { audit } = require('../helpers/audit');
 const { getCondominio } = require('../helpers/condominio');
 const { resumoCondominio, estadoEfetivo } = require('../helpers/saldos');
@@ -54,6 +57,35 @@ router.get('/', async (req, res) => {
   const nPendentes = quotas.filter((q) => ['pendente', 'parcialmente_paga'].includes(q.estado)).length;
   const nVencidas = quotas.filter((q) => estadoEfetivo(q) === 'vencida').length;
 
+  // Gráficos do dashboard (ano corrente)
+  const anoAtual = new Date().getFullYear();
+  const [pagamentos, despesas] = await Promise.all([
+    Pagamento.findAll({ attributes: ['valor', 'data_pagamento'], where: { estado: 'confirmado' }, raw: true }),
+    Despesa.findAll({
+      attributes: ['valor', 'data'],
+      where: { estado: { [Op.ne]: 'anulada' } },
+      include: [{ model: Categoria, as: 'categoria', attributes: ['nome'] }],
+      raw: true,
+    }),
+  ]);
+
+  const receitasMes = Array(12).fill(0);
+  const despesasMes = Array(12).fill(0);
+  const porCategoria = {};
+
+  pagamentos.forEach((p) => {
+    const d = p.data_pagamento ? new Date(p.data_pagamento) : null;
+    if (d && !isNaN(d.getTime()) && d.getFullYear() === anoAtual) receitasMes[d.getMonth()] += toCents(p.valor);
+  });
+  despesas.forEach((d) => {
+    const dt = d.data ? new Date(d.data) : null;
+    if (dt && !isNaN(dt.getTime()) && dt.getFullYear() === anoAtual) despesasMes[dt.getMonth()] += toCents(d.valor);
+    const nome = d['categoria.nome'] || 'Outras';
+    porCategoria[nome] = (porCategoria[nome] || 0) + toCents(d.valor);
+  });
+
+  const categoriasTop = Object.entries(porCategoria).sort((a, b) => b[1] - a[1]).slice(0, 6);
+
   res.render('admin/dashboard', {
     titulo: 'Painel de administração',
     nFracoes,
@@ -64,6 +96,7 @@ router.get('/', async (req, res) => {
     nPagas,
     nPendentes,
     nVencidas,
+    anoAtual,
     sistema: {
       driveLigado: drive.isConfigured(),
       smtp: smtpConfigured(),
@@ -71,6 +104,15 @@ router.get('/', async (req, res) => {
       filaPendentes,
       filaErros,
     },
+    chartFinanceiro: JSON.stringify({
+      labels: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'],
+      receitas: receitasMes.map((c) => fromCents(c)),
+      despesas: despesasMes.map((c) => fromCents(c)),
+    }),
+    chartCategorias: JSON.stringify({
+      labels: categoriasTop.map(([n]) => n),
+      valores: categoriasTop.map(([, v]) => fromCents(v)),
+    }),
   });
 });
 

@@ -21,4 +21,24 @@ module.exports = {
   selected: (a, b) => (String(a) === String(b) ? 'selected' : ''),
   // checked(a) → 'checked' se verdadeiro
   checked: (a) => (a ? 'checked' : ''),
+  // isActive(path, prefix) → 'active' se o path atual pertence a esse item
+  isActive: (path, prefix) => (path === prefix || (path && path.startsWith(prefix + '/'))) ? 'active' : '',
+  // saudacao() → cumprimento conforme a hora do dia
+  saudacao: () => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Bom dia';
+    if (h < 19) return 'Boa tarde';
+    return 'Boa noite';
+  },
+  // iniciais(nome) → iniciais para avatar
+  iniciais: (nome) =>
+    nome
+      ? nome
+          .split(' ')
+          .filter(Boolean)
+          .slice(0, 2)
+          .map((p) => p[0])
+          .join('')
+          .toUpperCase()
+      : '?',
 };
