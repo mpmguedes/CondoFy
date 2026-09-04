@@ -331,6 +331,37 @@ router.post('/quotas/config', async (req, res) => {
   res.redirect('/admin/quotas');
 });
 
+// Grelha anual do estado das quotas por fração × mês
+router.get('/quotas/grelha', async (req, res) => {
+  const ano = parseInt(req.query.ano || new Date().getFullYear(), 10);
+  const [fracoes, quotas, anos] = await Promise.all([
+    Fracao.findAll({ order: [['designacao', 'ASC']] }),
+    Quota.findAll({ where: { ano } }),
+    Quota.findAll({ attributes: [[sequelize.fn('DISTINCT', sequelize.col('ano')), 'ano']], order: [['ano', 'DESC']], raw: true }),
+  ]);
+
+  const porFracao = {};
+  quotas.forEach((q) => {
+    if (!porFracao[q.fracao_id]) porFracao[q.fracao_id] = {};
+    porFracao[q.fracao_id][q.mes] = { id: q.id, estado: estadoEfetivo(q) };
+  });
+
+  const linhas = fracoes.map((f) => ({
+    id: f.id,
+    designacao: f.designacao,
+    permilagem: f.permilagem,
+    meses: Array.from({ length: 12 }, (_, i) => (porFracao[f.id] ? porFracao[f.id][i + 1] || null : null)),
+  }));
+
+  res.render('admin/quotas/grelha', {
+    titulo: 'Grelha de quotas',
+    ano,
+    linhas,
+    anos: anos.map((a) => a.ano),
+    meses: MESES,
+  });
+});
+
 router.get('/quotas/gerar', async (req, res) => {
   const [fracoes, quotaConfig] = await Promise.all([
     Fracao.findAll({ where: { estado: 'ativo' }, order: [['designacao', 'ASC']] }),

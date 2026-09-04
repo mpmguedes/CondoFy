@@ -410,6 +410,15 @@ a:hover { color: var(--c-primary-dark); }
 .step-label { display: block; margin-top: var(--sp-1); font-size: 0.8rem; font-weight: 500; }
 .stepper .step.active .step-label { color: var(--c-primary); font-weight: 600; }
 
+/* ── Grelha de quotas ────────────────────────────────────────────── */
+.grid-quotas .sticky-col {
+  position: sticky;
+  left: 0;
+  background: var(--c-surface);
+  z-index: 1;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.03);
+}
+
 /* ── Empty state ─────────────────────────────────────────────────── */
 .empty-state { text-align: center; padding: var(--sp-7) var(--sp-4); }
 .empty-state-icon { font-size: 52px; color: var(--c-text-muted); opacity: 0.45; }

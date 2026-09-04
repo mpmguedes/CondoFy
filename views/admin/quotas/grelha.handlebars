@@ -1,0 +1,53 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Grelha de quotas</h1>
+    <p class="subtitle">Estado mensal das quotas por fração</p>
+  </div>
+  <div class="d-flex gap-2">
+    <form action="/admin/quotas/grelha" method="GET" class="d-flex gap-2">
+      <select class="form-select" name="ano" onchange="this.form.submit()">
+        {{#if anos}}
+          {{#each anos}}<option value="{{this}}" {{selected ../ano this}}>{{this}}</option>{{/each}}
+        {{else}}
+          <option value="{{ano}}">{{ano}}</option>
+        {{/if}}
+      </select>
+    </form>
+    <a href="/admin/quotas" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">list</span>Lista</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0 grid-quotas">
+      <thead class="table-light">
+        <tr>
+          <th class="sticky-col">Fração</th>
+          {{#each meses}}<th class="text-center">{{this}}</th>{{/each}}
+        </tr>
+      </thead>
+      <tbody>
+        {{#each linhas}}
+        <tr>
+          <td class="fw-semibold sticky-col text-nowrap">{{designacao}} <span class="text-muted small">({{permilagem}}‰)</span></td>
+          {{#each meses}}
+          <td class="text-center p-1">
+            {{#if this}}
+              {{#if (eq this.estado 'paga')}}<a href="/admin/quotas/{{this.id}}" class="badge text-bg-success text-decoration-none">Pago</a>
+              {{else if (eq this.estado 'parcialmente_paga')}}<a href="/admin/quotas/{{this.id}}" class="badge text-bg-info text-decoration-none">Parcial</a>
+              {{else if (eq this.estado 'vencida')}}<a href="/admin/quotas/{{this.id}}" class="badge text-bg-danger text-decoration-none">Em atraso</a>
+              {{else if (eq this.estado 'anulada')}}<a href="/admin/quotas/{{this.id}}" class="badge text-bg-secondary text-decoration-none">Anulada</a>
+              {{else}}<a href="/admin/quotas/{{this.id}}" class="badge text-bg-warning text-decoration-none">Pendente</a>{{/if}}
+            {{else}}
+              <span class="text-muted small">—</span>
+            {{/if}}
+          </td>
+          {{/each}}
+        </tr>
+        {{else}}
+        <tr><td colspan="13" class="text-center text-muted py-4">Sem frações.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
