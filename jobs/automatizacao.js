@@ -2,8 +2,9 @@ const sequelize = require('../config/database');
 const { Op } = require('sequelize');
 const { Quota, Fracao, Configuracao } = require('../models');
 const { proximoNumero } = require('../helpers/numeracao');
-const { toNumber } = require('../helpers/money');
 const { monthName } = require('../helpers/dates');
+const { getQuotaConfig } = require('../helpers/quotas-config');
+const { calcularQuota } = require('../helpers/quotas-calc');
 const { resolverDestinatarios } = require('../helpers/avisos');
 const { enfileirarEmail } = require('../helpers/email-fila');
 
@@ -13,14 +14,9 @@ async function getConfigNumero(chave, fallback) {
   return Number.isFinite(v) ? v : fallback;
 }
 
-// Gera as quotas do mês corrente (se existir valor mensal configurado).
+// Gera as quotas do mês corrente (por permilagem + FCR), de forma idempotente.
 async function gerarQuotasAutomaticas() {
-  const reg = await Configuracao.findOne({ where: { chave: 'quota_valor_mensal' } });
-  const valor = reg ? toNumber(reg.valor) : 0;
-  if (!valor || valor <= 0) {
-    return { geradas: 0, motivo: 'valor mensal não configurado' };
-  }
-
+  const { valorPermilagem, fcrPercentagem } = await getQuotaConfig();
   const agora = new Date();
   const ano = agora.getFullYear();
   const mes = agora.getMonth() + 1;
@@ -32,6 +28,7 @@ async function gerarQuotasAutomaticas() {
     for (const f of fracoes) {
       const existente = await Quota.findOne({ where: { fracao_id: f.id, ano, mes }, transaction: t });
       if (existente) continue;
+      const { base, fcr, total } = calcularQuota(f.permilagem, valorPermilagem, fcrPercentagem);
       const numero = await proximoNumero('aviso_quota', { ano, transaction: t });
       await Quota.create(
         {
@@ -40,7 +37,9 @@ async function gerarQuotasAutomaticas() {
           ano,
           mes,
           periodo: new Date(ano, mes - 1, 1),
-          valor,
+          valor: total,
+          valor_base: base,
+          valor_fcr: fcr,
           data_emissao: new Date(),
           data_vencimento: new Date(ano, mes - 1, 8),
           estado: 'pendente',

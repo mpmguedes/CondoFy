@@ -1,7 +1,7 @@
 <div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
     <h1>Gerar quotas</h1>
-    <p class="subtitle">Crie quotas para um período, com pré-visualização antes de confirmar</p>
+    <p class="subtitle">Quotas calculadas por permilagem + Fundo Comum de Reserva (FCR)</p>
   </div>
   <a href="/admin/quotas" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
 </div>
@@ -9,85 +9,79 @@
 <form action="/admin/quotas/gerar" method="POST" id="wizard">
   <ol class="stepper">
     <li class="step" data-step="1"><span class="step-circle">1</span><span class="step-label">Período</span></li>
-    <li class="step" data-step="2"><span class="step-circle">2</span><span class="step-label">Método</span></li>
-    <li class="step" data-step="3"><span class="step-circle">3</span><span class="step-label">Valores</span></li>
-    <li class="step" data-step="4"><span class="step-circle">4</span><span class="step-label">Confirmação</span></li>
+    <li class="step" data-step="2"><span class="step-circle">2</span><span class="step-label">Pré-visualização</span></li>
+    <li class="step" data-step="3"><span class="step-circle">3</span><span class="step-label">Confirmação</span></li>
   </ol>
 
   <div class="card">
     <div class="card-body">
-      <!-- Passo 1 -->
       <div class="wizard-step" data-step="1">
         <h2 class="h5 mb-3">Período</h2>
         <div class="row">
           <div class="col-md-6 mb-3">
-            <label class="form-label">Ano *</label>
-            <input type="number" class="form-control" name="ano" id="wAno" value="{{currentYear}}" min="2020" max="2100" required />
+            <label class="form-label">Âmbito</label>
+            <div class="form-check py-2">
+              <input class="form-check-input" type="radio" name="escopo" id="escopoMes" value="mes" checked />
+              <label class="form-check-label" for="escopoMes">Gerar para um mês</label>
+            </div>
+            <div class="form-check py-2">
+              <input class="form-check-input" type="radio" name="escopo" id="escopoAno" value="ano" />
+              <label class="form-check-label" for="escopoAno">Gerar para todo o ano</label>
+            </div>
           </div>
-          <div class="col-md-6 mb-3">
-            <label class="form-label">Mês *</label>
-            <select class="form-select" name="mes" id="wMes" required>
-              <option value="1" {{selected currentMonth 1}}>Janeiro</option>
-              <option value="2" {{selected currentMonth 2}}>Fevereiro</option>
-              <option value="3" {{selected currentMonth 3}}>Março</option>
-              <option value="4" {{selected currentMonth 4}}>Abril</option>
-              <option value="5" {{selected currentMonth 5}}>Maio</option>
-              <option value="6" {{selected currentMonth 6}}>Junho</option>
-              <option value="7" {{selected currentMonth 7}}>Julho</option>
-              <option value="8" {{selected currentMonth 8}}>Agosto</option>
-              <option value="9" {{selected currentMonth 9}}>Setembro</option>
-              <option value="10" {{selected currentMonth 10}}>Outubro</option>
-              <option value="11" {{selected currentMonth 11}}>Novembro</option>
-              <option value="12" {{selected currentMonth 12}}>Dezembro</option>
-            </select>
+          <div class="col-md-6">
+            <div class="mb-3">
+              <label class="form-label">Ano *</label>
+              <input type="number" class="form-control" name="ano" id="wAno" value="{{currentYear}}" min="2020" max="2100" required />
+            </div>
+            <div class="mb-3" id="campoMes">
+              <label class="form-label">Mês *</label>
+              <select class="form-select" name="mes" id="wMes">
+                <option value="1" {{selected currentMonth 1}}>Janeiro</option>
+                <option value="2" {{selected currentMonth 2}}>Fevereiro</option>
+                <option value="3" {{selected currentMonth 3}}>Março</option>
+                <option value="4" {{selected currentMonth 4}}>Abril</option>
+                <option value="5" {{selected currentMonth 5}}>Maio</option>
+                <option value="6" {{selected currentMonth 6}}>Junho</option>
+                <option value="7" {{selected currentMonth 7}}>Julho</option>
+                <option value="8" {{selected currentMonth 8}}>Agosto</option>
+                <option value="9" {{selected currentMonth 9}}>Setembro</option>
+                <option value="10" {{selected currentMonth 10}}>Outubro</option>
+                <option value="11" {{selected currentMonth 11}}>Novembro</option>
+                <option value="12" {{selected currentMonth 12}}>Dezembro</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Dia de vencimento</label>
+              <input type="number" class="form-control" name="vencimento_dia" id="wVencimento" value="8" min="1" max="28" />
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Passo 2 -->
       <div class="wizard-step d-none" data-step="2">
-        <h2 class="h5 mb-3">Método de cálculo</h2>
-        <div class="form-check py-2">
-          <input class="form-check-input" type="radio" name="modo" id="modoFixo" value="fixo" checked />
-          <label class="form-check-label" for="modoFixo">Valor fixo por fração</label>
-        </div>
-        <div class="form-check py-2">
-          <input class="form-check-input" type="radio" name="modo" id="modoPermilagem" value="permilagem" />
-          <label class="form-check-label" for="modoPermilagem">Valor total distribuído pela permilagem</label>
-        </div>
-      </div>
-
-      <!-- Passo 3 -->
-      <div class="wizard-step d-none" data-step="3">
-        <h2 class="h5 mb-3">Valores</h2>
-        <div class="mb-3" id="campoFixo">
-          <label class="form-label">Valor por fração (€)</label>
-          <input type="text" class="form-control" name="valor" id="wValor" placeholder="ex.: 45,00" />
-        </div>
-        <div class="mb-3 d-none" id="campoPermilagem">
-          <label class="form-label">Valor total a distribuir (€)</label>
-          <input type="text" class="form-control" name="valor_total" id="wValorTotal" placeholder="ex.: 500,00" />
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Dia de vencimento</label>
-          <input type="number" class="form-control" name="vencimento_dia" id="wVencimento" value="8" min="1" max="28" />
-        </div>
-      </div>
-
-      <!-- Passo 4 -->
-      <div class="wizard-step d-none" data-step="4">
         <h2 class="h5 mb-3">Pré-visualização</h2>
+        <div class="alert alert-info d-flex align-items-center gap-2 mb-3">
+          <span class="material-symbols-outlined">info</span>
+          <span>Valor por permilagem: <strong>{{quotaConfig.valorPermilagem}} €</strong> · FCR: <strong>{{quotaConfig.fcrPercentagem}}%</strong></span>
+        </div>
         <div class="table-responsive">
           <table class="table align-middle">
             <thead class="table-light">
-              <tr><th>Fração</th><th class="text-end">Permilagem</th><th class="text-end">Valor</th></tr>
+              <tr><th>Fração</th><th class="text-end">Permilagem</th><th class="text-end">Base</th><th class="text-end">FCR</th><th class="text-end">Total</th></tr>
             </thead>
             <tbody id="previewBody"></tbody>
             <tfoot class="table-light">
-              <tr><th>TOTAL</th><th></th><th class="text-end" id="previewTotal">0,00 €</th></tr>
+              <tr><th>TOTAL</th><th></th><th></th><th></th><th class="text-end" id="previewTotal">0,00 €</th></tr>
             </tfoot>
           </table>
         </div>
+      </div>
+
+      <div class="wizard-step d-none" data-step="3">
+        <h2 class="h5 mb-3">Confirmação</h2>
+        <p class="mb-1" id="resumoGeracao"></p>
+        <p class="text-muted mb-0">Quotas já existentes (fração + mês + ano) não serão duplicadas.</p>
       </div>
     </div>
 
@@ -104,60 +98,59 @@
 
 <script>
   const FRACOES = {{{fracoesJson}}};
+  const CFG = {{{json quotaConfig}}};
   const fmt = (n) => n.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+
+  function calc(perm) {
+    const valorPerC = Math.round(parseFloat(CFG.valorPermilagem) * 100);
+    const baseC = Math.round((parseFloat(perm) || 0) * valorPerC);
+    const fcrC = Math.round(baseC * parseFloat(CFG.fcrPercentagem) / 100);
+    return { base: baseC / 100, fcr: fcrC / 100, total: (baseC + fcrC) / 100 };
+  }
 
   const wizard = {
     step: 1,
     go(dir) {
       const prox = this.step + dir;
-      if (prox < 1 || prox > 4) return;
-      if (dir === 1 && prox === 4) this.previsualizar();
+      if (prox < 1 || prox > 3) return;
+      if (dir === 1 && prox === 2) this.previsualizar();
       this.step = prox;
       this.render();
     },
     render() {
-      document.querySelectorAll('.wizard-step').forEach((s) => {
-        s.classList.toggle('d-none', Number(s.dataset.step) !== this.step);
-      });
+      document.querySelectorAll('.wizard-step').forEach((s) => s.classList.toggle('d-none', Number(s.dataset.step) !== this.step));
       document.querySelectorAll('.stepper .step').forEach((s) => {
         const n = Number(s.dataset.step);
         s.classList.toggle('active', n === this.step);
         s.classList.toggle('done', n < this.step);
       });
-      document.getElementById('btnContinuar').classList.toggle('d-none', this.step === 4);
+      document.getElementById('btnContinuar').classList.toggle('d-none', this.step === 3);
       document.getElementById('btnVoltar').classList.toggle('d-none', this.step === 1);
-      document.getElementById('btnGerar').classList.toggle('d-none', this.step !== 4);
+      document.getElementById('btnGerar').classList.toggle('d-none', this.step !== 3);
     },
+    ehAno() { return document.getElementById('escopoAno').checked; },
     previsualizar() {
-      const modo = document.querySelector('input[name="modo"]:checked').value;
       const tbody = document.getElementById('previewBody');
       let html = '';
-      let total = 0;
+      let totalMes = 0;
       for (const f of FRACOES) {
-        const perm = parseFloat(f.permilagem) || 0;
-        let valor = 0;
-        if (modo === 'permilagem') {
-          const totalVal = parseFloat((document.getElementById('wValorTotal').value || '').replace(',', '.')) || 0;
-          valor = Math.round((totalVal * perm) / 1000 * 100) / 100;
-        } else {
-          valor = parseFloat((document.getElementById('wValor').value || '').replace(',', '.')) || 0;
-        }
-        total += valor;
-        html += `<tr><td>${f.designacao}</td><td class="text-end">${perm} ‰</td><td class="text-end">${fmt(valor)}</td></tr>`;
+        const r = calc(f.permilagem);
+        totalMes += r.total;
+        html += `<tr><td>${f.designacao}</td><td class="text-end">${f.permilagem} ‰</td><td class="text-end">${fmt(r.base)}</td><td class="text-end">${fmt(r.fcr)}</td><td class="text-end fw-semibold">${fmt(r.total)}</td></tr>`;
       }
       tbody.innerHTML = html;
-      document.getElementById('previewTotal').textContent = fmt(total);
+      document.getElementById('previewTotal').textContent = fmt(this.ehAno() ? totalMes * 12 : totalMes);
+      document.getElementById('resumoGeracao').innerHTML =
+        'Serão geradas quotas para <strong>' + FRACOES.length + ' frações</strong>' +
+        (this.ehAno() ? ' em <strong>12 meses</strong>' : ' em <strong>1 mês</strong>') + '.';
     },
   };
 
-  // alterna campos fixo/permilagem
-  function alternarCampos() {
-    const permilagem = document.getElementById('modoPermilagem').checked;
-    document.getElementById('campoFixo').classList.toggle('d-none', permilagem);
-    document.getElementById('campoPermilagem').classList.toggle('d-none', !permilagem);
+  function alternarEscopo() {
+    document.getElementById('campoMes').classList.toggle('d-none', document.getElementById('escopoAno').checked);
   }
-  document.getElementById('modoFixo').addEventListener('change', alternarCampos);
-  document.getElementById('modoPermilagem').addEventListener('change', alternarCampos);
-  alternarCampos();
+  document.getElementById('escopoMes').addEventListener('change', alternarEscopo);
+  document.getElementById('escopoAno').addEventListener('change', alternarEscopo);
+  alternarEscopo();
   wizard.render();
 </script>

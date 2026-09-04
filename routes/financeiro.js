@@ -25,6 +25,8 @@ const { sincronizarMovimentoDespesa } = require('../helpers/movimentos');
 const { gerarAvisoQuotaPDF, gerarReciboPDF } = require('../helpers/pdf');
 const { resolverDestinatarios } = require('../helpers/avisos');
 const { enfileirarEmail } = require('../helpers/email-fila');
+const { getQuotaConfig, setQuotaConfig } = require('../helpers/quotas-config');
+const { calcularQuota } = require('../helpers/quotas-calc');
 
 const router = express.Router();
 
@@ -268,70 +270,134 @@ router.get('/quotas', async (req, res) => {
     })
     .filter((q) => (estado ? q.estadoEfetivo === estado : true));
 
-  const anos = await Quota.findAll({ attributes: [[sequelize.fn('DISTINCT', sequelize.col('ano')), 'ano']], order: [['ano', 'DESC']], raw: true });
-  res.render('admin/quotas/listar', { titulo: 'Quotas', quotas: linhas, filtros: { ano: ano || '', mes: mes || '', estado: estado || '' }, anos: anos.map((a) => a.ano), meses: MESES });
+  const [anos, quotaConfig, fracoes] = await Promise.all([
+    Quota.findAll({ attributes: [[sequelize.fn('DISTINCT', sequelize.col('ano')), 'ano']], order: [['ano', 'DESC']], raw: true }),
+    getQuotaConfig(),
+    Fracao.findAll({ where: { estado: 'ativo' } }),
+  ]);
+
+  // Total mensal previsto das quotas (valor por permilagem + FCR)
+  const previstasMesC = fracoes.reduce((s, f) => {
+    const { totalC } = calcularQuota(f.permilagem, quotaConfig.valorPermilagem, quotaConfig.fcrPercentagem);
+    return s + totalC;
+  }, 0);
+
+  res.render('admin/quotas/listar', {
+    titulo: 'Quotas',
+    quotas: linhas,
+    filtros: { ano: ano || '', mes: mes || '', estado: estado || '' },
+    anos: anos.map((a) => a.ano),
+    meses: MESES,
+    quotaConfig,
+    previstasMes: fromCents(previstasMesC),
+  });
+});
+
+// Configuração das quotas (valor por permilagem + FCR)
+router.post('/quotas/config', async (req, res) => {
+  const valorPermilagem = parseDecimal(req.body.valor_permilagem);
+  const fcrPercentagem = parseInt(req.body.fcr_percentagem, 10);
+
+  if (valorPermilagem <= 0) {
+    req.flash('error_msg', 'O valor por permilagem tem de ser maior que zero.');
+    return res.redirect('/admin/quotas');
+  }
+  if (isNaN(fcrPercentagem) || fcrPercentagem < 0 || fcrPercentagem > 100) {
+    req.flash('error_msg', 'O FCR tem de estar entre 0 e 100%.');
+    return res.redirect('/admin/quotas');
+  }
+
+  await setQuotaConfig({ valorPermilagem, fcrPercentagem });
+
+  // Recalcular quotas futuras não pagas (se pedido)
+  if (req.body.recalcular === 'futuras') {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const futuras = await Quota.findAll({
+      where: { estado: { [Op.in]: ['pendente', 'parcialmente_paga'] }, data_vencimento: { [Op.gte]: hoje } },
+    });
+    for (const q of futuras) {
+      const fracao = await Fracao.findByPk(q.fracao_id);
+      if (!fracao) continue;
+      const { base, fcr, total } = calcularQuota(fracao.permilagem, valorPermilagem, fcrPercentagem);
+      await q.update({ valor_base: base, valor_fcr: fcr, valor: total });
+    }
+    req.flash('success_msg', `Configuração guardada e ${futuras.length} quota(s) futura(s) recalculada(s).`);
+  } else {
+    req.flash('success_msg', 'Configuração guardada (aplica-se a quotas futuras ainda não geradas).');
+  }
+
+  await audit({ userId: req.user.id, acao: 'configurar_quotas', entidade: 'Configuracao', detalhes: { valorPermilagem, fcrPercentagem } });
+  res.redirect('/admin/quotas');
 });
 
 router.get('/quotas/gerar', async (req, res) => {
-  const fracoes = await Fracao.findAll({ where: { estado: 'ativo' }, order: [['designacao', 'ASC']] });
+  const [fracoes, quotaConfig] = await Promise.all([
+    Fracao.findAll({ where: { estado: 'ativo' }, order: [['designacao', 'ASC']] }),
+    getQuotaConfig(),
+  ]);
   res.render('admin/quotas/gerar', {
     titulo: 'Gerar quotas',
     fracoes,
+    quotaConfig,
     fracoesJson: JSON.stringify(fracoes.map((f) => ({ id: f.id, designacao: f.designacao, permilagem: f.permilagem }))),
   });
 });
 
 router.post('/quotas/gerar', async (req, res) => {
-  const { ano, mes, modo, valor, valor_total, vencimento_dia } = req.body;
-  const anoNum = parseInt(ano, 10);
-  const mesNum = parseInt(mes, 10);
-  const valorFixo = toNumber(valor);
-  const valorTotal = toNumber(valor_total);
-  const vencDia = parseInt(vencimento_dia, 10) || 8;
-  const vencimento = new Date(anoNum, mesNum - 1, vencDia);
+  const escopo = req.body.escopo || 'mes'; // 'mes' | 'ano'
+  const anoNum = parseInt(req.body.ano, 10);
+  const mesNum = escopo === 'ano' ? null : parseInt(req.body.mes, 10);
+  const vencDia = parseInt(req.body.vencimento_dia, 10) || 8;
 
+  if (!anoNum || (escopo === 'mes' && !mesNum)) {
+    req.flash('error_msg', 'Indique o ano (e o mês, se aplicável).');
+    return res.redirect('/admin/quotas/gerar');
+  }
+
+  const { valorPermilagem, fcrPercentagem } = await getQuotaConfig();
   const fracoes = await Fracao.findAll({ where: { estado: 'ativo' }, order: [['designacao', 'ASC']] });
+  const meses = escopo === 'ano' ? Array.from({ length: 12 }, (_, i) => i + 1) : [mesNum];
+
   const t = await sequelize.transaction();
   let criadas = 0;
   let ignoradas = 0;
   try {
     for (const f of fracoes) {
-      const existente = await Quota.findOne({ where: { fracao_id: f.id, ano: anoNum, mes: mesNum }, transaction: t });
-      if (existente) {
-        ignoradas++;
-        continue;
+      const { base, fcr, total } = calcularQuota(f.permilagem, valorPermilagem, fcrPercentagem);
+      for (const m of meses) {
+        const existente = await Quota.findOne({ where: { fracao_id: f.id, ano: anoNum, mes: m }, transaction: t });
+        if (existente) {
+          ignoradas++;
+          continue;
+        }
+        const numero = await proximoNumero('aviso_quota', { ano: anoNum, transaction: t });
+        await Quota.create(
+          {
+            numero_documento: numero,
+            fracao_id: f.id,
+            ano: anoNum,
+            mes: m,
+            periodo: new Date(anoNum, m - 1, 1),
+            valor: total,
+            valor_base: base,
+            valor_fcr: fcr,
+            data_emissao: new Date(),
+            data_vencimento: new Date(anoNum, m - 1, vencDia),
+            estado: 'pendente',
+          },
+          { transaction: t }
+        );
+        criadas++;
       }
-      let valorQuota;
-      if (modo === 'permilagem') {
-        const perm = parseFloat(f.permilagem) || 0;
-        valorQuota = Math.round((valorTotal * perm) / 1000 * 100) / 100;
-      } else {
-        valorQuota = valorFixo;
-      }
-      const numero = await proximoNumero('aviso_quota', { ano: anoNum, transaction: t });
-      await Quota.create(
-        {
-          numero_documento: numero,
-          fracao_id: f.id,
-          ano: anoNum,
-          mes: mesNum,
-          periodo: new Date(anoNum, mesNum - 1, 1),
-          valor: valorQuota,
-          data_emissao: new Date(),
-          data_vencimento: vencimento,
-          estado: 'pendente',
-        },
-        { transaction: t }
-      );
-      criadas++;
     }
     await t.commit();
-    await audit({ userId: req.user.id, acao: 'gerar_quotas', entidade: 'Quota', detalhes: { ano: anoNum, mes: mesNum, criadas } });
-    req.flash('success_msg', `Geradas ${criadas} quota(s)${ignoradas ? `; ${ignoradas} já existiam` : ''}.`);
+    await audit({ userId: req.user.id, acao: 'gerar_quotas', entidade: 'Quota', detalhes: { ano: anoNum, mes: mesNum, escopo, criadas } });
+    req.flash('success_msg', `Geradas ${criadas} quota(s)${ignoradas ? `; ${ignoradas} já existiam (não duplicadas)` : ''}.`);
   } catch (err) {
     await t.rollback();
     console.error(err);
-    req.flash('error_msg', 'Erro ao gerar quotas.');
+    req.flash('error_msg', 'Não foi possível gerar as quotas. Verifique os dados e tente novamente.');
   }
   res.redirect('/admin/quotas');
 });
