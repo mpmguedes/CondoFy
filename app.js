@@ -89,6 +89,7 @@ app.use('/', require('./routes'));
 app.use('/', require('./routes/auth'));
 app.use('/admin', require('./routes/admin'));
 app.use('/admin', require('./routes/financeiro'));
+app.use('/admin', require('./routes/extra-quotas'));
 app.use('/admin', require('./routes/orcamento'));
 app.use('/admin', require('./routes/assembleias'));
 app.use('/admin', require('./routes/documentos'));

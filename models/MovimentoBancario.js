@@ -19,6 +19,7 @@ module.exports = (sequelize) => {
       quota_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       pagamento_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       despesa_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+      extra_quota_parcela_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       documento_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       estado: {
         type: DataTypes.ENUM('confirmado', 'anulado'),

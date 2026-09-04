@@ -1,0 +1,102 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>{{extra.designacao}}</h1>
+    <p class="subtitle">Quota extraordinária — {{#if (eq extra.metodo_divisao 'igual')}}partes iguais{{else}}permilagem{{/if}} · {{extra.numero_parcelas}} parcelas · {{lookup periodicidadeLabel extra.periodicidade}}</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/admin/quotas-extra" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
+    {{#unless (eq extra.estado 'anulada')}}
+    <form action="/admin/quotas-extra/{{extra.id}}/anular" method="POST" onsubmit="return confirm('Anular esta quota extraordinária? As parcelas não pagas serão anuladas.');">
+      <button class="btn btn-outline-danger"><span class="material-symbols-outlined me-1">block</span>Anular</button>
+    </form>
+    {{/unless}}
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Valor total</div>
+      <div class="stat-value">{{eur extra.valor_total}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Pago</div>
+      <div class="stat-value text-success">{{eur resumo.pago}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Em falta</div>
+      <div class="stat-value text-danger">{{eur resumo.emFalta}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Estado</div>
+      <div class="stat-value">
+        {{#if (eq extra.estado 'anulada')}}<span class="badge text-bg-secondary fs-6">Anulada</span>
+        {{else if (eq resumo.emFalta 0)}}<span class="badge text-bg-success fs-6">Liquidada</span>
+        {{else}}<span class="badge text-bg-primary fs-6">Ativa</span>{{/if}}
+      </div>
+    </div></div>
+  </div>
+</div>
+
+{{#if grupos}}
+{{#each grupos}}
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="fw-semibold">Fração {{fracao.designacao}} <span class="text-muted small">({{fracao.permilagem}}‰)</span></span>
+    <span class="small">Total {{eur total}} · Pago {{eur pago}} · Em falta {{eur emFalta}}</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Parcela</th>
+          <th>Vencimento</th>
+          <th class="text-end">Valor</th>
+          <th class="text-end">Pago</th>
+          <th>Estado</th>
+          <th class="text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each parcelas}}
+        <tr>
+          <td>{{parcela_numero}} / {{../../extra.numero_parcelas}}</td>
+          <td>{{formatDate data_vencimento}}</td>
+          <td class="text-end">{{eur valor}}</td>
+          <td class="text-end">{{eur valor_pago}}</td>
+          <td>
+            {{#if (eq estado 'paga')}}<span class="badge text-bg-success">Paga</span>
+            {{else if (eq estado 'anulada')}}<span class="badge text-bg-secondary">Anulada</span>
+            {{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}
+          </td>
+          <td class="text-end text-nowrap">
+            {{#if (eq estado 'pendente')}}
+            <form action="/admin/quotas-extra/parcelas/{{id}}/pagar" method="POST" class="d-inline-flex align-items-center gap-1">
+              <select class="form-select form-select-sm" name="conta_bancaria_id" style="width: auto;">
+                <option value="">Sem conta</option>
+                {{#each ../../contas}}<option value="{{id}}">{{nome}}</option>{{/each}}
+              </select>
+              <button class="btn btn-sm btn-outline-success" title="Marcar paga"><span class="material-symbols-outlined">check</span></button>
+            </form>
+            {{else if (eq estado 'paga')}}
+            <form action="/admin/quotas-extra/parcelas/{{id}}/desfazer" method="POST" class="d-inline" onsubmit="return confirm('Reverter este pagamento?');">
+              <button class="btn btn-sm btn-outline-secondary" title="Desfazer pagamento"><span class="material-symbols-outlined">undo</span></button>
+            </form>
+            {{/if}}
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{/each}}
+{{else}}
+{{> _empty-state icon="savings" titulo="Sem parcelas" descricao="Esta quota extraordinária não tem parcelas."}}
+{{/if}}

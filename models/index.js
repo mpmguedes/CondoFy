@@ -42,6 +42,8 @@ const {
   AvisoDestinatario,
   EmailFila,
   AuditLog,
+  ExtraQuota,
+  ExtraQuotaParcela,
 } = db;
 
 // Utilizador ↔ Pessoa (relação explícita, nunca por nome)
@@ -101,6 +103,8 @@ MovimentoBancario.belongsTo(Categoria, { foreignKey: 'categoria_id', as: 'catego
 MovimentoBancario.belongsTo(Quota, { foreignKey: 'quota_id', as: 'quota' });
 MovimentoBancario.belongsTo(Pagamento, { foreignKey: 'pagamento_id', as: 'pagamento' });
 MovimentoBancario.belongsTo(Despesa, { foreignKey: 'despesa_id', as: 'despesa' });
+MovimentoBancario.belongsTo(ExtraQuotaParcela, { foreignKey: 'extra_quota_parcela_id', as: 'extra_quota_parcela' });
+ExtraQuotaParcela.hasMany(MovimentoBancario, { foreignKey: 'extra_quota_parcela_id', as: 'movimentos' });
 MovimentoBancario.belongsTo(Documento, { foreignKey: 'documento_id', as: 'documento' });
 MovimentoBancario.belongsTo(User, { foreignKey: 'created_by', as: 'criador' });
 
@@ -151,6 +155,12 @@ EmailFila.belongsTo(Aviso, { foreignKey: 'aviso_id', as: 'aviso' });
 
 // Auditoria
 AuditLog.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+// Quotas Extraordinárias
+ExtraQuota.hasMany(ExtraQuotaParcela, { foreignKey: 'extra_quota_id', as: 'parcelas' });
+ExtraQuotaParcela.belongsTo(ExtraQuota, { foreignKey: 'extra_quota_id', as: 'extra_quota' });
+ExtraQuotaParcela.belongsTo(Fracao, { foreignKey: 'fracao_id', as: 'fracao' });
+Fracao.hasMany(ExtraQuotaParcela, { foreignKey: 'fracao_id', as: 'parcelas_extra' });
 
 db.sequelize = sequelize;
 db.Sequelize = require('sequelize');

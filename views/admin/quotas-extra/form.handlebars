@@ -1,0 +1,141 @@
+<div class="page-heading">
+  <h1>Nova quota extraordinária</h1>
+  <p class="subtitle">Distribua uma despesa pontual pelas frações e planeie o parcelamento</p>
+</div>
+
+<form action="/admin/quotas-extra" method="POST" id="formExtra">
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <div class="card mb-3">
+        <div class="card-header fw-semibold">Identificação</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Designação <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" name="designacao" required placeholder="Ex.: Obras de impermeabilização da cobertura" />
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Valor total (€) <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="valor_total" id="valorTotal" required placeholder="0,00" inputmode="decimal" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Método de divisão <span class="text-danger">*</span></label>
+              <select class="form-select" name="metodo_divisao" id="metodoDivisao">
+                <option value="permilagem">Permilagem (‰)</option>
+                <option value="igual">Partes iguais</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header fw-semibold">Parcelamento</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">Mês de início <span class="text-danger">*</span></label>
+              <select class="form-select" name="mes_inicio" id="mesInicio">
+                {{#each meses}}<option value="{{inc @index}}" {{selected ../mesAtual (inc @index)}}>{{this}}</option>{{/each}}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Ano de início <span class="text-danger">*</span></label>
+              <input type="number" class="form-control" name="ano_inicio" id="anoInicio" value="{{anoAtual}}" min="2000" max="2100" required />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">N.º de parcelas <span class="text-danger">*</span></label>
+              <input type="number" class="form-control" name="numero_parcelas" id="numeroParcelas" value="1" min="1" max="60" required />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Periodicidade <span class="text-danger">*</span></label>
+              <select class="form-select" name="periodicidade" id="periodicidade">
+                <option value="mensal">Mensal</option>
+                <option value="bimestral">Bimestral</option>
+                <option value="trimestral">Trimestral</option>
+                <option value="semestral">Semestral</option>
+                <option value="anual">Anual</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-semibold">Frações</span>
+          <span class="badge text-bg-light" id="contadorFracoes">0 selecionadas</span>
+        </div>
+        <div class="card-body">
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="todasFracoes" onchange="toggleTodas(this)" />
+            <label class="form-check-label fw-semibold" for="todasFracoes">Incluir todas as frações ativas</label>
+          </div>
+          <div class="row g-2" id="listaFracoes">
+            {{#each fracoes}}
+            <div class="col-6 col-md-4">
+              <div class="form-check">
+                <input class="form-check-input fracao-check" type="checkbox" name="fracoes" value="{{id}}" id="f{{id}}" />
+                <label class="form-check-label" for="f{{id}}">{{designacao}} <span class="text-muted small">({{permilagem}}‰)</span></label>
+              </div>
+            </div>
+            {{/each}}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card mb-3 sticky-top" style="top: 80px;">
+        <div class="card-header fw-semibold">Pré-visualização</div>
+        <div class="card-body">
+          <div class="mb-2 d-flex justify-content-between"><span class="text-muted">Valor total</span><strong id="pvTotal">0,00 €</strong></div>
+          <div class="mb-2 d-flex justify-content-between"><span class="text-muted">Frações</span><strong id="pvFracoes">0</strong></div>
+          <div class="mb-2 d-flex justify-content-between"><span class="text-muted">Parcelas / fração</span><strong id="pvParcelas">1</strong></div>
+          <hr />
+          <div class="mb-2 d-flex justify-content-between"><span class="text-muted">Valor por parcela (média)</span><strong id="pvParcela">0,00 €</strong></div>
+          <div class="form-text">A diferença de cêntimos resultante do arredondamento é atribuída à última parcela de cada fração, garantindo que a soma é exatamente o valor total.</div>
+        </div>
+        <div class="card-footer d-grid">
+          <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1">save</span>Criar quota extra</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+
+<script>
+  function numeroFracoesSel() {
+    return document.querySelectorAll('.fracao-check:checked').length;
+  }
+  function atualizarContador() {
+    document.getElementById('contadorFracoes').textContent = numeroFracoesSel() + ' selecionadas';
+    atualizarPreview();
+  }
+  function toggleTodas(el) {
+    document.querySelectorAll('.fracao-check').forEach((c) => (c.checked = el.checked));
+    atualizarContador();
+  }
+  function parseEuro(v) {
+    if (v == null || v === '') return 0;
+    return parseFloat(String(v).replace(/\./g, '').replace(',', '.')) || 0;
+  }
+  function eur(c) {
+    return c.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  }
+  function atualizarPreview() {
+    const total = parseEuro(document.getElementById('valorTotal').value);
+    const nFracoes = numeroFracoesSel();
+    const nParc = parseInt(document.getElementById('numeroParcelas').value, 10) || 1;
+    const porFracao = nFracoes > 0 ? total / nFracoes : 0;
+    const porParcela = nParc > 0 ? porFracao / nParc : 0;
+    document.getElementById('pvTotal').textContent = eur(total);
+    document.getElementById('pvFracoes').textContent = nFracoes;
+    document.getElementById('pvParcelas').textContent = nParc;
+    document.getElementById('pvParcela').textContent = eur(porParcela);
+  }
+  document.getElementById('valorTotal').addEventListener('input', atualizarPreview);
+  document.getElementById('numeroParcelas').addEventListener('input', atualizarPreview);
+  document.querySelectorAll('.fracao-check').forEach((c) => c.addEventListener('change', atualizarContador));
+  atualizarContador();
+</script>

@@ -1,0 +1,52 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Quotas Extraordinárias</h1>
+    <p class="subtitle">Despesas pontuais distribuídas pelas frações com parcelamento</p>
+  </div>
+  <a href="/admin/quotas-extra/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">add</span>Nova quota extra</a>
+</div>
+
+{{#if extras}}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Designação</th>
+          <th>Método</th>
+          <th>Início</th>
+          <th>Parcelas</th>
+          <th class="text-end">Total</th>
+          <th class="text-end">Pago</th>
+          <th class="text-end">Em falta</th>
+          <th>Estado</th>
+          <th class="text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each extras}}
+        <tr>
+          <td class="fw-semibold">{{designacao}}</td>
+          <td>{{#if (eq metodo_divisao 'igual')}}Partes iguais{{else}}Permilagem{{/if}}</td>
+          <td>{{monthName mes_inicio}} {{ano_inicio}}</td>
+          <td>{{numero_parcelas}} × {{lookup ../periodicidadeLabel periodicidade}}</td>
+          <td class="text-end">{{eur valor_total}}</td>
+          <td class="text-end text-success">{{eur pago}}</td>
+          <td class="text-end fw-semibold">{{eur emFalta}}</td>
+          <td>
+            {{#if (eq estado 'anulada')}}<span class="badge text-bg-secondary">Anulada</span>
+            {{else if (eq emFalta 0)}}<span class="badge text-bg-success">Liquidada</span>
+            {{else}}<span class="badge text-bg-primary">Ativa</span>{{/if}}
+          </td>
+          <td class="text-end text-nowrap">
+            <a href="/admin/quotas-extra/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{else}}
+{{> _empty-state icon="savings" titulo="Sem quotas extraordinárias" descricao="Crie uma quota extraordinária para distribuir uma despesa pontual pelas frações."}}
+{{/if}}
