@@ -17,13 +17,13 @@ Identidade própria do CondoFy. Não copiar textos/logo.
 
 | Módulo | Âmbito | Estado |
 | --- | --- | --- |
-| **M1** | AppLayout + Sidebar + Header + Dashboard (design tokens, spacing) | em curso |
-| M2 | Partials reutilizáveis (PageHeader, StatCard, StatusChip, EmptyState) + migrar listas | pendente |
-| M3 | Formulários (spacing, labels, money/date fields) + migrar forms | pendente |
-| M4 | Página de detalhe da fração com tabs | pendente |
-| M5 | Wizard Material para gerar quotas (multi-passo) | pendente |
-| M6 | Responsive (drawer mobile, cards 1 coluna, tabelas com scroll) | pendente |
-| M7 | Acessibilidade + polimento + empty states em todas as áreas | pendente |
+| **M1** | AppLayout + Sidebar + Header + Dashboard (design tokens, spacing) | ✅ |
+| M2 | Partials reutilizáveis (PageHeader, StatCard, StatusChip, EmptyState) + migrar listas | ✅ |
+| M3 | Formulários (spacing, labels, money/date fields) + migrar forms | ✅ |
+| M4 | Página de detalhe da fração com tabs | ✅ |
+| M5 | Wizard Material para gerar quotas (multi-passo) | ✅ |
+| M6 | Responsive (drawer mobile, cards, tabelas com scroll) | ✅ |
+| M7 | Acessibilidade + polimento + empty states em todas as áreas | ✅ |
 
 ## Regras
 
