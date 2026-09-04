@@ -26,14 +26,12 @@ function indicesCobranca(periodicidade, totalMeses) {
   return Array.from({ length: totalMeses }, (_, i) => i); // mensal
 }
 
-// Divide um total em cêntimos por n partes iguais, com resto distribuído
-// pelas primeiras partes (soma = total).
+// Divide um total em cêntimos por n partes IGUAIS (todas com o mesmo valor),
+// para que cada fração pague exatamente o mesmo todos os meses. O arredondamento
+// é absorvido no total anual (n × parte), nunca nos meses.
 function dividirEm(totalC, n) {
-  const base = Math.floor(totalC / n);
-  let resto = totalC - base * n;
-  const partes = new Array(n).fill(base);
-  for (let i = 0; i < resto; i++) partes[i] += 1;
-  return partes;
+  const valor = Math.round(totalC / n);
+  return new Array(n).fill(valor);
 }
 
 // Calcula o plano de quotas de um orçamento a partir da distribuição.

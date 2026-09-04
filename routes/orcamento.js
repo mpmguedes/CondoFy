@@ -303,11 +303,11 @@ router.get('/orcamento/:id/plano', async (req, res) => {
     id,
     designacao,
     totais: meses.map((m) => celulas[`${id}|${m.ano}|${m.mes}`] ?? 0),
-    totalAnual: meses.reduce((s, m) => s + toCents(celulas[`${id}|${m.ano}|${m.mes}`] ?? 0), 0),
+    totalAnual: fromCents(meses.reduce((s, m) => s + toCents(celulas[`${id}|${m.ano}|${m.mes}`] ?? 0), 0)),
   }));
 
   const totaisMes = meses.map((m) =>
-    plano.filter((p) => p.ano === m.ano && p.mes === m.mes).reduce((s, p) => s + toCents(p.valor), 0)
+    fromCents(plano.filter((p) => p.ano === m.ano && p.mes === m.mes).reduce((s, p) => s + toCents(p.valor), 0))
   );
 
   res.render('admin/orcamento/plano', {
@@ -316,7 +316,7 @@ router.get('/orcamento/:id/plano', async (req, res) => {
     meses,
     fracoes,
     totaisMes,
-    totalGeral: plano.reduce((s, p) => s + toCents(p.valor), 0),
+    totalGeral: fromCents(plano.reduce((s, p) => s + toCents(p.valor), 0)),
   });
 });
 
@@ -414,21 +414,32 @@ router.get('/orcamento/:id/emitir', async (req, res) => {
 router.post('/orcamento/:id/emitir', async (req, res) => {
   const orcamento = await Orcamento.findByPk(req.params.id);
   if (!orcamento) return res.redirect('/admin/orcamento');
-  const ano = parseInt(req.body.ano, 10);
-  const mes = parseInt(req.body.mes, 10);
-
-  const plano = await PlanoQuota.findAll({
-    where: { orcamento_id: orcamento.id, ano, mes, estado: 'planeada' },
-    lock: true,
-  });
-  if (plano.length === 0) {
-    req.flash('error_msg', 'Não há quotas planeadas para esse período.');
+  let ano = parseInt(req.body.ano, 10);
+  let mes = parseInt(req.body.mes, 10);
+  if (req.body.periodo) {
+    const [pAno, pMes] = req.body.periodo.split('-').map(Number);
+    ano = pAno;
+    mes = pMes;
+  }
+  if (!ano || !mes) {
+    req.flash('error_msg', 'Selecione o período a emitir.');
     return res.redirect(`/admin/orcamento/${orcamento.id}/emitir`);
   }
 
   const t = await sequelize.transaction();
   let criadas = 0;
   try {
+    const plano = await PlanoQuota.findAll({
+      where: { orcamento_id: orcamento.id, ano, mes, estado: 'planeada' },
+      lock: t.LOCK.UPDATE,
+      transaction: t,
+    });
+    if (plano.length === 0) {
+      await t.rollback();
+      req.flash('error_msg', 'Não há quotas planeadas para esse período.');
+      return res.redirect(`/admin/orcamento/${orcamento.id}/emitir`);
+    }
+
     for (const p of plano) {
       const numero = await proximoNumero('aviso_quota', { ano, transaction: t });
       await Quota.create(
@@ -458,7 +469,7 @@ router.post('/orcamento/:id/emitir', async (req, res) => {
   } catch (err) {
     await t.rollback();
     console.error(err);
-    req.flash('error_msg', 'Erro ao emitir quotas.');
+    req.flash('error_msg', `Erro ao emitir quotas: ${err.message}`);
   }
   res.redirect('/admin/quotas');
 });

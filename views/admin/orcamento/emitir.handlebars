@@ -14,18 +14,21 @@
       </div>
     </div>
 
-    {{#if proximoMes}}
+    {{#if meses}}
     <div class="card mt-3">
-      <div class="card-header bg-white"><i class="bi bi-calendar-event me-1"></i>Próxima emissão</div>
+      <div class="card-header bg-white"><i class="bi bi-calendar-event me-1"></i>Emitir quotas</div>
       <div class="card-body">
-        <dl class="row mb-3">
-          <dt class="col-6">Período a emitir</dt><dd class="col-6">{{monthName proximoMes}} {{proximoAno}}</dd>
-          <dt class="col-6">Frações</dt><dd class="col-6">{{nFracoes}}</dd>
-          <dt class="col-6">Total a emitir</dt><dd class="col-6 fw-semibold">{{eur total}}</dd>
-        </dl>
         <form action="/admin/orcamento/{{orcamento.id}}/emitir" method="POST">
-          <input type="hidden" name="ano" value="{{proximoAno}}" />
-          <input type="hidden" name="mes" value="{{proximoMes}}" />
+          <div class="mb-3">
+            <label class="form-label">Período a emitir</label>
+            <select class="form-select" name="periodo">
+              {{#each meses}}
+              <option value="{{ano}}-{{mes}}" {{#if (and (eq ano ../proximoAno) (eq mes ../proximoMes))}}selected{{/if}}>
+                {{monthName mes}} {{ano}}
+              </option>
+              {{/each}}
+            </select>
+          </div>
           <button type="submit" class="btn btn-primary"><i class="bi bi-send me-1"></i>Emitir avisos</button>
         </form>
       </div>
