@@ -28,6 +28,7 @@ const {
   OrcamentoRubrica,
   OrcamentoAlteracao,
   OrcamentoDistribuicao,
+  PlanoQuota,
   OrcamentoItem,
   Quota,
   Pagamento,
@@ -104,6 +105,9 @@ Orcamento.hasMany(OrcamentoDistribuicao, { foreignKey: 'orcamento_id', as: 'dist
 OrcamentoDistribuicao.belongsTo(Orcamento, { foreignKey: 'orcamento_id', as: 'orcamento' });
 OrcamentoDistribuicao.belongsTo(OrcamentoRubrica, { foreignKey: 'rubrica_id', as: 'rubrica' });
 OrcamentoDistribuicao.belongsTo(Fracao, { foreignKey: 'fracao_id', as: 'fracao' });
+Orcamento.hasMany(PlanoQuota, { foreignKey: 'orcamento_id', as: 'plano' });
+PlanoQuota.belongsTo(Orcamento, { foreignKey: 'orcamento_id', as: 'orcamento' });
+PlanoQuota.belongsTo(Fracao, { foreignKey: 'fracao_id', as: 'fracao' });
 Orcamento.hasMany(OrcamentoAlteracao, { foreignKey: 'orcamento_id', as: 'alteracoes' });
 OrcamentoAlteracao.belongsTo(Orcamento, { foreignKey: 'orcamento_id', as: 'orcamento' });
 OrcamentoAlteracao.belongsTo(User, { foreignKey: 'utilizador_id', as: 'utilizador' });
