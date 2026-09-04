@@ -382,9 +382,12 @@ async function gerarConvocatoriaPDF(condominio, d) {
   L.texto('Assembleia de condóminos', { bold: true, fontSize: 11 });
   L.espaco(6);
 
-  L.caixa('Informações', (C) => {
+  L.caixa('Identificação', (C) => {
+    C.linha('Número', d.numero || '—');
+    C.linha('Tipo', d.tipo || '—');
     C.linha('Data', formatDate(d.data));
-    C.linha('Hora', d.hora || '—');
+    C.linha('Hora (1.ª convocatória)', d.hora || '—');
+    C.linha('Hora (2.ª convocatória)', d.horaSegunda || '—');
     C.linha('Local', d.local || '—');
   });
 
@@ -402,6 +405,24 @@ async function gerarConvocatoriaPDF(condominio, d) {
       }
     },
     T.COR_SUCESSO
+  );
+
+  L.caixa(
+    'Convocações e quórum',
+    (C) => {
+      C.texto('1.ª convocatória — a assembleia reúne à hora indicada desde que estejam presentes condóminos que representem, pelo menos, metade do valor total do edifício.');
+      C.espaco(2);
+      C.texto('2.ª convocatória — decorridos 30 minutos, a assembleia pode deliberar com qualquer número de presentes, nos termos do artigo 1432.º do Código Civil.');
+    },
+    T.COR_ALERTA
+  );
+
+  L.caixa(
+    'Representação (procuração)',
+    (C) => {
+      C.texto('Os condóminos podem fazer-se representar por procuração escrita, dirigida ao presidente da mesa da assembleia, nos termos legais.');
+    },
+    T.COR_PRIMARIA
   );
 
   finalizarPaginacao(doc, condominio);

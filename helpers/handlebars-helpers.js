@@ -7,6 +7,7 @@ module.exports = {
   ne: (a, b) => String(a) !== String(b),
   and: (a, b) => Boolean(a) && Boolean(b),
   or: (a, b) => Boolean(a) || Boolean(b),
+  not: (a) => !a,
   gt: (a, b) => Number(a) > Number(b),
   lt: (a, b) => Number(a) < Number(b),
   inc: (n) => Number(n) + 1,

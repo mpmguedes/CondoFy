@@ -5,6 +5,8 @@ const {
   PagamentoQuota,
   ExtraQuotaParcela,
   Orcamento,
+  OrcamentoRubrica,
+  PlanoQuota,
 } = require('../models');
 const { toCents, fromCents } = require('./money');
 const { estadoEfetivo } = require('./saldos');
@@ -77,10 +79,29 @@ async function resumoEmAtraso() {
   return { total: fromCents(totalC), count };
 }
 
-// Orçamento cujo ano de início corresponde ao ano indicado (ou null).
+// Orçamento cujo ano de início corresponde ao ano indicado (ou null), com os
+// totais previstos: despesas (rubricas), receitas (plano emitido/planeado) e saldo.
 async function orcamentoDoAno(ano) {
-  const orcamentos = await Orcamento.findAll({ order: [['data_inicio', 'ASC']] });
-  return orcamentos.find((o) => new Date(o.data_inicio).getFullYear() === ano) || null;
+  const orcamentos = await Orcamento.findAll({
+    include: [{ model: OrcamentoRubrica, as: 'rubricas' }],
+    order: [['data_inicio', 'ASC']],
+  });
+  const orcamento = orcamentos.find((o) => new Date(o.data_inicio).getFullYear() === ano) || null;
+  if (!orcamento) return null;
+
+  const despesasC = orcamento.rubricas.filter((r) => r.ativo).reduce((s, r) => s + toCents(r.valor_anual), 0);
+  const plano = await PlanoQuota.findAll({
+    where: { orcamento_id: orcamento.id, estado: { [Op.ne]: 'cancelada' } },
+    raw: true,
+  });
+  const receitasC = plano.reduce((s, p) => s + toCents(p.valor), 0);
+
+  return {
+    ...orcamento.toJSON(),
+    despesasPrevistas: fromCents(despesasC),
+    receitasPrevistas: fromCents(receitasC),
+    saldoPrevisto: fromCents(receitasC - despesasC),
+  };
 }
 
 module.exports = { resumoFinanceiroMes, resumoEmAtraso, orcamentoDoAno };

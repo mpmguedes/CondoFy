@@ -44,6 +44,7 @@ const {
   AuditLog,
   ExtraQuota,
   ExtraQuotaParcela,
+  AgendaItem,
 } = db;
 
 // Utilizador ↔ Pessoa (relação explícita, nunca por nome)
@@ -161,6 +162,10 @@ ExtraQuota.hasMany(ExtraQuotaParcela, { foreignKey: 'extra_quota_id', as: 'parce
 ExtraQuotaParcela.belongsTo(ExtraQuota, { foreignKey: 'extra_quota_id', as: 'extra_quota' });
 ExtraQuotaParcela.belongsTo(Fracao, { foreignKey: 'fracao_id', as: 'fracao' });
 Fracao.hasMany(ExtraQuotaParcela, { foreignKey: 'fracao_id', as: 'parcelas_extra' });
+
+// Itens da ordem de trabalhos
+Assembleia.hasMany(AgendaItem, { foreignKey: 'assembleia_id', as: 'agenda_itens' });
+AgendaItem.belongsTo(Assembleia, { foreignKey: 'assembleia_id', as: 'assembleia' });
 
 db.sequelize = sequelize;
 db.Sequelize = require('sequelize');

@@ -6,38 +6,45 @@
   <a href="/admin/orcamento/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">add</span>Novo orçamento</a>
 </div>
 
+{{#unless temAnoAtual}}
+<div class="alert alert-info d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <span><span class="material-symbols-outlined me-1">info</span>Não existe orçamento para {{anoAtual}}</span>
+  <a href="/admin/orcamento/nova" class="btn btn-primary btn-sm"><span class="material-symbols-outlined me-1">add</span>Criar Orçamento</a>
+</div>
+{{/unless}}
+
 {{#if orcamentos}}
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <thead class="table-light">
         <tr>
-          <th>Designação</th>
+          <th>Ano</th>
           <th>Período</th>
-          <th>Estado</th>
           <th class="text-end">Receitas</th>
           <th class="text-end">Despesas</th>
           <th class="text-end">Saldo</th>
+          <th>Estado</th>
           <th class="text-end">Ações</th>
         </tr>
       </thead>
       <tbody>
         {{#each orcamentos}}
         <tr>
-          <td class="fw-semibold">{{designacao}}</td>
+          <td class="fw-semibold">{{ano}}</td>
           <td class="text-nowrap">{{formatDate data_inicio}} — {{formatDate data_fim}}</td>
-          <td>
-            {{#if (eq estado 'rascunho')}}<span class="badge text-bg-secondary">Rascunho</span>
-            {{else if (eq estado 'aprovado')}}<span class="badge text-bg-success">Aprovado</span>
-            {{else if (eq estado 'em_execucao')}}<span class="badge text-bg-primary">Em execução</span>
-            {{else if (eq estado 'encerrado')}}<span class="badge text-bg-dark">Encerrado</span>
-            {{else}}<span class="badge text-bg-danger">Anulado</span>{{/if}}
-          </td>
           <td class="text-end text-success">{{eur receitas}}</td>
           <td class="text-end">{{eur despesas}}</td>
           <td class="text-end fw-semibold {{#if (gt saldo 0)}}text-success{{else if (lt saldo 0)}}text-danger{{/if}}">{{eur saldo}}</td>
+          <td>
+            {{#if (eq estado 'rascunho')}}<span class="badge text-bg-secondary">Rascunho</span>
+            {{else if (eq estado 'encerrado')}}<span class="badge text-bg-dark">Fechado</span>
+            {{else if (eq estado 'anulado')}}<span class="badge text-bg-danger">Anulado</span>
+            {{else}}<span class="badge text-bg-success">Ativo</span>{{/if}}
+          </td>
           <td class="text-end">
             <a href="/admin/orcamento/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
+            <a href="/admin/orcamento/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
           </td>
         </tr>
         {{/each}}

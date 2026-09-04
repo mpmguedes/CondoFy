@@ -39,7 +39,7 @@
               {{else if (eq this.estado 'anulada')}}<a href="/admin/quotas/{{this.id}}" class="badge text-bg-secondary text-decoration-none">Anulada</a>
               {{else}}<a href="/admin/quotas/{{this.id}}" class="badge text-bg-warning text-decoration-none">Pendente</a>{{/if}}
             {{else}}
-              <span class="text-muted small">—</span>
+              <span class="badge text-bg-light border text-decoration-none">Não gerada</span>
             {{/if}}
           </td>
           {{/each}}

@@ -13,18 +13,59 @@ const upload = multer({
   limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
 });
 
+// Estrutura de pastas da biblioteca do condomínio.
+const PASTAS = {
+  atas: 'Atas',
+  convocatorias: 'Convocatórias',
+  contratos: 'Contratos',
+  regulamentos: 'Regulamentos',
+  recibos: 'Recibos de Pagamento',
+  assembleias: 'Assembleias',
+  apolices: 'Seguros — Apólices',
+  comprovativos: 'Seguros — Comprovativos',
+  faturas: 'Faturas',
+  outros: 'Outros',
+};
+
+// Tipos permitidos por pasta (para limitar o upload).
+const TIPOS_POR_PASTA = {
+  atas: ['ata', 'outro'],
+  convocatorias: ['convocatoria', 'outro'],
+  contratos: ['contrato', 'outro'],
+  regulamentos: ['outro'],
+  recibos: ['recibo', 'outro'],
+  assembleias: ['ata', 'convocatoria', 'outro'],
+  apolices: ['outro'],
+  comprovativos: ['outro'],
+  faturas: ['fatura', 'outro'],
+  outros: ['outro', 'ata', 'convocatoria', 'fatura', 'contrato', 'relatorio', 'orcamento'],
+};
+
 router.get('/documentos', async (req, res) => {
-  const documentos = await Documento.findAll({ order: [['data', 'DESC'], ['id', 'DESC']] });
-  res.render('admin/documentos/listar', { titulo: 'Documentos', documentos, driveLigado: drive.isConfigured() });
+  const pasta = req.query.pasta || null;
+  const where = pasta && PASTAS[pasta] ? { pasta } : {};
+  const documentos = await Documento.findAll({ where, order: [['data', 'DESC'], ['id', 'DESC']] });
+  res.render('admin/documentos/listar', {
+    titulo: 'Documentos',
+    documentos,
+    pasta,
+    pastas: PASTAS,
+    driveLigado: drive.isConfigured(),
+  });
 });
 
 router.get('/documentos/nova', (req, res) => {
-  res.render('admin/documentos/form', { titulo: 'Novo documento', driveLigado: drive.isConfigured() });
+  res.render('admin/documentos/form', {
+    titulo: 'Novo documento',
+    pastas: PASTAS,
+    driveLigado: drive.isConfigured(),
+  });
 });
 
 router.post('/documentos', upload.single('ficheiro'), async (req, res) => {
   try {
-    const { nome, tipo, data, url } = req.body;
+    const { nome, tipo, data, url, pasta } = req.body;
+    const pastaEscolhida = PASTAS[pasta] ? pasta : 'outros';
     const ano = data ? new Date(data).getFullYear() : new Date().getFullYear();
 
     let driveFileId = null;
@@ -53,6 +94,7 @@ router.post('/documentos', upload.single('ficheiro'), async (req, res) => {
     const documento = await Documento.create({
       tipo: tipo || 'outro',
       nome: nome || (req.file ? req.file.originalname : 'Documento'),
+      pasta: pastaEscolhida,
       drive_file_id: driveFileId,
       mime_type: mimeType,
       tamanho,
@@ -66,7 +108,7 @@ router.post('/documentos', upload.single('ficheiro'), async (req, res) => {
     console.error(err);
     req.flash('error_msg', `Erro ao guardar o documento: ${err.message}`);
   }
-  res.redirect('/admin/documentos');
+  res.redirect(`/admin/documentos?pasta=${req.body.pasta || ''}`);
 });
 
 router.post('/documentos/:id/eliminar', async (req, res) => {

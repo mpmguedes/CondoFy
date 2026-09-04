@@ -113,12 +113,18 @@ async function main() {
     assert.strictEqual(buf.slice(0, 5).toString(), '%PDF-', `${nome}: PDF válido`);
   }
 
-  // 5. Cálculo de quota: permilagem × valor/‰ + FCR
-  const q = calcularQuota('500', '0.1000', '10');
-  assert.strictEqual(q.base, 50, 'base = 500‰ × 0,10 € = 50 €');
+  // 5. Cálculo de quota: (permilagem/1000) × valor por 1000‰ + FCR
+  const q = calcularQuota('500', '100.0000', '10');
+  assert.strictEqual(q.base, 50, 'base = 500‰ / 1000 × 100 € = 50 €');
   assert.strictEqual(q.fcr, 5, 'fcr = 10% de 50 € = 5 €');
   assert.strictEqual(q.total, 55, 'total = 55 €');
   assert.strictEqual(q.totalC, 5500, 'total em cêntimos');
+  assert.strictEqual(q.valorPor1000, 100, 'valor por 1000‰ devolvido');
+
+  // 5b. Duas frações de 500‰ → 55 € + 55 € = 110 € (cenário da especificação)
+  const qA = calcularQuota('500', '100.0000', '10');
+  const qB = calcularQuota('500', '100.0000', '10');
+  assert.strictEqual(qA.total + qB.total, 110, 'total mensal = 110 €');
 
   // 6. Parcelamento: soma exata e resto na última parcela
   const p1 = parcelar(10000, 3);
@@ -160,7 +166,39 @@ async function main() {
   let somaMensalC = 0;
   for (const [, v] of qOrc) somaMensalC += v.totalC;
   assert.strictEqual(somaMensalC * 12, toCents('12000.00'), 'orçamento: 12 × soma mensal = total anual');
-  assert.strictEqual(qOrc.get(1).fcr, 0, 'método 2 não aplica FCR separado (FCR é rubrica)');
+  assert.strictEqual(qOrc.get(1).fcr, 0, 'método 2 sem FCR separado (FCR é rubrica)');
+
+  // 10. Quota extraordinária — 5000 € entre 500‰+500‰, 5 parcelas mensais
+  const extraDemo = distribuicaoExtra('5000.00', [
+    { id: 1, permilagem: '500' },
+    { id: 2, permilagem: '500' },
+  ], 'permilagem');
+  assert.strictEqual(extraDemo.reduce((s, p) => s + p.valorC, 0), toCents('5000.00'), 'extra 5000 soma exata');
+  const parcelasA = parcelar(extraDemo[0].valorC, 5);
+  const parcelasB = parcelar(extraDemo[1].valorC, 5);
+  assert.strictEqual(parcelasA[0], 50000, 'fração A: 500 €/parcela');
+  assert.strictEqual(parcelasB[0], 50000, 'fração B: 500 €/parcela');
+  assert.strictEqual(parcelasA.reduce((a, b) => a + b, 0), extraDemo[0].valorC, 'A: soma das parcelas = anual');
+
+  // 11. Partes iguais — 5000 € / 2 frações = 2500 € cada
+  const extraIgualDemo = distribuicaoExtra('5000.00', [
+    { id: 1, permilagem: '500' },
+    { id: 2, permilagem: '500' },
+  ], 'igual');
+  assert.strictEqual(extraIgualDemo[0].valorC, toCents('2500.00'), 'igual: 2500 € cada');
+  assert.strictEqual(extraIgualDemo[1].valorC, toCents('2500.00'), 'igual: 2500 € cada');
+
+  // 12. Convocatória PDF (novo layout com 1ª/2ª convocatória, quórum, procuração)
+  const convocatoria = await pdf.gerarConvocatoriaPDF(COND, {
+    numero: '2026/1',
+    tipo: 'Ordinária',
+    data: new Date(),
+    hora: '21:00',
+    horaSegunda: '21:30',
+    local: 'Hall de entrada do edifício, piso 0',
+    ordemTrabalhos: ['Aprovação do orçamento anual', 'Eleição do administrador', 'Outros assuntos'],
+  });
+  assert.strictEqual(convocatoria.slice(0, 5).toString(), '%PDF-', 'convocatória: PDF válido');
 
   console.log('✓ Todos os testes financeiros passaram.');
 }

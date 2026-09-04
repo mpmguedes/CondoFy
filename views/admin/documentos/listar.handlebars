@@ -1,7 +1,7 @@
 <div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
     <h1>Documentos</h1>
-    <p class="subtitle">Repositório documental do condomínio</p>
+    <p class="subtitle">Biblioteca documental do condomínio</p>
   </div>
   <a href="/admin/documentos/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">upload</span>Novo documento</a>
 </div>
@@ -10,6 +10,17 @@
 <div class="alert alert-warning"><span class="material-symbols-outlined me-1">info</span>Google Drive não configurado — o upload de ficheiros ficará indisponível até configurar o <code>.env</code>.</div>
 {{/unless}}
 
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="d-flex flex-wrap gap-2">
+      <a href="/admin/documentos" class="btn btn-sm {{#unless pasta}}btn-primary{{else}}btn-outline-secondary{{/unless}}">Todas</a>
+      {{#each pastas}}
+      <a href="/admin/documentos?pasta={{@key}}" class="btn btn-sm {{#if (eq ../pasta @key)}}btn-primary{{else}}btn-outline-secondary{{/if}}">{{this}}</a>
+      {{/each}}
+    </div>
+  </div>
+</div>
+
 {{#if documentos}}
 <div class="card">
   <div class="table-responsive">
@@ -17,10 +28,10 @@
       <thead class="table-light">
         <tr>
           <th>Nome</th>
+          <th>Pasta</th>
           <th>Tipo</th>
           <th>Data</th>
           <th>Tamanho</th>
-          <th>Drive</th>
           <th class="text-end">Ações</th>
         </tr>
       </thead>
@@ -28,6 +39,7 @@
         {{#each documentos}}
         <tr>
           <td class="fw-semibold">{{nome}}</td>
+          <td><span class="badge text-bg-light">{{lookup ../pastas pasta}}</span></td>
           <td>
             {{#if (eq tipo 'ata')}}Ata
             {{else if (eq tipo 'convocatoria')}}Convocatória
@@ -41,11 +53,8 @@
           </td>
           <td>{{formatDate data}}</td>
           <td>{{#if tamanho}}{{tamanho}} B{{else}}—{{/if}}</td>
-          <td>
-            {{#if url}}<a href="{{url}}" target="_blank" class="badge text-bg-primary text-decoration-none">Ver</a>
-            {{else}}<span class="badge text-bg-secondary">—</span>{{/if}}
-          </td>
           <td class="text-end">
+            {{#if url}}<a href="{{url}}" target="_blank" class="btn btn-sm btn-outline-primary" title="Download/Ver"><span class="material-symbols-outlined">download</span></a>{{/if}}
             <form action="/admin/documentos/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar este documento?');">
               <button class="btn btn-sm btn-outline-danger" title="Eliminar"><span class="material-symbols-outlined">delete</span></button>
             </form>
@@ -57,5 +66,5 @@
   </div>
 </div>
 {{else}}
-{{> _empty-state icon="folder" titulo="Sem documentos" descricao="Carregue documentos (atas, faturas, contratos…) para o repositório." link="/admin/documentos/nova" linkTexto="Novo documento"}}
+{{> _empty-state icon="folder" titulo="Esta pasta está vazia" descricao="Carregue documentos (atas, faturas, contratos…) para o repositório." link="/admin/documentos/nova" linkTexto="Novo documento"}}
 {{/if}}

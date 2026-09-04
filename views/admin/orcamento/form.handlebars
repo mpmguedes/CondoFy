@@ -3,33 +3,144 @@
   <a href="/admin/orcamento" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
 </div>
 
-<div class="row">
-  <div class="col-12 col-lg-7">
-    <div class="card">
-      <div class="card-body">
-        <form action="/admin/orcamento" method="POST">
-          <div class="mb-3">
-            <label class="form-label">Designação *</label>
-            <input type="text" class="form-control" name="designacao" required placeholder="ex.: Orçamento 2027" />
-          </div>
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Início *</label>
-              <input type="date" class="form-control" name="data_inicio" required />
+<form action="{{#if orcamento}}/admin/orcamento/{{orcamento.id}}{{else}}/admin/orcamento{{/if}}" method="POST">
+  <div class="row g-3">
+    <div class="col-12 col-lg-7">
+      <div class="card mb-3">
+        <div class="card-header fw-semibold">Exercício</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Ano *</label>
+              <input type="number" class="form-control" name="ano" value="{{#if orcamento}}{{orcamento.ano}}{{else}}{{anoAtual}}{{/if}}" min="2000" max="2100" required />
             </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Fim *</label>
-              <input type="date" class="form-control" name="data_fim" required />
+            <div class="col-md-4">
+              <label class="form-label">Designação</label>
+              <input type="text" class="form-control" name="designacao" value="{{#if orcamento}}{{orcamento.designacao}}{{else}}Orçamento {{anoAtual}}{{/if}}" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Saldo transitado (€)</label>
+              <input type="text" class="form-control" name="saldo_transitado" value="{{#if orcamento}}{{orcamento.saldo_transitado}}{{else}}0,00{{/if}}" inputmode="decimal" />
+              <div class="form-text">Informação de abertura do exercício (opcional).</div>
             </div>
           </div>
-          <div class="form-text mb-3">O período tem de corresponder exatamente a 1 ano (ex.: 01/01/2027 → 31/12/2027, ou 01/07/2027 → 30/06/2028).</div>
-          <div class="mb-3">
-            <label class="form-label">Observações</label>
-            <textarea class="form-control" name="observacoes" rows="3"></textarea>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header fw-semibold">Período</div>
+        <div class="card-body">
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="radio" name="tipo_periodo" id="tpCivil" value="civil" {{#unless orcamento}}checked{{/unless}} onchange="alternarPeriodo()" />
+            <label class="form-check-label" for="tpCivil">Ano civil (janeiro → dezembro)</label>
           </div>
-          <button type="submit" class="btn btn-primary">Criar orçamento</button>
-        </form>
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="radio" name="tipo_periodo" id="tpPers" value="personalizado" onchange="alternarPeriodo()" />
+            <label class="form-check-label" for="tpPers">Período personalizado</label>
+          </div>
+          <div class="row g-3 d-none" id="campoPeriodoPers">
+            <div class="col-md-6">
+              <label class="form-label">Data inicial *</label>
+              <input type="date" class="form-control" name="data_inicio" value="{{#if orcamento}}{{dateInput orcamento.data_inicio}}{{/if}}" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Data final *</label>
+              <input type="date" class="form-control" name="data_fim" value="{{#if orcamento}}{{dateInput orcamento.data_fim}}{{/if}}" />
+            </div>
+          </div>
+          <div class="form-text">O período tem de corresponder exatamente a 1 ano.</div>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header fw-semibold">Método de cálculo</div>
+        <div class="card-body">
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="radio" name="metodo_calculo" id="modoA" value="modo_a" {{#if (or (not orcamento) (eq orcamento.metodo_calculo 'modo_a'))}}checked{{/if}} onchange="alternarMetodo()" />
+            <label class="form-check-label" for="modoA">Modo A — valor por 1000‰ (configuração das quotas)</label>
+            <div class="form-text ms-4 mt-1">
+              Valor por 1000‰: <strong>{{quotaConfig.valorPor1000}} €</strong> (permilagem total: {{permilagemTotal}}‰)
+              · <a href="/admin/quotas">Gerir Quotas</a>
+            </div>
+          </div>
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="radio" name="metodo_calculo" id="modoB" value="modo_b" {{#if (and orcamento (eq orcamento.metodo_calculo 'modo_b'))}}checked{{/if}} onchange="alternarMetodo()" />
+            <label class="form-check-label" for="modoB">Modo B — orçamento define a receita</label>
+            <div class="ms-4 mt-2 d-none" id="campoModoB">
+              <label class="form-label">Receita anual pretendida (€) *</label>
+              <input type="text" class="form-control" name="receita_quotas_prevista" id="receitaAnual" value="{{#if orcamento}}{{orcamento.receita_quotas_prevista}}{{/if}}" inputmode="decimal" />
+              <div class="form-text mt-2" id="previewModoB"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header fw-semibold">Observações</div>
+        <div class="card-body">
+          <textarea class="form-control" name="observacoes" rows="3">{{#if orcamento}}{{orcamento.observacoes}}{{/if}}</textarea>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1">save</span>{{#if orcamento}}Guardar alterações{{else}}Criar orçamento{{/if}}</button>
+    </div>
+
+    <div class="col-12 col-lg-5">
+      <div class="card sticky-top" style="top: 80px;">
+        <div class="card-header fw-semibold">Pré-visualização (Modo B)</div>
+        <div class="card-body" id="pvModoB">
+          <p class="text-muted">Introduza a receita anual pretendida para ver o cálculo automático do valor por 1000‰.</p>
+        </div>
       </div>
     </div>
   </div>
-</div>
+</form>
+
+<script>
+  const PERMILAGEM_TOTAL = {{permilagemTotal}};
+  const FCR = parseFloat('{{quotaConfig.fcrPercentagem}}') || 0;
+  const fmt = (n) => n.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+
+  function parseEuro(v) {
+    if (v == null || v === '') return 0;
+    return parseFloat(String(v).replace(/\./g, '').replace(',', '.')) || 0;
+  }
+
+  function alternarPeriodo() {
+    document.getElementById('campoPeriodoPers').classList.toggle('d-none', !document.getElementById('tpPers').checked);
+  }
+  function alternarMetodo() {
+    const modoB = document.getElementById('modoB').checked;
+    document.getElementById('campoModoB').classList.toggle('d-none', !modoB);
+    document.getElementById('pvModoB').classList.toggle('d-none', !modoB);
+    atualizarPreviewB();
+  }
+  function atualizarPreviewB() {
+    if (!document.getElementById('modoB').checked) return;
+    const receita = parseEuro(document.getElementById('receitaAnual').value);
+    if (receita <= 0 || PERMILAGEM_TOTAL <= 0) {
+      document.getElementById('previewModoB').textContent = 'Introduza a receita anual pretendida.';
+      document.getElementById('pvModoB').innerHTML = '<p class="text-muted">Introduza a receita anual pretendida.</p>';
+      return;
+    }
+    const base = receita * 100 / (100 + FCR);
+    const fcr = receita - base;
+    const valorPor1000 = base / (PERMILAGEM_TOTAL / 1000);
+    const receitaMensal = receita / 12;
+    const quotaMediaMensal = receitaMensal / (PERMILAGEM_TOTAL / 1000);
+    document.getElementById('previewModoB').innerHTML =
+      'Base anual: <strong>' + fmt(base) + '</strong> · FCR (' + FCR + '%): <strong>' + fmt(fcr) + '</strong>';
+    document.getElementById('pvModoB').innerHTML =
+      '<div class="mb-2 d-flex justify-content-between"><span class="text-muted">Receita anual pretendida</span><strong>' + fmt(receita) + '</strong></div>' +
+      '<div class="mb-2 d-flex justify-content-between"><span class="text-muted">Receita calculada</span><strong>' + fmt(receita) + '</strong></div>' +
+      '<div class="mb-2 d-flex justify-content-between"><span class="text-muted">Diferença</span><strong>0,00 €</strong></div>' +
+      '<hr>' +
+      '<div class="mb-2 d-flex justify-content-between"><span class="text-muted">Receita mensal</span><strong>' + fmt(receitaMensal) + '</strong></div>' +
+      '<div class="mb-2 d-flex justify-content-between"><span class="text-muted">Valor por 1000‰</span><strong>' + fmt(valorPor1000) + '</strong></div>' +
+      '<div class="mb-2 d-flex justify-content-between"><span class="text-muted">Quota média mensal (por fração 1‰)</span><strong>' + fmt(quotaMediaMensal) + '</strong></div>' +
+      '<div class="mb-2 d-flex justify-content-between"><span class="text-muted">FCR</span><strong>' + FCR + '%</strong></div>';
+  }
+  document.getElementById('receitaAnual').addEventListener('input', atualizarPreviewB);
+  alternarPeriodo();
+  alternarMetodo();
+</script>

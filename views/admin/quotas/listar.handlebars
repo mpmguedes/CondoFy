@@ -7,21 +7,28 @@
   <a href="/admin/quotas/gerar" class="btn btn-primary"><span class="material-symbols-outlined me-1">auto_awesome</span>Gerar quotas</a>
 </div>
 
+{{#unless permilagem.ok}}
+<div class="alert alert-warning d-flex align-items-center gap-2">
+  <span class="material-symbols-outlined">warning</span>
+  <span>A soma das permilagens das frações é <strong>{{permilagem.total}}‰</strong>. O valor recomendado é <strong>1000‰</strong>.</span>
+</div>
+{{/unless}}
+
 <div class="row g-3 mb-4">
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-4">
     <div class="card stat-card h-100"><div class="card-body">
-      <div class="stat-label">Valor por permilagem</div>
-      <div class="stat-value">{{quotaConfig.valorPermilagem}} €</div>
+      <div class="stat-label">Valor por 1000‰</div>
+      <div class="stat-value">{{quotaConfig.valorPor1000}} €</div>
       <button class="btn btn-sm btn-outline-primary mt-2" data-bs-toggle="modal" data-bs-target="#modalConfig"><span class="material-symbols-outlined me-1">tune</span>Alterar</button>
     </div></div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-4">
     <div class="card stat-card h-100"><div class="card-body">
       <div class="stat-label">Fundo Comum de Reserva</div>
       <div class="stat-value">{{quotaConfig.fcrPercentagem}}%</div>
     </div></div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-4">
     <div class="card stat-card h-100"><div class="card-body">
       <div class="stat-label">Quotas previstas / mês</div>
       <div class="stat-value">{{eur previstasMes}}</div>
@@ -39,8 +46,9 @@
         </div>
         <div class="modal-body">
           <div class="mb-3">
-            <label class="form-label">Valor por permilagem (€ por 1‰)</label>
-            <input type="text" class="form-control" name="valor_permilagem" value="{{quotaConfig.valorPermilagem}}" />
+            <label class="form-label">Valor por 1000‰ (€)</label>
+            <input type="text" class="form-control" name="valor_1000" value="{{quotaConfig.valorPor1000}}" inputmode="decimal" />
+            <div class="form-text">Valor para a totalidade da permilagem do condomínio (1000‰), não por cada 1‰. Ex.: 100 € → fração de 500‰ paga 50 € de base.</div>
           </div>
           <div class="mb-3">
             <label class="form-label">Fundo Comum de Reserva (%)</label>
@@ -50,7 +58,7 @@
             <input class="form-check-input" type="checkbox" name="recalcular" id="recalcular" value="futuras" />
             <label class="form-check-label" for="recalcular">Recalcular quotas futuras ainda não pagas</label>
           </div>
-          <p class="form-text mt-2">A alteração destes valores afeta o cálculo das quotas das frações. Deve ser suportada pela respetiva ata de assembleia de condóminos. Quotas já pagas nunca são alteradas.</p>
+          <p class="form-text mt-2">A alteração destes valores afeta o cálculo das quotas das frações e deve ser suportada pela respetiva ata de assembleia de condóminos. Quotas já pagas nunca são alteradas.</p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>

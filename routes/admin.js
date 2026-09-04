@@ -107,7 +107,7 @@ router.get('/', async (req, res) => {
     anoAtual,
     financeiroMes,
     emAtraso,
-    orcamentoAno: orcamentoAno ? orcamentoAno.toJSON() : null,
+    orcamentoAno: orcamentoAno,
     sistema: {
       driveLigado: drive.isConfigured(),
       smtp: smtpConfigured(),

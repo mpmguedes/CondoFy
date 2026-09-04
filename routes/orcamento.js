@@ -19,19 +19,10 @@ const { monthName } = require('../helpers/dates');
 const { distribuirValorAnual } = require('../helpers/distribuicao');
 const { calcularPlano } = require('../helpers/plano');
 const { proximoNumero } = require('../helpers/numeracao');
+const { getQuotaConfig } = require('../helpers/quotas-config');
 
 const router = express.Router();
 router.use(eAdmin);
-
-function periodoUmAno(dataInicio, dataFim) {
-  if (!dataInicio || !dataFim) return false;
-  const [iy, im, id] = dataInicio.split('-').map(Number);
-  const fim = new Date(Date.UTC(iy, im - 1, id));
-  fim.setUTCFullYear(fim.getUTCFullYear() + 1);
-  fim.setUTCDate(fim.getUTCDate() - 1);
-  const esperado = fim.toISOString().slice(0, 10);
-  return dataFim === esperado;
-}
 
 function totalRubricasC(rubricas) {
   return rubricas.filter((r) => r.ativo).reduce((s, r) => s + toCents(r.valor_anual), 0);
@@ -43,11 +34,26 @@ function rotuloPeriodo(o) {
   return inicio === fim ? `${inicio}` : `${inicio}/${fim}`;
 }
 
+// Normaliza o período para exatamente 1 ano (ano civil ou personalizado).
+function periodoUmAno(dataInicio, dataFim) {
+  if (!dataInicio || !dataFim) return false;
+  const [iy, im, id] = dataInicio.split('-').map(Number);
+  const fim = new Date(Date.UTC(iy, im - 1, id));
+  fim.setUTCFullYear(fim.getUTCFullYear() + 1);
+  fim.setUTCDate(fim.getUTCDate() - 1);
+  const esperado = fim.toISOString().slice(0, 10);
+  return dataFim === esperado;
+}
+
+function dataParaAnoCivil(ano) {
+  return { dataInicio: `${ano}-01-01`, dataFim: `${ano}-12-31` };
+}
+
 // ── Lista ──────────────────────────────────────────────────────────
 router.get('/orcamento', async (req, res) => {
   const orcamentos = await Orcamento.findAll({
     include: [{ model: OrcamentoRubrica, as: 'rubricas' }],
-    order: [['data_inicio', 'DESC']],
+    order: [['ano', 'DESC'], ['data_inicio', 'DESC']],
   });
 
   const ids = orcamentos.map((o) => o.id);
@@ -58,6 +64,9 @@ router.get('/orcamento', async (req, res) => {
   plano.forEach((p) => {
     receitasPorOrcamento[p.orcamento_id] = (receitasPorOrcamento[p.orcamento_id] || 0) + toCents(p.valor);
   });
+
+  const anoAtual = new Date().getFullYear();
+  const temAnoAtual = orcamentos.some((o) => o.ano === anoAtual);
 
   const linhas = orcamentos.map((o) => {
     const despesasC = totalRubricasC(o.rubricas);
@@ -70,25 +79,72 @@ router.get('/orcamento', async (req, res) => {
       saldo: fromCents(receitasC - despesasC),
     };
   });
-  res.render('admin/orcamento/listar', { titulo: 'Orçamentos', orcamentos: linhas });
+  res.render('admin/orcamento/listar', {
+    titulo: 'Orçamentos',
+    orcamentos: linhas,
+    anoAtual,
+    temAnoAtual,
+  });
 });
 
 // ── Criar ──────────────────────────────────────────────────────────
-router.get('/orcamento/nova', (req, res) => {
-  res.render('admin/orcamento/form', { titulo: 'Novo orçamento', orcamento: null });
+router.get('/orcamento/nova', async (req, res) => {
+  const fracoes = await Fracao.findAll({ where: { estado: 'ativo' }, order: [['designacao', 'ASC']] });
+  const quotaConfig = await getQuotaConfig();
+  const anoAtual = new Date().getFullYear();
+  res.render('admin/orcamento/form', {
+    titulo: 'Novo orçamento',
+    orcamento: null,
+    fracoes,
+    quotaConfig,
+    anoAtual,
+    permilagemTotal: fracoes.reduce((s, f) => s + (toNumber(f.permilagem) || 0), 0),
+  });
 });
 
 router.post('/orcamento', async (req, res) => {
-  const { designacao, data_inicio, data_fim, observacoes } = req.body;
-  if (!periodoUmAno(data_inicio, data_fim)) {
-    req.flash('error_msg', 'O período tem de corresponder exatamente a 1 ano.');
+  const ano = parseInt(req.body.ano, 10);
+  const tipoPeriodo = req.body.tipo_periodo === 'personalizado' ? 'personalizado' : 'civil';
+  const saldoTransitado = toNumber(req.body.saldo_transitado);
+  const metodoCalculo = req.body.metodo_calculo === 'modo_b' ? 'modo_b' : 'modo_a';
+  const receitaPrevista = metodoCalculo === 'modo_b' ? toNumber(req.body.receita_quotas_prevista) : null;
+
+  if (!ano || ano < 2000 || ano > 2100) {
+    req.flash('error_msg', 'Indique um ano válido.');
     return res.redirect('/admin/orcamento/nova');
   }
+
+  let dataInicio;
+  let dataFim;
+  if (tipoPeriodo === 'personalizado') {
+    dataInicio = req.body.data_inicio;
+    dataFim = req.body.data_fim;
+    if (!periodoUmAno(dataInicio, dataFim)) {
+      req.flash('error_msg', 'O período tem de corresponder exatamente a 1 ano.');
+      return res.redirect('/admin/orcamento/nova');
+    }
+  } else {
+    const civil = dataParaAnoCivil(ano);
+    dataInicio = civil.dataInicio;
+    dataFim = civil.dataFim;
+  }
+
+  if (metodoCalculo === 'modo_b' && receitaPrevista <= 0) {
+    req.flash('error_msg', 'Indique a receita anual pretendida (maior que zero) para o Modo B.');
+    return res.redirect('/admin/orcamento/nova');
+  }
+
+  const designacao = req.body.designacao || `Orçamento ${ano}`;
+
   const orcamento = await Orcamento.create({
     designacao,
-    data_inicio,
-    data_fim,
-    observacoes: observacoes || null,
+    ano,
+    saldo_transitado: saldoTransitado,
+    data_inicio: dataInicio,
+    data_fim: dataFim,
+    metodo_calculo: metodoCalculo,
+    receita_quotas_prevista: receitaPrevista,
+    observacoes: req.body.observacoes || null,
     estado: 'rascunho',
   });
   await audit({ userId: req.user.id, acao: 'criar_orçamento', entidade: 'Orcamento', entidadeId: orcamento.id });
@@ -122,6 +178,57 @@ router.get('/orcamento/:id', async (req, res) => {
     categorias,
     alteracoes,
   });
+});
+
+// ── Editar ─────────────────────────────────────────────────────────
+router.get('/orcamento/:id/editar', async (req, res) => {
+  const orcamento = await Orcamento.findByPk(req.params.id);
+  if (!orcamento) return res.redirect('/admin/orcamento');
+  const fracoes = await Fracao.findAll({ where: { estado: 'ativo' }, order: [['designacao', 'ASC']] });
+  const quotaConfig = await getQuotaConfig();
+  res.render('admin/orcamento/form', {
+    titulo: 'Editar orçamento',
+    orcamento: orcamento.toJSON(),
+    fracoes,
+    quotaConfig,
+    anoAtual: orcamento.ano || new Date().getFullYear(),
+    permilagemTotal: fracoes.reduce((s, f) => s + (toNumber(f.permilagem) || 0), 0),
+  });
+});
+
+router.post('/orcamento/:id', async (req, res) => {
+  const orcamento = await Orcamento.findByPk(req.params.id);
+  if (!orcamento) return res.redirect('/admin/orcamento');
+
+  const metodoCalculo = req.body.metodo_calculo === 'modo_b' ? 'modo_b' : 'modo_a';
+  const receitaPrevista = metodoCalculo === 'modo_b' ? toNumber(req.body.receita_quotas_prevista) : null;
+
+  const dados = {
+    designacao: req.body.designacao || orcamento.designacao,
+    saldo_transitado: toNumber(req.body.saldo_transitado),
+    metodo_calculo: metodoCalculo,
+    receita_quotas_prevista: receitaPrevista,
+    observacoes: req.body.observacoes || null,
+  };
+
+  if (req.body.tipo_periodo === 'personalizado') {
+    if (!periodoUmAno(req.body.data_inicio, req.body.data_fim)) {
+      req.flash('error_msg', 'O período tem de corresponder exatamente a 1 ano.');
+      return res.redirect(`/admin/orcamento/${orcamento.id}/editar`);
+    }
+    dados.data_inicio = req.body.data_inicio;
+    dados.data_fim = req.body.data_fim;
+  }
+
+  if (metodoCalculo === 'modo_b' && receitaPrevista <= 0) {
+    req.flash('error_msg', 'Indique a receita anual pretendida (maior que zero) para o Modo B.');
+    return res.redirect(`/admin/orcamento/${orcamento.id}/editar`);
+  }
+
+  await orcamento.update(dados);
+  await audit({ userId: req.user.id, acao: 'editar_orçamento', entidade: 'Orcamento', entidadeId: orcamento.id });
+  req.flash('success_msg', 'Orçamento atualizado.');
+  res.redirect(`/admin/orcamento/${orcamento.id}`);
 });
 
 // ── Rubricas ───────────────────────────────────────────────────────
@@ -194,7 +301,7 @@ router.post('/orcamento/:id/rubricas/:rid/alterar', async (req, res) => {
   res.redirect(`/admin/orcamento/${orcamento.id}`);
 });
 
-// ── Aprovação ──────────────────────────────────────────────────────
+// ── Aprovação / estado ─────────────────────────────────────────────
 router.post('/orcamento/:id/aprovar', async (req, res) => {
   const orcamento = await Orcamento.findByPk(req.params.id, {
     include: [{ model: OrcamentoRubrica, as: 'rubricas' }],
@@ -217,7 +324,17 @@ router.post('/orcamento/:id/aprovar', async (req, res) => {
     entidade_id: orcamento.id,
   });
   await audit({ userId: req.user.id, acao: 'aprovar_orçamento', entidade: 'Orcamento', entidadeId: orcamento.id });
-  req.flash('success_msg', 'Orçamento aprovado.');
+  req.flash('success_msg', 'Orçamento aprovado (Ativo).');
+  res.redirect(`/admin/orcamento/${orcamento.id}`);
+});
+
+// Fecha o orçamento (encerrado).
+router.post('/orcamento/:id/fechar', async (req, res) => {
+  const orcamento = await Orcamento.findByPk(req.params.id);
+  if (!orcamento) return res.redirect('/admin/orcamento');
+  await orcamento.update({ estado: 'encerrado' });
+  await audit({ userId: req.user.id, acao: 'fechar_orçamento', entidade: 'Orcamento', entidadeId: orcamento.id });
+  req.flash('success_msg', 'Orçamento fechado.');
   res.redirect(`/admin/orcamento/${orcamento.id}`);
 });
 

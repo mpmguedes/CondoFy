@@ -29,6 +29,7 @@ const { resolverDestinatarios } = require('../helpers/avisos');
 const { enfileirarEmail } = require('../helpers/email-fila');
 const { getQuotaConfig, setQuotaConfig } = require('../helpers/quotas-config');
 const { calcularQuota, calcularQuotasOrcamento } = require('../helpers/quotas-calc');
+const { validarPermilagem } = require('../helpers/permilagem');
 
 const router = express.Router();
 
@@ -278,9 +279,12 @@ router.get('/quotas', async (req, res) => {
     Fracao.findAll({ where: { estado: 'ativo' } }),
   ]);
 
-  // Total mensal previsto das quotas (valor por permilagem + FCR)
+  // Validação da soma das permilagens (ideal: 1000‰)
+  const permilagem = validarPermilagem(fracoes);
+
+  // Total mensal previsto das quotas (valor por 1000‰ + FCR)
   const previstasMesC = fracoes.reduce((s, f) => {
-    const { totalC } = calcularQuota(f.permilagem, quotaConfig.valorPermilagem, quotaConfig.fcrPercentagem);
+    const { totalC } = calcularQuota(f.permilagem, quotaConfig.valorPor1000, quotaConfig.fcrPercentagem);
     return s + totalC;
   }, 0);
 
@@ -291,17 +295,18 @@ router.get('/quotas', async (req, res) => {
     anos: anos.map((a) => a.ano),
     meses: MESES,
     quotaConfig,
+    permilagem,
     previstasMes: fromCents(previstasMesC),
   });
 });
 
-// Configuração das quotas (valor por permilagem + FCR)
+// Configuração das quotas (valor por 1000‰ + FCR)
 router.post('/quotas/config', async (req, res) => {
-  const valorPermilagem = parseDecimal(req.body.valor_permilagem);
+  const valorPor1000 = parseDecimal(req.body.valor_1000 ?? req.body.valor_permilagem);
   const fcrPercentagem = parseInt(req.body.fcr_percentagem, 10);
 
-  if (valorPermilagem <= 0) {
-    req.flash('error_msg', 'O valor por permilagem tem de ser maior que zero.');
+  if (valorPor1000 <= 0) {
+    req.flash('error_msg', 'O valor por 1000‰ tem de ser maior que zero.');
     return res.redirect('/admin/quotas');
   }
   if (isNaN(fcrPercentagem) || fcrPercentagem < 0 || fcrPercentagem > 100) {
@@ -309,7 +314,7 @@ router.post('/quotas/config', async (req, res) => {
     return res.redirect('/admin/quotas');
   }
 
-  await setQuotaConfig({ valorPermilagem, fcrPercentagem });
+  await setQuotaConfig({ valorPor1000, fcrPercentagem });
 
   // Recalcular quotas futuras não pagas (se pedido)
   if (req.body.recalcular === 'futuras') {
@@ -321,15 +326,22 @@ router.post('/quotas/config', async (req, res) => {
     for (const q of futuras) {
       const fracao = await Fracao.findByPk(q.fracao_id);
       if (!fracao) continue;
-      const { base, fcr, total } = calcularQuota(fracao.permilagem, valorPermilagem, fcrPercentagem);
-      await q.update({ valor_base: base, valor_fcr: fcr, valor: total });
+      const calc = calcularQuota(fracao.permilagem, valorPor1000, fcrPercentagem);
+      await q.update({
+        valor_base: calc.base,
+        valor_fcr: calc.fcr,
+        valor: calc.total,
+        valor_por_1000: calc.valorPor1000,
+        permilagem_aplicada: calc.permilagem,
+        fcr_percentagem: calc.fcrPercentagem,
+      });
     }
     req.flash('success_msg', `Configuração guardada e ${futuras.length} quota(s) futura(s) recalculada(s).`);
   } else {
     req.flash('success_msg', 'Configuração guardada (aplica-se a quotas futuras ainda não geradas).');
   }
 
-  await audit({ userId: req.user.id, acao: 'configurar_quotas', entidade: 'Configuracao', detalhes: { valorPermilagem, fcrPercentagem } });
+  await audit({ userId: req.user.id, acao: 'configurar_quotas', entidade: 'Configuracao', detalhes: { valorPor1000, fcrPercentagem } });
   res.redirect('/admin/quotas');
 });
 
@@ -365,7 +377,7 @@ router.get('/quotas/grelha', async (req, res) => {
 });
 
 router.get('/quotas/gerar', async (req, res) => {
-  const [fracoes, quotaConfig, orcamentos] = await Promise.all([
+  const [fracoes, quotaConfig, orcamentos, existentes] = await Promise.all([
     Fracao.findAll({ where: { estado: 'ativo' }, order: [['designacao', 'ASC']] }),
     getQuotaConfig(),
     Orcamento.findAll({
@@ -373,6 +385,7 @@ router.get('/quotas/gerar', async (req, res) => {
       include: [{ model: OrcamentoRubrica, as: 'rubricas' }],
       order: [['data_inicio', 'DESC']],
     }),
+    Quota.findAll({ attributes: ['fracao_id', 'ano', 'mes'], raw: true }),
   ]);
 
   // Orçamentos com total de rubricas (receita anual definida pelo orçamento).
@@ -386,6 +399,12 @@ router.get('/quotas/gerar', async (req, res) => {
     };
   });
 
+  // Conjunto de quotas já existentes (fração|ano|mes) para o preview idempotente.
+  const existentesSet = {};
+  existentes.forEach((q) => {
+    existentesSet[`${q.fracao_id}|${q.ano}|${q.mes}`] = true;
+  });
+
   res.render('admin/quotas/gerar', {
     titulo: 'Gerar quotas',
     fracoes,
@@ -393,6 +412,7 @@ router.get('/quotas/gerar', async (req, res) => {
     orcamentos: orcamentosJson,
     orcamentosJson: JSON.stringify(orcamentosJson),
     fracoesJson: JSON.stringify(fracoes.map((f) => ({ id: f.id, designacao: f.designacao, permilagem: f.permilagem }))),
+    existentesJson: JSON.stringify(existentesSet),
   });
 });
 
@@ -436,9 +456,9 @@ router.post('/quotas/gerar', async (req, res) => {
     });
     metodoLabel = `orçamento ${orcamento.designacao}`;
   } else {
-    const { valorPermilagem, fcrPercentagem } = await getQuotaConfig();
+    const { valorPor1000, fcrPercentagem } = await getQuotaConfig();
     valoresPorFracao = new Map(
-      fracoes.map((f) => [f.id, calcularQuota(f.permilagem, valorPermilagem, fcrPercentagem)])
+      fracoes.map((f) => [f.id, calcularQuota(f.permilagem, valorPor1000, fcrPercentagem)])
     );
     metodoLabel = 'permilagem + FCR';
   }
@@ -448,7 +468,7 @@ router.post('/quotas/gerar', async (req, res) => {
   let ignoradas = 0;
   try {
     for (const f of fracoes) {
-      const { base, fcr, total } = valoresPorFracao.get(f.id);
+      const v = valoresPorFracao.get(f.id);
       for (const m of meses) {
         const existente = await Quota.findOne({ where: { fracao_id: f.id, ano: anoNum, mes: m }, transaction: t });
         if (existente) {
@@ -463,9 +483,12 @@ router.post('/quotas/gerar', async (req, res) => {
             ano: anoNum,
             mes: m,
             periodo: new Date(anoNum, m - 1, 1),
-            valor: total,
-            valor_base: base,
-            valor_fcr: fcr,
+            valor: v.total,
+            valor_base: v.base,
+            valor_fcr: v.fcr,
+            valor_por_1000: v.valorPor1000,
+            permilagem_aplicada: v.permilagem ?? f.permilagem,
+            fcr_percentagem: v.fcrPercentagem,
             data_emissao: new Date(),
             data_vencimento: new Date(anoNum, m - 1, vencDia),
             estado: 'pendente',
@@ -496,7 +519,23 @@ router.get('/quotas/:id', async (req, res) => {
     ],
     order: [['id', 'ASC']],
   });
-  res.render('admin/quotas/detalhe', { titulo: `Quota ${quota.numero_documento || ''}`, quota, aplicacoes, estadoEfetivo: estadoEfetivo(quota) });
+  const pagoC = aplicacoes
+    .filter((a) => a.pagamento)
+    .reduce((s, a) => s + toCents(a.valor_aplicado), 0);
+  const ultima = aplicacoes
+    .filter((a) => a.pagamento && a.pagamento.data_pagamento)
+    .map((a) => a.pagamento.data_pagamento)
+    .sort()
+    .pop();
+  res.render('admin/quotas/detalhe', {
+    titulo: `Quota ${quota.numero_documento || ''}`,
+    quota,
+    aplicacoes,
+    estadoEfetivo: estadoEfetivo(quota),
+    pago: fromCents(pagoC),
+    emFalta: fromCents(toCents(quota.valor) - pagoC),
+    ultimaData: ultima || null,
+  });
 });
 
 router.get('/quotas/:id/editar', async (req, res) => {

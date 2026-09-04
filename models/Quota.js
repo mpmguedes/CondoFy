@@ -14,6 +14,9 @@ module.exports = (sequelize) => {
       valor: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
       valor_base: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
       valor_fcr: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
+      valor_por_1000: { type: DataTypes.DECIMAL(10, 4), allowNull: true },
+      permilagem_aplicada: { type: DataTypes.DECIMAL(7, 2), allowNull: true },
+      fcr_percentagem: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
       data_emissao: { type: DataTypes.DATEONLY, allowNull: true },
       data_vencimento: { type: DataTypes.DATEONLY, allowNull: true },
       estado: {

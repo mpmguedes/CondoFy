@@ -6,12 +6,54 @@
   <a href="/admin/assembleias/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">add</span>Nova assembleia</a>
 </div>
 
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Rascunhos</div>
+      <div class="stat-value">{{cards.nRascunhos}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Agendadas</div>
+      <div class="stat-value">{{cards.nAgendadas}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Realizadas</div>
+      <div class="stat-value text-success">{{cards.nRealizadas}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Total</div>
+      <div class="stat-value">{{cards.nTotal}}</div>
+    </div></div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <form action="/admin/assembleias" method="GET" class="d-flex flex-wrap gap-2">
+      <a href="/admin/assembleias" class="btn btn-sm {{#if (eq filtro 'todas')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Todas</a>
+      <a href="/admin/assembleias?estado=rascunho" class="btn btn-sm {{#if (eq filtro 'rascunho')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Rascunho</a>
+      <a href="/admin/assembleias?estado=agendada" class="btn btn-sm {{#if (eq filtro 'agendada')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Agendadas</a>
+      <a href="/admin/assembleias?estado=convocada" class="btn btn-sm {{#if (eq filtro 'convocada')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Convidadas</a>
+      <a href="/admin/assembleias?estado=realizada" class="btn btn-sm {{#if (eq filtro 'realizada')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Realizadas</a>
+      <a href="/admin/assembleias?estado=cancelada" class="btn btn-sm {{#if (eq filtro 'cancelada')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Canceladas</a>
+    </form>
+  </div>
+</div>
+
 {{#if assembleias}}
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <thead class="table-light">
         <tr>
+          <th>Número</th>
+          <th>Tipo</th>
           <th>Data</th>
           <th>Hora</th>
           <th>Local</th>
@@ -22,12 +64,15 @@
       <tbody>
         {{#each assembleias}}
         <tr>
-          <td class="fw-semibold">{{formatDate data}}</td>
+          <td class="fw-semibold">{{#if numero}}{{numero}}{{else}}—{{/if}}</td>
+          <td>{{lookup ../tipos tipo}}</td>
+          <td>{{formatDate data}}</td>
           <td>{{#if hora}}{{hora}}{{else}}—{{/if}}</td>
           <td>{{#if local}}{{local}}{{else}}—{{/if}}</td>
           <td>
-            {{#if (eq estado 'realizada')}}<span class="badge text-bg-success">Realizada</span>
-            {{else if (eq estado 'cancelada')}}<span class="badge text-bg-secondary">Cancelada</span>
+            {{#if (eq estado 'rascunho')}}<span class="badge text-bg-secondary">Rascunho</span>
+            {{else if (eq estado 'realizada')}}<span class="badge text-bg-success">Realizada</span>
+            {{else if (eq estado 'cancelada')}}<span class="badge text-bg-dark">Cancelada</span>
             {{else if (eq estado 'convocada')}}<span class="badge text-bg-info">Convocada</span>
             {{else}}<span class="badge text-bg-warning">Agendada</span>{{/if}}
           </td>

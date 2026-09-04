@@ -14,6 +14,12 @@
           </div>
           <div class="row">
             <div class="col-md-6 mb-3">
+              <label class="form-label">Pasta</label>
+              <select class="form-select" name="pasta">
+                {{#each pastas}}<option value="{{@key}}">{{this}}</option>{{/each}}
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
               <label class="form-label">Tipo</label>
               <select class="form-select" name="tipo">
                 <option value="ata">Ata</option>
@@ -27,10 +33,10 @@
                 <option value="outro">Outro</option>
               </select>
             </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Data</label>
-              <input type="date" class="form-control" name="data" />
-            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Data</label>
+            <input type="date" class="form-control" name="data" />
           </div>
           <div class="mb-3">
             <label class="form-label">Ficheiro (guardado no Google Drive)</label>

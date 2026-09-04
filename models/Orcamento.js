@@ -6,8 +6,16 @@ module.exports = (sequelize) => {
     {
       id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
       designacao: { type: DataTypes.STRING(120), allowNull: false },
+      ano: { type: DataTypes.INTEGER, allowNull: true },
+      saldo_transitado: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
       data_inicio: { type: DataTypes.DATEONLY, allowNull: false },
       data_fim: { type: DataTypes.DATEONLY, allowNull: false },
+      metodo_calculo: {
+        type: DataTypes.ENUM('modo_a', 'modo_b'),
+        allowNull: false,
+        defaultValue: 'modo_a',
+      },
+      receita_quotas_prevista: { type: DataTypes.DECIMAL(12, 2), allowNull: true },
       estado: {
         type: DataTypes.ENUM('rascunho', 'aprovado', 'em_execucao', 'encerrado', 'anulado'),
         allowNull: false,

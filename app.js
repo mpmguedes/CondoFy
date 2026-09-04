@@ -96,6 +96,7 @@ app.use('/admin', require('./routes/documentos'));
 app.use('/admin', require('./routes/avisos'));
 app.use('/admin', require('./routes/configuracao'));
 app.use('/admin', require('./routes/sistema'));
+app.use('/admin', require('./routes/placeholders'));
 app.use('/condomino', require('./routes/condomino'));
 
 // ── Tratamento de erros ────────────────────────────────────────────

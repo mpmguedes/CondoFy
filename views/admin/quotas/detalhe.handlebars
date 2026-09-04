@@ -9,11 +9,37 @@
 <div class="row g-4">
   <div class="col-12 col-lg-5">
     <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-receipt me-1"></i>Dados da quota</div>
       <div class="card-body">
         <dl class="row mb-0">
           <dt class="col-6">Fração</dt><dd class="col-6">{{quota.fracao.designacao}}</dd>
           <dt class="col-6">Período</dt><dd class="col-6">{{monthName quota.mes}} {{quota.ano}}</dd>
-          <dt class="col-6">Valor</dt><dd class="col-6">{{eur quota.valor}}</dd>
+          <dt class="col-6">Permilagem aplicada</dt><dd class="col-6">{{#if quota.permilagem_aplicada}}{{quota.permilagem_aplicada}}‰{{else}}{{quota.fracao.permilagem}}‰{{/if}}</dd>
+          <dt class="col-6">Valor por 1000‰</dt><dd class="col-6">{{#if quota.valor_por_1000}}{{quota.valor_por_1000}} €{{else}}—{{/if}}</dd>
+          <dt class="col-6">FCR aplicado</dt><dd class="col-6">{{#if quota.fcr_percentagem}}{{quota.fcr_percentagem}}%{{else}}—{{/if}}</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-header bg-white"><i class="bi bi-calculator me-1"></i>Valores</div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-6">Valor base</dt><dd class="col-6">{{eur quota.valor_base}}</dd>
+          <dt class="col-6">Valor FCR</dt><dd class="col-6">{{eur quota.valor_fcr}}</dd>
+          <dt class="col-6">Valor total</dt><dd class="col-6 fw-semibold">{{eur quota.valor}}</dd>
+          <dt class="col-6">Valor pago</dt><dd class="col-6 text-success">{{eur pago}}</dd>
+          <dt class="col-6">Valor em falta</dt><dd class="col-6 {{#if (gt emFalta 0)}}text-danger fw-semibold{{/if}}">{{eur emFalta}}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-7">
+    <div class="card mb-3">
+      <div class="card-header bg-white"><i class="bi bi-info-circle me-1"></i>Estado e datas</div>
+      <div class="card-body">
+        <dl class="row mb-0">
           <dt class="col-6">Emissão</dt><dd class="col-6">{{formatDate quota.data_emissao}}</dd>
           <dt class="col-6">Vencimento</dt><dd class="col-6">{{formatDate quota.data_vencimento}}</dd>
           <dt class="col-6">Estado</dt>
@@ -24,12 +50,11 @@
             {{else if (eq estadoEfetivo 'anulada')}}<span class="badge text-bg-secondary">Anulada</span>
             {{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}
           </dd>
+          <dt class="col-6">Último pagamento</dt><dd class="col-6">{{#if ultimaData}}{{formatDate ultimaData}}{{else}}—{{/if}}</dd>
         </dl>
       </div>
     </div>
-  </div>
 
-  <div class="col-12 col-lg-7">
     <div class="card">
       <div class="card-header bg-white"><i class="bi bi-cash-coin me-1"></i>Pagamentos aplicados</div>
       <div class="table-responsive">

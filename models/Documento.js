@@ -22,6 +22,7 @@ module.exports = (sequelize) => {
       },
       numero_documento: { type: DataTypes.STRING(40), allowNull: true },
       nome: { type: DataTypes.STRING(255), allowNull: false },
+      pasta: { type: DataTypes.STRING(60), allowNull: true },
       drive_file_id: { type: DataTypes.STRING(191), allowNull: true },
       mime_type: { type: DataTypes.STRING(120), allowNull: true },
       tamanho: { type: DataTypes.BIGINT, allowNull: true },

@@ -14,9 +14,9 @@ async function getConfigNumero(chave, fallback) {
   return Number.isFinite(v) ? v : fallback;
 }
 
-// Gera as quotas do mês corrente (por permilagem + FCR), de forma idempotente.
+// Gera as quotas do mês corrente (por permilagem/1000‰ + FCR), de forma idempotente.
 async function gerarQuotasAutomaticas() {
-  const { valorPermilagem, fcrPercentagem } = await getQuotaConfig();
+  const { valorPor1000, fcrPercentagem } = await getQuotaConfig();
   const agora = new Date();
   const ano = agora.getFullYear();
   const mes = agora.getMonth() + 1;
@@ -28,7 +28,7 @@ async function gerarQuotasAutomaticas() {
     for (const f of fracoes) {
       const existente = await Quota.findOne({ where: { fracao_id: f.id, ano, mes }, transaction: t });
       if (existente) continue;
-      const { base, fcr, total } = calcularQuota(f.permilagem, valorPermilagem, fcrPercentagem);
+      const q = calcularQuota(f.permilagem, valorPor1000, fcrPercentagem);
       const numero = await proximoNumero('aviso_quota', { ano, transaction: t });
       await Quota.create(
         {
@@ -37,9 +37,12 @@ async function gerarQuotasAutomaticas() {
           ano,
           mes,
           periodo: new Date(ano, mes - 1, 1),
-          valor: total,
-          valor_base: base,
-          valor_fcr: fcr,
+          valor: q.total,
+          valor_base: q.base,
+          valor_fcr: q.fcr,
+          valor_por_1000: q.valorPor1000,
+          permilagem_aplicada: q.permilagem,
+          fcr_percentagem: q.fcrPercentagem,
           data_emissao: new Date(),
           data_vencimento: new Date(ano, mes - 1, 8),
           estado: 'pendente',

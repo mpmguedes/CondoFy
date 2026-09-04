@@ -1,11 +1,12 @@
 'use strict';
 
-// Configuração inicial das quotas: valor por permilagem e % do FCR.
+// Configuração inicial das quotas: valor por 1000‰ (total do condomínio) e % do FCR.
+// Exemplo: valor por 1000‰ = 100 €; fração de 500‰ → base 50 € (+10% FCR = 55 €).
 module.exports = {
   async up(queryInterface) {
     const now = new Date();
     const configs = [
-      { chave: 'quota_valor_permilagem', valor: '0.1000' },
+      { chave: 'quota_valor_1000', valor: '100.0000' },
       { chave: 'quota_fcr_percentagem', valor: '10' },
     ];
     for (const c of configs) {
@@ -21,7 +22,7 @@ module.exports = {
 
   async down(queryInterface) {
     await queryInterface.sequelize.query(
-      "DELETE FROM configuracoes WHERE chave IN ('quota_valor_permilagem', 'quota_fcr_percentagem')"
+      "DELETE FROM configuracoes WHERE chave IN ('quota_valor_1000', 'quota_fcr_percentagem')"
     );
   },
 };

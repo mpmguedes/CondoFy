@@ -84,7 +84,7 @@
         <h2 class="h5 mb-3">Pré-visualização</h2>
         <div class="alert alert-info d-flex align-items-center gap-2 mb-3">
           <span class="material-symbols-outlined">info</span>
-          <span id="infoMetodo">Valor por permilagem: <strong>{{quotaConfig.valorPermilagem}} €</strong> · FCR: <strong>{{quotaConfig.fcrPercentagem}}%</strong></span>
+          <span id="infoMetodo">Valor por 1000‰: <strong>{{quotaConfig.valorPor1000}} €</strong> · FCR: <strong>{{quotaConfig.fcrPercentagem}}%</strong></span>
         </div>
         <div class="table-responsive">
           <table class="table align-middle">
@@ -121,6 +121,7 @@
   const FRACOES = {{{fracoesJson}}};
   const CFG = {{{json quotaConfig}}};
   const ORCAMENTOS = {{{orcamentosJson}}};
+  const EXISTENTES = {{{existentesJson}}};
   const fmt = (n) => n.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
   function ehOrcamento() { return document.getElementById('metodoOrcamento').checked; }
@@ -134,8 +135,9 @@
       const mensal = anual / 12;
       return { base: mensal, fcr: 0, total: mensal, orcamento: orc };
     }
-    const valorPerC = Math.round(parseFloat(CFG.valorPermilagem) * 100);
-    const baseC = Math.round((parseFloat(perm) || 0) * valorPerC);
+    // (permilagem / 1000) × valor por 1000‰ + FCR
+    const valorPor1000C = Math.round(parseFloat(CFG.valorPor1000) * 100);
+    const baseC = Math.round((parseFloat(perm) || 0) / 1000 * valorPor1000C);
     const fcrC = Math.round(baseC * parseFloat(CFG.fcrPercentagem) / 100);
     return { base: baseC / 100, fcr: fcrC / 100, total: (baseC + fcrC) / 100 };
   }
@@ -166,20 +168,32 @@
         alert('Selecione o orçamento que define a receita.');
         return;
       }
+      const ano = parseInt(document.getElementById('wAno').value, 10);
+      const nMeses = this.ehAno() ? 12 : 1;
+      const mes = this.ehAno() ? null : parseInt(document.getElementById('wMes').value, 10);
       const tbody = document.getElementById('previewBody');
       let html = '';
       let totalMes = 0;
+      let novas = 0;
+      let existentes = 0;
       for (const f of FRACOES) {
         const r = calc(f.permilagem);
         totalMes += r.total;
         html += `<tr><td>${f.designacao}</td><td class="text-end">${f.permilagem} ‰</td><td class="text-end">${fmt(r.base)}</td><td class="text-end">${fmt(r.fcr)}</td><td class="text-end fw-semibold">${fmt(r.total)}</td></tr>`;
+        for (let m = 1; m <= 12; m++) {
+          if (!this.ehAno() && m !== mes) continue;
+          if (EXISTENTES[f.id + '|' + ano + '|' + m]) existentes++;
+          else novas++;
+        }
       }
       tbody.innerHTML = html;
+      const possiveis = novas + existentes;
       document.getElementById('previewTotal').textContent = fmt(this.ehAno() ? totalMes * 12 : totalMes);
       document.getElementById('resumoGeracao').innerHTML =
-        'Serão geradas quotas para <strong>' + FRACOES.length + ' frações</strong>' +
-        (this.ehAno() ? ' em <strong>12 meses</strong>' : ' em <strong>1 mês</strong>') +
-        (ehOrcamento() ? ' a partir do orçamento selecionado.' : '.');
+        '<strong>' + FRACOES.length + ' frações</strong> × <strong>' + nMeses + ' meses</strong> = ' +
+        '<strong>' + possiveis + ' quotas possíveis</strong><br>' +
+        existentes + ' quotas já existentes<br>' +
+        '<strong>' + novas + ' novas quotas serão criadas.</strong>';
     },
   };
 
@@ -191,7 +205,7 @@
     document.getElementById('campoOrcamento').classList.toggle('d-none', !orc);
     document.getElementById('infoMetodo').innerHTML = orc
       ? 'A receita mensal é definida pelo total de rubricas do orçamento selecionado (o FCR deve constar como rubrica).'
-      : 'Valor por permilagem: <strong>' + CFG.valorPermilagem + ' €</strong> · FCR: <strong>' + CFG.fcrPercentagem + '%</strong>';
+      : 'Valor por 1000‰: <strong>' + CFG.valorPor1000 + ' €</strong> · FCR: <strong>' + CFG.fcrPercentagem + '%</strong>';
   }
   document.getElementById('escopoMes').addEventListener('change', alternarEscopo);
   document.getElementById('escopoAno').addEventListener('change', alternarEscopo);

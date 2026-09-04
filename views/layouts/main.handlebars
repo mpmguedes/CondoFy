@@ -35,18 +35,14 @@
         </div>
 
         <div class="sidebar-group">
-          <div class="sidebar-group-title">Estrutura</div>
+          <div class="sidebar-group-title">Condomínio</div>
           <a class="sidebar-item {{isActive currentPath '/admin/fracoes'}}" href="/admin/fracoes" title="Frações">
             <span class="material-symbols-outlined">apartment</span>
             <span class="sidebar-item-text">Frações</span>
           </a>
-          <a class="sidebar-item {{isActive currentPath '/admin/condominos'}}" href="/admin/condominos" title="Condóminos">
+          <a class="sidebar-item {{isActive currentPath '/admin/condominos'}}" href="/admin/condominos" title="Membros">
             <span class="material-symbols-outlined">groups</span>
-            <span class="sidebar-item-text">Condóminos</span>
-          </a>
-          <a class="sidebar-item {{isActive currentPath '/admin/utilizadores'}}" href="/admin/utilizadores" title="Utilizadores">
-            <span class="material-symbols-outlined">manage_accounts</span>
-            <span class="sidebar-item-text">Utilizadores</span>
+            <span class="sidebar-item-text">Membros</span>
           </a>
         </div>
 
@@ -74,7 +70,7 @@
           </a>
           <a class="sidebar-item {{isActive currentPath '/admin/contas'}}" href="/admin/contas" title="Contas bancárias">
             <span class="material-symbols-outlined">account_balance</span>
-            <span class="sidebar-item-text">Contas bancárias</span>
+            <span class="sidebar-item-text">Contas</span>
           </a>
           <a class="sidebar-item {{isActive currentPath '/admin/categorias'}}" href="/admin/categorias" title="Categorias">
             <span class="material-symbols-outlined">category</span>
@@ -84,22 +80,54 @@
 
         <div class="sidebar-group">
           <div class="sidebar-group-title">Condomínio</div>
-          <a class="sidebar-item {{isActive currentPath '/admin/assembleias'}}" href="/admin/assembleias" title="Assembleias">
-            <span class="material-symbols-outlined">forum</span>
-            <span class="sidebar-item-text">Assembleias</span>
-          </a>
           <a class="sidebar-item {{isActive currentPath '/admin/documentos'}}" href="/admin/documentos" title="Documentos">
             <span class="material-symbols-outlined">folder</span>
             <span class="sidebar-item-text">Documentos</span>
           </a>
-          <a class="sidebar-item {{isActive currentPath '/admin/avisos'}}" href="/admin/avisos" title="Avisos">
+          <a class="sidebar-item {{isActive currentPath '/admin/assembleias'}}" href="/admin/assembleias" title="Assembleias">
+            <span class="material-symbols-outlined">forum</span>
+            <span class="sidebar-item-text">Assembleias</span>
+          </a>
+          <a class="sidebar-item {{isActive currentPath '/admin/votacoes'}}" href="/admin/votacoes" title="Votações">
+            <span class="material-symbols-outlined">how_to_vote</span>
+            <span class="sidebar-item-text">Votações</span>
+          </a>
+          <a class="sidebar-item {{isActive currentPath '/admin/calendario'}}" href="/admin/calendario" title="Calendário">
+            <span class="material-symbols-outlined">calendar_month</span>
+            <span class="sidebar-item-text">Calendário</span>
+          </a>
+          <a class="sidebar-item {{isActive currentPath '/admin/amenidades'}}" href="/admin/amenidades" title="Amenidades">
+            <span class="material-symbols-outlined">weekend</span>
+            <span class="sidebar-item-text">Amenidades</span>
+          </a>
+        </div>
+
+        <div class="sidebar-group">
+          <div class="sidebar-group-title">Serviços</div>
+          <a class="sidebar-item {{isActive currentPath '/admin/tickets'}}" href="/admin/tickets" title="Tickets">
+            <span class="material-symbols-outlined">confirmation_number</span>
+            <span class="sidebar-item-text">Tickets</span>
+          </a>
+          <a class="sidebar-item {{isActive currentPath '/admin/fornecedores'}}" href="/admin/fornecedores" title="Fornecedores">
+            <span class="material-symbols-outlined">local_shipping</span>
+            <span class="sidebar-item-text">Fornecedores</span>
+          </a>
+          <a class="sidebar-item {{isActive currentPath '/admin/seguros'}}" href="/admin/seguros" title="Seguros">
+            <span class="material-symbols-outlined">shield</span>
+            <span class="sidebar-item-text">Seguros</span>
+          </a>
+          <a class="sidebar-item {{isActive currentPath '/admin/avisos'}}" href="/admin/avisos" title="Comunicações">
             <span class="material-symbols-outlined">campaign</span>
-            <span class="sidebar-item-text">Avisos</span>
+            <span class="sidebar-item-text">Comunicações</span>
           </a>
         </div>
 
         <div class="sidebar-group">
           <div class="sidebar-group-title">Sistema</div>
+          <a class="sidebar-item {{isActive currentPath '/admin/utilizadores'}}" href="/admin/utilizadores" title="Utilizadores">
+            <span class="material-symbols-outlined">manage_accounts</span>
+            <span class="sidebar-item-text">Utilizadores</span>
+          </a>
           <a class="sidebar-item {{isActive currentPath '/admin/config'}}" href="/admin/config" title="Configuração">
             <span class="material-symbols-outlined">settings</span>
             <span class="sidebar-item-text">Configuração</span>
