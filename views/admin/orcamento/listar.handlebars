@@ -15,7 +15,9 @@
           <th>Designação</th>
           <th>Período</th>
           <th>Estado</th>
-          <th class="text-end">Total</th>
+          <th class="text-end">Receitas</th>
+          <th class="text-end">Despesas</th>
+          <th class="text-end">Saldo</th>
           <th class="text-end">Ações</th>
         </tr>
       </thead>
@@ -31,7 +33,9 @@
             {{else if (eq estado 'encerrado')}}<span class="badge text-bg-dark">Encerrado</span>
             {{else}}<span class="badge text-bg-danger">Anulado</span>{{/if}}
           </td>
-          <td class="text-end fw-semibold">{{eur total}}</td>
+          <td class="text-end text-success">{{eur receitas}}</td>
+          <td class="text-end">{{eur despesas}}</td>
+          <td class="text-end fw-semibold {{#if (gt saldo 0)}}text-success{{else if (lt saldo 0)}}text-danger{{/if}}">{{eur saldo}}</td>
           <td class="text-end">
             <a href="/admin/orcamento/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
           </td>

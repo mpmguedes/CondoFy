@@ -49,11 +49,27 @@ router.get('/orcamento', async (req, res) => {
     include: [{ model: OrcamentoRubrica, as: 'rubricas' }],
     order: [['data_inicio', 'DESC']],
   });
-  const linhas = orcamentos.map((o) => ({
-    ...o.toJSON(),
-    rotulo: rotuloPeriodo(o),
-    total: fromCents(totalRubricasC(o.rubricas)),
-  }));
+
+  const ids = orcamentos.map((o) => o.id);
+  const plano = ids.length
+    ? await PlanoQuota.findAll({ where: { orcamento_id: ids, estado: { [Op.ne]: 'cancelada' } }, raw: true })
+    : [];
+  const receitasPorOrcamento = {};
+  plano.forEach((p) => {
+    receitasPorOrcamento[p.orcamento_id] = (receitasPorOrcamento[p.orcamento_id] || 0) + toCents(p.valor);
+  });
+
+  const linhas = orcamentos.map((o) => {
+    const despesasC = totalRubricasC(o.rubricas);
+    const receitasC = receitasPorOrcamento[o.id] || 0;
+    return {
+      ...o.toJSON(),
+      rotulo: rotuloPeriodo(o),
+      despesas: fromCents(despesasC),
+      receitas: fromCents(receitasC),
+      saldo: fromCents(receitasC - despesasC),
+    };
+  });
   res.render('admin/orcamento/listar', { titulo: 'Orçamentos', orcamentos: linhas });
 });
 

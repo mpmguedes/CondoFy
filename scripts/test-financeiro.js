@@ -3,7 +3,9 @@
 const assert = require('assert');
 const { distribuirValorAnual } = require('../helpers/distribuicao');
 const { calcularPlano } = require('../helpers/plano');
-const { toCents } = require('../helpers/money');
+const { toCents, fromCents } = require('../helpers/money');
+const { calcularQuota } = require('../helpers/quotas-calc');
+const { distribuicaoExtra, parcelar, periodosVencimento } = require('../helpers/extra-quotas');
 const pdf = require('../helpers/pdf');
 
 const FRAÇÕES = [
@@ -110,6 +112,39 @@ async function main() {
   for (const [nome, buf] of [['aviso', aviso], ['recibo', recibo], ['ata', ata]]) {
     assert.strictEqual(buf.slice(0, 5).toString(), '%PDF-', `${nome}: PDF válido`);
   }
+
+  // 5. Cálculo de quota: permilagem × valor/‰ + FCR
+  const q = calcularQuota('500', '0.1000', '10');
+  assert.strictEqual(q.base, 50, 'base = 500‰ × 0,10 € = 50 €');
+  assert.strictEqual(q.fcr, 5, 'fcr = 10% de 50 € = 5 €');
+  assert.strictEqual(q.total, 55, 'total = 55 €');
+  assert.strictEqual(q.totalC, 5500, 'total em cêntimos');
+
+  // 6. Parcelamento: soma exata e resto na última parcela
+  const p1 = parcelar(10000, 3);
+  assert.deepStrictEqual(p1, [3333, 3333, 3334], 'resto na última parcela');
+  assert.strictEqual(p1.reduce((a, b) => a + b, 0), 10000, 'soma das parcelas = valor');
+  const p2 = parcelar(1, 3);
+  assert.strictEqual(p2.reduce((a, b) => a + b, 0), 1, '1 cêntimo dividido por 3 soma 1');
+
+  // 7. Quota extra: distribuição permilagem e igual com soma exata
+  const fracoesExtra = [
+    { id: 1, permilagem: '500' },
+    { id: 2, permilagem: '300' },
+    { id: 3, permilagem: '200' },
+  ];
+  const extraPerm = distribuicaoExtra('1000.00', fracoesExtra, 'permilagem');
+  assert.strictEqual(extraPerm.reduce((s, p) => s + p.valorC, 0), toCents('1000.00'), 'extra permilagem soma exata');
+  const extraIgual = distribuicaoExtra('1000.00', fracoesExtra, 'igual');
+  assert.strictEqual(extraIgual.reduce((s, p) => s + p.valorC, 0), toCents('1000.00'), 'extra igual soma exata');
+
+  // 8. Períodos de vencimento com periodicidade
+  const periodos = periodosVencimento(11, 2025, 4, 'bimestral');
+  assert.strictEqual(periodos.length, 4);
+  assert.strictEqual(periodos[0].ano, 2025);
+  assert.strictEqual(periodos[0].mes, 11);
+  assert.strictEqual(periodos[3].ano, 2026);
+  assert.strictEqual(periodos[3].mes, 5);
 
   console.log('✓ Todos os testes financeiros passaram.');
 }

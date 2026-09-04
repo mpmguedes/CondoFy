@@ -24,11 +24,11 @@
 ## Fases de implementação
 
 1. ✅ **Dados + cálculo** — `Quota.valor_base/valor_fcr`, seeds de config, `helpers/quotas-calc.js`.
-2. Config UI (cards + modal "Configuração das quotas") + rotas `GET/PUT /quotas/config`.
-3. Geração de quotas com FCR (wizard + auto) e regra "não alterar quotas pagas".
-4. Grelha anual do estado das quotas por fração.
-5. Quotas Extraordinárias (models + rotas + vistas + parcelamento + distribuição).
-6. Dashboard + integração financeira (receitas previstas/recebidas/atraso).
+2. ✅ **Config UI** — cards + modal "Configuração das quotas" + rotas `GET/POST /quotas/config`.
+3. ✅ **Geração de quotas com FCR** — wizard + auto usando `calcularQuota()`, regra "não alterar quotas pagas", idempotente.
+4. ✅ **Grelha anual** — `GET /quotas/grelha` + `views/admin/quotas/grelha.handlebars` (estado por fração × mês).
+5. ✅ **Quotas Extraordinárias** — `ExtraQuota` + `ExtraQuotaParcela` + rotas `/admin/quotas-extra` + parcelamento (permilagem/igual) + movimentos bancários.
+6. ✅ **Dashboard + integração financeira** — `helpers/dashboard.js` (previstas mês, recebidas, em atraso, total atraso, orçamento do ano).
 
 ## Regras
 
