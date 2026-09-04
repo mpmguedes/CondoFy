@@ -37,9 +37,7 @@
     </form>
     {{/if}}
     <a href="/admin/orcamento/{{orcamento.id}}/distribuicao" class="btn btn-outline-primary"><i class="bi bi-diagram-3 me-1"></i>Distribuição</a>
-    <form action="/admin/orcamento/{{orcamento.id}}/plano" method="POST" onsubmit="return confirm('Gerar o plano de quotas a partir da distribuição?');">
-      <button class="btn btn-outline-primary"><i class="bi bi-calendar3 me-1"></i>Gerar plano de quotas</button>
-    </form>
+    <a href="/admin/orcamento/{{orcamento.id}}/plano" class="btn btn-outline-primary"><i class="bi bi-calendar3 me-1"></i>Plano de quotas</a>
     <a href="/admin/orcamento/{{orcamento.id}}/emitir" class="btn btn-outline-primary"><i class="bi bi-send me-1"></i>Emitir quotas</a>
     <a href="/admin/orcamento/{{orcamento.id}}/historico" class="btn btn-outline-secondary"><i class="bi bi-clock-history me-1"></i>Histórico</a>
   </div>

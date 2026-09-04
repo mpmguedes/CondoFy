@@ -1,0 +1,51 @@
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h1 class="h3 mb-0"><i class="bi bi-calendar3 me-2"></i>{{titulo}}</h1>
+  <div>
+    <form action="/admin/orcamento/{{orcamento.id}}/plano" method="POST" class="d-inline" onsubmit="return confirm('Recalcular o plano de quotas?');">
+      <button class="btn btn-primary"><i class="bi bi-arrow-repeat me-1"></i>Recalcular plano</button>
+    </form>
+    <a href="/admin/orcamento/{{orcamento.id}}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+  </div>
+</div>
+
+{{#if meses}}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Fração</th>
+          {{#each meses}}
+          <th class="text-end text-nowrap">{{monthName mes}}<br /><span class="small text-muted">{{ano}}</span></th>
+          {{/each}}
+          <th class="text-end">Total anual</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each fracoes}}
+        <tr>
+          <td class="fw-semibold">{{designacao}}</td>
+          {{#each totais}}
+          <td class="text-end">{{#if this}}{{eur this}}{{else}}<span class="text-muted">—</span>{{/if}}</td>
+          {{/each}}
+          <td class="text-end fw-semibold">{{eur totalAnual}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+      <tfoot class="table-light">
+        <tr>
+          <th>Total mensal</th>
+          {{#each totaisMes}}
+          <th class="text-end">{{eur this}}</th>
+          {{/each}}
+          <th class="text-end">{{eur totalGeral}}</th>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+{{else}}
+<div class="alert alert-info">
+  <i class="bi bi-info-circle me-1"></i>Ainda não há plano gerado. Clica em <strong>Recalcular plano</strong> — a distribuição é calculada automaticamente se ainda não existir.
+</div>
+{{/if}}

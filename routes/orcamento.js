@@ -24,10 +24,13 @@ const router = express.Router();
 router.use(eAdmin);
 
 function periodoUmAno(dataInicio, dataFim) {
-  const i = new Date(dataInicio);
-  const umAno = new Date(i.getFullYear() + 1, i.getMonth(), i.getDate());
-  const fimEsperado = new Date(umAno.getTime() - 86400000);
-  return new Date(dataFim).getTime() === fimEsperado.getTime();
+  if (!dataInicio || !dataFim) return false;
+  const [iy, im, id] = dataInicio.split('-').map(Number);
+  const fim = new Date(Date.UTC(iy, im - 1, id));
+  fim.setUTCFullYear(fim.getUTCFullYear() + 1);
+  fim.setUTCDate(fim.getUTCDate() - 1);
+  const esperado = fim.toISOString().slice(0, 10);
+  return dataFim === esperado;
 }
 
 function totalRubricasC(rubricas) {
@@ -271,15 +274,86 @@ router.post('/orcamento/:id/distribuicao', async (req, res) => {
 });
 
 // ── Plano de quotas ────────────────────────────────────────────────
+router.get('/orcamento/:id/plano', async (req, res) => {
+  const orcamento = await Orcamento.findByPk(req.params.id);
+  if (!orcamento) return res.redirect('/admin/orcamento');
+
+  const plano = await PlanoQuota.findAll({
+    where: { orcamento_id: orcamento.id },
+    include: [{ model: Fracao, as: 'fracao' }],
+    order: [['ano', 'ASC'], ['mes', 'ASC'], ['fracao_id', 'ASC']],
+  });
+
+  const fracoesMap = new Map();
+  const meses = [];
+  const mesesSet = new Set();
+  plano.forEach((p) => {
+    if (!fracoesMap.has(p.fracao_id)) fracoesMap.set(p.fracao_id, p.fracao ? p.fracao.designacao : p.fracao_id);
+    const key = `${p.ano}|${p.mes}`;
+    if (!mesesSet.has(key)) {
+      mesesSet.add(key);
+      meses.push({ ano: p.ano, mes: p.mes });
+    }
+  });
+
+  const celulas = {};
+  plano.forEach((p) => (celulas[`${p.fracao_id}|${p.ano}|${p.mes}`] = p.valor));
+
+  const fracoes = [...fracoesMap.entries()].map(([id, designacao]) => ({
+    id,
+    designacao,
+    totais: meses.map((m) => celulas[`${id}|${m.ano}|${m.mes}`] ?? 0),
+    totalAnual: meses.reduce((s, m) => s + toCents(celulas[`${id}|${m.ano}|${m.mes}`] ?? 0), 0),
+  }));
+
+  const totaisMes = meses.map((m) =>
+    plano.filter((p) => p.ano === m.ano && p.mes === m.mes).reduce((s, p) => s + toCents(p.valor), 0)
+  );
+
+  res.render('admin/orcamento/plano', {
+    titulo: `Plano de quotas — ${rotuloPeriodo(orcamento)}`,
+    orcamento: orcamento.toJSON(),
+    meses,
+    fracoes,
+    totaisMes,
+    totalGeral: plano.reduce((s, p) => s + toCents(p.valor), 0),
+  });
+});
+
 router.post('/orcamento/:id/plano', async (req, res) => {
   const orcamento = await Orcamento.findByPk(req.params.id);
   if (!orcamento) return res.redirect('/admin/orcamento');
   const rubricas = await OrcamentoRubrica.findAll({ where: { orcamento_id: orcamento.id, ativo: true } });
-  const distribuicoes = await OrcamentoDistribuicao.findAll({ where: { orcamento_id: orcamento.id } });
   const fracoes = await Fracao.findAll({ where: { estado: 'ativo' } });
+  let distribuicoes = await OrcamentoDistribuicao.findAll({ where: { orcamento_id: orcamento.id } });
+
+  // Distribuição automática para rubricas ainda sem distribuição (permilagem/igual).
+  let autoDistribuidas = 0;
+  const tDist = await sequelize.transaction();
+  try {
+    for (const r of rubricas) {
+      if (distribuicoes.some((d) => d.rubrica_id === r.id)) continue;
+      const metodo = r.metodo_distribuicao === 'valor_fixo' ? 'igual' : r.metodo_distribuicao;
+      const partes = distribuirValorAnual(r.valor_anual, fracoes, metodo);
+      for (const p of partes) {
+        if (p.valor > 0) {
+          await OrcamentoDistribuicao.create(
+            { orcamento_id: orcamento.id, rubrica_id: r.id, fracao_id: p.fracaoId, valor_anual: p.valor },
+            { transaction: tDist }
+          );
+        }
+      }
+      autoDistribuidas++;
+    }
+    await tDist.commit();
+  } catch (err) {
+    await tDist.rollback();
+    throw err;
+  }
+  distribuicoes = await OrcamentoDistribuicao.findAll({ where: { orcamento_id: orcamento.id } });
 
   const plano = calcularPlano({
-    orcamento,
+    orcamento: orcamento.toJSON(),
     rubricas: rubricas.map((r) => r.toJSON()),
     distribuicoes: distribuicoes.map((d) => d.toJSON()),
     fracoes: fracoes.map((f) => f.toJSON()),
@@ -297,13 +371,13 @@ router.post('/orcamento/:id/plano', async (req, res) => {
     }
     await t.commit();
     await audit({ userId: req.user.id, acao: 'gerar_plano_quotas', entidade: 'Orcamento', entidadeId: orcamento.id, detalhes: { linhas: plano.length } });
-    req.flash('success_msg', `Plano de quotas gerado (${plano.length} lançamentos).`);
+    req.flash('success_msg', `Plano de quotas gerado (${plano.length} lançamentos${autoDistribuidas ? `; distribuição calculada para ${autoDistribuidas} rubrica(s)` : ''}).`);
   } catch (err) {
     await t.rollback();
     console.error(err);
     req.flash('error_msg', 'Erro ao gerar o plano.');
   }
-  res.redirect(`/admin/orcamento/${orcamento.id}`);
+  res.redirect(`/admin/orcamento/${orcamento.id}/plano`);
 });
 
 // ── Emissão (Fase 4) ───────────────────────────────────────────────
