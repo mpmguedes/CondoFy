@@ -274,7 +274,11 @@ router.get('/quotas', async (req, res) => {
 
 router.get('/quotas/gerar', async (req, res) => {
   const fracoes = await Fracao.findAll({ where: { estado: 'ativo' }, order: [['designacao', 'ASC']] });
-  res.render('admin/quotas/gerar', { titulo: 'Gerar quotas', fracoes });
+  res.render('admin/quotas/gerar', {
+    titulo: 'Gerar quotas',
+    fracoes,
+    fracoesJson: JSON.stringify(fracoes.map((f) => ({ id: f.id, designacao: f.designacao, permilagem: f.permilagem }))),
+  });
 });
 
 router.post('/quotas/gerar', async (req, res) => {

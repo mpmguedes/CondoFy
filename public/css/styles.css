@@ -365,6 +365,51 @@ a:hover { color: var(--c-primary-dark); }
 .nav-tabs .nav-link:hover { color: var(--c-text); }
 .nav-tabs .nav-link.active { color: var(--c-primary); border-bottom: 2px solid var(--c-primary); background: transparent; }
 
+/* ── Stepper (wizard) ────────────────────────────────────────────── */
+.stepper {
+  display: flex;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--sp-5);
+}
+.stepper .step {
+  flex: 1;
+  text-align: center;
+  position: relative;
+  color: var(--c-text-muted);
+}
+.stepper .step::before {
+  content: '';
+  position: absolute;
+  top: 14px;
+  left: -50%;
+  width: 100%;
+  height: 2px;
+  background: var(--c-border);
+  z-index: 0;
+}
+.stepper .step:first-child::before { display: none; }
+.step-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--c-surface-2);
+  border: 2px solid var(--c-border);
+  color: var(--c-text-muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+  position: relative;
+  z-index: 1;
+}
+.stepper .step.active .step-circle { background: var(--c-primary); border-color: var(--c-primary); color: #fff; }
+.stepper .step.done .step-circle { background: var(--c-success); border-color: var(--c-success); color: #fff; }
+.stepper .step.done::before { background: var(--c-success); }
+.step-label { display: block; margin-top: var(--sp-1); font-size: 0.8rem; font-weight: 500; }
+.stepper .step.active .step-label { color: var(--c-primary); font-weight: 600; }
+
 /* ── Empty state ─────────────────────────────────────────────────── */
 .empty-state { text-align: center; padding: var(--sp-7) var(--sp-4); }
 .empty-state-icon { font-size: 52px; color: var(--c-text-muted); opacity: 0.45; }

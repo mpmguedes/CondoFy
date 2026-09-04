@@ -16,6 +16,7 @@ module.exports = {
   eur: (v) => formatEUR(v),
   monthName: (m) => monthName(m),
   currentYear: () => currentYear(),
+  currentMonth: () => new Date().getMonth() + 1,
   json: (obj) => JSON.stringify(obj),
   // selected(option, current) → 'selected' se iguais
   selected: (a, b) => (String(a) === String(b) ? 'selected' : ''),
