@@ -8,6 +8,9 @@ const base = {
   port: parseInt(process.env.DB_PORT || '3306', 10),
   // Dialect 'mysql' usa o driver mysql2, que é totalmente compatível com MariaDB.
   dialect: 'mysql',
+  // O Sequelize executa "SET time_zone = '<valor>'" ao ligar; tem de ser um valor
+  // válido. Com nome IANA (com "/") converte para o offset atual de Lisboa.
+  timezone: 'Europe/Lisbon',
   logging: process.env.DB_LOGGING === 'true' ? console.log : false,
   define: {
     charset: 'utf8mb4',
