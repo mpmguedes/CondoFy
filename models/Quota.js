@@ -12,6 +12,8 @@ module.exports = (sequelize) => {
       mes: { type: DataTypes.INTEGER, allowNull: false },
       periodo: { type: DataTypes.DATEONLY, allowNull: true },
       valor: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
+      valor_base: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
+      valor_fcr: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
       data_emissao: { type: DataTypes.DATEONLY, allowNull: true },
       data_vencimento: { type: DataTypes.DATEONLY, allowNull: true },
       estado: {
