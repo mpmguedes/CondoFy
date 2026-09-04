@@ -29,6 +29,7 @@ const {
   OrcamentoAlteracao,
   OrcamentoDistribuicao,
   PlanoQuota,
+  MovimentoBancario,
   OrcamentoItem,
   Quota,
   Pagamento,
@@ -92,6 +93,16 @@ PagamentoQuota.belongsTo(Quota, { foreignKey: 'quota_id', as: 'quota' });
 Despesa.belongsTo(Categoria, { foreignKey: 'categoria_id', as: 'categoria' });
 Despesa.belongsTo(ContaBancaria, { foreignKey: 'conta_bancaria_id', as: 'conta_bancaria' });
 Despesa.belongsTo(MetodoPagamento, { foreignKey: 'metodo_pagamento_id', as: 'metodo_pagamento' });
+
+// Movimentos bancários
+MovimentoBancario.belongsTo(ContaBancaria, { foreignKey: 'conta_bancaria_id', as: 'conta_bancaria' });
+ContaBancaria.hasMany(MovimentoBancario, { foreignKey: 'conta_bancaria_id', as: 'movimentos' });
+MovimentoBancario.belongsTo(Categoria, { foreignKey: 'categoria_id', as: 'categoria' });
+MovimentoBancario.belongsTo(Quota, { foreignKey: 'quota_id', as: 'quota' });
+MovimentoBancario.belongsTo(Pagamento, { foreignKey: 'pagamento_id', as: 'pagamento' });
+MovimentoBancario.belongsTo(Despesa, { foreignKey: 'despesa_id', as: 'despesa' });
+MovimentoBancario.belongsTo(Documento, { foreignKey: 'documento_id', as: 'documento' });
+MovimentoBancario.belongsTo(User, { foreignKey: 'created_by', as: 'criador' });
 
 // Orçamento (modelo antigo, mantido por compatibilidade)
 OrcamentoItem.belongsTo(Categoria, { foreignKey: 'categoria_id', as: 'categoria' });

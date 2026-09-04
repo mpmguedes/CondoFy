@@ -14,6 +14,8 @@ module.exports = (sequelize) => {
         defaultValue: 'corrente',
       },
       saldo_inicial: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
+      data_inicio: { type: DataTypes.DATEONLY, allowNull: true },
+      data_saldo_inicial: { type: DataTypes.DATEONLY, allowNull: true },
       ativa: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     },
     { tableName: 'contas_bancarias', underscored: true }
