@@ -15,6 +15,7 @@
   <link href="/css/styles.css" rel="stylesheet" />
 </head>
 <body>
+  <a class="skip-link" href="#conteudo">Saltar para o conteúdo</a>
   {{#if user}}
   <div class="app-shell" id="appShell">
     <aside class="sidebar" id="sidebar">
@@ -23,7 +24,7 @@
         <span class="sidebar-brand-text">Condofy</span>
       </div>
 
-      <nav class="sidebar-nav">
+      <nav class="sidebar-nav" aria-label="Navegação principal">
         {{#if isAdmin}}
         <div class="sidebar-group">
           <div class="sidebar-group-title">Painel</div>
@@ -142,7 +143,7 @@
         </div>
       </header>
 
-      <main class="app-content">
+      <main class="app-content" id="conteudo">
         {{> _flash}}
         {{{body}}}
       </main>

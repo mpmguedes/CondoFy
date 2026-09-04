@@ -427,6 +427,29 @@ a:hover { color: var(--c-primary-dark); }
 .dropdown-item:active { background: var(--c-primary-light); color: var(--c-primary-dark); }
 .list-group-item { border-color: var(--c-border); }
 
+/* ── Acessibilidade ──────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--c-primary);
+  color: #fff;
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: 0 0 var(--sp-2) 0;
+  z-index: 9999;
+}
+.skip-link:focus {
+  left: 0;
+  color: #fff;
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
 /* ── Responsive ──────────────────────────────────────────────────── */
 @media (max-width: 991.98px) {
   .sidebar { transform: translateX(-100%); width: var(--sidebar-w); }
