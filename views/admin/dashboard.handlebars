@@ -47,6 +47,60 @@
   </div>
 </div>
 
+<div class="section-title">Finanças do mês</div>
+<div class="row g-3">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card"><div class="card-body">
+      <div class="stat-label">Quotas previstas (mês)</div>
+      <div class="stat-value">{{eur financeiroMes.previstas}}</div>
+      {{#if (gt financeiroMes.extra 0)}}<div class="stat-sub">+ {{eur financeiroMes.extra}} em quotas extra</div>{{/if}}
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card"><div class="card-body">
+      <div class="stat-label">Recebidas (mês)</div>
+      <div class="stat-value text-success">{{eur financeiroMes.recebidas}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card"><div class="card-body">
+      <div class="stat-label">Em atraso</div>
+      <div class="stat-value {{#if (gt emAtraso.count 0)}}text-danger{{/if}}">{{emAtraso.count}} <span class="text-muted small">quotas</span></div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card"><div class="card-body">
+      <div class="stat-label">Total em atraso</div>
+      <div class="stat-value {{#if (gt emAtraso.total 0)}}text-danger{{/if}}">{{eur emAtraso.total}}</div>
+    </div></div>
+  </div>
+</div>
+
+<div class="section-title">Orçamento {{anoAtual}}</div>
+<div class="row g-3 mb-3">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
+        {{#if orcamentoAno}}
+          <div>
+            <div class="fw-semibold">{{orcamentoAno.designacao}}</div>
+            <div class="text-muted small">
+              {{#if (eq orcamentoAno.estado 'aprovado')}}Aprovado{{else if (eq orcamentoAno.estado 'em_execucao')}}Em execução{{else if (eq orcamentoAno.estado 'encerrado')}}Encerrado{{else if (eq orcamentoAno.estado 'rascunho')}}Rascunho{{else}}Anulado{{/if}}
+            </div>
+          </div>
+          <a href="/admin/orcamento/{{orcamentoAno.id}}" class="btn btn-outline-primary">Ver orçamento</a>
+        {{else}}
+          <div>
+            <div class="fw-semibold">Não existe orçamento para {{anoAtual}}</div>
+            <div class="text-muted small">Crie o orçamento anual para definir as receitas previstas do condomínio.</div>
+          </div>
+          <a href="/admin/orcamento/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">add</span>Criar orçamento</a>
+        {{/if}}
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="section-title">Operação</div>
 <div class="row g-3">
   <div class="col-6 col-md-3">

@@ -23,6 +23,7 @@ const { toCents, fromCents } = require('../helpers/money');
 const { audit } = require('../helpers/audit');
 const { getCondominio } = require('../helpers/condominio');
 const { resumoCondominio, resumoFracao, estadoEfetivo } = require('../helpers/saldos');
+const { resumoFinanceiroMes, resumoEmAtraso, orcamentoDoAno } = require('../helpers/dashboard');
 const drive = require('../helpers/drive');
 const { smtpConfigured } = require('../helpers/mailer');
 
@@ -62,7 +63,8 @@ router.get('/', async (req, res) => {
 
   // Gráficos do dashboard (ano corrente)
   const anoAtual = new Date().getFullYear();
-  const [pagamentos, despesas] = await Promise.all([
+  const mesAtual = new Date().getMonth() + 1;
+  const [pagamentos, despesas, financeiroMes, emAtraso, orcamentoAno] = await Promise.all([
     Pagamento.findAll({ attributes: ['valor', 'data_pagamento'], where: { estado: 'confirmado' }, raw: true }),
     Despesa.findAll({
       attributes: ['valor', 'data'],
@@ -70,6 +72,9 @@ router.get('/', async (req, res) => {
       include: [{ model: Categoria, as: 'categoria', attributes: ['nome'] }],
       raw: true,
     }),
+    resumoFinanceiroMes(anoAtual, mesAtual),
+    resumoEmAtraso(),
+    orcamentoDoAno(anoAtual),
   ]);
 
   const receitasMes = Array(12).fill(0);
@@ -100,6 +105,9 @@ router.get('/', async (req, res) => {
     nPendentes,
     nVencidas,
     anoAtual,
+    financeiroMes,
+    emAtraso,
+    orcamentoAno: orcamentoAno ? orcamentoAno.toJSON() : null,
     sistema: {
       driveLigado: drive.isConfigured(),
       smtp: smtpConfigured(),
