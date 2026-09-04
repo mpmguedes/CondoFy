@@ -4,6 +4,31 @@ const PDFDocument = require('pdfkit');
 const { formatEUR } = require('./money');
 const { formatDate } = require('./dates');
 
+// ── Constantes de layout (sem números mágicos espalhados) ──────────
+const T = {
+  MARGEM: 50,
+  LARGURA_PAGINA: 595.28,
+  LARGURA_CONTEUDO: 495, // LARGURA_PAGINA - 2*MARGEM
+  PADDING: 12, // margem interna das caixas
+  LIMITE_INFERIOR: 778, // onde começa o rodapé
+  TEXTO_SIZE: 10,
+  TEXTO_SIZE_SMALL: 9,
+  TITULO_DOC_SIZE: 18,
+  TITULO_CAIXA_SIZE: 10,
+  FONTE: 'Helvetica',
+  FONTE_BOLD: 'Helvetica-Bold',
+  COR_PRIMARIA: '#2563eb',
+  COR_TEXTO: '#111827',
+  COR_MUTED: '#555555',
+  COR_SUCESSO: '#0f766e',
+  COR_ALERTA: '#b45309',
+  COR_VERDE: '#16a34a',
+  COR_FUNDO_CAIXA: '#f8fafc',
+  COR_FUNDO_VERDE: '#f0fdf4',
+  LARGURA_ROTULO: 200,
+  GAP_ROTULO: 20,
+};
+
 // Resolve o caminho físico do logótipo (guardado como nome de ficheiro em public/uploads).
 function caminhoLogotipo(condominio) {
   if (!condominio || !condominio.logotipo) return null;
@@ -11,91 +36,13 @@ function caminhoLogotipo(condominio) {
   return fs.existsSync(caminho) ? caminho : null;
 }
 
-// Cria um documento A4 com margens e paginação.
 function criarDocumento() {
   return new PDFDocument({
     size: 'A4',
-    margin: 50,
+    margin: T.MARGEM,
     bufferPages: true,
     info: { Title: 'Condofy', Author: 'Condofy' },
   });
-}
-
-function desenharCabecalho(doc, condominio, titulo) {
-  const logo = caminhoLogotipo(condominio);
-  let xTexto = 50;
-
-  if (logo && condominio.identidade_visual === 'logo') {
-    try {
-      doc.image(logo, 50, 40, { height: 55 });
-      xTexto = 120;
-    } catch (err) {
-      xTexto = 50;
-    }
-  }
-
-  doc
-    .font('Helvetica-Bold')
-    .fontSize(15)
-    .text(condominio.designacao || 'Condomínio', xTexto, 42, { width: 300, lineBreak: false });
-
-  const morada = [
-    condominio.morada,
-    [condominio.codigo_postal, condominio.localidade].filter(Boolean).join(' '),
-  ]
-    .filter(Boolean)
-    .join(', ');
-
-  doc
-    .font('Helvetica')
-    .fontSize(9)
-    .fillColor('#555555')
-    .text(morada, xTexto, 62, { width: 300 });
-  if (condominio.nif) {
-    doc.text(`NIF: ${condominio.nif}`, xTexto, 76, { width: 300 });
-  }
-
-  // Título do documento à direita
-  doc
-    .font('Helvetica-Bold')
-    .fontSize(18)
-    .fillColor('#1f2937')
-    .text(titulo, 300, 45, { width: 245, align: 'right' });
-
-  doc
-    .moveTo(50, 108)
-    .lineTo(545, 108)
-    .lineWidth(1.2)
-    .strokeColor('#2563eb')
-    .stroke();
-}
-
-function desenharRodape(doc, condominio) {
-  const rodape = `Condomínio ${condominio.designacao || ''} · Documento gerado por Condofy`;
-  doc
-    .font('Helvetica')
-    .fontSize(8)
-    .fillColor('#888888')
-    .text(rodape, 50, 790, { width: 400, align: 'left' });
-}
-
-function finalizarPaginacao(doc, condominio) {
-  const range = doc.bufferedPageRange();
-  for (let i = range.start; i < range.start + range.count; i++) {
-    doc.switchToPage(i);
-    doc
-      .moveTo(50, 782)
-      .lineTo(545, 782)
-      .lineWidth(0.5)
-      .strokeColor('#cccccc')
-      .stroke();
-    desenharRodape(doc, condominio);
-    doc
-      .font('Helvetica')
-      .fontSize(8)
-      .fillColor('#888888')
-      .text(`Página ${i + 1} de ${range.count}`, 450, 790, { width: 95, align: 'right' });
-  }
 }
 
 function toBuffer(doc) {
@@ -108,15 +55,205 @@ function toBuffer(doc) {
   });
 }
 
-// Rótulo:valor em duas colunas
-function linha(doc, y, rotulo, valor, x1 = 50, x2 = 300, width = 245, cor = '#111827') {
-  doc.font('Helvetica').fontSize(10).fillColor('#555555').text(rotulo, x1, y, { width: 200 });
-  doc.font('Helvetica-Bold').fontSize(10).fillColor(cor).text(valor, x2, y, { width, align: 'right' });
+// ── Layout: controla o cursor vertical, quebras de página e caixas ──
+class Layout {
+  constructor(doc, condominio, titulo) {
+    this.doc = doc;
+    this.condominio = condominio || {};
+    this.titulo = titulo;
+    this.y = 0;
+    this.medindo = false;
+    this.cx = T.MARGEM; // x do conteúdo (recuado dentro de caixas)
+    this.cw = T.LARGURA_CONTEUDO; // largura do conteúdo
+    this.desenharCabecalho();
+  }
+
+  desenharCabecalho() {
+    const logo = caminhoLogotipo(this.condominio);
+    let xTexto = T.MARGEM;
+
+    if (logo && this.condominio.identidade_visual === 'logo') {
+      try {
+        this.doc.image(logo, T.MARGEM, 38, { height: 48 });
+        xTexto = T.MARGEM + 66;
+      } catch (err) {
+        xTexto = T.MARGEM;
+      }
+    }
+
+    this.doc
+      .font(T.FONTE_BOLD)
+      .fontSize(15)
+      .fillColor(T.COR_TEXTO)
+      .text(this.condominio.designacao || 'Condomínio', xTexto, 42, { width: 250, lineBreak: false });
+
+    const morada = [
+      this.condominio.morada,
+      [this.condominio.codigo_postal, this.condominio.localidade].filter(Boolean).join(' '),
+    ]
+      .filter(Boolean)
+      .join(', ');
+
+    this.doc
+      .font(T.FONTE)
+      .fontSize(T.TEXTO_SIZE_SMALL)
+      .fillColor(T.COR_MUTED)
+      .text(morada, xTexto, 62, { width: 250 });
+    if (this.condominio.nif) {
+      this.doc.text(`NIF: ${this.condominio.nif}`, xTexto, 74, { width: 250 });
+    }
+
+    this.doc
+      .font(T.FONTE_BOLD)
+      .fontSize(T.TITULO_DOC_SIZE)
+      .fillColor(T.COR_TEXTO)
+      .text(this.titulo, 300, 45, { width: 245, align: 'right' });
+
+    this.doc
+      .moveTo(T.MARGEM, 96)
+      .lineTo(T.MARGEM + T.LARGURA_CONTEUDO, 96)
+      .lineWidth(1.2)
+      .strokeColor(T.COR_PRIMARIA)
+      .stroke();
+
+    this.y = 108;
+  }
+
+  garantirEspaco(altura) {
+    if (this.medindo) return;
+    if (this.y + altura > T.LIMITE_INFERIOR) {
+      this.doc.addPage();
+      this.desenharCabecalho();
+    }
+  }
+
+  espaco(n) {
+    this.y += n;
+  }
+
+  texto(texto, opts = {}) {
+    const fontSize = opts.fontSize || T.TEXTO_SIZE;
+    const bold = opts.bold;
+    const width = opts.width || this.cw;
+    const h =
+      this.doc.font(bold ? T.FONTE_BOLD : T.FONTE).heightOfString(String(texto ?? ''), { width, fontSize }) + 4;
+    this.garantirEspaco(h);
+    if (!this.medindo) {
+      this.doc
+        .font(bold ? T.FONTE_BOLD : T.FONTE)
+        .fontSize(fontSize)
+        .fillColor(opts.cor || T.COR_TEXTO)
+        .text(String(texto ?? ''), this.cx, this.y, { width, lineGap: opts.lineGap || 2 });
+    }
+    this.y += h;
+  }
+
+  linha(rotulo, valor, opts = {}) {
+    const fontSize = opts.fontSize || T.TEXTO_SIZE;
+    const largValor = this.cw - T.LARGURA_ROTULO - T.GAP_ROTULO;
+    const xValor = this.cx + T.LARGURA_ROTULO + T.GAP_ROTULO;
+    const h =
+      Math.max(
+        this.doc.font(T.FONTE).heightOfString(String(rotulo ?? ''), { width: T.LARGURA_ROTULO, fontSize }),
+        this.doc.font(T.FONTE_BOLD).heightOfString(String(valor ?? ''), { width: largValor, fontSize })
+      ) + 4;
+    this.garantirEspaco(h);
+    if (!this.medindo) {
+      this.doc
+        .font(T.FONTE)
+        .fontSize(fontSize)
+        .fillColor(T.COR_MUTED)
+        .text(String(rotulo ?? ''), this.cx, this.y, { width: T.LARGURA_ROTULO, lineGap: 1 });
+      this.doc
+        .font(T.FONTE_BOLD)
+        .fontSize(fontSize)
+        .fillColor(opts.cor || T.COR_TEXTO)
+        .text(String(valor ?? ''), xValor, this.y, { width: largValor, align: 'right', lineGap: 1 });
+    }
+    this.y += h;
+  }
+
+  tabela(colunas, linhas) {
+    const fontSize = T.TEXTO_SIZE_SMALL;
+    const medir = (txt, c) =>
+      this.doc.font(T.FONTE).heightOfString(String(txt ?? ''), { width: c.width, fontSize }) + 6;
+
+    if (!this.medindo) {
+      this.doc.font(T.FONTE_BOLD).fontSize(fontSize).fillColor(T.COR_MUTED);
+      colunas.forEach((c) => this.doc.text(c.titulo, this.cx + c.x, this.y, { width: c.width, align: c.align || 'left' }));
+    }
+    this.y += 14;
+
+    for (const linha of linhas) {
+      const h = Math.max(...linha.map((cell, i) => medir(cell, colunas[i])));
+      this.garantirEspaco(h);
+      if (!this.medindo) {
+        this.doc.font(T.FONTE).fontSize(fontSize).fillColor(T.COR_TEXTO);
+        linha.forEach((cell, i) =>
+          this.doc.text(String(cell ?? ''), this.cx + colunas[i].x, this.y, { width: colunas[i].width, align: colunas[i].align || 'left' })
+        );
+      }
+      this.y += h;
+    }
+  }
+
+  caixa(titulo, corpo, cor = T.COR_PRIMARIA, fundo = T.COR_FUNDO_CAIXA) {
+    const yInicio = this.y;
+    const prevCx = this.cx;
+    const prevCw = this.cw;
+    this.cx = T.MARGEM + T.PADDING;
+    this.cw = T.LARGURA_CONTEUDO - 2 * T.PADDING;
+
+    // mede o corpo
+    this.medindo = true;
+    const yMedida = this.y;
+    corpo(this);
+    const alturaCorpo = this.y - yMedida;
+    this.medindo = false;
+    this.y = yInicio;
+
+    const alturaTotal = T.PADDING + 12 + 4 + alturaCorpo + T.PADDING;
+    this.garantirEspaco(alturaTotal);
+
+    this.doc.roundedRect(T.MARGEM, this.y, T.LARGURA_CONTEUDO, alturaTotal, 6).fillAndStroke(fundo, cor);
+    this.y += T.PADDING;
+    this.doc
+      .font(T.FONTE_BOLD)
+      .fontSize(T.TITULO_CAIXA_SIZE)
+      .fillColor(cor)
+      .text(titulo, T.MARGEM + T.PADDING, this.y, { width: T.LARGURA_CONTEUDO - 2 * T.PADDING });
+    this.y += 12 + 4;
+
+    corpo(this);
+
+    this.y += T.PADDING;
+    this.cx = prevCx;
+    this.cw = prevCw;
+  }
 }
 
-function caixa(doc, y, altura, titulo, cor = '#2563eb') {
-  doc.roundedRect(50, y, 495, altura, 6).fillAndStroke('#f8fafc', cor);
-  doc.font('Helvetica-Bold').fontSize(10).fillColor(cor).text(titulo, 62, y + 8);
+// ── Rodapé + paginação ─────────────────────────────────────────────
+function finalizarPaginacao(doc, condominio) {
+  const range = doc.bufferedPageRange();
+  for (let i = range.start; i < range.start + range.count; i++) {
+    doc.switchToPage(i);
+    doc
+      .moveTo(T.MARGEM, 782)
+      .lineTo(T.MARGEM + T.LARGURA_CONTEUDO, 782)
+      .lineWidth(0.5)
+      .strokeColor('#cccccc')
+      .stroke();
+    doc
+      .font(T.FONTE)
+      .fontSize(8)
+      .fillColor('#888888')
+      .text(`Condomínio ${condominio.designacao || ''} · Documento gerado por Condofy`, T.MARGEM, 790, { width: 400, align: 'left' });
+    doc
+      .font(T.FONTE)
+      .fontSize(8)
+      .fillColor('#888888')
+      .text(`Página ${i + 1} de ${range.count}`, 450, 790, { width: 95, align: 'right' });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -124,76 +261,55 @@ function caixa(doc, y, altura, titulo, cor = '#2563eb') {
 // ═══════════════════════════════════════════════════════════════════
 async function gerarAvisoQuotaPDF(condominio, d) {
   const doc = criarDocumento();
-  desenharCabecalho(doc, condominio, 'AVISO DE QUOTA');
+  const L = new Layout(doc, condominio, 'AVISO DE QUOTA');
 
-  let y = 130;
-
-  // Destinatário
-  doc.font('Helvetica-Bold').fontSize(11).fillColor('#111827').text('Destinatário', 50, y);
-  y += 16;
-  doc.font('Helvetica').fontSize(10).fillColor('#111827').text(d.destinatarioNome || '—', 50, y);
-  y += 14;
-  doc
-    .font('Helvetica')
-    .fontSize(9)
-    .fillColor('#555555')
-    .text(`Fração: ${d.fracaoDesignacao || ''}`, 50, y);
-  y += 14;
+  L.texto('Destinatário', { bold: true, fontSize: 11 });
+  L.texto(d.destinatarioNome || '—');
+  L.texto(`Fração: ${d.fracaoDesignacao || ''}`, { fontSize: T.TEXTO_SIZE_SMALL, cor: T.COR_MUTED });
   if (d.fracaoMorada) {
-    doc.text(d.fracaoMorada, 50, y);
-    y += 14;
+    L.texto(d.fracaoMorada, { fontSize: T.TEXTO_SIZE_SMALL, cor: T.COR_MUTED });
   }
+  L.espaco(10);
 
-  y += 8;
+  L.caixa('Informação da quota', (C) => {
+    C.linha('Número do aviso', d.numero || '—');
+    C.linha('Período', d.periodo || '—');
+    C.linha('Data de emissão', formatDate(d.dataEmissao));
+    C.linha('Data de vencimento', formatDate(d.dataVencimento));
+    C.linha('Valor da quota', formatEUR(d.valor));
+  });
 
-  // Informação da quota
-  caixa(doc, y, 92, 'Informação da quota');
-  y += 22;
-  linha(doc, y, 'Número do aviso', d.numero || '—');
-  y += 16;
-  linha(doc, y, 'Período', d.periodo || '—');
-  y += 16;
-  linha(doc, y, 'Data de emissão', formatDate(d.dataEmissao));
-  y += 16;
-  linha(doc, y, 'Data de vencimento', formatDate(d.dataVencimento));
-  y += 16;
-  linha(doc, y, 'Valor da quota', formatEUR(d.valor));
-  y += 100;
+  L.caixa(
+    'Situação financeira',
+    (C) => {
+      C.linha('Saldo anterior', formatEUR(d.saldoAnterior), { cor: T.COR_SUCESSO });
+      const ult = d.ultimoPagamento
+        ? `${formatEUR(d.ultimoPagamentoValor)} — ${formatDate(d.ultimoPagamentoData)}`
+        : '—';
+      C.linha('Último pagamento', ult, { cor: T.COR_SUCESSO });
+      C.linha('Em dívida (antes desta quota)', formatEUR(d.emDivida), { cor: T.COR_SUCESSO });
+      C.linha('Quota atual', formatEUR(d.valor), { cor: T.COR_SUCESSO });
+      C.linha('Total a pagar', formatEUR(d.totalAPagar), { cor: T.COR_SUCESSO });
+    },
+    T.COR_SUCESSO
+  );
 
-  // Situação financeira
-  caixa(doc, y, 108, 'Situação financeira', '#0f766e');
-  y += 22;
-  linha(doc, y, 'Saldo anterior', formatEUR(d.saldoAnterior), 50, 300, 245, '#0f766e');
-  y += 16;
-  const ult = d.ultimoPagamento
-    ? `${formatEUR(d.ultimoPagamentoValor)} — ${formatDate(d.ultimoPagamentoData)}`
-    : '—';
-  linha(doc, y, 'Último pagamento', ult, 50, 300, 245, '#0f766e');
-  y += 16;
-  linha(doc, y, 'Em dívida (antes desta quota)', formatEUR(d.emDivida), 50, 300, 245, '#0f766e');
-  y += 16;
-  linha(doc, y, 'Quota atual', formatEUR(d.valor), 50, 300, 245, '#0f766e');
-  y += 16;
-  linha(doc, y, 'Total a pagar', formatEUR(d.totalAPagar), 50, 300, 245, '#0f766e');
-  y += 110;
-
-  // Pagamento
-  caixa(doc, y, 96, 'Pagamento', '#b45309');
-  y += 22;
-  doc.font('Helvetica-Bold').fontSize(11).fillColor('#111827').text('IBAN:', 62, y);
-  doc.font('Helvetica-Bold').fontSize(14).fillColor('#b45309').text(d.iban || '—', 105, y - 2);
-  y += 26;
-  if (d.outrosMeiosPagamento) {
-    doc.font('Helvetica').fontSize(9).fillColor('#555555').text(d.outrosMeiosPagamento, 62, y, { width: 470 });
-    y += 20;
-  }
-  if (d.referencia) {
-    doc.font('Helvetica').fontSize(9).fillColor('#555555').text(`Referência: ${d.referencia}`, 62, y);
-    y += 16;
-  }
-  if (d.instrucoesPagamento) {
-    doc.font('Helvetica').fontSize(9).fillColor('#555555').text(d.instrucoesPagamento, 62, y, { width: 470 });
-  }
+  L.caixa(
+    'Pagamento',
+    (C) => {
+      C.linha('IBAN', d.iban || '—', { fontSize: 12 });
+      if (d.outrosMeiosPagamento) {
+        C.texto(d.outrosMeiosPagamento, { fontSize: T.TEXTO_SIZE_SMALL, cor: T.COR_MUTED });
+      }
+      if (d.referencia) {
+        C.texto(`Referência: ${d.referencia}`, { fontSize: T.TEXTO_SIZE_SMALL, cor: T.COR_MUTED });
+      }
+      if (d.instrucoesPagamento) {
+        C.texto(d.instrucoesPagamento, { fontSize: T.TEXTO_SIZE_SMALL, cor: T.COR_MUTED });
+      }
+    },
+    T.COR_ALERTA
+  );
 
   finalizarPaginacao(doc, condominio);
   return toBuffer(doc);
@@ -204,53 +320,53 @@ async function gerarAvisoQuotaPDF(condominio, d) {
 // ═══════════════════════════════════════════════════════════════════
 async function gerarReciboPDF(condominio, d) {
   const doc = criarDocumento();
-  desenharCabecalho(doc, condominio, 'RECIBO');
+  const L = new Layout(doc, condominio, 'RECIBO');
 
-  let y = 130;
+  L.texto(`Recibo n.º ${d.numero || '—'}`, { bold: true, fontSize: 12 });
+  L.texto(`Data: ${formatDate(d.data)}`, { cor: T.COR_MUTED });
+  L.espaco(6);
 
-  doc.font('Helvetica-Bold').fontSize(11).fillColor('#111827').text('Recibo n.º ' + (d.numero || '—'), 50, y);
-  y += 16;
-  doc.font('Helvetica').fontSize(10).fillColor('#111827').text(`Data: ${formatDate(d.data)}`, 50, y);
-  y += 20;
+  L.caixa('Dados do pagamento', (C) => {
+    C.linha('Condómino', d.condominoNome || '—');
+    C.linha('Fração', d.fracaoDesignacao || '—');
+    C.linha('Data do pagamento', formatDate(d.dataPagamento));
+    C.linha('Método de pagamento', d.metodoPagamento || '—');
+    C.linha('Referência', d.referencia || '—');
+  });
 
-  caixa(doc, y, 80, 'Dados do pagamento');
-  y += 22;
-  linha(doc, y, 'Condómino', d.condominoNome || '—');
-  y += 16;
-  linha(doc, y, 'Fração', d.fracaoDesignacao || '—');
-  y += 16;
-  linha(doc, y, 'Data do pagamento', formatDate(d.dataPagamento));
-  y += 16;
-  linha(doc, y, 'Método de pagamento', d.metodoPagamento || '—');
-  y += 16;
-  linha(doc, y, 'Referência', d.referencia || '—');
-  y += 88;
-
-  // Distribuição pelas quotas
   if (d.quotas && d.quotas.length) {
-    caixa(doc, y, 30 + d.quotas.length * 16, 'Distribuição pelas quotas', '#0f766e');
-    y += 22;
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#555555').text('Quota', 62, y);
-    doc.text('Período', 250, y);
-    doc.text('Valor aplicado', 400, y, { width: 130, align: 'right' });
-    y += 14;
-    for (const q of d.quotas) {
-      doc.font('Helvetica').fontSize(9).fillColor('#111827').text(q.numero || '', 62, y);
-      doc.text(q.periodo || '', 250, y);
-      doc.text(formatEUR(q.valorAplicado), 400, y, { width: 130, align: 'right' });
-      y += 16;
-    }
-    y += 24;
+    L.caixa(
+      'Distribuição pelas quotas',
+      (C) => {
+        C.tabela(
+          [
+            { titulo: 'Quota', x: 0, width: 120 },
+            { titulo: 'Período', x: 130, width: 150 },
+            { titulo: 'Valor aplicado', x: 300, width: 160, align: 'right' },
+          ],
+          d.quotas.map((q) => [q.numero || '', q.periodo || '', formatEUR(q.valorAplicado)])
+        );
+      },
+      T.COR_SUCESSO
+    );
   }
 
   // Total
-  doc.roundedRect(50, y, 495, 54, 6).fillAndStroke('#f0fdf4', '#16a34a');
-  y += 16;
-  doc.font('Helvetica-Bold').fontSize(11).fillColor('#166534').text('Valor recebido', 62, y);
-  doc.font('Helvetica-Bold').fontSize(16).fillColor('#166534').text(formatEUR(d.valor), 400, y - 2, { width: 130, align: 'right' });
-  y += 24;
-  doc.font('Helvetica').fontSize(9).fillColor('#166534').text(`Saldo após pagamento: ${formatEUR(d.saldoAposPagamento)}`, 62, y);
-  y += 60;
+  L.garantirEspaco(70);
+  const yTotal = L.y;
+  L.doc.roundedRect(T.MARGEM, yTotal, T.LARGURA_CONTEUDO, 64, 6).fillAndStroke(T.COR_FUNDO_VERDE, T.COR_VERDE);
+  L.doc.font(T.FONTE_BOLD).fontSize(11).fillColor('#166534').text('Valor recebido', T.MARGEM + T.PADDING, yTotal + 14);
+  L.doc
+    .font(T.FONTE_BOLD)
+    .fontSize(16)
+    .fillColor('#166534')
+    .text(formatEUR(d.valor), 300, yTotal + 12, { width: 220, align: 'right' });
+  L.doc
+    .font(T.FONTE)
+    .fontSize(T.TEXTO_SIZE_SMALL)
+    .fillColor('#166534')
+    .text(`Saldo após pagamento: ${formatEUR(d.saldoAposPagamento)}`, T.MARGEM + T.PADDING, yTotal + 40);
+  L.espaco(76);
 
   finalizarPaginacao(doc, condominio);
   return toBuffer(doc);
@@ -261,33 +377,32 @@ async function gerarReciboPDF(condominio, d) {
 // ═══════════════════════════════════════════════════════════════════
 async function gerarConvocatoriaPDF(condominio, d) {
   const doc = criarDocumento();
-  desenharCabecalho(doc, condominio, 'CONVOCATÓRIA');
+  const L = new Layout(doc, condominio, 'CONVOCATÓRIA');
 
-  let y = 130;
-  doc.font('Helvetica-Bold').fontSize(11).fillColor('#111827').text('Assembleia de condóminos', 50, y);
-  y += 22;
+  L.texto('Assembleia de condóminos', { bold: true, fontSize: 11 });
+  L.espaco(6);
 
-  caixa(doc, y, 70, 'Informações');
-  y += 22;
-  linha(doc, y, 'Data', formatDate(d.data));
-  y += 16;
-  linha(doc, y, 'Hora', d.hora || '—');
-  y += 16;
-  linha(doc, y, 'Local', d.local || '—');
-  y += 80;
+  L.caixa('Informações', (C) => {
+    C.linha('Data', formatDate(d.data));
+    C.linha('Hora', d.hora || '—');
+    C.linha('Local', d.local || '—');
+  });
 
-  caixa(doc, y, 30 + Math.max(1, (d.ordemTrabalhos || []).length) * 16, 'Ordem de trabalhos', '#0f766e');
-  y += 24;
-  if (d.ordemTrabalhos && d.ordemTrabalhos.length) {
-    let n = 1;
-    for (const ponto of d.ordemTrabalhos) {
-      doc.font('Helvetica').fontSize(10).fillColor('#111827').text(`${n}. ${ponto}`, 62, y, { width: 470 });
-      y += 16;
-      n++;
-    }
-  } else {
-    doc.font('Helvetica').fontSize(10).fillColor('#888888').text('(sem pontos definidos)', 62, y);
-  }
+  L.caixa(
+    'Ordem de trabalhos',
+    (C) => {
+      if (d.ordemTrabalhos && d.ordemTrabalhos.length) {
+        let n = 1;
+        for (const ponto of d.ordemTrabalhos) {
+          C.texto(`${n}. ${ponto}`);
+          n++;
+        }
+      } else {
+        C.texto('(sem pontos definidos)', { cor: T.COR_MUTED });
+      }
+    },
+    T.COR_SUCESSO
+  );
 
   finalizarPaginacao(doc, condominio);
   return toBuffer(doc);
@@ -298,36 +413,33 @@ async function gerarConvocatoriaPDF(condominio, d) {
 // ═══════════════════════════════════════════════════════════════════
 async function gerarAtaPDF(condominio, d) {
   const doc = criarDocumento();
-  desenharCabecalho(doc, condominio, 'ATA');
+  const L = new Layout(doc, condominio, 'ATA');
 
-  let y = 130;
-  caixa(doc, y, 86, 'Identificação');
-  y += 22;
-  linha(doc, y, 'Data', formatDate(d.data));
-  y += 16;
-  linha(doc, y, 'Hora', d.hora || '—');
-  y += 16;
-  linha(doc, y, 'Local', d.local || '—');
-  y += 16;
-  linha(doc, y, 'Presentes / permilagem', d.presentes || '—');
-  y += 94;
+  L.caixa('Identificação', (C) => {
+    C.linha('Data', formatDate(d.data));
+    C.linha('Hora', d.hora || '—');
+    C.linha('Local', d.local || '—');
+    C.linha('Presentes / permilagem', d.presentes || '—');
+  });
 
   if (d.ordemTrabalhos && d.ordemTrabalhos.length) {
-    caixa(doc, y, 24 + d.ordemTrabalhos.length * 16, 'Ordem de trabalhos', '#0f766e');
-    y += 24;
-    let n = 1;
-    for (const ponto of d.ordemTrabalhos) {
-      doc.font('Helvetica').fontSize(10).fillColor('#111827').text(`${n}. ${ponto}`, 62, y, { width: 470 });
-      y += 16;
-      n++;
-    }
-    y += 20;
+    L.caixa(
+      'Ordem de trabalhos',
+      (C) => {
+        let n = 1;
+        for (const ponto of d.ordemTrabalhos) {
+          C.texto(`${n}. ${ponto}`);
+          n++;
+        }
+      },
+      T.COR_SUCESSO
+    );
   }
 
-  caixa(doc, y, 24, 'Deliberações', '#b45309');
-  y += 24;
-  const texto = d.ataTexto || '(sem conteúdo registado)';
-  doc.font('Helvetica').fontSize(10).fillColor('#111827').text(texto, 62, y, { width: 470 });
+  // Deliberações em texto livre (flui por várias páginas sem cortar)
+  L.texto('Deliberações', { bold: true, fontSize: 11, cor: T.COR_ALERTA });
+  L.espaco(2);
+  L.texto(d.ataTexto || '(sem conteúdo registado)');
 
   finalizarPaginacao(doc, condominio);
   return toBuffer(doc);
