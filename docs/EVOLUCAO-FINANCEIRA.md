@@ -29,6 +29,9 @@
 4. ✅ **Grelha anual** — `GET /quotas/grelha` + `views/admin/quotas/grelha.handlebars` (estado por fração × mês).
 5. ✅ **Quotas Extraordinárias** — `ExtraQuota` + `ExtraQuotaParcela` + rotas `/admin/quotas-extra` + parcelamento (permilagem/igual) + movimentos bancários.
 6. ✅ **Dashboard + integração financeira** — `helpers/dashboard.js` (previstas mês, recebidas, em atraso, total atraso, orçamento do ano).
+7. ✅ **Lista de orçamentos** — colunas Receitas / Despesas / Saldo (receitas = plano de quotas emitido, despesas = rubricas).
+8. ✅ **Método 2 — orçamento define a receita** — no wizard "Gerar quotas" pode-se escolher entre *permilagem + FCR (config)* e *orçamento define a receita* (total de rubricas distribuído por permilagem ÷ 12; FCR tratado como rubrica do orçamento).
+9. ✅ **Testes** — `scripts/test-financeiro.js` cobre distribuição (permilagem/igual), plano de quotas, parcelamento com resto na última parcela, quota extra, periodicidades e Método 2 (soma exata).
 
 ## Regras
 
