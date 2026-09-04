@@ -1,8 +1,28 @@
+/* ============================================================
+   Condofy — Material Design theme (camada sobre Bootstrap 5)
+   ============================================================ */
 :root {
-  --app-accent: #2563eb;
-  --app-accent-dark: #1d4ed8;
-  --app-navbar: #1f2937;
-  --app-bg: #f4f6f9;
+  --md-primary: #1a73e8;
+  --md-primary-dark: #1557b0;
+  --md-primary-light: #e8f0fe;
+  --md-secondary: #188038;
+  --md-error: #d93025;
+  --md-warning: #f9ab00;
+  --md-surface: #ffffff;
+  --md-surface-2: #f6f8fc;
+  --md-background: #f1f3f6;
+  --md-on-surface: #1f2937;
+  --md-on-surface-muted: #5f6368;
+  --md-outline: #dadce0;
+  --md-radius: 12px;
+  --md-radius-sm: 8px;
+  --md-elevation-1: 0 1px 2px rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+  --md-elevation-2: 0 1px 3px rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
+  --md-elevation-3: 0 2px 6px 2px rgba(60, 64, 67, 0.15), 0 1px 2px rgba(60, 64, 67, 0.3);
+}
+
+* {
+  box-sizing: border-box;
 }
 
 html,
@@ -11,17 +31,51 @@ body {
 }
 
 body {
-  background: var(--app-bg);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
-  color: #1f2937;
+  background: var(--md-background);
+  color: var(--md-on-surface);
+  font-family: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 0.95rem;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
 }
 
+a {
+  color: var(--md-primary);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--md-primary-dark);
+}
+
+/* ── App bar (navbar) ── */
 .app-navbar {
-  background: var(--app-navbar);
+  background: var(--md-primary);
+  box-shadow: var(--md-elevation-2);
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
+}
+.app-navbar .navbar-brand,
+.app-navbar .nav-link {
+  color: #fff;
+}
+.app-navbar .nav-link:hover,
+.app-navbar .nav-link:focus {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: var(--md-radius-sm);
+  color: #fff;
+}
+.app-navbar .dropdown-menu {
+  border-radius: var(--md-radius-sm);
+  border: none;
+  box-shadow: var(--md-elevation-3);
+}
+.app-navbar .dropdown-item:active {
+  background: var(--md-primary-light);
+  color: var(--md-primary-dark);
+}
+.app-navbar .btn-outline-light {
+  border-radius: 20px;
 }
 
 .brand-badge {
@@ -31,48 +85,217 @@ body {
   width: 2.1rem;
   height: 2.1rem;
   border-radius: 0.5rem;
-  background: var(--app-accent);
-  color: #fff;
+  background: #fff;
+  color: var(--md-primary);
   font-weight: 700;
   font-size: 1.05rem;
 }
-
-.brand-badge-lg {
-  width: 3.2rem;
-  height: 3.2rem;
-  font-size: 1.6rem;
-  border-radius: 0.8rem;
+.brand-logo {
+  height: 30px;
+  width: auto;
+  object-fit: contain;
+  background: #fff;
+  padding: 2px;
+  border-radius: 6px;
 }
-
 .brand-text {
-  font-weight: 600;
+  font-weight: 500;
   font-size: 1rem;
 }
 
-.brand-logo {
-  height: 32px;
-  width: auto;
-  object-fit: contain;
-}
-
-.login-logo {
-  height: 64px;
-  width: auto;
-  object-fit: contain;
-}
-
+/* ── Layout ── */
 .app-main {
   flex: 1 0 auto;
   padding: 1.5rem 0 2rem;
 }
-
 .app-footer {
   flex-shrink: 0;
-  border-top: 1px solid #e5e7eb;
-  background: #fff;
+  background: var(--md-surface);
+  border-top: 1px solid var(--md-outline);
 }
 
-/* Autenticação */
+/* ── Cards ── */
+.card {
+  background: var(--md-surface);
+  border: none;
+  border-radius: var(--md-radius);
+  box-shadow: var(--md-elevation-1);
+}
+.card-header {
+  background: var(--md-surface);
+  border-bottom: 1px solid var(--md-outline);
+  font-weight: 500;
+  border-radius: var(--md-radius) var(--md-radius) 0 0 !important;
+}
+
+/* ── Botões Material ── */
+.btn {
+  border-radius: 20px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  padding: 0.45rem 1.1rem;
+  border: 1px solid transparent;
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease, background-color 0.2s ease;
+}
+.btn-primary {
+  background: var(--md-primary);
+  border-color: var(--md-primary);
+  box-shadow: var(--md-elevation-1);
+}
+.btn-primary:hover,
+.btn-primary:focus {
+  background: var(--md-primary-dark);
+  border-color: var(--md-primary-dark);
+  box-shadow: var(--md-elevation-2);
+}
+.btn-outline-primary {
+  color: var(--md-primary);
+  border-color: var(--md-outline);
+  background: transparent;
+}
+.btn-outline-primary:hover {
+  background: var(--md-primary-light);
+  border-color: var(--md-primary);
+  color: var(--md-primary-dark);
+}
+.btn-outline-secondary {
+  color: var(--md-on-surface-muted);
+  border-color: var(--md-outline);
+}
+.btn-outline-danger {
+  color: var(--md-error);
+  border-color: var(--md-outline);
+}
+.btn-outline-danger:hover {
+  background: #fce8e6;
+  border-color: var(--md-error);
+  color: var(--md-error);
+}
+.btn-sm {
+  padding: 0.25rem 0.7rem;
+  border-radius: 16px;
+}
+
+/* Ripple */
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  transform: scale(0);
+  animation: ripple 0.6s linear;
+  background: rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+}
+@keyframes ripple {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* ── Campos de formulário Material ── */
+.form-control,
+.form-select {
+  border-radius: var(--md-radius-sm);
+  border: 1px solid var(--md-outline);
+  padding: 0.5rem 0.75rem;
+  background: var(--md-surface);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--md-primary);
+  box-shadow: 0 0 0 2px var(--md-primary-light);
+}
+.form-label {
+  font-weight: 500;
+  color: var(--md-on-surface-muted);
+  margin-bottom: 0.35rem;
+}
+.form-text {
+  color: var(--md-on-surface-muted);
+}
+.form-check-input:checked {
+  background-color: var(--md-primary);
+  border-color: var(--md-primary);
+}
+
+/* ── Tabelas Material ── */
+.table {
+  --bs-table-hover-bg: #f6f8fc;
+}
+.table thead th {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--md-on-surface-muted);
+  font-weight: 500;
+  border-bottom: 1px solid var(--md-outline);
+}
+
+/* ── Badges / chips ── */
+.badge {
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  padding: 0.4em 0.7em;
+  border-radius: 16px;
+}
+.badge.text-bg-light {
+  background: #f1f3f4 !important;
+  color: var(--md-on-surface-muted) !important;
+  border: 1px solid var(--md-outline);
+}
+
+/* ── Alertas ── */
+.alert {
+  border-radius: var(--md-radius-sm);
+  border: none;
+  box-shadow: var(--md-elevation-1);
+}
+.alert-success {
+  background: #e6f4ea;
+  color: var(--md-secondary);
+}
+.alert-danger {
+  background: #fce8e6;
+  color: var(--md-error);
+}
+.alert-warning {
+  background: #fef7e0;
+  color: #b06000;
+}
+.alert-info {
+  background: var(--md-primary-light);
+  color: var(--md-primary-dark);
+}
+
+/* ── Progress ── */
+.progress {
+  background: #e8eaed;
+  border-radius: 4px;
+}
+.progress-bar {
+  background: var(--md-primary);
+  border-radius: 4px;
+}
+
+/* ── Stats ── */
+.stat-card .stat-icon {
+  font-size: 1.4rem;
+  color: var(--md-primary);
+  margin-bottom: 0.25rem;
+}
+.stat-card .stat-value {
+  font-size: 1.5rem;
+  font-weight: 500;
+}
+.stat-card .stat-label {
+  color: var(--md-on-surface-muted);
+  font-size: 0.85rem;
+}
+
+/* ── Autenticação ── */
 .auth-wrap {
   min-height: 80vh;
   display: flex;
@@ -80,59 +303,26 @@ body {
   justify-content: center;
   padding: 1.5rem 0;
 }
-
 .auth-card {
   width: 100%;
   max-width: 420px;
+  border-radius: 16px;
+  box-shadow: var(--md-elevation-3);
+}
+.login-logo {
+  height: 64px;
+  width: auto;
+  object-fit: contain;
 }
 
-/* Cartões e estatísticas */
-.card {
-  border: 1px solid #e5e7eb;
-  border-radius: 0.75rem;
+/* ── Dropdown / navegação ── */
+.dropdown-menu {
+  border: none;
+  border-radius: var(--md-radius-sm);
+  box-shadow: var(--md-elevation-3);
 }
 
-.card-header {
-  font-weight: 600;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.stat-card .stat-icon {
-  font-size: 1.4rem;
-  color: var(--app-accent);
-  margin-bottom: 0.25rem;
-}
-
-.stat-card .stat-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-}
-
-.stat-card .stat-label {
-  color: #6b7280;
-  font-size: 0.85rem;
-}
-
-/* Tabelas */
-.table thead th {
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  color: #6b7280;
-  font-weight: 600;
-}
-
-.btn-primary {
-  background: var(--app-accent);
-  border-color: var(--app-accent);
-}
-
-.btn-primary:hover,
-.btn-primary:focus {
-  background: var(--app-accent-dark);
-  border-color: var(--app-accent-dark);
-}
-
-a {
-  color: var(--app-accent);
+/* ── List groups ── */
+.list-group-item {
+  border-color: var(--md-outline);
 }
