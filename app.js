@@ -15,6 +15,10 @@ require('./config/passport')(passport);
 
 const app = express();
 
+// Atrás do Cloudflare Tunnel (proxy), confiar nos cabeçalhos X-Forwarded-*
+// para que req.protocol/req.secure reflitam corretamente o HTTPS.
+app.set('trust proxy', 1);
+
 // ── Motor de vistas (Handlebars) ───────────────────────────────────
 app.engine(
   'handlebars',
