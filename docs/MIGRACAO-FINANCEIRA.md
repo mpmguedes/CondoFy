@@ -36,15 +36,15 @@ Este documento descreve a estratégia de evolução do modelo financeiro para o 
 
 ## Fases
 
-| Fase | Âmbito |
-| --- | --- |
-| 1 | Novo modelo de orçamento (entidade + rubricas + histórico) + migrations |
-| 2 | Distribuição do orçamento pelas frações (permilagem / igual / valor fixo) |
-| 3 | Plano de quotas (derivado do orçamento aprovado) |
-| 4 | Nova emissão de quotas baseada no plano aprovado |
-| 5 | Bloqueio de alterações + histórico (`orcamento_alteracoes`) |
-| 6 | Movimentos bancários + saldos derivados |
-| 7 | Integração pagamentos/despesas → movimentos bancários |
-| 8 | Refatoração dos PDFs (sistema de layout) |
-| 9 | Redesign Material Design |
-| 10 | Testes + documentação |
+| Fase | Âmbito | Estado |
+| --- | --- | --- |
+| 1 | Novo modelo de orçamento (entidade + rubricas + histórico) + migrations | ✅ |
+| 2 | Distribuição do orçamento pelas frações (permilagem / igual / valor fixo) | ✅ |
+| 3 | Plano de quotas (derivado do orçamento aprovado) | ✅ |
+| 4 | Nova emissão de quotas baseada no plano aprovado | ✅ |
+| 5 | Bloqueio de alterações + histórico (`orcamento_alteracoes`) | ✅ |
+| 6 | Movimentos bancários + saldos derivados | ✅ |
+| 7 | Integração pagamentos/despesas → movimentos bancários | ✅ |
+| 8 | Refatoração dos PDFs (sistema de layout) | ✅ |
+| 9 | Redesign Material Design | ✅ |
+| 10 | Testes + documentação | ✅ |

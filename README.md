@@ -61,10 +61,13 @@ docker compose up -d --build
 | `npm run db:migrate` | Aplica migrations |
 | `npm run db:seed` | Aplica seeds |
 | `npm run db:setup` | Migrations + seeds |
+| `node scripts/test-financeiro.js` | Testes do modelo financeiro (distribuição, plano, PDFs) |
+| `node scripts/check-templates.js` | Valida que as vistas Handlebars compilam/renderizam |
 
 ## Documentação
 
 - [`docs/MODELO-DADOS.md`](docs/MODELO-DADOS.md) — modelo de dados e relações
+- [`docs/MIGRACAO-FINANCEIRA.md`](docs/MIGRACAO-FINANCEIRA.md) — novo modelo financeiro e fases
 - [`docs/PLANO.md`](docs/PLANO.md) — análise do projeto base e fases de implementação
 
 ## Funcionalidades

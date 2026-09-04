@@ -80,3 +80,26 @@ users ──< audit_logs
    (`drive_file_id`, nome, tipo, tamanho, data, entidade, URL).
 6. **Auditoria** regista criação/alteração/anulação de quotas, pagamentos, despesas,
    documentos, envios e configurações.
+
+## Novo modelo financeiro (orçamento → quota → movimento → saldo)
+
+Fluxo: **orçamento anual → distribuição pelas frações → plano de quotas → emissão → pagamento → movimento bancário → saldo**.
+
+| Tabela | Papel |
+| --- | --- |
+| `orcamentos` | Entidade de orçamento: período de 1 ano, estados (`rascunho/aprovado/em_execucao/encerrado/anulado`), aprovação, assembleia/documento |
+| `orcamento_rubricas` | Rubricas do orçamento: categoria, valor anual, método de distribuição (`permilagem/igual/valor_fixo`), periodicidade (`mensal/trimestral/semestral/anual/unica`) |
+| `orcamento_distribuicoes` | Valor anual calculado por rubrica × fração (distribuição explícita) |
+| `orcamento_alteracoes` | Histórico/versionamento de alterações (valor anterior/novo, justificação, utilizador, assembleia) |
+| `planos_quota` | Plano de cobrança derivado do orçamento (período × fração × valor), estados `planeada/emitida/cancelada` |
+| `movimentos_bancarios` | Movimentos de `entrada`/`saida`/`transferencia` por conta (valor sempre positivo; o tipo dá o sentido) |
+| `contas_bancarias` | + `data_inicio`, `data_saldo_inicial` |
+| `quotas` | + `orcamento_id` (ligação ao orçamento que a originou) |
+
+### Regras do novo modelo
+
+- **Dinheiro em `DECIMAL`** e cálculo em cêntimos (`helpers/money.js`); arredondamento por "maior resto" para que a soma das frações = total.
+- **Saldo bancário derivado**: `saldo_inicial + entradas − saídas` (calculado pelos movimentos, nunca editável).
+- **Orçamento aprovado não é editado normalmente** — alterações exigem justificação e ficam em `orcamento_alteracoes`.
+- **Transações Sequelize** em emissão, pagamento, transferência e alteração extraordinária.
+- `orcamento_itens` (modelo antigo) é mantido e migrado para o novo modelo (sem perda de dados).
