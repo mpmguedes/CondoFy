@@ -30,6 +30,11 @@ function parseDecimal(value, fallback = null) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function toArray(value) {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
 // ── Dashboard ──────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
   const [nFracoes, nPessoas, nUsers, condominio, resumo, quotas, ultimoBackup, filaPendentes, filaErros] =
@@ -193,14 +198,26 @@ router.get('/condominos', async (req, res) => {
   res.render('admin/condominos/listar', { titulo: 'Condóminos', pessoas });
 });
 
-router.get('/condominos/nova', (req, res) => {
-  res.render('admin/condominos/form', { titulo: 'Novo condómino', pessoa: null });
+router.get('/condominos/nova', async (req, res) => {
+  const fracoes = await Fracao.findAll({ order: [['designacao', 'ASC']] });
+  res.render('admin/condominos/form', {
+    titulo: 'Novo condómino',
+    pessoa: null,
+    fracoes: fracoes.map((f) => ({ ...f.toJSON(), associada: false })),
+  });
 });
 
 router.post('/condominos', async (req, res) => {
   const { nome, email, telefone, nif, tipo, observacoes } = req.body;
+  const vinculo = req.body.vinculo || 'proprietario';
+  const fracoesSelecionadas = toArray(req.body.fracoes).map(Number);
   const pessoa = await Pessoa.create({ nome, email, telefone, nif, tipo: tipo || 'proprietario', observacoes });
-  await audit({ userId: req.user.id, acao: 'criar_condómino', entidade: 'Pessoa', entidadeId: pessoa.id });
+
+  for (const fid of fracoesSelecionadas) {
+    await FracaoPessoa.create({ fracao_id: fid, pessoa_id: pessoa.id, vinculo });
+  }
+
+  await audit({ userId: req.user.id, acao: 'criar_condómino', entidade: 'Pessoa', entidadeId: pessoa.id, detalhes: { fracoes: fracoesSelecionadas.length } });
   req.flash('success_msg', 'Condómino criado.');
   res.redirect('/admin/condominos');
 });
@@ -213,13 +230,20 @@ router.get('/condominos/:id/editar', async (req, res) => {
     req.flash('error_msg', 'Condómino não encontrado.');
     return res.redirect('/admin/condominos');
   }
-  res.render('admin/condominos/form', { titulo: 'Editar condómino', pessoa });
+  const fracoes = await Fracao.findAll({ order: [['designacao', 'ASC']] });
+  const associadasIds = new Set(pessoa.fracoes.map((f) => f.id));
+  res.render('admin/condominos/form', {
+    titulo: 'Editar condómino',
+    pessoa,
+    fracoes: fracoes.map((f) => ({ ...f.toJSON(), associada: associadasIds.has(f.id) })),
+  });
 });
 
 router.post('/condominos/:id', async (req, res) => {
   const pessoa = await Pessoa.findByPk(req.params.id);
   if (!pessoa) return res.redirect('/admin/condominos');
   const { nome, email, telefone, nif, tipo, observacoes, ativo } = req.body;
+  const vinculo = req.body.vinculo || 'proprietario';
   await pessoa.update({
     nome,
     email,
@@ -229,6 +253,20 @@ router.post('/condominos/:id', async (req, res) => {
     observacoes,
     ativo: ativo === 'on' || ativo === '1' || ativo === true,
   });
+
+  // Sincronizar frações: remove as desmarcadas, adiciona as novas com o vínculo escolhido.
+  const fracoesSelecionadas = toArray(req.body.fracoes).map(Number);
+  const selecionadasIds = new Set(fracoesSelecionadas);
+  const atuais = await FracaoPessoa.findAll({ where: { pessoa_id: pessoa.id } });
+  const atuaisIds = new Set(atuais.map((a) => a.fracao_id));
+
+  for (const a of atuais) {
+    if (!selecionadasIds.has(a.fracao_id)) await a.destroy();
+  }
+  for (const fid of fracoesSelecionadas) {
+    if (!atuaisIds.has(fid)) await FracaoPessoa.create({ fracao_id: fid, pessoa_id: pessoa.id, vinculo });
+  }
+
   await audit({ userId: req.user.id, acao: 'editar_condómino', entidade: 'Pessoa', entidadeId: pessoa.id });
   req.flash('success_msg', 'Condómino atualizado.');
   res.redirect('/admin/condominos');
