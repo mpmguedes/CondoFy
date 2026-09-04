@@ -1,4 +1,5 @@
-const { toNumber, fromCents } = require('./money');
+const { toCents, toNumber, fromCents } = require('./money');
+const { distribuirPorPesos } = require('./distribuicao');
 
 // Calcula o valor de uma quota a partir da permilagem da fração.
 // - valorPermilagem: valor em euros por cada 1‰ (ex.: 0.1000 € → 0,10 € por ‰)
@@ -36,4 +37,31 @@ function dividirIgual(total, n) {
   return partes.map((c) => fromCents(c));
 }
 
-module.exports = { calcularQuota, dividirIgual };
+// Método 2 — orçamento define a receita: o total anual de rubricas do orçamento
+// (incluindo o FCR, quando registado como rubrica) é distribuído pelas frações
+// (permilagem ou igual) e dividido uniformemente pelos meses cobrados.
+// fracoes: [{ id, permilagem }] · metodo: 'permilagem' | 'igual'
+// devolve: Map<fracaoId, { baseC, fcrC, totalC, base, fcr, total }> (mensal)
+function calcularQuotasOrcamento({ fracoes, totalAnual, metodo = 'permilagem', meses = 12 }) {
+  const totalC = toCents(totalAnual);
+  const pesos = fracoes.map((f) => ({
+    fracaoId: f.id,
+    peso: metodo === 'igual' ? 1 : parseFloat(String(f.permilagem).replace(',', '.')) || 0,
+  }));
+  const distribuicao = distribuirPorPesos(totalC, pesos);
+  const resultado = new Map();
+  for (const d of distribuicao) {
+    const mensalC = Math.round(d.valorC / meses);
+    resultado.set(d.fracaoId, {
+      baseC: mensalC,
+      fcrC: 0, // FCR já integrado nas rubricas do orçamento
+      totalC: mensalC,
+      base: fromCents(mensalC),
+      fcr: 0,
+      total: fromCents(mensalC),
+    });
+  }
+  return resultado;
+}
+
+module.exports = { calcularQuota, dividirIgual, calcularQuotasOrcamento };

@@ -12,6 +12,8 @@ const {
   Fracao,
   Pessoa,
   FracaoPessoa,
+  Orcamento,
+  OrcamentoRubrica,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
@@ -26,7 +28,7 @@ const { gerarAvisoQuotaPDF, gerarReciboPDF } = require('../helpers/pdf');
 const { resolverDestinatarios } = require('../helpers/avisos');
 const { enfileirarEmail } = require('../helpers/email-fila');
 const { getQuotaConfig, setQuotaConfig } = require('../helpers/quotas-config');
-const { calcularQuota } = require('../helpers/quotas-calc');
+const { calcularQuota, calcularQuotasOrcamento } = require('../helpers/quotas-calc');
 
 const router = express.Router();
 
@@ -363,39 +365,90 @@ router.get('/quotas/grelha', async (req, res) => {
 });
 
 router.get('/quotas/gerar', async (req, res) => {
-  const [fracoes, quotaConfig] = await Promise.all([
+  const [fracoes, quotaConfig, orcamentos] = await Promise.all([
     Fracao.findAll({ where: { estado: 'ativo' }, order: [['designacao', 'ASC']] }),
     getQuotaConfig(),
+    Orcamento.findAll({
+      where: { estado: { [Op.ne]: 'anulado' } },
+      include: [{ model: OrcamentoRubrica, as: 'rubricas' }],
+      order: [['data_inicio', 'DESC']],
+    }),
   ]);
+
+  // Orçamentos com total de rubricas (receita anual definida pelo orçamento).
+  const orcamentosJson = orcamentos.map((o) => {
+    const totalC = o.rubricas.filter((r) => r.ativo).reduce((s, r) => s + toCents(r.valor_anual), 0);
+    return {
+      id: o.id,
+      designacao: o.designacao,
+      anoInicio: new Date(o.data_inicio).getFullYear(),
+      total: fromCents(totalC),
+    };
+  });
+
   res.render('admin/quotas/gerar', {
     titulo: 'Gerar quotas',
     fracoes,
     quotaConfig,
+    orcamentos: orcamentosJson,
+    orcamentosJson: JSON.stringify(orcamentosJson),
     fracoesJson: JSON.stringify(fracoes.map((f) => ({ id: f.id, designacao: f.designacao, permilagem: f.permilagem }))),
   });
 });
 
 router.post('/quotas/gerar', async (req, res) => {
   const escopo = req.body.escopo || 'mes'; // 'mes' | 'ano'
+  const metodo = req.body.metodo === 'orcamento' ? 'orcamento' : 'permilagem';
   const anoNum = parseInt(req.body.ano, 10);
   const mesNum = escopo === 'ano' ? null : parseInt(req.body.mes, 10);
   const vencDia = parseInt(req.body.vencimento_dia, 10) || 8;
+  const orcamentoId = parseInt(req.body.orcamento_id, 10) || null;
 
   if (!anoNum || (escopo === 'mes' && !mesNum)) {
     req.flash('error_msg', 'Indique o ano (e o mês, se aplicável).');
     return res.redirect('/admin/quotas/gerar');
   }
 
-  const { valorPermilagem, fcrPercentagem } = await getQuotaConfig();
   const fracoes = await Fracao.findAll({ where: { estado: 'ativo' }, order: [['designacao', 'ASC']] });
   const meses = escopo === 'ano' ? Array.from({ length: 12 }, (_, i) => i + 1) : [mesNum];
+
+  // Método 1 (permilagem + FCR via config) vs Método 2 (orçamento define a receita).
+  let valoresPorFracao;
+  let metodoLabel;
+  if (metodo === 'orcamento') {
+    if (!orcamentoId) {
+      req.flash('error_msg', 'Selecione o orçamento que define a receita.');
+      return res.redirect('/admin/quotas/gerar');
+    }
+    const orcamento = await Orcamento.findByPk(orcamentoId, {
+      include: [{ model: OrcamentoRubrica, as: 'rubricas' }],
+    });
+    if (!orcamento) {
+      req.flash('error_msg', 'Orçamento não encontrado.');
+      return res.redirect('/admin/quotas/gerar');
+    }
+    const totalAnualC = orcamento.rubricas.filter((r) => r.ativo).reduce((s, r) => s + toCents(r.valor_anual), 0);
+    valoresPorFracao = calcularQuotasOrcamento({
+      fracoes,
+      totalAnual: fromCents(totalAnualC),
+      metodo: 'permilagem',
+      meses: 12,
+    });
+    metodoLabel = `orçamento ${orcamento.designacao}`;
+  } else {
+    const { valorPermilagem, fcrPercentagem } = await getQuotaConfig();
+    valoresPorFracao = new Map(
+      fracoes.map((f) => [f.id, calcularQuota(f.permilagem, valorPermilagem, fcrPercentagem)])
+    );
+    metodoLabel = 'permilagem + FCR';
+  }
 
   const t = await sequelize.transaction();
   let criadas = 0;
   let ignoradas = 0;
   try {
     for (const f of fracoes) {
-      const { base, fcr, total } = calcularQuota(f.permilagem, valorPermilagem, fcrPercentagem);
+      const { base, fcr, total } = valoresPorFracao.get(f.id);
       for (const m of meses) {
         const existente = await Quota.findOne({ where: { fracao_id: f.id, ano: anoNum, mes: m }, transaction: t });
         if (existente) {
@@ -423,8 +476,8 @@ router.post('/quotas/gerar', async (req, res) => {
       }
     }
     await t.commit();
-    await audit({ userId: req.user.id, acao: 'gerar_quotas', entidade: 'Quota', detalhes: { ano: anoNum, mes: mesNum, escopo, criadas } });
-    req.flash('success_msg', `Geradas ${criadas} quota(s)${ignoradas ? `; ${ignoradas} já existiam (não duplicadas)` : ''}.`);
+    await audit({ userId: req.user.id, acao: 'gerar_quotas', entidade: 'Quota', detalhes: { ano: anoNum, mes: mesNum, escopo, metodo: metodoLabel, criadas } });
+    req.flash('success_msg', `Geradas ${criadas} quota(s)${ignoradas ? `; ${ignoradas} já existiam (não duplicadas)` : ''} (${metodoLabel}).`);
   } catch (err) {
     await t.rollback();
     console.error(err);

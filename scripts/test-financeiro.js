@@ -3,8 +3,8 @@
 const assert = require('assert');
 const { distribuirValorAnual } = require('../helpers/distribuicao');
 const { calcularPlano } = require('../helpers/plano');
-const { toCents, fromCents } = require('../helpers/money');
-const { calcularQuota } = require('../helpers/quotas-calc');
+const { toCents } = require('../helpers/money');
+const { calcularQuota, calcularQuotasOrcamento } = require('../helpers/quotas-calc');
 const { distribuicaoExtra, parcelar, periodosVencimento } = require('../helpers/extra-quotas');
 const pdf = require('../helpers/pdf');
 
@@ -145,6 +145,22 @@ async function main() {
   assert.strictEqual(periodos[0].mes, 11);
   assert.strictEqual(periodos[3].ano, 2026);
   assert.strictEqual(periodos[3].mes, 5);
+
+  // 9. Método 2 — orçamento define a receita (distribuição por permilagem ÷ 12)
+  const qOrc = calcularQuotasOrcamento({
+    fracoes: [
+      { id: 1, permilagem: '500' },
+      { id: 2, permilagem: '300' },
+      { id: 3, permilagem: '200' },
+    ],
+    totalAnual: '12000.00',
+    metodo: 'permilagem',
+    meses: 12,
+  });
+  let somaMensalC = 0;
+  for (const [, v] of qOrc) somaMensalC += v.totalC;
+  assert.strictEqual(somaMensalC * 12, toCents('12000.00'), 'orçamento: 12 × soma mensal = total anual');
+  assert.strictEqual(qOrc.get(1).fcr, 0, 'método 2 não aplica FCR separado (FCR é rubrica)');
 
   console.log('✓ Todos os testes financeiros passaram.');
 }

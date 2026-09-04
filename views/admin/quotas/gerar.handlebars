@@ -16,17 +16,38 @@
   <div class="card">
     <div class="card-body">
       <div class="wizard-step" data-step="1">
-        <h2 class="h5 mb-3">Período</h2>
+        <h2 class="h5 mb-3">Período e método</h2>
         <div class="row">
           <div class="col-md-6 mb-3">
-            <label class="form-label">Âmbito</label>
+            <label class="form-label">Método de cálculo</label>
             <div class="form-check py-2">
-              <input class="form-check-input" type="radio" name="escopo" id="escopoMes" value="mes" checked />
-              <label class="form-check-label" for="escopoMes">Gerar para um mês</label>
+              <input class="form-check-input" type="radio" name="metodo" id="metodoPerm" value="permilagem" checked onchange="alternarMetodo()" />
+              <label class="form-check-label" for="metodoPerm">Permilagem + FCR (configuração)</label>
             </div>
             <div class="form-check py-2">
-              <input class="form-check-input" type="radio" name="escopo" id="escopoAno" value="ano" />
-              <label class="form-check-label" for="escopoAno">Gerar para todo o ano</label>
+              <input class="form-check-input" type="radio" name="metodo" id="metodoOrcamento" value="orcamento" onchange="alternarMetodo()" />
+              <label class="form-check-label" for="metodoOrcamento">Orçamento define a receita</label>
+            </div>
+            <div id="campoOrcamento" class="d-none mt-2">
+              <label class="form-label">Orçamento *</label>
+              <select class="form-select" name="orcamento_id" id="wOrcamento">
+                <option value="">— Selecionar —</option>
+                {{#each orcamentos}}<option value="{{id}}">{{designacao}} ({{eur total}}/ano)</option>{{/each}}
+              </select>
+              <p class="form-text">O total anual de rubricas do orçamento é distribuído pelas frações por permilagem e dividido em 12 meses. O FCR deve constar como rubrica do orçamento.</p>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="mb-3">
+              <label class="form-label">Âmbito</label>
+              <div class="form-check py-2">
+                <input class="form-check-input" type="radio" name="escopo" id="escopoMes" value="mes" checked />
+                <label class="form-check-label" for="escopoMes">Gerar para um mês</label>
+              </div>
+              <div class="form-check py-2">
+                <input class="form-check-input" type="radio" name="escopo" id="escopoAno" value="ano" />
+                <label class="form-check-label" for="escopoAno">Gerar para todo o ano</label>
+              </div>
             </div>
           </div>
           <div class="col-md-6">
@@ -63,7 +84,7 @@
         <h2 class="h5 mb-3">Pré-visualização</h2>
         <div class="alert alert-info d-flex align-items-center gap-2 mb-3">
           <span class="material-symbols-outlined">info</span>
-          <span>Valor por permilagem: <strong>{{quotaConfig.valorPermilagem}} €</strong> · FCR: <strong>{{quotaConfig.fcrPercentagem}}%</strong></span>
+          <span id="infoMetodo">Valor por permilagem: <strong>{{quotaConfig.valorPermilagem}} €</strong> · FCR: <strong>{{quotaConfig.fcrPercentagem}}%</strong></span>
         </div>
         <div class="table-responsive">
           <table class="table align-middle">
@@ -99,9 +120,20 @@
 <script>
   const FRACOES = {{{fracoesJson}}};
   const CFG = {{{json quotaConfig}}};
+  const ORCAMENTOS = {{{orcamentosJson}}};
   const fmt = (n) => n.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
+  function ehOrcamento() { return document.getElementById('metodoOrcamento').checked; }
+
   function calc(perm) {
+    if (ehOrcamento()) {
+      const orc = ORCAMENTOS.find((o) => String(o.id) === String(document.getElementById('wOrcamento').value));
+      const totalAnual = orc ? parseFloat(orc.total) : 0;
+      const totalPerm = FRACOES.reduce((s, f) => s + (parseFloat(f.permilagem) || 0), 0);
+      const anual = totalPerm > 0 ? totalAnual * (parseFloat(perm) || 0) / totalPerm : totalAnual / FRACOES.length;
+      const mensal = anual / 12;
+      return { base: mensal, fcr: 0, total: mensal, orcamento: orc };
+    }
     const valorPerC = Math.round(parseFloat(CFG.valorPermilagem) * 100);
     const baseC = Math.round((parseFloat(perm) || 0) * valorPerC);
     const fcrC = Math.round(baseC * parseFloat(CFG.fcrPercentagem) / 100);
@@ -130,6 +162,10 @@
     },
     ehAno() { return document.getElementById('escopoAno').checked; },
     previsualizar() {
+      if (ehOrcamento() && !document.getElementById('wOrcamento').value) {
+        alert('Selecione o orçamento que define a receita.');
+        return;
+      }
       const tbody = document.getElementById('previewBody');
       let html = '';
       let totalMes = 0;
@@ -142,15 +178,24 @@
       document.getElementById('previewTotal').textContent = fmt(this.ehAno() ? totalMes * 12 : totalMes);
       document.getElementById('resumoGeracao').innerHTML =
         'Serão geradas quotas para <strong>' + FRACOES.length + ' frações</strong>' +
-        (this.ehAno() ? ' em <strong>12 meses</strong>' : ' em <strong>1 mês</strong>') + '.';
+        (this.ehAno() ? ' em <strong>12 meses</strong>' : ' em <strong>1 mês</strong>') +
+        (ehOrcamento() ? ' a partir do orçamento selecionado.' : '.');
     },
   };
 
   function alternarEscopo() {
     document.getElementById('campoMes').classList.toggle('d-none', document.getElementById('escopoAno').checked);
   }
+  function alternarMetodo() {
+    const orc = ehOrcamento();
+    document.getElementById('campoOrcamento').classList.toggle('d-none', !orc);
+    document.getElementById('infoMetodo').innerHTML = orc
+      ? 'A receita mensal é definida pelo total de rubricas do orçamento selecionado (o FCR deve constar como rubrica).'
+      : 'Valor por permilagem: <strong>' + CFG.valorPermilagem + ' €</strong> · FCR: <strong>' + CFG.fcrPercentagem + '%</strong>';
+  }
   document.getElementById('escopoMes').addEventListener('change', alternarEscopo);
   document.getElementById('escopoAno').addEventListener('change', alternarEscopo);
   alternarEscopo();
+  alternarMetodo();
   wizard.render();
 </script>
