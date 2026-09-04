@@ -1,6 +1,9 @@
-<div class="d-flex justify-content-between align-items-center mb-4">
-  <h1 class="h3 mb-0"><i class="bi bi-building me-2"></i>{{titulo}}</h1>
-  <a href="/admin/fracoes" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>{{titulo}}</h1>
+    <p class="subtitle">Defina os dados da fração</p>
+  </div>
+  <a href="/admin/fracoes" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
 </div>
 
 <div class="row g-4">
@@ -33,7 +36,7 @@
               <option value="inativo" {{selected fracao.estado 'inativo'}}>Inativa</option>
             </select>
           </div>
-          <button type="submit" class="btn btn-primary">Guardar</button>
+          <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1">save</span>Guardar</button>
         </form>
       </div>
     </div>
@@ -42,7 +45,7 @@
   {{#if fracao}}
   <div class="col-12 col-lg-6">
     <div class="card">
-      <div class="card-header bg-white"><i class="bi bi-link-45deg me-1"></i>Pessoas associadas</div>
+      <div class="card-header"><span class="material-symbols-outlined me-2">link</span>Pessoas associadas</div>
       <div class="card-body">
         <form action="/admin/fracoes/{{fracao.id}}/pessoas" method="POST" class="row g-2 mb-3">
           <div class="col-12">
@@ -61,7 +64,7 @@
             </select>
           </div>
           <div class="col-6">
-            <button type="submit" class="btn btn-outline-primary w-100"><i class="bi bi-plus-lg me-1"></i>Associar</button>
+            <button type="submit" class="btn btn-outline-primary w-100"><span class="material-symbols-outlined me-1">add</span>Associar</button>
           </div>
         </form>
 
@@ -73,7 +76,7 @@
               <span class="badge text-bg-light border ms-2">{{this.FracaoPessoa.vinculo}}</span>
             </div>
             <form action="/admin/fracoes/{{../fracao.id}}/pessoas/{{this.FracaoPessoa.id}}/eliminar" method="POST">
-              <button class="btn btn-sm btn-outline-danger"><i class="bi bi-x-lg"></i></button>
+              <button class="btn btn-sm btn-outline-danger"><span class="material-symbols-outlined">close</span></button>
             </form>
           </li>
           {{else}}

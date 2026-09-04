@@ -1,6 +1,9 @@
-<div class="d-flex justify-content-between align-items-center mb-4">
-  <h1 class="h3 mb-0"><i class="bi bi-bank me-2"></i>{{titulo}}</h1>
-  <a href="/admin/contas" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>{{titulo}}</h1>
+    <p class="subtitle">Defina os dados da conta bancária</p>
+  </div>
+  <a href="/admin/contas" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
 </div>
 
 <div class="row">
@@ -43,7 +46,7 @@
             <label class="form-check-label" for="ativa">Ativa</label>
           </div>
           {{/if}}
-          <button type="submit" class="btn btn-primary">Guardar</button>
+          <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1">save</span>Guardar</button>
         </form>
       </div>
     </div>
