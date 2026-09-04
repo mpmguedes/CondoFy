@@ -29,6 +29,8 @@ router.post('/config', upload.single('logotipo'), async (req, res) => {
   try {
     const dados = {
       designacao: req.body.designacao,
+      administracao_nome: req.body.administracao_nome || null,
+      website: req.body.website || null,
       nif: req.body.nif || null,
       morada: req.body.morada || null,
       codigo_postal: req.body.codigo_postal || null,

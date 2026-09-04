@@ -57,4 +57,41 @@ function monthName(mes) {
   return MESES[idx - 1] || String(mes);
 }
 
-module.exports = { formatDate, formatDateTime, toDateInput, currentYear, monthName, MESES };
+// Data local segura (evita desvio de dia em strings YYYY-MM-DD por causa do fuso).
+function asDateLocal(value) {
+  if (!value) return null;
+  if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+  if (m) {
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(String(value));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+const DIAS_SEMANA = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+
+// "Terça-feira"
+function diaSemana(value) {
+  const d = asDateLocal(value);
+  return d ? DIAS_SEMANA[d.getDay()] : '';
+}
+
+// "15 de março de 2026"
+function formatDateExtenso(value) {
+  const d = asDateLocal(value);
+  if (!d) return '';
+  return `${d.getDate()} de ${MESES[d.getMonth()].toLowerCase()} de ${d.getFullYear()}`;
+}
+
+module.exports = {
+  formatDate,
+  formatDateTime,
+  toDateInput,
+  currentYear,
+  monthName,
+  MESES,
+  diaSemana,
+  formatDateExtenso,
+};

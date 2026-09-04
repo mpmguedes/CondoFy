@@ -192,13 +192,30 @@ async function main() {
   const convocatoria = await pdf.gerarConvocatoriaPDF(COND, {
     numero: '2026/1',
     tipo: 'Ordinária',
-    data: new Date(),
+    data: '2026-03-15',
     hora: '21:00',
     horaSegunda: '21:30',
     local: 'Hall de entrada do edifício, piso 0',
-    ordemTrabalhos: ['Aprovação do orçamento anual', 'Eleição do administrador', 'Outros assuntos'],
+    ordemTrabalhos: ['1. Aprovação do orçamento anual', '2. Eleição do administrador', '3. Outros assuntos'],
   });
   assert.strictEqual(convocatoria.slice(0, 5).toString(), '%PDF-', 'convocatória: PDF válido');
+  // Uma única página A4 (sem segunda página).
+  const convPaginas = (convocatoria.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length;
+  assert.strictEqual(convPaginas, 1, 'convocatória: única página A4');
+
+  // 13. Convocatória com muitos pontos — continua numa única página.
+  const muitos = [];
+  for (let i = 0; i < 20; i++) muitos.push(`Ponto ${i + 1}: deliberação com texto longo para testar wrapping automático do layout`);
+  const convMuitos = await pdf.gerarConvocatoriaPDF(COND, {
+    numero: '2026/2',
+    tipo: 'Ordinária',
+    data: '2026-11-20',
+    hora: '21:00',
+    horaSegunda: '21:30',
+    local: 'Hall de entrada do edifício, piso 0',
+    ordemTrabalhos: muitos,
+  });
+  assert.strictEqual((convMuitos.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length, 1, 'convocatória: 20 pontos numa página');
 
   console.log('✓ Todos os testes financeiros passaram.');
 }

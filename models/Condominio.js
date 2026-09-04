@@ -6,6 +6,8 @@ module.exports = (sequelize) => {
     {
       id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
       designacao: { type: DataTypes.STRING(191), allowNull: false },
+      administracao_nome: { type: DataTypes.STRING(191), allowNull: true },
+      website: { type: DataTypes.STRING(191), allowNull: true },
       nif: { type: DataTypes.STRING(20), allowNull: true },
       morada: { type: DataTypes.STRING(255), allowNull: true },
       codigo_postal: { type: DataTypes.STRING(20), allowNull: true },
