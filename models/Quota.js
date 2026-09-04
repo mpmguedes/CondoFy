@@ -1,0 +1,30 @@
+const { DataTypes } = require('sequelize');
+
+module.exports = (sequelize) => {
+  const Quota = sequelize.define(
+    'Quota',
+    {
+      id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+      numero_documento: { type: DataTypes.STRING(40), allowNull: true, unique: true },
+      fracao_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+      ano: { type: DataTypes.INTEGER, allowNull: false },
+      mes: { type: DataTypes.INTEGER, allowNull: false },
+      periodo: { type: DataTypes.DATEONLY, allowNull: true },
+      valor: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
+      data_emissao: { type: DataTypes.DATEONLY, allowNull: true },
+      data_vencimento: { type: DataTypes.DATEONLY, allowNull: true },
+      estado: {
+        type: DataTypes.ENUM('pendente', 'parcialmente_paga', 'paga', 'vencida', 'anulada'),
+        allowNull: false,
+        defaultValue: 'pendente',
+      },
+      observacoes: { type: DataTypes.TEXT, allowNull: true },
+    },
+    {
+      tableName: 'quotas',
+      underscored: true,
+      indexes: [{ unique: true, fields: ['fracao_id', 'ano', 'mes'] }],
+    }
+  );
+  return Quota;
+};

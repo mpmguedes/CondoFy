@@ -1,0 +1,52 @@
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h1 class="h3 mb-0"><i class="bi bi-people me-2"></i>Condóminos</h1>
+  <a href="/admin/condominos/nova" class="btn btn-primary"><i class="bi bi-person-plus me-1"></i>Novo condómino</a>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Nome</th>
+          <th>Email</th>
+          <th>Telefone</th>
+          <th>NIF</th>
+          <th>Tipo</th>
+          <th>Frações</th>
+          <th class="text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each pessoas}}
+        <tr>
+          <td class="fw-semibold">{{nome}}</td>
+          <td>{{#if email}}{{email}}{{else}}—{{/if}}</td>
+          <td>{{#if telefone}}{{telefone}}{{else}}—{{/if}}</td>
+          <td>{{#if nif}}{{nif}}{{else}}—{{/if}}</td>
+          <td>
+            {{#if (eq tipo 'proprietario')}}<span class="badge text-bg-primary">Proprietário</span>
+            {{else if (eq tipo 'arrendatario')}}<span class="badge text-bg-info">Arrendatário</span>
+            {{else}}<span class="badge text-bg-secondary">Outro</span>{{/if}}
+          </td>
+          <td>
+            {{#each fracoes}}
+              <span class="badge text-bg-light border">{{designacao}}</span>
+            {{else}}
+              <span class="text-muted">—</span>
+            {{/each}}
+          </td>
+          <td class="text-end">
+            <a href="/admin/condominos/{{id}}/editar" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+            <form action="/admin/condominos/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar este condómino?');">
+              <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="7" class="text-center text-muted py-4">Ainda não há condóminos registados.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>

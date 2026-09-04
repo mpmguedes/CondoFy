@@ -1,0 +1,49 @@
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0"><i class="bi bi-people-fill me-2"></i>{{titulo}}</h1>
+  <a href="/admin/assembleias" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+</div>
+
+<div class="row">
+  <div class="col-12 col-lg-8">
+    <div class="card">
+      <div class="card-body">
+        <form action="{{#if assembleia}}/admin/assembleias/{{assembleia.id}}{{else}}/admin/assembleias{{/if}}" method="POST">
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Data</label>
+              <input type="date" class="form-control" name="data" value="{{dateInput assembleia.data}}" />
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Hora</label>
+              <input type="text" class="form-control" name="hora" value="{{assembleia.hora}}" placeholder="ex.: 21:00" />
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Estado</label>
+              <select class="form-select" name="estado">
+                <option value="agendada" {{selected assembleia.estado 'agendada'}}>Agendada</option>
+                <option value="convocada" {{selected assembleia.estado 'convocada'}}>Convocada</option>
+                <option value="realizada" {{selected assembleia.estado 'realizada'}}>Realizada</option>
+                <option value="cancelada" {{selected assembleia.estado 'cancelada'}}>Cancelada</option>
+              </select>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Local</label>
+            <input type="text" class="form-control" name="local" value="{{assembleia.local}}" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Ordem de trabalhos (um ponto por linha)</label>
+            <textarea class="form-control" name="ordem_trabalhos" rows="5">{{assembleia.ordem_trabalhos}}</textarea>
+          </div>
+          {{#if assembleia}}
+          <div class="mb-3">
+            <label class="form-label">Ata (deliberações)</label>
+            <textarea class="form-control" name="ata_texto" rows="6">{{assembleia.ata_texto}}</textarea>
+          </div>
+          {{/if}}
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

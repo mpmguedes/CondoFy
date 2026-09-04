@@ -1,0 +1,47 @@
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0"><i class="bi bi-cash-coin me-2"></i>Recibo {{pagamento.numero_documento}}</h1>
+  <div>
+    <a href="/admin/pagamentos/{{pagamento.id}}/recibo" target="_blank" class="btn btn-primary"><i class="bi bi-file-earmark-pdf me-1"></i>Recibo PDF</a>
+    <a href="/admin/pagamentos" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-5">
+    <div class="card">
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-6">Fração</dt><dd class="col-6">{{pagamento.fracao.designacao}}</dd>
+          <dt class="col-6">Valor</dt><dd class="col-6">{{eur pagamento.valor}}</dd>
+          <dt class="col-6">Data</dt><dd class="col-6">{{formatDate pagamento.data_pagamento}}</dd>
+          <dt class="col-6">Método</dt><dd class="col-6">{{#if pagamento.metodo_pagamento}}{{pagamento.metodo_pagamento.nome}}{{else}}—{{/if}}</dd>
+          <dt class="col-6">Referência</dt><dd class="col-6">{{#if pagamento.referencia}}{{pagamento.referencia}}{{else}}—{{/if}}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-7">
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-receipt me-1"></i>Distribuição pelas quotas</div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light">
+            <tr><th>Quota</th><th>Período</th><th class="text-end">Valor aplicado</th></tr>
+          </thead>
+          <tbody>
+            {{#each pagamento.quotas}}
+            <tr>
+              <td class="font-monospace small">{{numero_documento}}</td>
+              <td>{{monthName mes}} {{ano}}</td>
+              <td class="text-end">{{eur this.PagamentoQuota.valor_aplicado}}</td>
+            </tr>
+            {{else}}
+            <tr><td colspan="3" class="text-center text-muted py-4">Sem distribuição.</td></tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

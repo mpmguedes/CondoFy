@@ -1,0 +1,56 @@
+services:
+  db:
+    image: mariadb:11
+    container_name: condofy-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASS:-root}
+      MARIADB_DATABASE: ${DB_NAME:-condofy}
+      MARIADB_USER: ${DB_USER:-condofy}
+      MARIADB_PASSWORD: ${DB_PASS:-condofy}
+    volumes:
+      - condofy_db:/var/lib/mysql
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    container_name: condofy-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-condofy}
+      DB_USER: ${DB_USER:-condofy}
+      DB_PASS: ${DB_PASS:-condofy}
+      SESSION_SECRET: ${SESSION_SECRET:-troque-esta-chave}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_TLS: ${SMTP_TLS:-true}
+      SMTP_FROM: ${SMTP_FROM:-noreply@condominio.pt}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Condomínio}
+      GOOGLE_DRIVE_ENABLED: ${GOOGLE_DRIVE_ENABLED:-false}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REFRESH_TOKEN: ${GOOGLE_REFRESH_TOKEN:-}
+      GOOGLE_DRIVE_ROOT_FOLDER: ${GOOGLE_DRIVE_ROOT_FOLDER:-}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    volumes:
+      - condofy_uploads:/app/public/uploads
+
+volumes:
+  condofy_db:
+  condofy_uploads:

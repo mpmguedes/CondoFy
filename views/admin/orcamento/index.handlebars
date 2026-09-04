@@ -1,0 +1,115 @@
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h1 class="h3 mb-0"><i class="bi bi-graph-up me-2"></i>Orçamento</h1>
+  <form action="/admin/orcamento" method="GET" class="d-flex gap-2">
+    <select class="form-select" name="ano">
+      {{#if anos}}
+        {{#each anos}}<option value="{{this}}" {{selected ../ano this}}>{{this}}</option>{{/each}}
+      {{else}}
+        <option value="{{ano}}">{{ano}}</option>
+      {{/if}}
+    </select>
+    <button type="submit" class="btn btn-outline-primary">Ver</button>
+  </form>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-4">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Orçamentado</div>
+      <div class="stat-value">{{eur global.orcamentado}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-4">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Executado</div>
+      <div class="stat-value">{{eur global.executado}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-4">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Execução</div>
+      <div class="stat-value">{{global.percentagem}}%</div>
+    </div></div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-7">
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-table me-1"></i>Por categoria</div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Categoria</th>
+              <th class="text-end">Orçamentado</th>
+              <th class="text-end">Executado</th>
+              <th class="text-end">Diferença</th>
+              <th style="min-width:140px">%</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#each linhas}}
+            <tr>
+              <td class="fw-semibold">{{nome}}</td>
+              <td class="text-end"><input form="orc-{{id}}" type="text" class="form-control form-control-sm text-end" name="valor_orcamentado" value="{{orcamentado}}" /></td>
+              <td class="text-end">{{eur executado}}</td>
+              <td class="text-end {{#if (lt diferenca 0)}}text-danger{{/if}}">{{eur diferenca}}</td>
+              <td>
+                <div class="d-flex align-items-center gap-2">
+                  <div class="progress flex-grow-1" style="height:8px">
+                    <div class="progress-bar {{#if acima}}bg-danger{{else}}bg-primary{{/if}}" style="width: {{#if percentagem}}{{percentagem}}{{else}}0{{/if}}%"></div>
+                  </div>
+                  <span class="small text-muted">{{#if percentagem}}{{percentagem}}%{{else}}—{{/if}}</span>
+                </div>
+              </td>
+            </tr>
+            {{else}}
+            <tr><td colspan="5" class="text-center text-muted py-4">Sem categorias de despesa.</td></tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body border-top">
+        <button type="button" class="btn btn-primary btn-sm" onclick="guardarTudo()"><i class="bi bi-check-lg me-1"></i>Guardar orçamento</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-5">
+    <div class="card h-100">
+      <div class="card-header bg-white"><i class="bi bi-bar-chart me-1"></i>Execução por categoria</div>
+      <div class="card-body">
+        <canvas id="graficoOrcamento" height="240"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{#each linhas}}<form id="orc-{{id}}" action="/admin/orcamento" method="POST"><input type="hidden" name="ano" value="{{../ano}}" /><input type="hidden" name="categoria_id" value="{{id}}" /></form>{{/each}}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+  function guardarTudo() {
+    const forms = document.querySelectorAll('form[id^="orc-"]');
+    forms.forEach(f => f.submit());
+  }
+
+  const dados = {{{chart}}};
+  if (dados && dados.labels && dados.labels.length) {
+    new Chart(document.getElementById('graficoOrcamento'), {
+      type: 'bar',
+      data: {
+        labels: dados.labels,
+        datasets: [
+          { label: 'Orçamentado', data: dados.orcado, backgroundColor: '#93c5fd' },
+          { label: 'Executado', data: dados.executado, backgroundColor: '#2563eb' },
+        ],
+      },
+      options: {
+        responsive: true,
+        scales: { y: { beginAtZero: true } },
+      },
+    });
+  }
+</script>

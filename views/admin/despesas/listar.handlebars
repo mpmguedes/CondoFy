@@ -1,0 +1,46 @@
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h1 class="h3 mb-0"><i class="bi bi-credit-card me-2"></i>Despesas</h1>
+  <a href="/admin/despesas/nova" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Nova despesa</a>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>N.º</th>
+          <th>Descrição</th>
+          <th>Categoria</th>
+          <th>Data</th>
+          <th class="text-end">Valor</th>
+          <th>Estado</th>
+          <th class="text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each despesas}}
+        <tr>
+          <td class="font-monospace small">{{#if numero_documento}}{{numero_documento}}{{else}}—{{/if}}</td>
+          <td class="fw-semibold">{{descricao}}</td>
+          <td>{{#if categoria}}{{categoria.nome}}{{else}}—{{/if}}</td>
+          <td>{{formatDate data}}</td>
+          <td class="text-end fw-semibold">{{eur valor}}</td>
+          <td>
+            {{#if (eq estado 'anulada')}}<span class="badge text-bg-secondary">Anulada</span>
+            {{else if (eq estado 'paga')}}<span class="badge text-bg-success">Paga</span>
+            {{else}}<span class="badge text-bg-warning">Registada</span>{{/if}}
+          </td>
+          <td class="text-end">
+            <a href="/admin/despesas/{{id}}/editar" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+            <form action="/admin/despesas/{{id}}/anular" method="POST" class="d-inline" onsubmit="return confirm('Anular esta despesa?');">
+              <button class="btn btn-sm btn-outline-danger"><i class="bi bi-slash-circle"></i></button>
+            </form>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="7" class="text-center text-muted py-4">Sem despesas.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>

@@ -1,0 +1,76 @@
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0"><i class="bi bi-credit-card me-2"></i>{{titulo}}</h1>
+  <a href="/admin/despesas" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+</div>
+
+<div class="row">
+  <div class="col-12 col-lg-8">
+    <div class="card">
+      <div class="card-body">
+        <form action="{{#if despesa}}/admin/despesas/{{despesa.id}}{{else}}/admin/despesas{{/if}}" method="POST">
+          <div class="mb-3">
+            <label class="form-label">Descrição *</label>
+            <input type="text" class="form-control" name="descricao" value="{{despesa.descricao}}" required />
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Categoria</label>
+              <select class="form-select" name="categoria_id">
+                <option value="">— Sem categoria —</option>
+                {{#each categorias}}
+                <option value="{{id}}" {{selected ../despesa.categoria_id id}}>{{nome}}</option>
+                {{/each}}
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Valor (€) *</label>
+              <input type="text" class="form-control" name="valor" value="{{despesa.valor}}" required />
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Data</label>
+              <input type="date" class="form-control" name="data" value="{{dateInput despesa.data}}" />
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Fornecedor</label>
+              <input type="text" class="form-control" name="fornecedor" value="{{despesa.fornecedor}}" />
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Estado</label>
+              <select class="form-select" name="estado">
+                <option value="registada" {{selected despesa.estado 'registada'}}>Registada</option>
+                <option value="paga" {{selected despesa.estado 'paga'}}>Paga</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Conta bancária</label>
+              <select class="form-select" name="conta_bancaria_id">
+                <option value="">— Sem conta —</option>
+                {{#each contas}}
+                <option value="{{id}}" {{selected ../despesa.conta_bancaria_id id}}>{{nome}}</option>
+                {{/each}}
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Método de pagamento</label>
+              <select class="form-select" name="metodo_pagamento_id">
+                <option value="">— Sem método —</option>
+                {{#each metodos}}
+                <option value="{{id}}" {{selected ../despesa.metodo_pagamento_id id}}>{{nome}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Observações</label>
+            <textarea class="form-control" name="observacoes" rows="2">{{despesa.observacoes}}</textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

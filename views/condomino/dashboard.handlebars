@@ -1,0 +1,119 @@
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <div>
+    <h1 class="h3 mb-1">Olá, {{user.nome}}</h1>
+    <p class="text-muted mb-0">A minha área no condomínio {{condominio.designacao}}</p>
+  </div>
+</div>
+
+{{#unless pessoa}}
+<div class="alert alert-warning">
+  <i class="bi bi-info-circle me-1"></i>
+  A sua conta ainda não está associada a um condómino. Contacte a administração.
+</div>
+{{/unless}}
+
+{{#if pessoa}}
+<h2 class="h5 mb-3"><i class="bi bi-wallet2 me-2"></i>A minha situação</h2>
+<div class="row g-3">
+  {{#each fracoesComResumo}}
+  <div class="col-12 col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span>Fração {{designacao}}</span>
+        <span class="badge text-bg-light border">{{this.FracaoPessoa.vinculo}}</span>
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-6">
+            <div class="stat-label">Saldo atual</div>
+            <div class="stat-value {{#if (lt resumo.emDivida 0)}}text-success{{else if (gt resumo.emDivida 0)}}text-danger{{/if}}">{{eur resumo.emDivida}}</div>
+          </div>
+          <div class="col-6">
+            <div class="stat-label">Em dívida</div>
+            <div class="stat-value">{{#if (gt resumo.emDivida 0)}}{{eur resumo.emDivida}}{{else}}0,00 €{{/if}}</div>
+          </div>
+          <div class="col-6">
+            <div class="stat-label">Quotas pagas</div>
+            <div class="stat-value">{{resumo.quotasPagas}}</div>
+          </div>
+          <div class="col-6">
+            <div class="stat-label">Quotas pendentes</div>
+            <div class="stat-value">{{resumo.quotasPendentes}}</div>
+          </div>
+          <div class="col-12">
+            <div class="stat-label">Último pagamento</div>
+            {{#if resumo.ultimoPagamento}}
+            <div class="fw-semibold">{{eur resumo.ultimoPagamento.valor}} <span class="text-muted small">— {{formatDate resumo.ultimoPagamento.data}}</span></div>
+            {{else}}
+            <div class="text-muted">Sem pagamentos registados.</div>
+            {{/if}}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {{else}}
+  <div class="col-12"><div class="alert alert-info mb-0">Não tem frações associadas.</div></div>
+  {{/each}}
+</div>
+{{/if}}
+
+<h2 class="h5 mt-4 mb-3"><i class="bi bi-building me-2"></i>Situação do condomínio</h2>
+<div class="row g-3">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-icon"><i class="bi bi-cash-stack"></i></div>
+      <div class="stat-value">{{eur resumo.saldoContas}}</div>
+      <div class="stat-label">Saldo das contas</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-icon"><i class="bi bi-shield-check"></i></div>
+      <div class="stat-value">{{eur resumo.fundoReserva}}</div>
+      <div class="stat-label">Fundo de reserva</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-icon text-success"><i class="bi bi-arrow-down-circle"></i></div>
+      <div class="stat-value">{{eur resumo.receitas}}</div>
+      <div class="stat-label">Receitas</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-icon text-danger"><i class="bi bi-arrow-up-circle"></i></div>
+      <div class="stat-value">{{eur resumo.despesas}}</div>
+      <div class="stat-label">Despesas</div>
+    </div></div>
+  </div>
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="stat-label">Execução do orçamento {{orcamento.ano}}</span>
+          <span class="fw-semibold">{{orcamento.percentagem}}%</span>
+        </div>
+        <div class="progress" style="height:10px">
+          <div class="progress-bar {{#if (gt orcamento.percentagem 100)}}bg-danger{{else}}bg-primary{{/if}}" style="width: {{orcamento.percentagem}}%"></div>
+        </div>
+        <div class="text-muted small mt-2">{{eur orcamento.executado}} de {{eur orcamento.orcamentado}}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{#if resumo.contas}}
+<h3 class="h6 mt-4 mb-2"><i class="bi bi-bank me-2"></i>Contas do condomínio</h3>
+<div class="card">
+  <ul class="list-group list-group-flush">
+    {{#each resumo.contas}}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      <span>{{nome}} <span class="text-muted small">{{#if iban}}· {{iban}}{{/if}}</span></span>
+      <span class="fw-semibold">{{eur saldo}}</span>
+    </li>
+    {{/each}}
+  </ul>
+</div>
+{{/if}}

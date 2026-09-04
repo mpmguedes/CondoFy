@@ -1,0 +1,89 @@
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h1 class="h3 mb-0"><i class="bi bi-receipt me-2"></i>Quotas</h1>
+  <a href="/admin/quotas/gerar" class="btn btn-primary"><i class="bi bi-magic me-1"></i>Gerar quotas</a>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <form action="/admin/quotas" method="GET" class="row g-2 align-items-end">
+      <div class="col-4 col-md-2">
+        <label class="form-label">Ano</label>
+        <select class="form-select" name="ano">
+          <option value="">Todos</option>
+          {{#each anos}}<option value="{{this}}" {{selected ../filtros.ano this}}>{{this}}</option>{{/each}}
+        </select>
+      </div>
+      <div class="col-4 col-md-3">
+        <label class="form-label">Mês</label>
+        <select class="form-select" name="mes">
+          <option value="">Todos</option>
+          {{#each meses}}<option value="{{inc @index}}" {{selected ../filtros.mes (inc @index)}}>{{this}}</option>{{/each}}
+        </select>
+      </div>
+      <div class="col-4 col-md-3">
+        <label class="form-label">Estado</label>
+        <select class="form-select" name="estado">
+          <option value="">Todos</option>
+          <option value="pendente" {{selected filtros.estado 'pendente'}}>Pendente</option>
+          <option value="parcialmente_paga" {{selected filtros.estado 'parcialmente_paga'}}>Parcialmente paga</option>
+          <option value="paga" {{selected filtros.estado 'paga'}}>Paga</option>
+          <option value="vencida" {{selected filtros.estado 'vencida'}}>Vencida</option>
+          <option value="anulada" {{selected filtros.estado 'anulada'}}>Anulada</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-2 d-grid">
+        <button type="submit" class="btn btn-outline-primary"><i class="bi bi-funnel me-1"></i>Filtrar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>N.º</th>
+          <th>Fração</th>
+          <th>Período</th>
+          <th>Vencimento</th>
+          <th class="text-end">Valor</th>
+          <th class="text-end">Pago</th>
+          <th class="text-end">Em aberto</th>
+          <th>Estado</th>
+          <th class="text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each quotas}}
+        <tr>
+          <td class="font-monospace small">{{numero_documento}}</td>
+          <td class="fw-semibold">{{fracao.designacao}}</td>
+          <td>{{monthName mes}} {{ano}}</td>
+          <td>{{formatDate data_vencimento}}</td>
+          <td class="text-end">{{eur valor}}</td>
+          <td class="text-end">{{eur pago}}</td>
+          <td class="text-end fw-semibold">{{eur emAberto}}</td>
+          <td>
+            {{#if (eq estadoEfetivo 'paga')}}<span class="badge text-bg-success">Paga</span>
+            {{else if (eq estadoEfetivo 'parcialmente_paga')}}<span class="badge text-bg-info">Parcial</span>
+            {{else if (eq estadoEfetivo 'vencida')}}<span class="badge text-bg-danger">Vencida</span>
+            {{else if (eq estadoEfetivo 'anulada')}}<span class="badge text-bg-secondary">Anulada</span>
+            {{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}
+          </td>
+          <td class="text-end text-nowrap">
+            <a href="/admin/quotas/{{id}}/aviso" target="_blank" class="btn btn-sm btn-outline-primary" title="Aviso PDF"><i class="bi bi-file-earmark-pdf"></i></a>
+            <a href="/admin/quotas/{{id}}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-eye"></i></a>
+            <a href="/admin/quotas/{{id}}/editar" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+            <form action="/admin/quotas/{{id}}/anular" method="POST" class="d-inline" onsubmit="return confirm('Anular esta quota?');">
+              <button class="btn btn-sm btn-outline-danger"><i class="bi bi-slash-circle"></i></button>
+            </form>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="9" class="text-center text-muted py-4">Sem quotas.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>

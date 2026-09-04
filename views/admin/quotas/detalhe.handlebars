@@ -1,0 +1,57 @@
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0"><i class="bi bi-receipt me-2"></i>Quota {{quota.numero_documento}}</h1>
+  <div>
+    <a href="/admin/quotas/{{quota.id}}/aviso" target="_blank" class="btn btn-primary"><i class="bi bi-file-earmark-pdf me-1"></i>Aviso PDF</a>
+    <a href="/admin/quotas" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-5">
+    <div class="card">
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-6">Fração</dt><dd class="col-6">{{quota.fracao.designacao}}</dd>
+          <dt class="col-6">Período</dt><dd class="col-6">{{monthName quota.mes}} {{quota.ano}}</dd>
+          <dt class="col-6">Valor</dt><dd class="col-6">{{eur quota.valor}}</dd>
+          <dt class="col-6">Emissão</dt><dd class="col-6">{{formatDate quota.data_emissao}}</dd>
+          <dt class="col-6">Vencimento</dt><dd class="col-6">{{formatDate quota.data_vencimento}}</dd>
+          <dt class="col-6">Estado</dt>
+          <dd class="col-6">
+            {{#if (eq estadoEfetivo 'paga')}}<span class="badge text-bg-success">Paga</span>
+            {{else if (eq estadoEfetivo 'parcialmente_paga')}}<span class="badge text-bg-info">Parcialmente paga</span>
+            {{else if (eq estadoEfetivo 'vencida')}}<span class="badge text-bg-danger">Vencida</span>
+            {{else if (eq estadoEfetivo 'anulada')}}<span class="badge text-bg-secondary">Anulada</span>
+            {{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}
+          </dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-7">
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-cash-coin me-1"></i>Pagamentos aplicados</div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light">
+            <tr><th>Recibo</th><th>Data</th><th class="text-end">Valor aplicado</th></tr>
+          </thead>
+          <tbody>
+            {{#each aplicacoes}}
+            {{#if pagamento}}
+            <tr>
+              <td class="font-monospace small">{{pagamento.numero_documento}}</td>
+              <td>{{formatDate pagamento.data_pagamento}}</td>
+              <td class="text-end">{{eur valor_aplicado}}</td>
+            </tr>
+            {{/if}}
+            {{else}}
+            <tr><td colspan="3" class="text-center text-muted py-4">Sem pagamentos.</td></tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

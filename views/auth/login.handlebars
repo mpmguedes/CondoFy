@@ -1,0 +1,31 @@
+<div class="auth-wrap">
+  <div class="auth-card card shadow-sm">
+    <div class="card-body p-4 p-md-5">
+      <div class="text-center mb-4">
+        <img src="/img/logo.png" alt="Condofy" class="login-logo mx-auto d-block mb-3" />
+        <h1 class="h4 mb-1">{{condominio.designacao}}</h1>
+        <p class="text-muted mb-0">Condofy — Gestão de condomínios</p>
+      </div>
+
+      {{#if error}}
+        <div class="alert alert-danger py-2 small">{{error}}</div>
+      {{/if}}
+
+      <form action="/login" method="POST">
+        <div class="mb-3">
+          <label for="email" class="form-label">Email</label>
+          <input type="email" class="form-control" id="email" name="email" autocomplete="email" required autofocus />
+        </div>
+        <div class="mb-3">
+          <label for="password" class="form-label">Palavra-passe</label>
+          <input type="password" class="form-control" id="password" name="password" autocomplete="current-password" required />
+        </div>
+        <button type="submit" class="btn btn-primary w-100">Entrar</button>
+      </form>
+
+      <div class="text-center mt-3">
+        <a href="/recuperar" class="small">Esqueci a minha palavra-passe</a>
+      </div>
+    </div>
+  </div>
+</div>

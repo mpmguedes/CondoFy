@@ -1,0 +1,89 @@
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0"><i class="bi bi-magic me-2"></i>Gerar quotas</h1>
+  <a href="/admin/quotas" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+</div>
+
+<div class="row">
+  <div class="col-12 col-lg-7">
+    <div class="card">
+      <div class="card-body">
+        <form action="/admin/quotas/gerar" method="POST">
+          <div class="row">
+            <div class="col-6 mb-3">
+              <label class="form-label">Ano *</label>
+              <input type="number" class="form-control" name="ano" value="{{currentYear}}" min="2020" max="2100" required />
+            </div>
+            <div class="col-6 mb-3">
+              <label class="form-label">Mês *</label>
+              <select class="form-select" name="mes" required>
+                <option value="1">Janeiro</option>
+                <option value="2">Fevereiro</option>
+                <option value="3">Março</option>
+                <option value="4">Abril</option>
+                <option value="5">Maio</option>
+                <option value="6">Junho</option>
+                <option value="7">Julho</option>
+                <option value="8">Agosto</option>
+                <option value="9">Setembro</option>
+                <option value="10">Outubro</option>
+                <option value="11">Novembro</option>
+                <option value="12">Dezembro</option>
+              </select>
+            </div>
+          </div>
+
+          <fieldset class="mb-3">
+            <legend class="form-label fs-6">Modo de cálculo</legend>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="modo" id="modoFixo" value="fixo" checked />
+              <label class="form-check-label" for="modoFixo">Valor fixo por fração</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="modo" id="modoPermilagem" value="permilagem" />
+              <label class="form-check-label" for="modoPermilagem">Valor total distribuído pela permilagem</label>
+            </div>
+          </fieldset>
+
+          <div class="mb-3" id="campoFixo">
+            <label class="form-label">Valor por fração (€)</label>
+            <input type="text" class="form-control" name="valor" placeholder="ex.: 45,00" />
+          </div>
+          <div class="mb-3 d-none" id="campoPermilagem">
+            <label class="form-label">Valor total a distribuir (€)</label>
+            <input type="text" class="form-control" name="valor_total" placeholder="ex.: 500,00" />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Dia de vencimento</label>
+            <input type="number" class="form-control" name="vencimento_dia" value="8" min="1" max="28" />
+          </div>
+
+          <button type="submit" class="btn btn-primary"><i class="bi bi-magic me-1"></i>Gerar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-5">
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-info-circle me-1"></i>Como funciona</div>
+      <div class="card-body text-muted small">
+        <p class="mb-1">Serão criadas quotas para todas as frações <strong>ativas</strong> sem quota no período escolhido.</p>
+        <p class="mb-0">Cada quota recebe um número de documento sequencial (ex.: <code>2026/0001</code>).</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const modoFixo = document.getElementById('modoFixo');
+  const modoPermilagem = document.getElementById('modoPermilagem');
+  const campoFixo = document.getElementById('campoFixo');
+  const campoPermilagem = document.getElementById('campoPermilagem');
+  function alternar() {
+    campoFixo.classList.toggle('d-none', !modoFixo.checked);
+    campoPermilagem.classList.toggle('d-none', !modoPermilagem.checked);
+  }
+  modoFixo.addEventListener('change', alternar);
+  modoPermilagem.addEventListener('change', alternar);
+  alternar();
+</script>

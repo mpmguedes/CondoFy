@@ -1,0 +1,99 @@
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0"><i class="bi bi-gear me-2"></i>Configuração do condomínio</h1>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-8">
+    <div class="card">
+      <div class="card-body">
+        <form action="/admin/config" method="POST" enctype="multipart/form-data">
+          <h5 class="mb-3">Dados do condomínio</h5>
+          <div class="mb-3">
+            <label class="form-label">Designação *</label>
+            <input type="text" class="form-control" name="designacao" value="{{condominio.designacao}}" required />
+          </div>
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label">NIF</label>
+              <input type="text" class="form-control" name="nif" value="{{condominio.nif}}" />
+            </div>
+            <div class="col-md-8 mb-3">
+              <label class="form-label">Morada</label>
+              <input type="text" class="form-control" name="morada" value="{{condominio.morada}}" />
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Código postal</label>
+              <input type="text" class="form-control" name="codigo_postal" value="{{condominio.codigo_postal}}" placeholder="0000-000" />
+            </div>
+            <div class="col-md-8 mb-3">
+              <label class="form-label">Localidade</label>
+              <input type="text" class="form-control" name="localidade" value="{{condominio.localidade}}" />
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Email</label>
+              <input type="email" class="form-control" name="email" value="{{condominio.email}}" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Telefone</label>
+              <input type="text" class="form-control" name="telefone" value="{{condominio.telefone}}" />
+            </div>
+          </div>
+
+          <h5 class="mt-2 mb-3">Pagamentos</h5>
+          <div class="mb-3">
+            <label class="form-label">IBAN principal</label>
+            <input type="text" class="form-control" name="iban_principal" value="{{condominio.iban_principal}}" placeholder="PT50 ..." />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Outros meios de pagamento</label>
+            <textarea class="form-control" name="outros_meios_pagamento" rows="2" placeholder="ex.: MB Way 912 345 678">{{condominio.outros_meios_pagamento}}</textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Dados bancários / instruções adicionais</label>
+            <textarea class="form-control" name="dados_bancarios_adicionais" rows="2">{{condominio.dados_bancarios_adicionais}}</textarea>
+          </div>
+
+          <h5 class="mt-2 mb-3">Identidade visual</h5>
+          <div class="mb-3">
+            <label class="form-label">Modo</label>
+            <select class="form-select" name="identidade_visual">
+              <option value="logo" {{selected condominio.identidade_visual 'logo'}}>Usar logótipo personalizado</option>
+              <option value="designacao" {{selected condominio.identidade_visual 'designacao'}}>Usar apenas a designação oficial</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Logótipo (PNG/JPG, máx. 5 MB)</label>
+            <input type="file" class="form-control" name="logotipo" accept="image/png,image/jpeg" />
+            {{#if condominio.logotipo}}
+            <div class="form-text">Logótipo atual: <code>{{condominio.logotipo}}</code></div>
+            {{/if}}
+          </div>
+
+          <button type="submit" class="btn btn-primary">Guardar configuração</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-4">
+    <div class="card mb-3">
+      <div class="card-header bg-white"><i class="bi bi-cloud me-1"></i>Google Drive</div>
+      <div class="card-body">
+        <p class="mb-2">
+          {{#if driveLigado}}<span class="badge text-bg-success">🟢 Ligado</span>
+          {{else}}<span class="badge text-bg-secondary">⚪ Não configurado</span>{{/if}}
+        </p>
+        <p class="text-muted small mb-3">Configure <code>GOOGLE_DRIVE_ENABLED</code>, <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code> e <code>GOOGLE_REFRESH_TOKEN</code> no <code>.env</code>.</p>
+        <form action="/admin/config/drive/estrutura" method="POST">
+          <button type="submit" class="btn btn-outline-primary w-100" {{#unless driveLigado}}disabled{{/unless}}>
+            <i class="bi bi-diagram-3 me-1"></i>Criar estrutura de pastas
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

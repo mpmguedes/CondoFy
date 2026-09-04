@@ -1,0 +1,48 @@
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0"><i class="bi bi-folder2-open me-2"></i>{{titulo}}</h1>
+  <a href="/admin/documentos" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+</div>
+
+<div class="row">
+  <div class="col-12 col-lg-7">
+    <div class="card">
+      <div class="card-body">
+        <form action="/admin/documentos" method="POST" enctype="multipart/form-data">
+          <div class="mb-3">
+            <label class="form-label">Nome *</label>
+            <input type="text" class="form-control" name="nome" required placeholder="ex.: Ata da assembleia de 10/01/2026" />
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Tipo</label>
+              <select class="form-select" name="tipo">
+                <option value="ata">Ata</option>
+                <option value="convocatoria">Convocatória</option>
+                <option value="aviso_quota">Aviso de quota</option>
+                <option value="recibo">Recibo</option>
+                <option value="fatura">Fatura</option>
+                <option value="contrato">Contrato</option>
+                <option value="orcamento">Orçamento</option>
+                <option value="relatorio">Relatório</option>
+                <option value="outro">Outro</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Data</label>
+              <input type="date" class="form-control" name="data" />
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Ficheiro (guardado no Google Drive)</label>
+            <input type="file" class="form-control" name="ficheiro" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Ou URL externa (opcional)</label>
+            <input type="url" class="form-control" name="url" placeholder="https://..." />
+          </div>
+          <button type="submit" class="btn btn-primary">Guardar documento</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

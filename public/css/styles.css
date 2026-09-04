@@ -1,0 +1,138 @@
+:root {
+  --app-accent: #2563eb;
+  --app-accent-dark: #1d4ed8;
+  --app-navbar: #1f2937;
+  --app-bg: #f4f6f9;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: var(--app-bg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  color: #1f2937;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-navbar {
+  background: var(--app-navbar);
+}
+
+.brand-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 0.5rem;
+  background: var(--app-accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.brand-badge-lg {
+  width: 3.2rem;
+  height: 3.2rem;
+  font-size: 1.6rem;
+  border-radius: 0.8rem;
+}
+
+.brand-text {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.brand-logo {
+  height: 32px;
+  width: auto;
+  object-fit: contain;
+}
+
+.login-logo {
+  height: 64px;
+  width: auto;
+  object-fit: contain;
+}
+
+.app-main {
+  flex: 1 0 auto;
+  padding: 1.5rem 0 2rem;
+}
+
+.app-footer {
+  flex-shrink: 0;
+  border-top: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+/* Autenticação */
+.auth-wrap {
+  min-height: 80vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 0;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+}
+
+/* Cartões e estatísticas */
+.card {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+}
+
+.card-header {
+  font-weight: 600;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.stat-card .stat-icon {
+  font-size: 1.4rem;
+  color: var(--app-accent);
+  margin-bottom: 0.25rem;
+}
+
+.stat-card .stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.stat-card .stat-label {
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+/* Tabelas */
+.table thead th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.btn-primary {
+  background: var(--app-accent);
+  border-color: var(--app-accent);
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+  background: var(--app-accent-dark);
+  border-color: var(--app-accent-dark);
+}
+
+a {
+  color: var(--app-accent);
+}

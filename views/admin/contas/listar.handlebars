@@ -1,0 +1,64 @@
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h1 class="h3 mb-0"><i class="bi bi-bank me-2"></i>Contas bancárias</h1>
+  <a href="/admin/contas/nova" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Nova conta</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-icon"><i class="bi bi-cash-stack"></i></div>
+      <div class="stat-value">{{eur resumo.saldoContas}}</div>
+      <div class="stat-label">Saldo total</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-icon"><i class="bi bi-shield-check"></i></div>
+      <div class="stat-value">{{eur resumo.fundoReserva}}</div>
+      <div class="stat-label">Fundo de reserva</div>
+    </div></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Nome</th>
+          <th>Banco</th>
+          <th>IBAN</th>
+          <th>Tipo</th>
+          <th class="text-end">Saldo</th>
+          <th>Estado</th>
+          <th class="text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each contas}}
+        <tr>
+          <td class="fw-semibold">{{nome}}</td>
+          <td>{{#if banco}}{{banco}}{{else}}—{{/if}}</td>
+          <td><span class="font-monospace small">{{#if iban}}{{iban}}{{else}}—{{/if}}</span></td>
+          <td>
+            {{#if (eq tipo 'fundo_reserva')}}<span class="badge text-bg-warning">Fundo de reserva</span>
+            {{else if (eq tipo 'poupanca')}}<span class="badge text-bg-info">Poupança</span>
+            {{else if (eq tipo 'corrente')}}<span class="badge text-bg-primary">Corrente</span>
+            {{else}}<span class="badge text-bg-secondary">Outra</span>{{/if}}
+          </td>
+          <td class="text-end fw-semibold">{{eur saldo}}</td>
+          <td>{{#if ativa}}<span class="badge text-bg-success">Ativa</span>{{else}}<span class="badge text-bg-secondary">Inativa</span>{{/if}}</td>
+          <td class="text-end">
+            <a href="/admin/contas/{{id}}/editar" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+            <form action="/admin/contas/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar esta conta?');">
+              <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="7" class="text-center text-muted py-4">Sem contas bancárias.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>

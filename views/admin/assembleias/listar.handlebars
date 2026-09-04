@@ -1,0 +1,41 @@
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h1 class="h3 mb-0"><i class="bi bi-people-fill me-2"></i>Assembleias</h1>
+  <a href="/admin/assembleias/nova" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Nova assembleia</a>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Data</th>
+          <th>Hora</th>
+          <th>Local</th>
+          <th>Estado</th>
+          <th class="text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each assembleias}}
+        <tr>
+          <td class="fw-semibold">{{formatDate data}}</td>
+          <td>{{#if hora}}{{hora}}{{else}}—{{/if}}</td>
+          <td>{{#if local}}{{local}}{{else}}—{{/if}}</td>
+          <td>
+            {{#if (eq estado 'realizada')}}<span class="badge text-bg-success">Realizada</span>
+            {{else if (eq estado 'cancelada')}}<span class="badge text-bg-secondary">Cancelada</span>
+            {{else if (eq estado 'convocada')}}<span class="badge text-bg-info">Convocada</span>
+            {{else}}<span class="badge text-bg-warning">Agendada</span>{{/if}}
+          </td>
+          <td class="text-end">
+            <a href="/admin/assembleias/{{id}}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-eye"></i></a>
+            <a href="/admin/assembleias/{{id}}/editar" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="5" class="text-center text-muted py-4">Sem assembleias.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>

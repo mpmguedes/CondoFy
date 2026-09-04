@@ -1,0 +1,23 @@
+<div class="auth-wrap">
+  <div class="auth-card card shadow-sm">
+    <div class="card-body p-4 p-md-5">
+      <div class="text-center mb-4">
+        <img src="/img/logo.png" alt="Condofy" class="login-logo mx-auto d-block mb-3" />
+        <h1 class="h4 mb-1">Definir nova palavra-passe</h1>
+        <p class="text-muted mb-0">Escolha uma palavra-passe com pelo menos 8 caracteres.</p>
+      </div>
+
+      <form action="/redefinir/{{token}}" method="POST">
+        <div class="mb-3">
+          <label for="password" class="form-label">Nova palavra-passe</label>
+          <input type="password" class="form-control" id="password" name="password" minlength="8" required autofocus />
+        </div>
+        <div class="mb-3">
+          <label for="password2" class="form-label">Confirmar palavra-passe</label>
+          <input type="password" class="form-control" id="password2" name="password2" minlength="8" required />
+        </div>
+        <button type="submit" class="btn btn-primary w-100">Guardar</button>
+      </form>
+    </div>
+  </div>
+</div>

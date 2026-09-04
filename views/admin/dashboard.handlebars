@@ -1,0 +1,145 @@
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <div>
+    <h1 class="h3 mb-1">Painel de administração</h1>
+    <p class="text-muted mb-0">{{condominio.designacao}}</p>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-6 col-md-4 col-lg-3">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="stat-icon"><i class="bi bi-cash-stack"></i></div>
+        <div class="stat-value">{{eur resumo.saldoContas}}</div>
+        <div class="stat-label">Saldo das contas</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-3">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="stat-icon"><i class="bi bi-shield-check"></i></div>
+        <div class="stat-value">{{eur resumo.fundoReserva}}</div>
+        <div class="stat-label">Fundo de reserva</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-3">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="stat-icon"><i class="bi bi-arrow-down-circle"></i></div>
+        <div class="stat-value">{{eur resumo.receitas}}</div>
+        <div class="stat-label">Receitas</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-3">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="stat-icon"><i class="bi bi-arrow-up-circle"></i></div>
+        <div class="stat-value">{{eur resumo.despesas}}</div>
+        <div class="stat-label">Despesas</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-3">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="stat-icon"><i class="bi bi-exclamation-circle"></i></div>
+        <div class="stat-value">{{eur resumo.emDividaGlobal}}</div>
+        <div class="stat-label">Em dívida</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-3">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="stat-icon text-success"><i class="bi bi-check-circle"></i></div>
+        <div class="stat-value">{{nPagas}}</div>
+        <div class="stat-label">Quotas pagas</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-3">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="stat-icon text-warning"><i class="bi bi-hourglass-split"></i></div>
+        <div class="stat-value">{{nPendentes}}</div>
+        <div class="stat-label">Quotas pendentes</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-3">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="stat-icon text-danger"><i class="bi bi-exclamation-triangle"></i></div>
+        <div class="stat-value">{{nVencidas}}</div>
+        <div class="stat-label">Quotas vencidas</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-12 col-md-4">
+    <div class="card h-100">
+      <div class="card-header bg-white"><i class="bi bi-building me-1"></i>Gestão</div>
+      <div class="card-body">
+        <p class="mb-2"><span class="text-muted">Frações:</span> <strong>{{nFracoes}}</strong></p>
+        <p class="mb-2"><span class="text-muted">Condóminos:</span> <strong>{{nPessoas}}</strong></p>
+        <p class="mb-0"><span class="text-muted">Utilizadores:</span> <strong>{{nUsers}}</strong></p>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-md-8">
+    <div class="card h-100">
+      <div class="card-header bg-white"><i class="bi bi-list-check me-1"></i>Ações rápidas</div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-12 col-md-6"><a href="/admin/quotas/gerar" class="btn btn-outline-primary w-100"><i class="bi bi-magic me-1"></i>Gerar quotas</a></div>
+          <div class="col-12 col-md-6"><a href="/admin/pagamentos/nova" class="btn btn-outline-primary w-100"><i class="bi bi-cash-coin me-1"></i>Registar pagamento</a></div>
+          <div class="col-12 col-md-6"><a href="/admin/despesas/nova" class="btn btn-outline-primary w-100"><i class="bi bi-credit-card me-1"></i>Nova despesa</a></div>
+          <div class="col-12 col-md-6"><a href="/admin/fracoes/nova" class="btn btn-outline-primary w-100"><i class="bi bi-plus-lg me-1"></i>Nova fração</a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-diagram-3 me-1"></i>Sistema</div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-6 col-md-3">
+            <div class="stat-label">Google Drive</div>
+            {{#if sistema.driveLigado}}<span class="badge text-bg-success">🟢 Ligado</span>{{else}}<span class="badge text-bg-secondary">⚪ Não configurado</span>{{/if}}
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="stat-label">Email (SMTP)</div>
+            {{#if sistema.smtp}}<span class="badge text-bg-success">🟢 Configurado</span>{{else}}<span class="badge text-bg-secondary">⚪ Não configurado</span>{{/if}}
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="stat-label">Último backup</div>
+            {{#if sistema.ultimoBackup}}
+              <span class="text-muted small">{{formatDateTime sistema.ultimoBackup.data}}</span>
+              {{#if (eq sistema.ultimoBackup.estado 'concluido')}}<span class="badge text-bg-success">Concluído</span>
+              {{else if (eq sistema.ultimoBackup.estado 'erro')}}<span class="badge text-bg-danger">🔴 Erro</span>
+              {{else}}<span class="badge text-bg-warning">Em curso</span>{{/if}}
+            {{else}}
+              <span class="text-muted small">Sem backups</span>
+            {{/if}}
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="stat-label">Fila de email</div>
+            <span class="text-muted small">{{sistema.filaPendentes}} pendentes · {{sistema.filaErros}} erros</span>
+            <form action="/admin/sistema/backup" method="POST" class="mt-2">
+              <button class="btn btn-sm btn-outline-primary">Backup manual</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

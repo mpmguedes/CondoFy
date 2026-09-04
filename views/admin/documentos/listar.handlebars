@@ -1,0 +1,56 @@
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h1 class="h3 mb-0"><i class="bi bi-folder2-open me-2"></i>Documentos</h1>
+  <a href="/admin/documentos/nova" class="btn btn-primary"><i class="bi bi-upload me-1"></i>Novo documento</a>
+</div>
+
+{{#unless driveLigado}}
+<div class="alert alert-warning"><i class="bi bi-info-circle me-1"></i>Google Drive não configurado — o upload de ficheiros ficará indisponível até configurar o <code>.env</code>.</div>
+{{/unless}}
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Nome</th>
+          <th>Tipo</th>
+          <th>Data</th>
+          <th>Tamanho</th>
+          <th>Drive</th>
+          <th class="text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each documentos}}
+        <tr>
+          <td class="fw-semibold">{{nome}}</td>
+          <td>
+            {{#if (eq tipo 'ata')}}Ata
+            {{else if (eq tipo 'convocatoria')}}Convocatória
+            {{else if (eq tipo 'aviso_quota')}}Aviso de quota
+            {{else if (eq tipo 'recibo')}}Recibo
+            {{else if (eq tipo 'fatura')}}Fatura
+            {{else if (eq tipo 'contrato')}}Contrato
+            {{else if (eq tipo 'orcamento')}}Orçamento
+            {{else if (eq tipo 'relatorio')}}Relatório
+            {{else}}Outro{{/if}}
+          </td>
+          <td>{{formatDate data}}</td>
+          <td>{{#if tamanho}}{{tamanho}} B{{else}}—{{/if}}</td>
+          <td>
+            {{#if url}}<a href="{{url}}" target="_blank" class="badge text-bg-primary text-decoration-none">Ver</a>
+            {{else}}<span class="badge text-bg-secondary">—</span>{{/if}}
+          </td>
+          <td class="text-end">
+            <form action="/admin/documentos/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar este documento?');">
+              <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="6" class="text-center text-muted py-4">Sem documentos.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>

@@ -1,0 +1,23 @@
+<div class="auth-wrap">
+  <div class="auth-card card shadow-sm">
+    <div class="card-body p-4 p-md-5">
+      <div class="text-center mb-4">
+        <img src="/img/logo.png" alt="Condofy" class="login-logo mx-auto d-block mb-3" />
+        <h1 class="h4 mb-1">Recuperar palavra-passe</h1>
+        <p class="text-muted mb-0">Indique o seu email para receber instruções.</p>
+      </div>
+
+      <form action="/recuperar" method="POST">
+        <div class="mb-3">
+          <label for="email" class="form-label">Email</label>
+          <input type="email" class="form-control" id="email" name="email" autocomplete="email" required autofocus />
+        </div>
+        <button type="submit" class="btn btn-primary w-100">Enviar instruções</button>
+      </form>
+
+      <div class="text-center mt-3">
+        <a href="/login" class="small">Voltar ao início de sessão</a>
+      </div>
+    </div>
+  </div>
+</div>

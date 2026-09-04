@@ -1,0 +1,83 @@
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0"><i class="bi bi-megaphone me-2"></i>{{aviso.assunto}}</h1>
+  <a href="/admin/avisos" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-5">
+    <div class="card mb-3">
+      <div class="card-body">
+        <p class="text-muted mb-1">
+          {{#if (eq aviso.tipo 'automatico')}}<span class="badge text-bg-info">Automático</span>
+          {{else if (eq aviso.tipo 'programado')}}<span class="badge text-bg-warning">Programado</span>
+          {{else}}<span class="badge text-bg-primary">Manual</span>{{/if}}
+          {{#if aviso.data_programada}}<span class="ms-2">envio em {{formatDate aviso.data_programada}}</span>{{/if}}
+        </p>
+        <p class="mb-0">{{aviso.mensagem}}</p>
+        {{#if aviso.documento}}<p class="mt-2 mb-0 small">Documento: <a href="{{aviso.documento.url}}" target="_blank">{{aviso.documento.nome}}</a></p>{{/if}}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-envelope me-1"></i>Envio</span>
+        <span class="badge text-bg-light border">Serão enviados {{destinatarios.length}} avisos</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-2">Confirme antes de enviar. O envio é processado em fila (sem sobrecarregar o servidor).</p>
+        <form action="/admin/avisos/{{aviso.id}}/enviar" method="POST">
+          <button type="submit" class="btn btn-primary w-100" {{#unless smtp}}disabled title="SMTP não configurado"{{/unless}}>
+            <i class="bi bi-send me-1"></i>Enviar
+          </button>
+        </form>
+        {{#unless smtp}}
+        <p class="text-muted small mt-2 mb-0">SMTP não configurado — configure o <code>.env</code> para poder enviar.</p>
+        {{/unless}}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-7">
+    <div class="card mb-3">
+      <div class="card-header bg-white"><i class="bi bi-people me-1"></i>Destinatários</div>
+      <ul class="list-group list-group-flush">
+        {{#each destinatarios}}
+        <li class="list-group-item d-flex justify-content-between">
+          <span>{{#if pessoa}}{{pessoa.nome}}{{else}}—{{/if}}</span>
+          <span class="text-muted small">{{#if pessoa}}{{pessoa.email}}{{else}}sem email{{/if}}</span>
+        </li>
+        {{else}}
+        <li class="list-group-item text-muted">Sem destinatários.</li>
+        {{/each}}
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-list-check me-1"></i>Resultado dos envios</div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead class="table-light">
+            <tr><th>Destinatário</th><th>Estado</th><th>Data enviada</th><th>Tentativas</th></tr>
+          </thead>
+          <tbody>
+            {{#each envios}}
+            <tr>
+              <td>{{destinatario_email}}</td>
+              <td>
+                {{#if (eq estado 'enviado')}}<span class="badge text-bg-success">Enviado</span>
+                {{else if (eq estado 'erro')}}<span class="badge text-bg-danger">Erro</span>
+                {{else if (eq estado 'cancelado')}}<span class="badge text-bg-secondary">Cancelado</span>
+                {{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}
+              </td>
+              <td>{{#if data_enviada}}{{formatDateTime data_enviada}}{{else}}—{{/if}}</td>
+              <td>{{tentativas}}</td>
+            </tr>
+            {{else}}
+            <tr><td colspan="4" class="text-center text-muted py-3">Ainda não há envios.</td></tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

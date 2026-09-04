@@ -1,0 +1,51 @@
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0"><i class="bi bi-bank me-2"></i>{{titulo}}</h1>
+  <a href="/admin/contas" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+</div>
+
+<div class="row">
+  <div class="col-12 col-lg-7">
+    <div class="card">
+      <div class="card-body">
+        <form action="{{#if conta}}/admin/contas/{{conta.id}}{{else}}/admin/contas{{/if}}" method="POST">
+          <div class="mb-3">
+            <label class="form-label">Nome *</label>
+            <input type="text" class="form-control" name="nome" value="{{conta.nome}}" required placeholder="ex.: Conta corrente" />
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Banco</label>
+              <input type="text" class="form-control" name="banco" value="{{conta.banco}}" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">IBAN</label>
+              <input type="text" class="form-control" name="iban" value="{{conta.iban}}" placeholder="PT50 ..." />
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Tipo</label>
+              <select class="form-select" name="tipo">
+                <option value="corrente" {{selected conta.tipo 'corrente'}}>Corrente</option>
+                <option value="poupanca" {{selected conta.tipo 'poupanca'}}>Poupança</option>
+                <option value="fundo_reserva" {{selected conta.tipo 'fundo_reserva'}}>Fundo de reserva</option>
+                <option value="outro" {{selected conta.tipo 'outro'}}>Outra</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Saldo inicial (€)</label>
+              <input type="text" class="form-control" name="saldo_inicial" value="{{conta.saldo_inicial}}" placeholder="0,00" />
+            </div>
+          </div>
+          {{#if conta}}
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="ativa" name="ativa" {{#if conta.ativa}}checked{{/if}} />
+            <label class="form-check-label" for="ativa">Ativa</label>
+          </div>
+          {{/if}}
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

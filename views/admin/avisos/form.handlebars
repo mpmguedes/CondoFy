@@ -1,0 +1,112 @@
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0"><i class="bi bi-megaphone me-2"></i>{{titulo}}</h1>
+  <a href="/admin/avisos" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+</div>
+
+{{#unless smtp}}
+<div class="alert alert-warning"><i class="bi bi-info-circle me-1"></i>SMTP não configurado — os emails ficarão na fila (não serão enviados) até configurar o <code>.env</code>.</div>
+{{/unless}}
+
+<form action="/admin/avisos" method="POST">
+  <div class="row g-4">
+    <div class="col-12 col-lg-7">
+      <div class="card">
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Tipo</label>
+              <select class="form-select" name="tipo" id="tipoAviso">
+                <option value="manual">Manual</option>
+                <option value="programado">Programado</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3 d-none" id="campoData">
+              <label class="form-label">Data de envio</label>
+              <input type="date" class="form-control" name="data_programada" />
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Assunto *</label>
+            <input type="text" class="form-control" name="assunto" required />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Mensagem</label>
+            <textarea class="form-control" name="mensagem" rows="4"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Documento (opcional)</label>
+            <select class="form-select" name="documento_id">
+              <option value="">— Sem documento —</option>
+              {{#each documentos}}
+              <option value="{{id}}">{{nome}}</option>
+              {{/each}}
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-5">
+      <div class="card">
+        <div class="card-header bg-white"><i class="bi bi-people me-1"></i>Destinatários</div>
+        <div class="card-body">
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="radio" name="modo" id="modoTodos" value="todos" checked />
+            <label class="form-check-label" for="modoTodos">☑ Todos os condóminos</label>
+          </div>
+
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="radio" name="modo" id="modoFracoes" value="fracoes" />
+            <label class="form-check-label" for="modoFracoes">Determinadas frações</label>
+          </div>
+          <div class="mb-3 d-none" id="campoFracoes">
+            {{#each fracoes}}
+            <div class="form-check ms-3">
+              <input class="form-check-input" type="checkbox" name="fracoes" id="f{{id}}" value="{{id}}" />
+              <label class="form-check-label" for="f{{id}}">{{designacao}}</label>
+            </div>
+            {{/each}}
+          </div>
+
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="radio" name="modo" id="modoPessoas" value="pessoas" />
+            <label class="form-check-label" for="modoPessoas">Determinados condóminos</label>
+          </div>
+          <div class="mb-3 d-none" id="campoPessoas">
+            {{#each pessoas}}
+            <div class="form-check ms-3">
+              <input class="form-check-input" type="checkbox" name="pessoas" id="p{{id}}" value="{{id}}" />
+              <label class="form-check-label" for="p{{id}}">{{nome}}</label>
+            </div>
+            {{/each}}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-3">
+    <button type="submit" class="btn btn-primary">Criar aviso</button>
+  </div>
+</form>
+
+<script>
+  const tipo = document.getElementById('tipoAviso');
+  const campoData = document.getElementById('campoData');
+  const rTodos = document.getElementById('modoTodos');
+  const rFracoes = document.getElementById('modoFracoes');
+  const rPessoas = document.getElementById('modoPessoas');
+  const cFracoes = document.getElementById('campoFracoes');
+  const cPessoas = document.getElementById('campoPessoas');
+  function alternarTipo() { campoData.classList.toggle('d-none', tipo.value !== 'programado'); }
+  function alternarDest() {
+    cFracoes.classList.toggle('d-none', !rFracoes.checked);
+    cPessoas.classList.toggle('d-none', !rPessoas.checked);
+  }
+  tipo.addEventListener('change', alternarTipo);
+  rTodos.addEventListener('change', alternarDest);
+  rFracoes.addEventListener('change', alternarDest);
+  rPessoas.addEventListener('change', alternarDest);
+  alternarTipo();
+  alternarDest();
+</script>
