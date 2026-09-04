@@ -24,6 +24,9 @@ const {
   ContaBancaria,
   Categoria,
   MetodoPagamento,
+  Orcamento,
+  OrcamentoRubrica,
+  OrcamentoAlteracao,
   OrcamentoItem,
   Quota,
   Pagamento,
@@ -86,8 +89,21 @@ Despesa.belongsTo(Categoria, { foreignKey: 'categoria_id', as: 'categoria' });
 Despesa.belongsTo(ContaBancaria, { foreignKey: 'conta_bancaria_id', as: 'conta_bancaria' });
 Despesa.belongsTo(MetodoPagamento, { foreignKey: 'metodo_pagamento_id', as: 'metodo_pagamento' });
 
-// Orçamento
+// Orçamento (modelo antigo, mantido por compatibilidade)
 OrcamentoItem.belongsTo(Categoria, { foreignKey: 'categoria_id', as: 'categoria' });
+
+// Orçamento (novo modelo: entidade + rubricas + histórico de alterações)
+Orcamento.belongsTo(User, { foreignKey: 'aprovado_por', as: 'aprovador' });
+Orcamento.belongsTo(Assembleia, { foreignKey: 'assembleia_id', as: 'assembleia' });
+Orcamento.belongsTo(Documento, { foreignKey: 'documento_id', as: 'documento' });
+Orcamento.hasMany(OrcamentoRubrica, { foreignKey: 'orcamento_id', as: 'rubricas' });
+OrcamentoRubrica.belongsTo(Orcamento, { foreignKey: 'orcamento_id', as: 'orcamento' });
+OrcamentoRubrica.belongsTo(Categoria, { foreignKey: 'categoria_id', as: 'categoria' });
+Orcamento.hasMany(OrcamentoAlteracao, { foreignKey: 'orcamento_id', as: 'alteracoes' });
+OrcamentoAlteracao.belongsTo(Orcamento, { foreignKey: 'orcamento_id', as: 'orcamento' });
+OrcamentoAlteracao.belongsTo(User, { foreignKey: 'utilizador_id', as: 'utilizador' });
+OrcamentoAlteracao.belongsTo(Assembleia, { foreignKey: 'assembleia_id', as: 'assembleia' });
+OrcamentoAlteracao.belongsTo(Documento, { foreignKey: 'documento_id', as: 'documento' });
 
 // Documentos
 Documento.belongsTo(User, { foreignKey: 'created_by', as: 'criador' });
