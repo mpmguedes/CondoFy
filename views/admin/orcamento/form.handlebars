@@ -1,0 +1,35 @@
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0"><i class="bi bi-graph-up me-2"></i>{{titulo}}</h1>
+  <a href="/admin/orcamento" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+</div>
+
+<div class="row">
+  <div class="col-12 col-lg-7">
+    <div class="card">
+      <div class="card-body">
+        <form action="/admin/orcamento" method="POST">
+          <div class="mb-3">
+            <label class="form-label">Designação *</label>
+            <input type="text" class="form-control" name="designacao" required placeholder="ex.: Orçamento 2027" />
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Início *</label>
+              <input type="date" class="form-control" name="data_inicio" required />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Fim *</label>
+              <input type="date" class="form-control" name="data_fim" required />
+            </div>
+          </div>
+          <div class="form-text mb-3">O período tem de corresponder exatamente a 1 ano (ex.: 01/01/2027 → 31/12/2027, ou 01/07/2027 → 30/06/2028).</div>
+          <div class="mb-3">
+            <label class="form-label">Observações</label>
+            <textarea class="form-control" name="observacoes" rows="3"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Criar orçamento</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

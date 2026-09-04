@@ -1,0 +1,41 @@
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h1 class="h3 mb-0"><i class="bi bi-graph-up me-2"></i>Orçamentos</h1>
+  <a href="/admin/orcamento/nova" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Novo orçamento</a>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Designação</th>
+          <th>Período</th>
+          <th>Estado</th>
+          <th class="text-end">Total</th>
+          <th class="text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each orcamentos}}
+        <tr>
+          <td class="fw-semibold">{{designacao}}</td>
+          <td class="text-nowrap">{{formatDate data_inicio}} — {{formatDate data_fim}}</td>
+          <td>
+            {{#if (eq estado 'rascunho')}}<span class="badge text-bg-secondary">Rascunho</span>
+            {{else if (eq estado 'aprovado')}}<span class="badge text-bg-success">Aprovado</span>
+            {{else if (eq estado 'em_execucao')}}<span class="badge text-bg-primary">Em execução</span>
+            {{else if (eq estado 'encerrado')}}<span class="badge text-bg-dark">Encerrado</span>
+            {{else}}<span class="badge text-bg-danger">Anulado</span>{{/if}}
+          </td>
+          <td class="text-end fw-semibold">{{eur total}}</td>
+          <td class="text-end">
+            <a href="/admin/orcamento/{{id}}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-eye"></i></a>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="5" class="text-center text-muted py-4">Sem orçamentos. <a href="/admin/orcamento/nova">Criar orçamento</a>.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>

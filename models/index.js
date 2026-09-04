@@ -66,6 +66,8 @@ FracaoPessoa.belongsTo(Pessoa, { foreignKey: 'pessoa_id', as: 'pessoa' });
 // Quotas
 Quota.belongsTo(Fracao, { foreignKey: 'fracao_id', as: 'fracao' });
 Fracao.hasMany(Quota, { foreignKey: 'fracao_id', as: 'quotas' });
+Quota.belongsTo(Orcamento, { foreignKey: 'orcamento_id', as: 'orcamento' });
+Orcamento.hasMany(Quota, { foreignKey: 'orcamento_id', as: 'quotas' });
 
 // Pagamentos ↔ Quotas (distribuição de pagamentos parciais)
 Pagamento.belongsTo(Fracao, { foreignKey: 'fracao_id', as: 'fracao' });

@@ -1,0 +1,50 @@
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0"><i class="bi bi-send me-2"></i>{{titulo}}</h1>
+  <a href="/admin/orcamento/{{orcamento.id}}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-6">
+    <div class="card">
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-6">Orçamento ativo</dt><dd class="col-6">{{orcamento.designacao}}</dd>
+          <dt class="col-6">Período</dt><dd class="col-6">{{formatDate orcamento.data_inicio}} — {{formatDate orcamento.data_fim}}</dd>
+        </dl>
+      </div>
+    </div>
+
+    {{#if proximoMes}}
+    <div class="card mt-3">
+      <div class="card-header bg-white"><i class="bi bi-calendar-event me-1"></i>Próxima emissão</div>
+      <div class="card-body">
+        <dl class="row mb-3">
+          <dt class="col-6">Período a emitir</dt><dd class="col-6">{{monthName proximoMes}} {{proximoAno}}</dd>
+          <dt class="col-6">Frações</dt><dd class="col-6">{{nFracoes}}</dd>
+          <dt class="col-6">Total a emitir</dt><dd class="col-6 fw-semibold">{{eur total}}</dd>
+        </dl>
+        <form action="/admin/orcamento/{{orcamento.id}}/emitir" method="POST">
+          <input type="hidden" name="ano" value="{{proximoAno}}" />
+          <input type="hidden" name="mes" value="{{proximoMes}}" />
+          <button type="submit" class="btn btn-primary"><i class="bi bi-send me-1"></i>Emitir avisos</button>
+        </form>
+      </div>
+    </div>
+    {{else}}
+    <div class="alert alert-info mt-3">Não há quotas planeadas por emitir. Gere primeiro o <strong>plano de quotas</strong>.</div>
+    {{/if}}
+  </div>
+
+  <div class="col-12 col-lg-6">
+    {{#if meses}}
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-list me-1"></i>Períodos no plano</div>
+      <ul class="list-group list-group-flush">
+        {{#each meses}}
+        <li class="list-group-item small">{{monthName mes}} {{ano}}</li>
+        {{/each}}
+      </ul>
+    </div>
+    {{/if}}
+  </div>
+</div>

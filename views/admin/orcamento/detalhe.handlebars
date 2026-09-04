@@ -1,0 +1,159 @@
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <div>
+    <h1 class="h3 mb-1">{{orcamento.designacao}}</h1>
+    <p class="text-muted mb-0">
+      {{formatDate orcamento.data_inicio}} — {{formatDate orcamento.data_fim}}
+      {{#if (eq orcamento.estado 'rascunho')}}<span class="badge text-bg-secondary ms-2">Rascunho</span>
+      {{else if (eq orcamento.estado 'aprovado')}}<span class="badge text-bg-success ms-2">Aprovado</span>
+      {{else if (eq orcamento.estado 'em_execucao')}}<span class="badge text-bg-primary ms-2">Em execução</span>
+      {{else if (eq orcamento.estado 'encerrado')}}<span class="badge text-bg-dark ms-2">Encerrado</span>
+      {{else}}<span class="badge text-bg-danger ms-2">Anulado</span>{{/if}}
+    </p>
+  </div>
+  <a href="/admin/orcamento" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Total do orçamento</div>
+      <div class="stat-value">{{eur total}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Rubricas</div>
+      <div class="stat-value">{{orcamento.rubricas.length}}</div>
+    </div></div>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header bg-white"><i class="bi bi-lightning-charge me-1"></i>Ações</div>
+  <div class="card-body d-flex flex-wrap gap-2">
+    {{#if (eq orcamento.estado 'rascunho')}}
+    <form action="/admin/orcamento/{{orcamento.id}}/aprovar" method="POST">
+      <button class="btn btn-success"><i class="bi bi-check-lg me-1"></i>Aprovar orçamento</button>
+    </form>
+    {{/if}}
+    <a href="/admin/orcamento/{{orcamento.id}}/distribuicao" class="btn btn-outline-primary"><i class="bi bi-diagram-3 me-1"></i>Distribuição</a>
+    <form action="/admin/orcamento/{{orcamento.id}}/plano" method="POST" onsubmit="return confirm('Gerar o plano de quotas a partir da distribuição?');">
+      <button class="btn btn-outline-primary"><i class="bi bi-calendar3 me-1"></i>Gerar plano de quotas</button>
+    </form>
+    <a href="/admin/orcamento/{{orcamento.id}}/emitir" class="btn btn-outline-primary"><i class="bi bi-send me-1"></i>Emitir quotas</a>
+    <a href="/admin/orcamento/{{orcamento.id}}/historico" class="btn btn-outline-secondary"><i class="bi bi-clock-history me-1"></i>Histórico</a>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header bg-white"><i class="bi bi-list-ul me-1"></i>Rubricas</div>
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Descrição</th>
+          <th>Categoria</th>
+          <th class="text-end">Valor anual</th>
+          <th>Distribuição</th>
+          <th>Periodicidade</th>
+          <th class="text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each orcamento.rubricas}}
+        <tr>
+          <td class="fw-semibold">{{descricao}}</td>
+          <td>{{#if categoria}}{{categoria.nome}}{{else}}—{{/if}}</td>
+          <td class="text-end">{{eur valor_anual}}</td>
+          <td>{{metodo_distribuicao}}</td>
+          <td>{{periodicidade}}</td>
+          <td class="text-end text-nowrap">
+            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#edit{{id}}"><i class="bi bi-pencil"></i></button>
+            {{#if (eq ../orcamento.estado 'rascunho')}}
+            <form action="/admin/orcamento/{{../orcamento.id}}/rubricas/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Remover esta rubrica?');">
+              <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+            </form>
+            {{/if}}
+          </td>
+        </tr>
+        <tr class="collapse" id="edit{{id}}">
+          <td colspan="6" class="bg-light">
+            <form action="/admin/orcamento/{{../orcamento.id}}/rubricas/{{id}}/alterar" method="POST" class="row g-2 align-items-end p-2">
+              <div class="col-md-3">
+                <label class="form-label">Novo valor anual (€)</label>
+                <input type="text" class="form-control" name="valor_novo" value="{{valor_anual}}" required />
+              </div>
+              <div class="col-md-5">
+                <label class="form-label">Justificação {{#unless (eq ../orcamento.estado 'rascunho')}}(obrigatória){{/unless}}</label>
+                <input type="text" class="form-control" name="justificacao" placeholder="Ex.: deliberação da assembleia de ..." />
+              </div>
+              <div class="col-md-3">
+                <button class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Guardar alteração</button>
+              </div>
+            </form>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="6" class="text-center text-muted py-4">Sem rubricas.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+
+  {{#if (eq orcamento.estado 'rascunho')}}
+  <div class="card-body border-top">
+    <form action="/admin/orcamento/{{orcamento.id}}/rubricas" method="POST" class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">Descrição</label>
+        <input type="text" class="form-control" name="descricao" required />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Categoria</label>
+        <select class="form-select" name="categoria_id">
+          <option value="">—</option>
+          {{#each categorias}}<option value="{{id}}">{{nome}}</option>{{/each}}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Valor anual (€)</label>
+        <input type="text" class="form-control" name="valor_anual" required />
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Distribuição</label>
+        <select class="form-select" name="metodo_distribuicao">
+          <option value="permilagem">Permilagem</option>
+          <option value="igual">Igual</option>
+          <option value="valor_fixo">Valor fixo</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Periodicidade</label>
+        <select class="form-select" name="periodicidade">
+          <option value="mensal">Mensal</option>
+          <option value="trimestral">Trimestral</option>
+          <option value="semestral">Semestral</option>
+          <option value="anual">Anual</option>
+          <option value="unica">Única</option>
+        </select>
+      </div>
+      <div class="col-md-12 mt-2">
+        <button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar rubrica</button>
+      </div>
+    </form>
+  </div>
+  {{/if}}
+</div>
+
+{{#if alteracoes}}
+<div class="card">
+  <div class="card-header bg-white"><i class="bi bi-clock-history me-1"></i>Últimas alterações</div>
+  <ul class="list-group list-group-flush">
+    {{#each alteracoes}}
+    <li class="list-group-item d-flex justify-content-between">
+      <span>{{tipo_alteracao}} {{#if entidade_alterada}}({{entidade_alterada}}){{/if}} {{#if valor_anterior}}{{eur valor_anterior}} → {{eur valor_novo}}{{/if}}</span>
+      <span class="text-muted small">{{#if utilizador}}{{utilizador.nome}}{{/if}} · {{formatDateTime data_alteracao}}</span>
+    </li>
+    {{/each}}
+  </ul>
+</div>
+{{/if}}
