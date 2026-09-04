@@ -21,6 +21,7 @@ const { resumoCondominio, resumoFracao, estadoEfetivo } = require('../helpers/sa
 const { getCondominio } = require('../helpers/condominio');
 const { proximoNumero } = require('../helpers/numeracao');
 const { registarPagamento, anularPagamento } = require('../helpers/pagamentos');
+const { sincronizarMovimentoDespesa } = require('../helpers/movimentos');
 const { gerarAvisoQuotaPDF, gerarReciboPDF } = require('../helpers/pdf');
 const { resolverDestinatarios } = require('../helpers/avisos');
 const { enfileirarEmail } = require('../helpers/email-fila');
@@ -172,6 +173,7 @@ router.post('/despesas', async (req, res) => {
     observacoes,
     estado: estado || 'registada',
   });
+  await sincronizarMovimentoDespesa(despesa, req.user.id);
   await audit({ userId: req.user.id, acao: 'criar_despesa', entidade: 'Despesa', entidadeId: despesa.id });
   req.flash('success_msg', 'Despesa criada.');
   res.redirect('/admin/despesas');
@@ -206,6 +208,7 @@ router.post('/despesas/:id', async (req, res) => {
     observacoes,
     estado: estado || 'registada',
   });
+  await sincronizarMovimentoDespesa(despesa, req.user.id);
   await audit({ userId: req.user.id, acao: 'editar_despesa', entidade: 'Despesa', entidadeId: despesa.id });
   req.flash('success_msg', 'Despesa atualizada.');
   res.redirect('/admin/despesas');
@@ -215,6 +218,7 @@ router.post('/despesas/:id/anular', async (req, res) => {
   const despesa = await Despesa.findByPk(req.params.id);
   if (despesa) {
     await despesa.update({ estado: 'anulada' });
+    await sincronizarMovimentoDespesa(despesa, req.user.id);
     await audit({ userId: req.user.id, acao: 'anular_despesa', entidade: 'Despesa', entidadeId: despesa.id });
   }
   req.flash('success_msg', 'Despesa anulada.');
@@ -407,6 +411,7 @@ router.post('/pagamentos', async (req, res) => {
       contaBancariaId: conta_bancaria_id || null,
       referencia,
       observacoes,
+      userId: req.user.id,
     });
     await audit({ userId: req.user.id, acao: 'registar_pagamento', entidade: 'Pagamento', entidadeId: resultado.pagamento.id });
 

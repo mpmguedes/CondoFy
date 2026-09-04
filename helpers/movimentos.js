@@ -72,6 +72,43 @@ async function registarTransferencia({ contaOrigemId, contaDestinoId, valor, dat
   }
 }
 
+// Sincroniza o movimento bancário de saída de uma despesa com o seu estado:
+// - despesa 'paga' com conta → garante um movimento de saída;
+// - caso contrário → anula o movimento existente.
+async function sincronizarMovimentoDespesa(despesa, userId, transaction) {
+  const movimento = await MovimentoBancario.findOne({ where: { despesa_id: despesa.id }, transaction });
+  if (despesa.estado === 'paga' && despesa.conta_bancaria_id) {
+    if (movimento) {
+      if (movimento.estado === 'confirmado') {
+        await movimento.update(
+          {
+            conta_bancaria_id: despesa.conta_bancaria_id,
+            data: despesa.data || new Date(),
+            valor: despesa.valor,
+            descricao: despesa.descricao,
+            categoria_id: despesa.categoria_id,
+          },
+          { transaction }
+        );
+      }
+    } else {
+      await criarMovimento({
+        contaBancariaId: despesa.conta_bancaria_id,
+        data: despesa.data || new Date(),
+        tipo: 'saida',
+        valor: despesa.valor,
+        descricao: despesa.descricao,
+        categoriaId: despesa.categoria_id,
+        despesaId: despesa.id,
+        userId,
+        transaction,
+      });
+    }
+  } else if (movimento && movimento.estado === 'confirmado') {
+    await movimento.update({ estado: 'anulado' }, { transaction });
+  }
+}
+
 // Saldo de uma conta calculado pelos movimentos: saldo inicial + entradas − saídas.
 async function saldoContaMovimentos(conta) {
   const [entradas, saidas] = await Promise.all([
@@ -81,4 +118,4 @@ async function saldoContaMovimentos(conta) {
   return fromCents(toCents(conta.saldo_inicial) + toCents(entradas) - toCents(saidas));
 }
 
-module.exports = { criarMovimento, registarTransferencia, saldoContaMovimentos };
+module.exports = { criarMovimento, registarTransferencia, sincronizarMovimentoDespesa, saldoContaMovimentos };

@@ -7,6 +7,7 @@ const {
   OrcamentoItem,
 } = require('../models');
 const { toCents, fromCents } = require('./money');
+const { saldoContaMovimentos } = require('./movimentos');
 
 // Estado efetivo de uma quota: 'vencida' quando passa o vencimento sem estar paga.
 function estadoEfetivo(quota) {
@@ -54,13 +55,9 @@ async function resumoFracao(fracaoId) {
   };
 }
 
-// Saldo de uma conta bancária (saldo inicial + entradas − saídas).
+// Saldo de uma conta bancária calculado pelos movimentos (saldo inicial + entradas − saídas).
 async function saldoConta(conta) {
-  const [recebido, gasto] = await Promise.all([
-    Pagamento.sum('valor', { where: { conta_bancaria_id: conta.id, estado: 'confirmado' } }),
-    Despesa.sum('valor', { where: { conta_bancaria_id: conta.id, estado: { [Op.ne]: 'anulada' } } }),
-  ]);
-  return fromCents(toCents(conta.saldo_inicial) + toCents(recebido) - toCents(gasto));
+  return saldoContaMovimentos(conta);
 }
 
 // Resumo financeiro global do condomínio.

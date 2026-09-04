@@ -1,8 +1,9 @@
 const sequelize = require('../config/database');
 const { Op } = require('sequelize');
-const { Quota, Pagamento, PagamentoQuota } = require('../models');
+const { Quota, Pagamento, PagamentoQuota, MovimentoBancario } = require('../models');
 const { toCents, fromCents } = require('./money');
 const { proximoNumero } = require('./numeracao');
+const { criarMovimento } = require('./movimentos');
 
 // Recalcula o estado de uma quota a partir dos pagamentos confirmados.
 async function recalcularEstadoQuota(quotaId, transaction) {
@@ -28,6 +29,7 @@ async function recalcularEstadoQuota(quotaId, transaction) {
 }
 
 // Regista um pagamento e distribui-o pelas quotas em aberto (FIFO).
+// Cria o movimento bancário de entrada quando há conta bancária.
 // Devolve { pagamento, excedente } (excedente = valor não aplicado, crédito).
 async function registarPagamento({
   fracaoId,
@@ -37,6 +39,7 @@ async function registarPagamento({
   contaBancariaId,
   referencia,
   observacoes,
+  userId,
 }) {
   const t = await sequelize.transaction();
   try {
@@ -57,6 +60,20 @@ async function registarPagamento({
       },
       { transaction: t }
     );
+
+    if (contaBancariaId) {
+      await criarMovimento({
+        contaBancariaId,
+        data: dataPagamento || new Date(),
+        tipo: 'entrada',
+        valor: fromCents(valorC),
+        descricao: `Pagamento ${numero}`,
+        referencia,
+        pagamentoId: pagamento.id,
+        userId,
+        transaction: t,
+      });
+    }
 
     const quotas = await Quota.findAll({
       where: {
@@ -107,6 +124,7 @@ async function registarPagamento({
 }
 
 // Anula um pagamento (mantém o número do documento) e recalcula as quotas afetadas.
+// Anula também o movimento bancário de entrada associado.
 async function anularPagamento(pagamentoId) {
   const t = await sequelize.transaction();
   try {
@@ -116,6 +134,14 @@ async function anularPagamento(pagamentoId) {
       return false;
     }
     await pagamento.update({ estado: 'anulado' }, { transaction: t });
+
+    const movimento = await MovimentoBancario.findOne({
+      where: { pagamento_id: pagamento.id, estado: 'confirmado' },
+      transaction: t,
+    });
+    if (movimento) {
+      await movimento.update({ estado: 'anulado' }, { transaction: t });
+    }
 
     const aplicacoes = await PagamentoQuota.findAll({
       where: { pagamento_id: pagamento.id },
