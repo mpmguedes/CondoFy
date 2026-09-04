@@ -105,7 +105,7 @@ a:hover { color: var(--c-primary-dark); }
   border-bottom: 1px solid var(--c-border);
   flex-shrink: 0;
 }
-.sidebar-logo { height: 30px; width: auto; object-fit: contain; border-radius: 6px; }
+.sidebar-logo { height: 30px; width: auto; max-width: 180px; object-fit: contain; border-radius: 6px; }
 .sidebar-brand-text { font-weight: 700; font-size: 1.05rem; white-space: nowrap; }
 
 .sidebar-nav { flex: 1; overflow-y: auto; padding: var(--sp-3) var(--sp-2); }
@@ -419,7 +419,7 @@ a:hover { color: var(--c-primary-dark); }
 /* ── Auth card ───────────────────────────────────────────────────── */
 .auth-wrap { min-height: 80vh; display: flex; align-items: center; justify-content: center; }
 .auth-card { width: 100%; max-width: 420px; border-radius: 16px; box-shadow: var(--elev-3); }
-.login-logo { height: 64px; width: auto; object-fit: contain; }
+.login-logo { height: 64px; width: auto; max-width: 240px; object-fit: contain; }
 
 /* ── Dropdowns / list groups ─────────────────────────────────────── */
 .dropdown-menu { border: 1px solid var(--c-border); border-radius: var(--radius-sm); box-shadow: var(--elev-3); }
