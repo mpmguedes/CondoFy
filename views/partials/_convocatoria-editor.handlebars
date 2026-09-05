@@ -1,0 +1,130 @@
+{{!--
+  Parcial: editor da convocatória. Recebe "v" (objeto de valores, nunca null).
+  Deve ser usado DENTRO de um <form method="POST" action="/admin/convocatorias">.
+--}}
+
+{{!-- ═══ 1. Dados do condomínio ═══ --}}
+<div class="card mb-4">
+  <div class="card-header bg-white">
+    <span class="material-symbols-outlined me-1 text-muted">apartment</span> Dados do condomínio
+  </div>
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label" for="campoEdificio">Nome do edifício <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="campoEdificio" name="edificio_nome" value="{{v.edificio_nome}}" required placeholder="Ex.: Edifício Residencial Vista Mar" />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="campoNumero">Número da reunião</label>
+        <input type="text" class="form-control" id="campoNumero" name="reuniao_numero" value="{{v.reuniao_numero}}" placeholder="Ex.: 2026/3" />
+        <div class="form-text">Sugerido automaticamente; editável.</div>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="campoAdm">Nome da administração</label>
+        <input type="text" class="form-control" id="campoAdm" name="administracao_nome" value="{{v.administracao_nome}}" placeholder="Ex.: Gestcondomínio, Lda." />
+      </div>
+    </div>
+    <div class="row g-3 mt-1">
+      <div class="col-md-7">
+        <label class="form-label" for="campoMorada">Morada</label>
+        <input type="text" class="form-control" id="campoMorada" name="morada" value="{{v.morada}}" placeholder="Ex.: Rua das Flores, n.º 12" />
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="campoCp">Código postal</label>
+        <input type="text" class="form-control" id="campoCp" name="codigo_postal" value="{{v.codigo_postal}}" placeholder="0000-000" />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="campoCidade">Cidade <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="campoCidade" name="cidade" value="{{v.cidade}}" required placeholder="Ex.: Lisboa" />
+      </div>
+    </div>
+  </div>
+</div>
+
+{{!-- ═══ 2. Dados da assembleia ═══ --}}
+<div class="card mb-4">
+  <div class="card-header bg-white">
+    <span class="material-symbols-outlined me-1 text-muted">event_available</span> Dados da assembleia
+  </div>
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label" for="campoTipo">Tipo de assembleia</label>
+        <select class="form-select" id="campoTipo" name="tipo">
+          <option value="ordinaria" {{#if (eq v.tipo 'ordinaria')}}selected{{/if}}>Assembleia Geral Ordinária</option>
+          <option value="extraordinaria" {{#if (eq v.tipo 'extraordinaria')}}selected{{/if}}>Assembleia Geral Extraordinária</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="campoData">Data da reunião <span class="text-danger">*</span></label>
+        <input type="date" class="form-control" id="campoData" name="data" value="{{v.data}}" required />
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="campoHora">Hora da 1.ª convocatória <span class="text-danger">*</span></label>
+        <input type="time" class="form-control" id="campoHora" name="hora" value="{{v.hora}}" required step="60" />
+      </div>
+    </div>
+
+    <div class="alert alert-light border cv-segunda mt-3 mb-0">
+      <span class="material-symbols-outlined me-1">schedule</span>
+      <span class="me-2">2.ª convocatória (automática, 30 minutos depois):</span>
+      <strong id="segundaHora" class="cv-segunda-hora">—:——</strong>
+    </div>
+
+    <div class="row g-3 mt-1">
+      <div class="col-md-6">
+        <label class="form-label" for="campoLocal">Local da reunião <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="campoLocal" name="local" value="{{v.local}}" required placeholder="Ex.: Salão de festas do edifício, piso 0" />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="campoEmissao">Data de emissão</label>
+        <input type="date" class="form-control" id="campoEmissao" name="data_emissao" value="{{v.data_emissao}}" />
+        <div class="form-text">Data da carta.</div>
+      </div>
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" name="email_autorizado" value="on" id="campoEmail" {{#if v.email_autorizado}}checked{{/if}} />
+          <label class="form-check-label small" for="campoEmail">
+            Comunicação por email autorizada em assembleia anterior
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{!-- ═══ 3. Ordem de trabalhos ═══ --}}
+<div class="card mb-4">
+  <div class="card-header bg-white">
+    <span class="material-symbols-outlined me-1 text-muted">format_list_numbered</span> Ordem de Trabalhos
+  </div>
+  <div class="card-body">
+    <div id="listaPontos" class="cv-pontos">
+      {{#each v.pontos}}
+      <div class="cv-ponto-linha">
+        <span class="cv-ponto-num">{{inc @index}}</span>
+        <input type="text" class="form-control cv-ponto-input" name="pontos[]" value="{{this}}" placeholder="Descreva o ponto da ordem de trabalhos…" />
+        <button type="button" class="btn btn-outline-secondary btn-sm cv-ponto-btn" data-accao="subir" title="Subir na ordem"><span class="material-symbols-outlined">arrow_upward</span></button>
+        <button type="button" class="btn btn-outline-secondary btn-sm cv-ponto-btn" data-accao="descer" title="Descer na ordem"><span class="material-symbols-outlined">arrow_downward</span></button>
+        <button type="button" class="btn btn-outline-danger btn-sm cv-ponto-btn" data-accao="remover" title="Eliminar ponto"><span class="material-symbols-outlined">close</span></button>
+      </div>
+      {{/each}}
+    </div>
+    <button type="button" id="btnAdicionarPonto" class="btn btn-outline-primary mt-2">
+      <span class="material-symbols-outlined me-1">add</span>Adicionar ponto
+    </button>
+    <div class="form-text mt-2">
+      Os pontos são numerados automaticamente e apresentados no documento pela ordem definida aqui.
+    </div>
+  </div>
+</div>
+
+{{!-- ═══ Ações ═══ --}}
+<div class="cv-acoes d-flex flex-wrap gap-2">
+  <button type="submit" name="_acao" value="preview" class="btn btn-outline-primary btn-lg">
+    <span class="material-symbols-outlined me-1">visibility</span>Pré-visualizar
+  </button>
+  <button type="submit" name="_acao" value="pdf" class="btn btn-success btn-lg">
+    <span class="material-symbols-outlined me-1">picture_as_pdf</span>Gerar PDF
+  </button>
+</div>

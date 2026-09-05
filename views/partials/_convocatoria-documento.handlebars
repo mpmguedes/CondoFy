@@ -1,0 +1,68 @@
+{{!--
+  Parcial: reprodução fiel do documento oficial da convocatória.
+  Recebe "doc" (objeto devolvido por construirDocumento). A composição
+  espelha o PDF gerado por helpers/pdf-convocatoria.js.
+--}}
+<div class="cv-sheet">
+  {{!-- Cabeçalho (duas colunas) --}}
+  <div class="cv-head">
+    <div class="cv-head-left">
+      <div class="cv-nome">{{doc.edificioNome}}</div>
+      {{#if doc.morada}}<div class="cv-linha-peq">{{doc.morada}}</div>{{/if}}
+      {{#if (or doc.codigoPostal doc.cidade)}}<div class="cv-linha-peq">{{doc.codigoPostal}} {{doc.cidade}}</div>{{/if}}
+    </div>
+    <div class="cv-head-right">
+      <div class="cv-saudacao">{{doc.textos.saudacaoCabecalho}}</div>
+      <div class="cv-rule"></div>
+      {{#if doc.cidade}}<div class="cv-cidade">{{doc.cidade}}</div>{{/if}}
+    </div>
+  </div>
+
+  {{!-- Assunto e título --}}
+  <div class="cv-assunto">{{doc.textos.rotuloAssunto}}</div>
+  <div class="cv-titulo">{{doc.textos.titulo}}</div>
+  {{#if doc.textos.linhaIdentificacao}}<div class="cv-meta">{{doc.textos.linhaIdentificacao}}</div>{{/if}}
+  <div class="cv-localdata">{{doc.textos.localData}}</div>
+
+  {{!-- Saudação + introdução --}}
+  <div class="cv-saudacao2">{{doc.textos.saudacao}}</div>
+  <p class="cv-paragrafo">{{doc.textos.introducao}}</p>
+
+  {{!-- Ordem de trabalhos --}}
+  <div class="cv-seccao">{{doc.textos.tituloOrdem}}</div>
+  {{#if doc.pontos}}
+    <div class="cv-lista-pontos">
+      {{#each doc.pontos}}
+      <div class="cv-ponto">
+        <span class="cv-num">{{inc @index}}.</span>
+        <span class="cv-txt">{{this}}</span>
+      </div>
+      {{/each}}
+    </div>
+  {{else}}
+    <div class="cv-sem-pontos">{{doc.textos.semPontos}}</div>
+  {{/if}}
+
+  {{!-- Quórum e segunda convocatória --}}
+  <div class="cv-seccao">{{doc.textos.tituloQuorum}}</div>
+  <div class="cv-subseccao">{{doc.textos.subtituloPrimeira}}</div>
+  <p class="cv-paragrafo">{{doc.textos.textoPrimeira}}</p>
+  <div class="cv-subseccao">{{doc.textos.subtituloSegunda}}</div>
+  <p class="cv-paragrafo">{{doc.textos.textoSegunda}}</p>
+  <p class="cv-paragrafo">{{doc.textos.textoRepresentacao}}</p>
+
+  {{!-- Fecho e assinatura --}}
+  <p class="cv-fecho">{{doc.textos.fechoComparacia}}</p>
+  <p class="cv-fecho">{{doc.textos.fechoCumprimentos}}</p>
+  <div class="cv-assinatura">
+    <div class="cv-ass-rotulo">{{doc.textos.assinaturaRotulo}}</div>
+    {{#if doc.administracaoNome}}<div class="cv-ass-nome">{{doc.administracaoNome}}</div>{{/if}}
+  </div>
+
+  {{!-- Rodapé --}}
+  <div class="cv-rodape">
+    <div class="cv-rodape-linea"></div>
+    <div class="cv-rodape-texto">{{doc.textos.rodape}}</div>
+    {{#if doc.emailAutorizado}}<div class="cv-rodape-texto">{{doc.textos.rodapeEmail}}</div>{{/if}}
+  </div>
+</div>

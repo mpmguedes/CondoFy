@@ -2,7 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
 const { formatEUR } = require('./money');
-const { formatDate, diaSemana, formatDateExtenso } = require('./dates');
+const { formatDate } = require('./dates');
+const { gerarConvocatoriaCartaPDF } = require('./pdf-convocatoria');
 
 // ── Constantes de layout (sem números mágicos espalhados) ──────────
 const T = {
@@ -373,184 +374,24 @@ async function gerarReciboPDF(condominio, d) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// CONVOCATÓRIA (página única, layout institucional adaptativo)
+// CONVOCATÓRIA — carta oficial A4 de página única
+// (composição e adaptação automática em helpers/pdf-convocatoria.js)
 // ═══════════════════════════════════════════════════════════════════
-
-// Cores do documento (discretas, institucionais).
-const CONV = {
-  NAVY: '#16324a',      // títulos / administração
-  BLUE: '#2b6cb0',      // acentos (website, numeração)
-  TEXTO: '#1f2937',
-  MUTED: '#5b6472',
-  LINHA: '#d7dde3',
-  FUNDO: '#f4f7fa',     // faixa do título
-};
-
-// Normaliza os pontos: separa por linha, remove numeração manual ("1.", "1)", "1 -")
-// para evitar duplicações ("1. 1. Aprovação…").
-function normalizarPontos(ordemTrabalhos) {
-  const linhas = [];
-  for (const p of ordemTrabalhos || []) {
-    for (const linha of String(p).split(/\r?\n/)) {
-      const t = linha.trim();
-      if (t) linhas.push(t.replace(/^\s*(?:\d{1,3}\s*[.)\-–—:]\s*)+\s*/, '').trim());
-    }
-  }
-  return linhas.filter(Boolean);
-}
-
-function textoPara(doc, texto, x, y, opts = {}) {
-  const font = opts.bold ? T.FONTE_BOLD : T.FONTE;
-  doc.font(font).fontSize(opts.size || T.TEXTO_SIZE).fillColor(opts.color || CONV.TEXTO);
-  doc.text(String(texto ?? ''), x, y, { width: opts.width || T.LARGURA_CONTEUDO, align: opts.align || 'left' });
-}
-
-// Altura de um texto com wrapping (devolve em pt; não desenha).
-function alturaTexto(doc, texto, opts = {}) {
-  const font = opts.bold ? T.FONTE_BOLD : T.FONTE;
-  doc.font(font).fontSize(opts.size || T.TEXTO_SIZE);
-  return doc.heightOfString(String(texto ?? ''), { width: opts.width || T.LARGURA_CONTEUDO }) + (opts.gap || 0);
-}
-
 async function gerarConvocatoriaPDF(condominio, d) {
-  const M = 48;
-  const W = T.LARGURA_PAGINA - M * 2;
-  const TOPO = 44;
-  const RODAPE_Y = 770; // linha de rodapé (acima do limite útil da página)
-  const limiteConteudo = 740; // nunca desenhar conteúdo abaixo disto (reserva rodapé)
-
-  const adminNome = (condominio.administracao_nome || '').trim();
-  const website = (condominio.website || '').trim();
-  const nomeCondominio = (condominio.designacao || '').trim();
-  const morada = [
-    condominio.morada,
-    [condominio.codigo_postal, condominio.localidade].filter(Boolean).join(' '),
-  ].filter(Boolean).join(', ');
-
-  const tipoLabel = d.tipo === 'Urgência' ? 'Extraordinária' : (d.tipo || 'Ordinária');
-  const pontos = normalizarPontos(d.ordemTrabalhos);
-
-  const metaLinha = () => {
-    const partes = [];
-    if (d.numero) partes.push(`Reunião n.º ${d.numero}`);
-    if (d.data) partes.push(formatDateExtenso(d.data));
-    if (d.hora) partes.push(`${d.hora}`);
-    return partes.join(' · ');
-  };
-
-  const textoDestinatario = () => {
-    const dia = d.data ? diaSemana(d.data) : '';
-    const data = d.data ? formatDateExtenso(d.data) : '';
-    const hora = d.hora || '';
-    const local = d.local || 'a designar';
-    return `Nos termos dos artigos 1431.º e 1432.º do Código Civil, com as alterações introduzidas pela Lei n.º 8/2022, de 10 de janeiro, fica V. Exa. convocado(a) para a Assembleia Geral ${tipoLabel} do Condomínio, a realizar` +
-      (dia && data ? ` no dia ${dia}, ${data}, pelas ${hora || '—'} horas, em ${local}.` : ` no dia ${data || '—'}, pelas ${hora || '—'} horas, em ${local}.`);
-  };
-
-  const textoQuorum1 = () => 'A assembleia realizar-se-á em primeira convocatória desde que estejam presentes ou representados condóminos que correspondam a mais de 500‰ do valor total do prédio, nos termos do artigo 1432.º do Código Civil.';
-  const textoQuorum2 = () => `Não se verificando o quórum necessário, fica desde já convocada uma segunda reunião para as ${d.horaSegunda || '—'} horas do mesmo dia e no mesmo local, podendo esta deliberar validamente com a presença ou representação de condóminos que correspondam a pelo menos 250‰ do valor total do prédio, nos termos do artigo 1432.º, n.º 5.`;
-  const textoQuorum3 = () => 'Os condóminos que não possam comparecer poderão fazer-se representar por procurador, mediante procuração escrita, a entregar antes do início da reunião, nos termos do artigo 1432.º, n.º 6 do Código Civil.';
-
-  const numW = 34;
-  const textoW = W - numW;
-
-  // Motor de layout único: desenha (se desenhar=true) e devolve o y final.
-  function montar(doc, { size, gap, desenhar }) {
-    let y = TOPO;
-    const h = (texto, opts) => {
-      const fh = opts.bold ? T.FONTE_BOLD : T.FONTE;
-      const fs = opts.size || T.TEXTO_SIZE;
-      doc.font(fh).fontSize(fs);
-      const alt = doc.heightOfString(String(texto ?? ''), { width: opts.width || W }) + (opts.gap || 0);
-      if (desenhar) {
-        doc.font(fh).fontSize(fs).fillColor(opts.color || CONV.TEXTO);
-        doc.text(String(texto ?? ''), opts.x, y, { width: opts.width || W, align: opts.align || 'left' });
-      }
-      y += alt;
-    };
-
-    // Cabeçalho
-    if (adminNome) h(adminNome, { x: M, size: 13, bold: true, color: CONV.NAVY, gap: 2 });
-    if (website) h(website, { x: M, size: 9, color: CONV.BLUE, gap: 2 });
-    h(nomeCondominio, { x: M, size: 11, bold: true, gap: 1 });
-    if (morada) h(morada, { x: M, size: 9, color: CONV.MUTED, gap: 8 });
-    if (desenhar) { doc.moveTo(M, y).lineTo(M + W, y).lineWidth(1).strokeColor(CONV.NAVY).stroke(); }
-    y += 10;
-
-    // Faixa do título
-    if (desenhar) {
-      doc.rect(M, y, W, 66).fill(CONV.FUNDO);
-      doc.rect(M, y, 4, 66).fill(CONV.NAVY);
-      textoPara(doc, 'CONVOCATÓRIA', M + 16, y + 10, { size: 22, bold: true, color: CONV.NAVY, width: W - 24 });
-      textoPara(doc, `Assembleia Geral ${tipoLabel}`, M + 16, y + 40, { size: 13, color: CONV.TEXTO, width: W - 24 });
-    }
-    y += 76;
-
-    // Linha compacta
-    h(metaLinha(), { x: M, size: 10, color: CONV.MUTED, gap: 12 });
-
-    // Destinatário
-    h('Exmo.(a) Sr.(a) Condómino(a),', { x: M, size: 10, bold: true, gap: 4 });
-    h(textoDestinatario(), { x: M, size: 9.5, gap: 12 });
-
-    // Ordem de trabalhos
-    h('ORDEM DE TRABALHOS', { x: M, size: 10, bold: true, color: CONV.NAVY, gap: 4 });
-    if (desenhar) { doc.moveTo(M, y).lineTo(M + W, y).lineWidth(0.6).strokeColor(CONV.LINHA).stroke(); }
-    y += 4;
-    let n = 1;
-    for (const p of pontos) {
-      const th = doc.font(T.FONTE).fontSize(size).heightOfString(p, { width: textoW });
-      if (desenhar) {
-        textoPara(doc, String(n).padStart(2, '0'), M, y, { size, bold: true, color: CONV.BLUE, width: numW });
-        textoPara(doc, p, M + numW, y, { size, width: textoW });
-      }
-      y += th + gap;
-      n++;
-    }
-    y += 8;
-
-    // Quórum e segunda convocatória
-    h('QUÓRUM E SEGUNDA CONVOCATÓRIA', { x: M, size: 10, bold: true, color: CONV.NAVY, gap: 4 });
-    h(textoQuorum1(), { x: M, size: 8.5, gap: 3 });
-    h(textoQuorum2(), { x: M, size: 8.5, gap: 3 });
-    h(textoQuorum3(), { x: M, size: 8.5, gap: 8 });
-
-    // Fecho
-    h('Agradecemos a sua comparência e participação na vida do condomínio.', { x: M, size: 9.5, gap: 6 });
-    h('Com os melhores cumprimentos,', { x: M, size: 9.5, gap: 4 });
-    h('A Administração do Condomínio', { x: M, size: 10, bold: true, gap: 0 });
-    if (adminNome) h(adminNome, { x: M, size: 9, color: CONV.MUTED, gap: 0 });
-
-    return y;
-  }
-
-  // Escolhe o tamanho da ordem de trabalhos que cabe numa página.
-  const TAMANHOS = [10.5, 10, 9.5, 9, 8.5, 8, 7.5, 7, 6.5, 6, 5.5];
-  const docMed = criarDocumento();
-  let sizeEscolhido = 5.5;
-  let gapEscolhido = 0;
-  for (const s of TAMANHOS) {
-    const gap = s >= 9.5 ? 5 : s >= 8.5 ? 3 : s >= 7.5 ? 2 : s >= 6.5 ? 1 : 0;
-    const yFinal = montar(docMed, { size: s, gap, desenhar: false });
-    if (yFinal <= limiteConteudo) {
-      sizeEscolhido = s;
-      gapEscolhido = gap;
-      break;
-    }
-  }
-
-  // Desenho
-  const doc = criarDocumento();
-  montar(doc, { size: sizeEscolhido, gap: gapEscolhido, desenhar: true });
-
-  // Rodapé discreto
-  doc.moveTo(M, RODAPE_Y).lineTo(M + W, RODAPE_Y).lineWidth(0.5).strokeColor('#d7dde3').stroke();
-  doc.font(T.FONTE).fontSize(8).fillColor('#8a93a0');
-  const rodapeW = 380;
-  doc.text('Documento gerado por CondoFy', M, RODAPE_Y + 6, { width: rodapeW, align: 'left', lineBreak: false });
-  doc.text('Página 1 de 1', M + rodapeW, RODAPE_Y + 6, { width: W - rodapeW, align: 'right', lineBreak: false });
-
-  return toBuffer(doc);
+  const tipoLabel = String(d.tipo || 'Ordinária').replace(/^Assembleia Geral\s*/i, '');
+  const tipo =
+    tipoLabel === 'Extraordinária' || tipoLabel === 'Urgência' ? 'extraordinaria' : 'ordinaria';
+  return gerarConvocatoriaCartaPDF(condominio || {}, {
+    numero: d.numero,
+    tipo,
+    data: d.data,
+    dataEmissao: d.dataEmissao || new Date(),
+    hora: d.hora,
+    horaSegunda: d.horaSegunda,
+    local: d.local,
+    emailAutorizado: d.emailAutorizado,
+    ordemTrabalhos: d.ordemTrabalhos,
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════

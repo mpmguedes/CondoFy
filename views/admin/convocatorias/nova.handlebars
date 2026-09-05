@@ -1,0 +1,163 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>{{titulo}}</h1>
+    <p class="subtitle">Preencha os dados, pré-visualize e gere a convocatória em PDF (documento oficial, uma página A4).</p>
+  </div>
+  <a href="/admin/assembleias" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">forum</span>Assembleias</a>
+</div>
+
+<form method="POST" action="/admin/convocatorias" id="formConvocatoria" autocomplete="off">
+  {{#if previa}}
+  {{!-- ═══ Modo pré-visualização ═══ --}}
+  <div class="cv-preview-zona">
+    <div class="cv-preview-barra">
+      <div>
+        <div class="fw-semibold d-flex align-items-center gap-1">
+          <span class="material-symbols-outlined">description</span> Pré-visualização do documento
+        </div>
+        <div class="small text-muted">Composição idêntica ao PDF que será gerado ({{previa.tipoLabel}}, {{previa.hora}} — 2.ª convocatória {{previa.horaSegunda}}).</div>
+      </div>
+      <div class="d-flex gap-2">
+        <button type="submit" name="_acao" value="editar" class="btn btn-outline-secondary">
+          <span class="material-symbols-outlined me-1">edit</span>Voltar à edição
+        </button>
+        <button type="submit" name="_acao" value="pdf" class="btn btn-success">
+          <span class="material-symbols-outlined me-1">picture_as_pdf</span>Gerar PDF
+        </button>
+      </div>
+    </div>
+
+    <div class="cv-preview-papel">
+      {{> _convocatoria-documento doc=previa}}
+    </div>
+
+    <details class="cv-editor-details">
+      <summary>Editar dados da convocatória (mantém tudo o que introduziu)</summary>
+      <div class="cv-editor-inner">
+        {{> _convocatoria-editor v=valores}}
+      </div>
+    </details>
+  </div>
+  {{else}}
+  {{> _convocatoria-editor v=valores}}
+  {{/if}}
+</form>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Pontos da ordem de trabalhos ─────────────────────────────────
+  var lista = document.getElementById('listaPontos');
+  var btnAdicionar = document.getElementById('btnAdicionarPonto');
+
+  function renumear() {
+    if (!lista) return;
+    var linhas = lista.querySelectorAll('.cv-ponto-linha');
+    linhas.forEach(function (linha, i) {
+      var num = linha.querySelector('.cv-ponto-num');
+      if (num) num.textContent = String(i + 1);
+      var subir = linha.querySelector('[data-accao="subir"]');
+      var descer = linha.querySelector('[data-accao="descer"]');
+      if (subir) subir.disabled = i === 0;
+      if (descer) descer.disabled = i === linhas.length - 1;
+    });
+  }
+
+  function criarLinhaPonto(valor) {
+    var linha = document.createElement('div');
+    linha.className = 'cv-ponto-linha';
+
+    var num = document.createElement('span');
+    num.className = 'cv-ponto-num';
+    num.textContent = '1';
+    linha.appendChild(num);
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'form-control cv-ponto-input';
+    input.name = 'pontos[]';
+    input.placeholder = 'Descreva o ponto da ordem de trabalhos…';
+    input.value = valor || '';
+    linha.appendChild(input);
+
+    [['subir', 'arrow_upward', 'Subir na ordem', 'btn-outline-secondary'],
+     ['descer', 'arrow_downward', 'Descer na ordem', 'btn-outline-secondary'],
+     ['remover', 'close', 'Eliminar ponto', 'btn-outline-danger']].forEach(function (def) {
+      var botao = document.createElement('button');
+      botao.type = 'button';
+      botao.className = 'btn btn-sm cv-ponto-btn ' + def[3];
+      botao.dataset.accao = def[0];
+      botao.title = def[2];
+      botao.setAttribute('aria-label', def[2]);
+      var icone = document.createElement('span');
+      icone.className = 'material-symbols-outlined';
+      icone.textContent = def[1];
+      botao.appendChild(icone);
+      linha.appendChild(botao);
+    });
+
+    return linha;
+  }
+
+  if (lista) {
+    lista.addEventListener('click', function (e) {
+      var botao = e.target.closest('[data-accao]');
+      if (!botao) return;
+      var linha = botao.closest('.cv-ponto-linha');
+      if (!linha) return;
+      var accao = botao.dataset.accao;
+      if (accao === 'remover') {
+        linha.remove();
+      } else if (accao === 'subir' && linha.previousElementSibling) {
+        lista.insertBefore(linha, linha.previousElementSibling);
+      } else if (accao === 'descer' && linha.nextElementSibling) {
+        lista.insertBefore(linha.nextElementSibling, linha);
+      }
+      renumear();
+      var input = linha.querySelector('.cv-ponto-input');
+      if (input) input.focus();
+    });
+  }
+
+  if (btnAdicionar) {
+    btnAdicionar.addEventListener('click', function () {
+      var linha = criarLinhaPonto('');
+      lista.appendChild(linha);
+      renumear();
+      var input = linha.querySelector('.cv-ponto-input');
+      if (input) input.focus();
+    });
+  }
+
+  if (lista && !lista.querySelector('.cv-ponto-linha')) {
+    lista.appendChild(criarLinhaPonto(''));
+  }
+  renumear();
+
+  // ── Segunda convocatória automática (+ 30 minutos) ───────────────
+  var campoHora = document.getElementById('campoHora');
+  var segundaHora = document.getElementById('segundaHora');
+
+  function calcularSegunda(valor) {
+    var m = /^(\d{1,2}):(\d{2})/.exec(String(valor || '').trim());
+    if (!m) return '';
+    var h = parseInt(m[1], 10);
+    var min = parseInt(m[2], 10);
+    if (h < 0 || h > 23 || min < 0 || min > 59) return '';
+    var total = h * 60 + min + 30;
+    h = Math.floor(total / 60) % 24;
+    min = total % 60;
+    return String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
+  }
+
+  function atualizarSegunda() {
+    if (!segundaHora) return;
+    var valor = calcularSegunda(campoHora ? campoHora.value : '');
+    segundaHora.textContent = valor || '—:——';
+  }
+
+  if (campoHora) campoHora.addEventListener('input', atualizarSegunda);
+  atualizarSegunda();
+})();
+</script>

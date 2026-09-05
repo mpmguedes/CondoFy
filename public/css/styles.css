@@ -482,3 +482,186 @@ a:hover { color: var(--c-primary-dark); }
   .condominio-pill-text { display: none; }
   .page-heading h1 { font-size: 1.3rem; }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   Convocatórias — Nova Convocatória (editor + pré-visualização)
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Ordem de trabalhos (editor) ──────────────────────────────────── */
+.cv-pontos { display: flex; flex-direction: column; gap: 8px; }
+.cv-ponto-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cv-ponto-num {
+  flex: 0 0 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: 50%;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--c-primary-dark);
+}
+.cv-ponto-input { flex: 1 1 auto; }
+.cv-ponto-btn {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.cv-ponto-btn .material-symbols-outlined { font-size: 18px; }
+
+/* Segunda convocatória (info automática) */
+.cv-segunda {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  background: #f7fafc;
+  border: 1px dashed var(--c-border);
+  font-size: 0.9rem;
+}
+.cv-segunda .material-symbols-outlined { color: var(--c-primary); }
+.cv-segunda-hora { font-variant-numeric: tabular-nums; }
+
+/* ── Modo pré-visualização ────────────────────────────────────────── */
+.cv-preview-zona { display: flex; flex-direction: column; gap: var(--sp-4); }
+.cv-preview-barra {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  background: var(--c-primary-light);
+  border: 1px solid rgba(26, 115, 232, 0.35);
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-4);
+}
+.cv-preview-papel {
+  background: #eceef1;
+  border-radius: var(--radius);
+  padding: var(--sp-5) clamp(8px, 4vw, 48px);
+  overflow-x: auto;
+}
+.cv-editor-details {
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-surface);
+}
+.cv-editor-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: var(--sp-3) var(--sp-4);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.cv-editor-details summary::-webkit-details-marker { display: none; }
+.cv-editor-details summary::before {
+  content: 'expand_more';
+  font-family: 'Material Symbols Outlined';
+  font-size: 20px;
+  transition: transform 0.15s ease;
+}
+.cv-editor-details[open] summary::before { transform: rotate(180deg); }
+.cv-editor-inner { padding: 0 var(--sp-4) var(--sp-4); }
+
+/* ── Folha do documento (pré-visualização) ──────────────────────────
+   Composição próxima do PDF: carta oficial, sem caixas nem cores
+   fortes, tipografia sem serifa (Helvetica/Arial). */
+.cv-sheet {
+  width: 794px;
+  max-width: 100%;
+  margin: 0 auto;
+  background: #ffffff;
+  color: #1c2733;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  padding: 40px 52px 46px;
+  border: 1px solid #dde2e8;
+  box-shadow: 0 1px 4px rgba(30, 41, 59, 0.12);
+}
+.cv-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 26px;
+}
+.cv-head-left { flex: 1 1 auto; min-width: 0; padding-right: 12px; }
+.cv-nome { font-size: 19px; font-weight: 700; color: #1c2733; line-height: 1.25; }
+.cv-linha-peq { font-size: 10.5pt; color: #6a7380; margin-top: 2px; }
+.cv-head-right { flex: 0 0 auto; text-align: right; max-width: 46%; }
+.cv-saudacao { font-size: 13px; font-weight: 700; }
+.cv-rule { height: 1px; background: #c3cbd4; margin: 7px 0 6px; }
+.cv-cidade { font-size: 11.5px; color: #6a7380; }
+
+.cv-assunto {
+  text-align: center;
+  font-size: 9px;
+  letter-spacing: 2.2px;
+  color: #6a7380;
+}
+.cv-titulo {
+  text-align: center;
+  font-size: 21px;
+  font-weight: 700;
+  color: #1c2733;
+  line-height: 1.25;
+  margin: 7px 0 4px;
+}
+.cv-meta {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #3c4856;
+  margin-top: 10px;
+}
+.cv-localdata { text-align: center; font-size: 11.5px; color: #6a7380; margin-top: 3px; }
+.cv-saudacao2 { font-size: 13px; font-weight: 700; margin: 18px 0 8px; }
+.cv-paragrafo { font-size: 12.6px; line-height: 1.5; text-align: justify; margin: 0 0 8px; }
+
+.cv-seccao {
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  color: #1c2733;
+  margin: 18px 0 8px;
+}
+.cv-lista-pontos { display: flex; flex-direction: column; }
+.cv-lista-pontos .cv-ponto { margin-bottom: 7px; }
+.cv-ponto { display: flex; }
+.cv-ponto .cv-num {
+  flex: 0 0 30px;
+  text-align: right;
+  font-weight: 700;
+  color: #1c2733;
+  padding-right: 3px;
+  font-size: 12.6px;
+}
+.cv-ponto .cv-txt { flex: 1 1 auto; font-size: 12.6px; line-height: 1.45; min-width: 0; }
+.cv-sem-pontos { font-size: 12px; color: #6a7380; font-style: italic; }
+.cv-subseccao { font-size: 12.6px; font-weight: 700; margin: 12px 0 3px; }
+.cv-fecho { font-size: 12.6px; margin: 0 0 5px; }
+
+.cv-assinatura { margin-top: 72px; }
+.cv-ass-rotulo { font-size: 13.5px; font-weight: 700; color: #1c2733; }
+.cv-ass-nome { font-size: 12px; color: #6a7380; margin-top: 3px; }
+
+.cv-rodape { margin-top: 26px; }
+.cv-rodape-linea { border-top: 1px solid #c3cbd4; margin-bottom: 7px; }
+.cv-rodape-texto { font-size: 9px; line-height: 1.5; color: #7c8794; }
+
+@media (max-width: 991.98px) {
+  .cv-head { flex-direction: column; }
+  .cv-head-right { text-align: left; max-width: 100%; }
+  .cv-sheet { padding: 28px 24px 34px; }
+}
+
