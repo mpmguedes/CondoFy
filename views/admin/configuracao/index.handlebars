@@ -103,6 +103,7 @@
                   <code>.env</code>. Pode mantê-la ou passar a usar a conta Google ligada pela
                   aplicação (recomendado).
                 </p>
+                <p class="small text-muted mb-2"><i class="bi bi-folder2 me-1"></i>Pasta de destino: <strong>{{driveOpcoes.pastaRaiz}}</strong></p>
                 <a href="/admin/config/drive/ligar" class="btn btn-primary w-100 mb-2">
                   <i class="bi bi-google me-1"></i>Ligar com a conta Google
                 </a>
@@ -121,12 +122,13 @@
                 {{#if driveEstado.conta}}
                 <p class="mb-1 fw-semibold small"><i class="bi bi-person-circle me-1"></i>{{driveEstado.conta}}</p>
                 {{/if}}
-                <p class="text-muted small mb-3">
-                  Ligado à conta Google. Os documentos do condomínio podem ser guardados no Drive.
-                </p>
+                <p class="small text-muted mb-3"><i class="bi bi-folder2 me-1"></i>Pasta de destino: <strong>{{driveOpcoes.pastaRaiz}}</strong></p>
                 <div class="d-grid gap-2 mb-2">
                   <a href="https://drive.google.com" target="_blank" rel="noopener" class="btn btn-outline-primary">
                     <i class="bi bi-box-arrow-up-right me-1"></i>Abrir Google Drive
+                  </a>
+                  <a href="#armazenamento" class="btn btn-outline-secondary">
+                    <i class="bi bi-folder-plus me-1"></i>Alterar pasta
                   </a>
                   <form action="/admin/config/drive/testar" method="POST">
                     <button type="submit" class="btn btn-outline-secondary w-100">
@@ -139,19 +141,16 @@
                     </button>
                   </form>
                 </div>
-                <form action="/admin/config/drive/desligar" method="POST"
-                      onsubmit="return confirm('Desligar o Google Drive? Os ficheiros já guardados no Drive não serão apagados.');">
-                  <button type="submit" class="btn btn-outline-danger w-100">
-                    <i class="bi bi-plug me-1"></i>Desligar
-                  </button>
-                </form>
+                <button type="button" class="btn btn-outline-danger w-100" data-bs-toggle="modal" data-bs-target="#modalDesligarDrive">
+                  <i class="bi bi-plug me-1"></i>Desligar Google Drive
+                </button>
               {{/if}}
             {{else}}
-              {{!-- Não ligado --}}
-              <p class="mb-2"><span class="badge text-bg-secondary">⚪ Não ligado</span></p>
+              {{!-- Desligado (não ligado) --}}
+              <p class="mb-2"><span class="badge text-bg-danger">🔴 Desligado</span></p>
               <p class="text-muted small mb-3">
-                Ligue a conta Google para guardar documentos (convocatórias, atas, recibos,
-                anexos e backups) no Google Drive.
+                Associe uma conta Google para guardar automaticamente documentos, recibos, avisos
+                e outros ficheiros do condomínio no Google Drive.
               </p>
               {{#unless driveEstado.redirectUriDefinido}}
               <p class="alert alert-warning small py-2 px-3">
@@ -186,17 +185,21 @@
     <div class="card mb-3" id="armazenamento">
       <div class="card-header bg-white"><i class="bi bi-diagram-3 me-1"></i>Armazenamento &amp; backups</div>
       <div class="card-body">
-        <form action="/admin/config/drive/opcoes" method="POST">
+        <form action="/admin/config/drive/opcoes" method="POST" id="formPasta">
           <div class="mb-2">
-            <label class="form-label small">Pasta raiz no Google Drive</label>
-            <input type="text" class="form-control" name="pasta_raiz" value="{{driveOpcoes.pastaRaiz}}" placeholder="CondoFy" />
-            <div class="form-text">Se a pasta existir, é reutilizada (nunca são criadas duplicadas).</div>
+            <label class="form-label small" for="pastaRaiz">Pasta de destino no Google Drive</label>
+            <input type="text" class="form-control" id="pastaRaiz" name="pasta_raiz" value="{{driveOpcoes.pastaRaiz}}" placeholder="ex.: CondoFy ou GesCondu" />
+            <div class="form-text">
+              A pasta guardada aqui é a única fonte de verdade e tem prioridade sobre o <code>.env</code>.
+              Se a pasta já existir, é reutilizada (nunca são criadas duplicadas). Pode indicar uma
+              pasta antiga (ex.: <code>CondoFy</code>) — os documentos existentes não são alterados.
+            </div>
           </div>
           <div class="form-check mb-3">
             <input class="form-check-input" type="checkbox" name="backups_drive" value="on" id="backupsDrive" {{#if driveOpcoes.backupsDrive}}checked{{/if}} />
             <label class="form-check-label small" for="backupsDrive">Guardar backups da base de dados no Google Drive</label>
           </div>
-          <button type="submit" class="btn btn-outline-primary w-100">Guardar opções</button>
+          <button type="submit" class="btn btn-outline-primary w-100"><i class="bi bi-check2 me-1"></i>Guardar pasta/opções</button>
         </form>
 
         {{#if ultimoBackup}}
@@ -220,9 +223,37 @@
     <div class="card mb-3">
       <div class="card-header bg-white"><i class="bi bi-lightning-charge me-1"></i>Documentos e Automações</div>
       <div class="card-body">
-        <p class="text-muted small">Defina o que acontece automaticamente (Google Drive, email) quando o CondoFy gera documentos.</p>
+        <p class="text-muted small">Defina o que acontece automaticamente (Google Drive, email) quando o GesCondu gera documentos.</p>
         <a href="/admin/config/automacoes" class="btn btn-outline-primary w-100"><i class="bi bi-gear me-1"></i>Configurar automações</a>
         <a href="/admin/emails" class="btn btn-outline-secondary w-100 mt-2"><i class="bi bi-envelope me-1"></i>Emails (central)</a>
+      </div>
+    </div>
+
+    {{!-- Modal de confirmação dupla — Desligar Google Drive --}}
+    <div class="modal fade" id="modalDesligarDrive" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-danger">
+          <div class="modal-header bg-danger text-white">
+            <h5 class="modal-title"><i class="bi bi-exclamation-triangle me-1"></i>Desligar Google Drive</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <p><strong>Tem a certeza que pretende desligar o Google Drive?</strong></p>
+            <ul class="small text-muted mb-0">
+              <li>A aplicação deixará de conseguir gravar novos documentos no Google Drive.</li>
+              <li>Os documentos já existentes no Google Drive <strong>não serão apagados</strong>.</li>
+              <li>A conta Google não será apagada.</li>
+              <li>A autorização OAuth será removida da aplicação.</li>
+              <li>Será necessário voltar a autorizar o Google Drive para voltar a utilizar a integração.</li>
+            </ul>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <form action="/admin/config/drive/desligar" method="POST" class="d-inline">
+              <button type="submit" class="btn btn-danger">Desligar Google Drive</button>
+            </form>
+          </div>
+        </div>
       </div>
     </div>
   </div>

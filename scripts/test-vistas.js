@@ -125,14 +125,14 @@ const ctxConfig = { titulo: 'Configuração do condomínio', condominio: condCon
 
 html = config({ ...ctxConfig, driveLigado: false, driveEstado: { ativo: true, credenciais: true, ligado: false, viaEnv: false, conta: null, redirectUriDefinido: true }, driveOpcoes: { pastaRaiz: 'CondoFy', backupsDrive: true }, ultimoBackup: null });
 assert.ok(html.includes('Ligar Google Drive'), 'config: botão ligar quando não ligado');
-assert.ok(html.includes('Não ligado'), 'config: estado não ligado');
+assert.ok(html.includes('Desligado'), 'config: estado desligado');
 
 html = config({ ...ctxConfig, driveLigado: true, driveEstado: { ativo: true, credenciais: true, ligado: true, viaEnv: false, conta: 'admin@gmail.com', redirectUriDefinido: true }, driveOpcoes: { pastaRaiz: 'CondoFy', backupsDrive: true }, ultimoBackup: null });
 assert.ok(html.includes('admin@gmail.com'), 'config: conta ligada visível');
 assert.ok(html.includes('Desligar'), 'config: botão desligar');
 assert.ok(html.includes('Abrir Google Drive'), 'config: abrir drive');
 assert.ok(html.includes('Testar ligação'), 'config: testar ligação');
-assert.ok(html.includes('Pasta raiz no Google Drive'), 'config: opções de armazenamento');
+assert.ok(html.includes('Pasta de destino no Google Drive'), 'config: opções de armazenamento');
 
 html = config({ ...ctxConfig, driveLigado: true, driveEstado: { ativo: true, credenciais: true, ligado: true, viaEnv: true, conta: null, redirectUriDefinido: true }, driveOpcoes: { pastaRaiz: 'CondoFy', backupsDrive: true }, ultimoBackup: { data: new Date(), tipo: 'diario', estado: 'concluido', erro: null } });
 assert.ok(html.includes('via .env'), 'config: estado legado via .env');

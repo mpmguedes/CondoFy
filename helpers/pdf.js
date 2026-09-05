@@ -42,7 +42,7 @@ function criarDocumento() {
     size: 'A4',
     margin: T.MARGEM,
     bufferPages: true,
-    info: { Title: 'Condofy', Author: 'Condofy' },
+    info: { Title: 'GesCondu', Author: 'GesCondu' },
   });
 }
 
@@ -248,7 +248,7 @@ function finalizarPaginacao(doc, condominio) {
       .font(T.FONTE)
       .fontSize(8)
       .fillColor('#888888')
-      .text(`Condomínio ${condominio.designacao || ''} · Documento gerado por Condofy`, T.MARGEM, 790, { width: 400, align: 'left' });
+      .text(`Condomínio ${condominio.designacao || ''} · Documento gerado por GesCondu`, T.MARGEM, 790, { width: 400, align: 'left' });
     doc
       .font(T.FONTE)
       .fontSize(8)

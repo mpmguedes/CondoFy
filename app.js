@@ -68,7 +68,7 @@ app.use(async (req, res, next) => {
   res.locals.isAdmin = !!(req.user && req.user.role === 'admin');
   const condominio = await getCondominio();
   res.locals.condominio = condominio ? condominio.toJSON() : null;
-  res.locals.appName = 'Condofy';
+  res.locals.appName = 'GesCondu';
   res.locals.currentYear = new Date().getFullYear();
   res.locals.currentPath = req.path || '';
   next();
@@ -130,7 +130,7 @@ sequelize
     await drive.inicializar(); // carrega o estado do Google Drive (tokens na BD)
     await mailer.inicializar(); // carrega a configuração SMTP (BD/.env)
     app.listen(PORT, () => {
-      console.log(`Condofy a correr em http://localhost:${PORT}`);
+      console.log(`GesCondu a correr em http://localhost:${PORT}`);
       require('./jobs/scheduler').iniciar();
     });
   })

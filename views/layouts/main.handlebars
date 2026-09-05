@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{#if titulo}}{{titulo}} · {{/if}}{{condominio.designacao}}</title>
-  <link rel="icon" type="image/png" href="/img/logo.png" />
+  <link rel="icon" type="image/png" href="/img/logo_gescondu.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -20,8 +20,8 @@
   <div class="app-shell" id="appShell">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">
-        <img src="/img/logo.png" alt="Condofy" class="sidebar-logo" />
-        <span class="sidebar-brand-text">Condofy</span>
+        <img src="/img/logo_gescondu.png" alt="GesCondu" class="sidebar-logo" />
+        <span class="sidebar-brand-text">GesCondu</span>
       </div>
 
       <nav class="sidebar-nav" aria-label="Navegação principal">
@@ -40,9 +40,9 @@
             <span class="material-symbols-outlined">apartment</span>
             <span class="sidebar-item-text">Frações</span>
           </a>
-          <a class="sidebar-item {{isActive currentPath '/admin/condominos'}}" href="/admin/condominos" title="Membros">
+          <a class="sidebar-item {{isActive currentPath '/admin/condominos'}}" href="/admin/condominos" title="Condóminos">
             <span class="material-symbols-outlined">groups</span>
-            <span class="sidebar-item-text">Membros</span>
+            <span class="sidebar-item-text">Condóminos</span>
           </a>
         </div>
 

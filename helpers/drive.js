@@ -311,21 +311,24 @@ async function encontrarOuCriarPasta(nome, parentId) {
   });
 }
 
-// Resolve o nome da pasta raiz (precedência: .env → BD → "CondoFy").
+// Fonte única de verdade da pasta raiz no Google Drive.
+// Precedência: configuração guardada na BD → GOOGLE_DRIVE_ROOT_FOLDER (.env)
+// → pasta inicial "GesCondu". Nunca substitui uma pasta já configurada.
 async function obterNomeRaiz() {
-  let raizNome = (process.env.GOOGLE_DRIVE_ROOT_FOLDER || '').trim();
-  if (!raizNome) {
-    try {
-      raizNome = String((await getConfig('google_drive_root_folder', '')) || '').trim();
-    } catch (err) {
-      raizNome = '';
-    }
+  try {
+    const dbRaiz = String((await getConfig('google_drive_root_folder', '')) || '').trim();
+    if (dbRaiz) return dbRaiz;
+  } catch (err) {
+    // BD indisponível → segue para .env/fallback
   }
-  return raizNome || 'CondoFy';
+  const envRaiz = (process.env.GOOGLE_DRIVE_ROOT_FOLDER || '').trim();
+  if (envRaiz) return envRaiz;
+  return 'GesCondu';
 }
 
-// Estrutura: CondoFy/<ano>/<pastas> e CondoFy/Backups.
-// A pasta raiz ("CondoFy" por omissão) é reutilizada se já existir.
+// Estrutura: <raiz>/<ano>/<pastas> e <raiz>/Backups.
+// A pasta raiz configurada é reutilizada se já existir (nunca duplicada);
+// pastas antigas (ex.: "CondoFy") continuam válidas e utilizáveis.
 async function criarEstruturaPastas(ano = new Date().getFullYear()) {
   const raizId = await encontrarOuCriarPasta(await obterNomeRaiz());
   const anoId = await encontrarOuCriarPasta(String(ano), raizId);
@@ -359,7 +362,7 @@ async function pastaParaDocumento(tipo, ano) {
 }
 
 // Pasta de um fornecedor:
-// CondoFy/<ano>/Fornecedores/<nome>/<subpasta>
+// <raiz>/<ano>/Fornecedores/<nome>/<subpasta>
 // (nunca cria pastas duplicadas; reutiliza as existentes pelo nome).
 async function pastaParaFornecedor({ nome, ano, subpasta = 'Comprovativos' }) {
   const anoNum = ano || new Date().getFullYear();

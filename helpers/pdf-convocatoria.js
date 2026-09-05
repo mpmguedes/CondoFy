@@ -279,9 +279,9 @@ async function gerarConvocatoriaCartaPDF(condominio, d = {}) {
     margin: 0,
     info: {
       Title: docObj.textos.titulo,
-      Author: docObj.administracaoNome || 'Condofy',
+      Author: docObj.administracaoNome || 'GesCondu',
       Subject: `Convocatória${docObj.numero ? ` n.º ${docObj.numero}` : ''} — ${docObj.textos.titulo}`,
-      Producer: 'Condofy',
+      Producer: 'GesCondu',
     },
   });
 

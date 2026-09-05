@@ -23,13 +23,15 @@ router.get('/config', async (req, res) => {
   const condominio = await getCondominio({ force: true });
   const driveEstado = await drive.estadoLigacao();
 
-  const [ultimoBackup, raizDb, backupsDb] = await Promise.all([
+  const [ultimoBackup, raizDbRaw, backupsDb] = await Promise.all([
     BackupLog.findOne({ order: [['id', 'DESC']] }).catch(() => null),
     getConfig('google_drive_root_folder', '').catch(() => ''),
     getConfig('drive_auto_backups', '1').catch(() => '1'),
   ]);
 
-  const raizEfetiva = (process.env.GOOGLE_DRIVE_ROOT_FOLDER || '').trim() || String(raizDb || '').trim() || 'CondoFy';
+  // Fonte única de verdade: BD → .env → pasta inicial "GesCondu".
+  const raizDb = String(raizDbRaw || '').trim();
+  const raizEfetiva = raizDb || (process.env.GOOGLE_DRIVE_ROOT_FOLDER || '').trim() || 'GesCondu';
 
   res.render('admin/configuracao/index', {
     titulo: 'Configuração do condomínio',

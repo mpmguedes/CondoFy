@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────
 // Automações de documentos — comportamento automático por tipo de
-// documento quando o CondoFy gera/regista um documento.
+// documento quando o GesCondu gera/regista um documento.
 //
 // Por cada tipo guarda-se na BD (chaves `auto_<tipo>_<canal>`):
 //  · drive      → guardar automaticamente no Google Drive (0/1)
