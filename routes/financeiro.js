@@ -33,6 +33,7 @@ const { resolverDestinatarios } = require('../helpers/avisos');
 const { enfileirarEmail } = require('../helpers/email-fila');
 const { estaAtivo } = require('../helpers/notificacoes');
 const { estaAtivo: automacaoAtiva } = require('../helpers/automacoes');
+const background = require('../helpers/background-jobs');
 const { getQuotaConfig, setQuotaConfig } = require('../helpers/quotas-config');
 const { calcularQuota, calcularQuotasOrcamento } = require('../helpers/quotas-calc');
 const { validarPermilagem } = require('../helpers/permilagem');
@@ -542,48 +543,30 @@ router.post('/quotas/gerar', async (req, res) => {
     await t.commit();
     await audit({ userId: req.user.id, acao: 'gerar_quotas', entidade: 'Quota', detalhes: { ano: anoNum, mes: mesNum, escopo, metodo: metodoLabel, criadas } });
 
-    // ── Documentos e comunicação (automações + opções do formulário) ──
+    // ── Processamento em segundo plano (PDFs/Drive/emails) ──────────
+    // A criação das quotas é síncrona; as operações pesadas (gerar PDFs,
+    // Google Drive, colocar emails na fila) correm fora do request.
     let extraMsg = '';
     try {
-      if (criadas > 0 && (req.body.enviar_email === 'on' || (await automacaoAtiva('quotas', 'automatico')))) {
-        const cctx = await contextoEnvioQuotas({ ano: anoNum, mes: mesNum });
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
-        const r = await enfileirarLoteEmails({
-          linhas: cctx.linhas.filter((l) => l.temEmail),
-          entidadeTipo: 'Quota',
-          userId: req.user.id,
-          link: (l) => `${baseUrl}/admin/quotas/${l.id}/aviso`,
-          assunto: (l) => `Aviso de quota ${l.numero} — ${l.periodo}`,
-          corpo: (l, url) => `Fração ${l.fracao}\nPeríodo: ${l.periodo}\nValor: ${l.valor} €\n\nAviso de quota: ${url}`,
-        });
-        extraMsg += ` ${r.enfileirados} email(s) enfileirado(s) para envio.`;
-      }
-      if (criadas > 0 && (req.body.guardar_drive === 'on' || (await automacaoAtiva('quotas', 'drive'))) && drive.isConfigured()) {
-        let okDrive = 0;
-        let errDrive = 0;
-        for (const q of criadasLista) {
-          try {
-            const { buffer } = await construirAvisoQuota(q.id);
-            const { doc } = await guardarPdfFinanceiroDrive({
-              tipo: 'aviso_quota',
-              numeroDocumento: q.numero_documento,
-              nome: `Aviso de quota ${q.numero_documento || q.id}`,
-              buffer,
-              anoData: q.ano,
-              userId: req.user.id,
-            });
-            await doc.update({ entidade_tipo: 'Quota', entidade_id: q.id }).catch(() => {});
-            okDrive++;
-          } catch (e) {
-            console.error('[quotas-drive]', e.message);
-            errDrive++;
-          }
+      if (criadas > 0) {
+        const guardarDrive = req.body.guardar_drive === 'on' || (await automacaoAtiva('quotas', 'drive'));
+        const enviarEmail = req.body.enviar_email === 'on' || (await automacaoAtiva('quotas', 'automatico'));
+        if ((guardarDrive && drive.isConfigured()) || enviarEmail) {
+          const baseUrl = `${req.protocol}://${req.get('host')}`;
+          background.enqueue('quotas_pos_processamento', {
+            ano: anoNum,
+            mes: mesNum,
+            guardarDrive: Boolean(guardarDrive && drive.isConfigured()),
+            enviarEmail: Boolean(enviarEmail),
+            userId: req.user.id,
+            baseUrl,
+          });
+          extraMsg = ' Processamento em segundo plano iniciado (PDFs/Drive/emails). A interface continua disponível.';
         }
-        extraMsg += ` ${okDrive} aviso(s) guardado(s) no Google Drive${errDrive ? ` (${errDrive} com erro)` : ''}.`;
       }
     } catch (e) {
-      console.error('[quotas-automacao]', e.message);
-      extraMsg += ' (a automação de envio/Drive falhou — verifique os envios na central de emails).';
+      console.error('[quotas-background]', e.message);
+      extraMsg = ' (não foi possível agendar o processamento em segundo plano).';
     }
 
     req.flash('success_msg', `Geradas ${criadas} quota(s)${ignoradas ? `; ${ignoradas} já existiam (não duplicadas)` : ''} (${metodoLabel}).${extraMsg}`);
@@ -1257,5 +1240,119 @@ router.post('/pagamentos/:id/recibo/drive', async (req, res) => {
   }
   res.redirect(req.get('Referer') || '/admin/pagamentos');
 });
+
+// ── Processamento em segundo plano: pós-geração de quotas ──────────
+// (PDFs → Google Drive → emails para a email_fila). Idempotente: não
+// duplica documentos (verifica Documento associado) nem emails
+// (existeEnvioPara), mesmo quando a tarefa corre/repete mais do que uma vez.
+async function processarPosGeracaoQuotas({ ano, mes, guardarDrive, enviarEmail, userId, baseUrl }, progresso) {
+  if (!ano || !mes || (!guardarDrive && !enviarEmail)) return;
+
+  const quotas = await Quota.findAll({
+    where: { ano, mes },
+    include: [{ model: Fracao, as: 'fracao' }],
+    order: [[{ model: Fracao, as: 'fracao' }, 'designacao', 'ASC']],
+  });
+
+  const total = quotas.length;
+  const fases = {
+    drive: { estado: guardarDrive ? 'a_processar' : 'nao_requerido', atual: 0, total },
+    emails: { estado: enviarEmail ? 'a_processar' : 'nao_requerido', atual: 0, total },
+  };
+  progresso({ fases, resumo: {} });
+  const erros = [];
+
+  // 1) Guardar avisos no Google Drive (idempotente por quota)
+  if (guardarDrive) {
+    let ok = 0;
+    let atual = 0;
+    for (const q of quotas) {
+      atual += 1;
+      try {
+        const jaGuardado = await Documento.count({
+          where: { entidade_tipo: 'Quota', entidade_id: q.id, drive_status: 'guardado' },
+        });
+        if (!jaGuardado) {
+          const { buffer } = await construirAvisoQuota(q.id);
+          const { doc } = await guardarPdfFinanceiroDrive({
+            tipo: 'aviso_quota',
+            numeroDocumento: q.numero_documento,
+            nome: `Aviso de quota ${q.numero_documento || q.id}`,
+            buffer,
+            anoData: q.ano,
+            userId,
+          });
+          await doc.update({ entidade_tipo: 'Quota', entidade_id: q.id }).catch(() => {});
+        }
+        ok += 1;
+      } catch (e) {
+        erros.push(`Fração ${q.fracao ? q.fracao.designacao : q.id}: ${e.message}`);
+      }
+      fases.drive.atual = atual;
+      progresso({ fases });
+    }
+    fases.drive.estado = 'concluido';
+    progresso({ fases, resumo: { driveOk: ok, driveErros: erros.length } });
+  }
+
+  // 2) Colocar emails na fila (nunca envia diretamente; o scheduler trata)
+  if (enviarEmail) {
+    const cond = await getCondominio();
+    const condNome = (cond && String(cond.designacao || '').trim()) || '';
+    const adminNome = (cond && String(cond.administracao_nome || '').trim()) || '';
+    const cctx = await contextoEnvioQuotas({ ano, mes });
+    const base = baseUrl || '';
+    let enfileirados = 0;
+    let atual = 0;
+    for (const l of cctx.linhas.filter((x) => x.temEmail)) {
+      atual += 1;
+      const url = `${base}/admin/quotas/${l.id}/aviso`;
+      const nome = l.condominos && l.condominos !== '—' ? String(l.condominos).split(',')[0].trim() : undefined;
+      const tpl = comporEmail('quota', {
+        destinatarioNome: nome,
+        condominio: condNome,
+        administracao: adminNome,
+        periodo: l.periodo,
+        valor: l.valor,
+        urlOnline: url,
+      });
+      let anexo = null;
+      try {
+        const { buffer } = await construirAvisoQuota(l.id);
+        anexo = { nome: nomeFicheiroEmail('quota', { ano: String(l.ano || ''), mes: l.mes || '', fracao: l.fracao }), buffer };
+      } catch (e) {
+        console.error('[quotas-bg-anexo]', e.message);
+      }
+      for (const email of l.emailsLista) {
+        const ja = await existeEnvioPara({ entidadeTipo: 'Quota', entidadeId: l.id, email });
+        if (ja) continue;
+        await enfileirarEmailFila({
+          destinatario_email: email,
+          destinatario_nome: l.condominos !== '—' ? l.condominos : null,
+          assunto: tpl.assunto,
+          corpo: tpl.text,
+          corpo_html: tpl.html,
+          entidade_tipo: 'Quota',
+          entidade_id: l.id,
+          userId,
+          anexoNome: anexo ? anexo.nome : null,
+          anexoBuffer: anexo ? anexo.buffer : null,
+        });
+        enfileirados += 1;
+      }
+      fases.emails.atual = atual;
+      progresso({ fases });
+    }
+    fases.emails.estado = 'concluido';
+    progresso({ fases, resumo: { emailsEnfileirados: enfileirados } });
+  }
+
+  if (erros.length) {
+    // Não falha a tarefa por itens isolados — os registos já feitos mantêm-se.
+    progresso({ fases, resumo: { erros: erros.slice(0, 20) } });
+  }
+}
+
+router.processarPosGeracaoQuotas = processarPosGeracaoQuotas;
 
 module.exports = router;

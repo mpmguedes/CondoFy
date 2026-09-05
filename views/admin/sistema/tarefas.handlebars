@@ -1,0 +1,56 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Processamento em segundo plano</h1>
+    <p class="subtitle">Tarefas pesadas (PDFs, Google Drive, emails) executadas fora do pedido HTTP</p>
+  </div>
+  <a href="/admin" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Dashboard</a>
+</div>
+
+<div class="alert alert-light border small mb-3">
+  <i class="bi bi-info-circle me-1"></i>
+  Estas tarefas não bloqueiam a interface. Em caso de erro, os registos já processados
+  são mantidos — reprocessar é idempotente (não duplica documentos nem emails).
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Tarefa</th>
+          <th>Tipo</th>
+          <th>Estado</th>
+          <th>Iniciada</th>
+          <th>Concluída</th>
+          <th>Progresso</th>
+          <th>Erro</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each tarefas}}
+        <tr>
+          <td class="font-monospace small">{{id}}</td>
+          <td><span class="badge text-bg-light border">{{tipo}}</span></td>
+          <td>
+            {{#if (eq estado 'concluido')}}<span class="badge text-bg-success">Concluída</span>
+            {{else if (eq estado 'erro')}}<span class="badge text-bg-danger">Erro</span>
+            {{else if (eq estado 'a_processar')}}<span class="badge text-bg-info">A processar</span>
+            {{else}}<span class="badge text-bg-secondary">Em fila</span>{{/if}}
+          </td>
+          <td class="small text-nowrap">{{formatDateTime criadoEm}}</td>
+          <td class="small text-nowrap">{{#if fimEm}}{{formatDateTime fimEm}}{{else}}—{{/if}}</td>
+          <td class="small text-muted">
+            {{#if progresso.fases.drive}}Drive: {{progresso.fases.drive.estado}} ({{progresso.fases.drive.atual}}/{{progresso.fases.drive.total}})<br />{{/if}}
+            {{#if progresso.fases.emails}}Emails: {{progresso.fases.emails.estado}} ({{progresso.fases.emails.atual}}/{{progresso.fases.emails.total}}){{/if}}
+            {{#if progresso.resumo.driveOk}}✓ Drive: {{progresso.resumo.driveOk}}{{/if}}
+            {{#if progresso.resumo.emailsEnfileirados}}✓ Emails na fila: {{progresso.resumo.emailsEnfileirados}}{{/if}}
+          </td>
+          <td class="small text-danger text-truncate" style="max-width:260px">{{#if erro}}{{erro}}{{else}}—{{/if}}</td>
+        </tr>
+        {{else}}
+        <tr><td colspan="7" class="text-center text-muted py-4">Sem tarefas de processamento.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>

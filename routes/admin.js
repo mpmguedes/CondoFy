@@ -28,6 +28,7 @@ const { resumoCondominio, resumoFracao, estadoEfetivo } = require('../helpers/sa
 const { resumoFinanceiroMes, resumoEmAtraso, orcamentoDoAno } = require('../helpers/dashboard');
 const drive = require('../helpers/drive');
 const { smtpConfigured } = require('../helpers/mailer');
+const background = require('../helpers/background-jobs');
 
 const router = express.Router();
 
@@ -467,6 +468,12 @@ router.post('/utilizadores/:id/eliminar', async (req, res) => {
     req.flash('error_msg', 'Não pode eliminar a sua própria conta.');
   }
   res.redirect('/admin/utilizadores');
+});
+
+// Tarefas de processamento em segundo plano (estado/consulta)
+router.get('/tarefas', async (req, res) => {
+  const tarefas = background.listarTarefas(100);
+  res.render('admin/sistema/tarefas', { titulo: 'Processamento em segundo plano', tarefas });
 });
 
 module.exports = router;

@@ -48,6 +48,16 @@ async function main() {
   assert.ok(recibo.html.includes('Consultar recibo online'), 'link no HTML');
   assert.ok(recibo.html.includes('45,20 €'), 'valor no corpo');
   assert.ok(!recibo.html.includes('CondoFy'), 'sem referência a CondoFy');
+  // HTML preparado não é escapado; o texto simples não tem tags.
+  assert.ok(recibo.html.includes('<strong>') && !recibo.html.includes('&lt;strong'), 'HTML <strong> renderizado sem escapar');
+  assert.ok(!recibo.text.includes('<strong>'), 'versão texto sem tags HTML');
+
+  const quotaT = compor('quota', { condominio: 'Condomínio X', periodo: 'Outubro 2026', valor: 61.23, destinatarioNome: 'Martinho' });
+  assert.ok(quotaT.html.includes('<strong>Outubro 2026</strong>'), 'quota: período a negrito sem escapar');
+  assert.ok(quotaT.html.includes('<strong>Valor: 61,23 €</strong>'), 'quota: valor PT-PT a negrito');
+  assert.ok(!quotaT.html.includes('&lt;strong'), 'quota: sem HTML escapado');
+  assert.ok(!quotaT.text.includes('<strong>'), 'quota: texto sem tags');
+  assert.ok(quotaT.text.includes('61,23 €'), 'quota: valor PT-PT no texto');
   const semAnexo = compor('recibo', { condominio: 'X', destinatarioNome: 'Ana', urlOnline: 'https://gescondu.xyz/r', anexo: false });
   assert.ok(!semAnexo.text.includes('em anexo'), 'sem anexo não afirma anexo');
   assert.ok(semAnexo.text.includes('Consultar recibo online'), 'sem anexo mantém link');

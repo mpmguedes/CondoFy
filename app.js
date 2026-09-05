@@ -13,6 +13,7 @@ const handlebarsHelpers = require('./helpers/handlebars-helpers');
 const { getCondominio } = require('./helpers/condominio');
 const drive = require('./helpers/drive');
 const mailer = require('./helpers/mailer');
+const background = require('./helpers/background-jobs');
 require('./config/passport')(passport);
 
 const app = express();
@@ -71,6 +72,7 @@ app.use(async (req, res, next) => {
   res.locals.appName = 'GesCondu';
   res.locals.currentYear = new Date().getFullYear();
   res.locals.currentPath = req.path || '';
+  res.locals.tarefas = background.resumo();
   next();
 });
 
@@ -90,7 +92,9 @@ app.use((req, res, next) => {
 app.use('/', require('./routes'));
 app.use('/', require('./routes/auth'));
 app.use('/admin', require('./routes/admin'));
-app.use('/admin', require('./routes/financeiro'));
+const rotasFinanceiro = require('./routes/financeiro');
+app.use('/admin', rotasFinanceiro);
+background.registar('quotas_pos_processamento', rotasFinanceiro.processarPosGeracaoQuotas);
 app.use('/admin', require('./routes/extra-quotas'));
 app.use('/admin', require('./routes/orcamento'));
 app.use('/admin', require('./routes/assembleias'));
