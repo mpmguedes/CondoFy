@@ -15,6 +15,8 @@ const {
   Documento,
   Aviso,
   AvisoDestinatario,
+  Fornecedor,
+  PagamentoFornecedor,
   BackupLog,
   EmailFila,
 } = require('../models');
@@ -56,6 +58,13 @@ router.get('/', async (req, res) => {
       EmailFila.count({ where: { estado: 'pendente' } }),
       EmailFila.count({ where: { estado: 'erro' } }),
     ]);
+
+  const [nDriveDocs, nEmailsEnviados, nFornecedores, nPagFornecedorPendentes] = await Promise.all([
+    Documento.count({ where: { drive_status: 'guardado' } }),
+    EmailFila.count({ where: { estado: 'enviado' } }),
+    Fornecedor.count({ where: { ativo: true } }),
+    PagamentoFornecedor.count({ where: { estado: 'pendente' } }),
+  ]);
 
   const nPagas = quotas.filter((q) => q.estado === 'paga').length;
   const nPendentes = quotas.filter((q) => ['pendente', 'parcialmente_paga'].includes(q.estado)).length;
@@ -104,6 +113,10 @@ router.get('/', async (req, res) => {
     nPagas,
     nPendentes,
     nVencidas,
+    nDriveDocs,
+    nEmailsEnviados,
+    nFornecedores,
+    nPagFornecedorPendentes,
     anoAtual,
     financeiroMes,
     emAtraso,

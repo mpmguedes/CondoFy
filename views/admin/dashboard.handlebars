@@ -171,6 +171,46 @@
   </div>
 </div>
 
+<div class="section-title">Documentos e comunicação</div>
+<div class="row g-3">
+  <div class="col-6 col-md-3">
+    <a class="text-decoration-none" href="/admin/documentos">
+      <div class="card stat-card h-100"><div class="card-body">
+        <div class="stat-label">☁ Documentos no Drive</div>
+        <div class="stat-value">{{nDriveDocs}}</div>
+        <div class="stat-sub">guardados</div>
+      </div></div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3">
+    <a class="text-decoration-none" href="/admin/emails">
+      <div class="card stat-card h-100"><div class="card-body">
+        <div class="stat-label">✉ Emails</div>
+        <div class="stat-value text-success">{{nEmailsEnviados}}</div>
+        <div class="stat-sub">{{#if (gt sistema.filaPendentes 0)}}{{sistema.filaPendentes}} pendentes · {{/if}}{{#if (gt sistema.filaErros 0)}}<span class="text-danger">{{sistema.filaErros}} erros</span>{{else}}sem pendentes{{/if}}</div>
+      </div></div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3">
+    <a class="text-decoration-none" href="/admin/fornecedores">
+      <div class="card stat-card h-100"><div class="card-body">
+        <div class="stat-label">Fornecedores</div>
+        <div class="stat-value">{{nFornecedores}}</div>
+        <div class="stat-sub">{{#if (gt nPagFornecedorPendentes 0)}}<span class="text-warning">{{nPagFornecedorPendentes}} pagamentos pendentes</span>{{else}}ativos{{/if}}</div>
+      </div></div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3">
+    <a class="text-decoration-none" href="/admin/config/automacoes">
+      <div class="card stat-card h-100"><div class="card-body">
+        <div class="stat-label">⚙ Automações</div>
+        <div class="stat-value">Documentos</div>
+        <div class="stat-sub">configuração de Drive/email automático</div>
+      </div></div>
+    </a>
+  </div>
+</div>
+
 <div class="section-title">Análise {{anoAtual}}</div>
 <div class="row g-3">
   <div class="col-12 col-lg-7">

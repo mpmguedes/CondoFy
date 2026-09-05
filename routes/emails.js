@@ -34,15 +34,30 @@ function filtraPor(filtro) {
   return {};
 }
 
+// Filtro por origem (tipo de documento/entidade).
+const ORIGENS = {
+  quotas: { rotulo: 'Quotas', condicao: { entidade_tipo: 'Quota' } },
+  recibos: { rotulo: 'Recibos', condicao: { entidade_tipo: 'Pagamento' } },
+  avisos: { rotulo: 'Avisos', condicao: { aviso_id: { [Op.ne]: null } } },
+  documentos: { rotulo: 'Documentos', condicao: { documento_id: { [Op.ne]: null }, aviso_id: null } },
+  fornecedores: { rotulo: 'Fornecedores', condicao: { entidade_tipo: 'PagamentoFornecedor' } },
+};
+
+function filtraOrigem(tipo) {
+  const origem = ORIGENS[tipo];
+  return origem ? origem.condicao : {};
+}
+
 router.get('/emails', async (req, res) => {
   const filtro = ['pendentes', 'enviados', 'erros', 'cancelados'].includes(req.query.estado)
     ? req.query.estado
     : 'todas';
+  const tipo = Object.prototype.hasOwnProperty.call(ORIGENS, req.query.tipo) ? req.query.tipo : 'todas';
 
   const [contagens, emails, estadoSmtp, preferencias] = await Promise.all([
     contarFila(),
     EmailFila.findAll({
-      where: filtraPor(filtro),
+      where: { ...filtraPor(filtro), ...filtraOrigem(tipo) },
       include: [
         { model: Documento, as: 'documento', attributes: ['id', 'nome', 'drive_status', 'url'] },
         { model: Aviso, as: 'aviso', attributes: ['id', 'assunto'] },
@@ -59,6 +74,8 @@ router.get('/emails', async (req, res) => {
     titulo: 'Emails',
     emails,
     filtro,
+    tipo,
+    origens: ORIGENS,
     contagens,
     estadoSmtp,
     preferencias,

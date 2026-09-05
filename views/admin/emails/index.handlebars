@@ -45,6 +45,14 @@
           <a href="/admin/emails?estado=erros" class="btn btn-sm {{#if (eq filtro 'erros')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Erros</a>
           <a href="/admin/emails?estado=cancelados" class="btn btn-sm {{#if (eq filtro 'cancelados')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Cancelados</a>
         </div>
+        <hr class="my-2" />
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+          <span class="small text-muted">Origem:</span>
+          <a href="/admin/emails{{#if (ne filtro 'todas')}}?estado={{filtro}}{{/if}}" class="btn btn-sm {{#if (eq tipo 'todas')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Todas</a>
+          {{#each origens}}
+          <a href="/admin/emails?tipo={{@key}}{{#if (ne ../filtro 'todas')}}&estado={{../filtro}}{{/if}}" class="btn btn-sm {{#if (eq ../tipo @key)}}btn-primary{{else}}btn-outline-secondary{{/if}}">{{this.rotulo}}</a>
+          {{/each}}
+        </div>
       </div>
     </div>
 
