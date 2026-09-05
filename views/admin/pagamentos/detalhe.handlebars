@@ -2,6 +2,11 @@
   <h1>Recibo {{pagamento.numero_documento}}</h1>
   <div>
     <a href="/admin/pagamentos/{{pagamento.id}}/recibo" target="_blank" class="btn btn-primary"><i class="bi bi-file-earmark-pdf me-1"></i>Recibo PDF</a>
+    {{#if driveLigado}}
+    <form action="/admin/pagamentos/{{pagamento.id}}/recibo/drive" method="POST" class="d-inline">
+      <button class="btn btn-outline-secondary"><i class="bi bi-cloud-arrow-up me-1"></i>Guardar no Drive</button>
+    </form>
+    {{/if}}
     <a href="/admin/pagamentos" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
   </div>
 </div>

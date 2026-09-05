@@ -140,6 +140,11 @@
           </td>
           <td class="text-end text-nowrap">
             <a href="/admin/quotas/{{id}}/aviso" target="_blank" class="btn btn-sm btn-outline-primary" title="Aviso PDF"><span class="material-symbols-outlined">picture_as_pdf</span></a>
+            {{#if ../driveLigado}}
+            <form action="/admin/quotas/{{id}}/aviso/drive" method="POST" class="d-inline">
+              <button class="btn btn-sm btn-outline-secondary" title="Guardar aviso no Google Drive"><span class="material-symbols-outlined">cloud_upload</span></button>
+            </form>
+            {{/if}}
             <a href="/admin/quotas/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
             <a href="/admin/quotas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
             <form action="/admin/quotas/{{id}}/anular" method="POST" class="d-inline" onsubmit="return confirm('Anular esta quota?');">

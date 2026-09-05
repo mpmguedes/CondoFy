@@ -14,6 +14,7 @@ const {
   FracaoPessoa,
   Orcamento,
   OrcamentoRubrica,
+  Documento,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
@@ -31,6 +32,7 @@ const { estaAtivo } = require('../helpers/notificacoes');
 const { getQuotaConfig, setQuotaConfig } = require('../helpers/quotas-config');
 const { calcularQuota, calcularQuotasOrcamento } = require('../helpers/quotas-calc');
 const { validarPermilagem } = require('../helpers/permilagem');
+const drive = require('../helpers/drive');
 
 const router = express.Router();
 
@@ -298,6 +300,7 @@ router.get('/quotas', async (req, res) => {
     quotaConfig,
     permilagem,
     previstasMes: fromCents(previstasMesC),
+    driveLigado: drive.isConfigured(),
   });
 });
 
@@ -536,6 +539,7 @@ router.get('/quotas/:id', async (req, res) => {
     pago: fromCents(pagoC),
     emFalta: fromCents(toCents(quota.valor) - pagoC),
     ultimaData: ultima || null,
+    driveLigado: drive.isConfigured(),
   });
 });
 
@@ -582,7 +586,7 @@ router.get('/pagamentos', async (req, res) => {
     ],
     order: [['data_pagamento', 'DESC'], ['id', 'DESC']],
   });
-  res.render('admin/pagamentos/listar', { titulo: 'Pagamentos', pagamentos });
+  res.render('admin/pagamentos/listar', { titulo: 'Pagamentos', pagamentos, driveLigado: drive.isConfigured() });
 });
 
 router.get('/pagamentos/nova', async (req, res) => {
@@ -647,7 +651,7 @@ router.get('/pagamentos/:id', async (req, res) => {
     ],
   });
   if (!pagamento) return res.redirect('/admin/pagamentos');
-  res.render('admin/pagamentos/detalhe', { titulo: `Recibo ${pagamento.numero_documento || ''}`, pagamento });
+  res.render('admin/pagamentos/detalhe', { titulo: `Recibo ${pagamento.numero_documento || ''}`, pagamento, driveLigado: drive.isConfigured() });
 });
 
 router.post('/pagamentos/:id/anular', async (req, res) => {
@@ -671,46 +675,84 @@ async function nomeProprietarioPrincipal(fracaoId) {
   return vinculo && vinculo.pessoa ? vinculo.pessoa.nome : 'Condómino';
 }
 
+// Gera o buffer do aviso de quota (partilhado entre ver/descarregar e Drive).
+async function construirAvisoQuota(quotaId) {
+  const quota = await Quota.findByPk(quotaId, { include: [{ model: Fracao, as: 'fracao' }] });
+  if (!quota) throw new Error('Quota não encontrada.');
+  const condominio = await getCondominio();
+  const resumo = await resumoFracao(quota.fracao_id);
+  const destinatarioNome = await nomeProprietarioPrincipal(quota.fracao_id);
+
+  const aplicacoes = await PagamentoQuota.findAll({
+    where: { quota_id: quota.id },
+    include: [{ model: Pagamento, as: 'pagamento', attributes: ['estado'] }],
+  });
+  const pagoAplicadoC = aplicacoes
+    .filter((a) => a.pagamento && a.pagamento.estado === 'confirmado')
+    .reduce((s, a) => s + toCents(a.valor_aplicado), 0);
+  const quotaEmAberto = fromCents(toCents(quota.valor) - pagoAplicadoC);
+  const emDividaC = toCents(resumo.emDivida);
+  const saldoAnterior = fromCents(emDividaC - toCents(quota.valor) + pagoAplicadoC);
+
+  const buffer = await gerarAvisoQuotaPDF(condominio.toJSON(), {
+    numero: quota.numero_documento,
+    periodo: `${monthName(quota.mes)} ${quota.ano}`,
+    dataEmissao: quota.data_emissao,
+    dataVencimento: quota.data_vencimento,
+    valor: quota.valor,
+    destinatarioNome,
+    fracaoDesignacao: quota.fracao.designacao,
+    fracaoMorada: [condominio.morada, [condominio.codigo_postal, condominio.localidade].filter(Boolean).join(' ')].filter(Boolean).join(', '),
+    saldoAnterior,
+    ultimoPagamento: resumo.ultimoPagamento,
+    ultimoPagamentoValor: resumo.ultimoPagamento ? resumo.ultimoPagamento.valor : null,
+    ultimoPagamentoData: resumo.ultimoPagamento ? resumo.ultimoPagamento.data : null,
+    emDivida: resumo.emDivida,
+    totalAPagar: quotaEmAberto,
+    iban: condominio.iban_principal,
+    outrosMeiosPagamento: condominio.outros_meios_pagamento,
+    referencia: null,
+    instrucoesPagamento: condominio.dados_bancarios_adicionais,
+  });
+  return { buffer, quota };
+}
+
+// Gera o buffer do recibo (partilhado entre ver/descarregar e Drive).
+async function construirRecibo(pagamentoId) {
+  const pagamento = await Pagamento.findByPk(pagamentoId, {
+    include: [
+      { model: Fracao, as: 'fracao' },
+      { model: MetodoPagamento, as: 'metodo_pagamento' },
+      { model: Quota, as: 'quotas', through: { attributes: ['valor_aplicado'] } },
+    ],
+  });
+  if (!pagamento) throw new Error('Pagamento não encontrado.');
+  const condominio = await getCondominio();
+  const resumo = await resumoFracao(pagamento.fracao_id);
+  const condominoNome = await nomeProprietarioPrincipal(pagamento.fracao_id);
+
+  const buffer = await gerarReciboPDF(condominio.toJSON(), {
+    numero: pagamento.numero_documento,
+    data: pagamento.data_pagamento,
+    dataPagamento: pagamento.data_pagamento,
+    valor: pagamento.valor,
+    condominoNome,
+    fracaoDesignacao: pagamento.fracao.designacao,
+    metodoPagamento: pagamento.metodo_pagamento ? pagamento.metodo_pagamento.nome : null,
+    referencia: pagamento.referencia,
+    quotas: pagamento.quotas.map((q) => ({
+      numero: q.numero_documento,
+      periodo: `${monthName(q.mes)} ${q.ano}`,
+      valorAplicado: q.PagamentoQuota ? q.PagamentoQuota.valor_aplicado : 0,
+    })),
+    saldoAposPagamento: resumo.emDivida,
+  });
+  return { buffer, pagamento };
+}
+
 router.get('/quotas/:id/aviso', async (req, res) => {
   try {
-    const quota = await Quota.findByPk(req.params.id, { include: [{ model: Fracao, as: 'fracao' }] });
-    if (!quota) return res.redirect('/admin/quotas');
-    const condominio = await getCondominio();
-    const resumo = await resumoFracao(quota.fracao_id);
-    const destinatarioNome = await nomeProprietarioPrincipal(quota.fracao_id);
-
-    const aplicacoes = await PagamentoQuota.findAll({
-      where: { quota_id: quota.id },
-      include: [{ model: Pagamento, as: 'pagamento', attributes: ['estado'] }],
-    });
-    const pagoAplicadoC = aplicacoes
-      .filter((a) => a.pagamento && a.pagamento.estado === 'confirmado')
-      .reduce((s, a) => s + toCents(a.valor_aplicado), 0);
-    const quotaEmAberto = fromCents(toCents(quota.valor) - pagoAplicadoC);
-    const emDividaC = toCents(resumo.emDivida);
-    const saldoAnterior = fromCents(emDividaC - toCents(quota.valor) + pagoAplicadoC);
-
-    const buffer = await gerarAvisoQuotaPDF(condominio.toJSON(), {
-      numero: quota.numero_documento,
-      periodo: `${monthName(quota.mes)} ${quota.ano}`,
-      dataEmissao: quota.data_emissao,
-      dataVencimento: quota.data_vencimento,
-      valor: quota.valor,
-      destinatarioNome,
-      fracaoDesignacao: quota.fracao.designacao,
-      fracaoMorada: [condominio.morada, [condominio.codigo_postal, condominio.localidade].filter(Boolean).join(' ')].filter(Boolean).join(', '),
-      saldoAnterior,
-      ultimoPagamento: resumo.ultimoPagamento,
-      ultimoPagamentoValor: resumo.ultimoPagamento ? resumo.ultimoPagamento.valor : null,
-      ultimoPagamentoData: resumo.ultimoPagamento ? resumo.ultimoPagamento.data : null,
-      emDivida: resumo.emDivida,
-      totalAPagar: quotaEmAberto,
-      iban: condominio.iban_principal,
-      outrosMeiosPagamento: condominio.outros_meios_pagamento,
-      referencia: null,
-      instrucoesPagamento: condominio.dados_bancarios_adicionais,
-    });
-
+    const { buffer, quota } = await construirAvisoQuota(req.params.id);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="aviso_${quota.numero_documento || quota.id}.pdf"`);
     res.send(buffer);
@@ -723,35 +765,7 @@ router.get('/quotas/:id/aviso', async (req, res) => {
 
 router.get('/pagamentos/:id/recibo', async (req, res) => {
   try {
-    const pagamento = await Pagamento.findByPk(req.params.id, {
-      include: [
-        { model: Fracao, as: 'fracao' },
-        { model: MetodoPagamento, as: 'metodo_pagamento' },
-        { model: Quota, as: 'quotas', through: { attributes: ['valor_aplicado'] } },
-      ],
-    });
-    if (!pagamento) return res.redirect('/admin/pagamentos');
-    const condominio = await getCondominio();
-    const resumo = await resumoFracao(pagamento.fracao_id);
-    const condominoNome = await nomeProprietarioPrincipal(pagamento.fracao_id);
-
-    const buffer = await gerarReciboPDF(condominio.toJSON(), {
-      numero: pagamento.numero_documento,
-      data: pagamento.data_pagamento,
-      dataPagamento: pagamento.data_pagamento,
-      valor: pagamento.valor,
-      condominoNome,
-      fracaoDesignacao: pagamento.fracao.designacao,
-      metodoPagamento: pagamento.metodo_pagamento ? pagamento.metodo_pagamento.nome : null,
-      referencia: pagamento.referencia,
-      quotas: pagamento.quotas.map((q) => ({
-        numero: q.numero_documento,
-        periodo: `${monthName(q.mes)} ${q.ano}`,
-        valorAplicado: q.PagamentoQuota ? q.PagamentoQuota.valor_aplicado : 0,
-      })),
-      saldoAposPagamento: resumo.emDivida,
-    });
-
+    const { buffer, pagamento } = await construirRecibo(req.params.id);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="recibo_${pagamento.numero_documento || pagamento.id}.pdf"`);
     res.send(buffer);
@@ -760,6 +774,72 @@ router.get('/pagamentos/:id/recibo', async (req, res) => {
     req.flash('error_msg', 'Erro ao gerar o recibo.');
     res.redirect('/admin/pagamentos');
   }
+});
+
+// Guarda no Google Drive um PDF gerado pelo Financeiro (aviso/recibo) e
+// regista-o como Documento (fica disponível na biblioteca para enviar por email).
+async function guardarPdfFinanceiroDrive({ tipo, numeroDocumento, nome, buffer, anoData, userId }) {
+  if (!drive.isConfigured()) throw new Error('Google Drive não está ligado (Configuração → Google Drive).');
+  const pastaId = await drive.pastaParaDocumento(tipo, anoData);
+  const up = await drive.uploadArquivo({ nome, mimeType: 'application/pdf', buffer, parentFolderId: pastaId });
+  const doc = await Documento.create({
+    tipo,
+    numero_documento: numeroDocumento || null,
+    nome,
+    pasta: tipo === 'recibo' ? 'recibos' : 'quotas',
+    drive_file_id: up.driveFileId,
+    drive_folder_id: pastaId,
+    mime_type: 'application/pdf',
+    tamanho: up.tamanho,
+    data: anoData ? new Date(anoData, 0, 1) : new Date(),
+    url: up.url,
+    drive_status: 'guardado',
+    drive_uploaded_at: new Date(),
+    created_by: userId,
+  });
+  return { doc, up };
+}
+
+router.post('/quotas/:id/aviso/drive', async (req, res) => {
+  try {
+    const { buffer, quota } = await construirAvisoQuota(req.params.id);
+    const ano = quota.data_emissao ? new Date(quota.data_emissao).getFullYear() : new Date().getFullYear();
+    const { doc } = await guardarPdfFinanceiroDrive({
+      tipo: 'aviso_quota',
+      numeroDocumento: quota.numero_documento,
+      nome: `Aviso de quota ${quota.numero_documento || quota.id}`,
+      buffer,
+      anoData: ano,
+      userId: req.user.id,
+    });
+    await audit({ userId: req.user.id, acao: 'guardar_documento_drive', entidade: 'Documento', entidadeId: doc.id, detalhes: { tipo: 'aviso_quota' } }).catch(() => {});
+    req.flash('success_msg', 'Aviso de quota guardado no Google Drive.');
+  } catch (err) {
+    console.error('[aviso-drive]', err.message);
+    req.flash('error_msg', `Não foi possível guardar no Drive: ${err.message}`);
+  }
+  res.redirect('/admin/quotas');
+});
+
+router.post('/pagamentos/:id/recibo/drive', async (req, res) => {
+  try {
+    const { buffer, pagamento } = await construirRecibo(req.params.id);
+    const ano = pagamento.data_pagamento ? new Date(pagamento.data_pagamento).getFullYear() : new Date().getFullYear();
+    const { doc } = await guardarPdfFinanceiroDrive({
+      tipo: 'recibo',
+      numeroDocumento: pagamento.numero_documento,
+      nome: `Recibo ${pagamento.numero_documento || pagamento.id}`,
+      buffer,
+      anoData: ano,
+      userId: req.user.id,
+    });
+    await audit({ userId: req.user.id, acao: 'guardar_documento_drive', entidade: 'Documento', entidadeId: doc.id, detalhes: { tipo: 'recibo' } }).catch(() => {});
+    req.flash('success_msg', 'Recibo guardado no Google Drive.');
+  } catch (err) {
+    console.error('[recibo-drive]', err.message);
+    req.flash('error_msg', `Não foi possível guardar no Drive: ${err.message}`);
+  }
+  res.redirect('/admin/pagamentos');
 });
 
 module.exports = router;

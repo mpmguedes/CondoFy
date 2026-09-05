@@ -144,6 +144,9 @@ Onde estão disponíveis:
 
 * **Documentos** (biblioteca): estado ☁ Guardado/Erro, “Abrir no Google Drive”,
   “Enviar por email”, eliminar.
+* **Financeiro**: nas listas/detalhes de quotas e pagamentos, botão
+  “Guardar no Drive” para o aviso de quota e o recibo (gera o PDF, guarda na
+  pasta correta e regista o Documento para envio posterior).
 * **Assembleias**: guardar convocatória/ata no Drive e anexos (botões existentes).
 * **Convocatórias (Nova Convocatória)**: opção “Guardar também no Google Drive”.
 * **Avisos**: envio por email centralizado (fila), sem duplicados.
