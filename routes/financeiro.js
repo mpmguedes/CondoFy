@@ -657,6 +657,8 @@ async function contextoEnvioQuotas({ ano, mes }) {
       fracao: q.fracao.designacao,
       numero: q.numero_documento,
       periodo: `${monthName(q.mes)} ${q.ano}`,
+      ano: q.ano,
+      mes: q.mes,
       valor: q.valor,
       condominos: pessoas.map((p) => p.nome).join(', ') || '—',
       emails: emails.join(', ') || '',
@@ -685,7 +687,20 @@ async function contextoEnvioQuotas({ ano, mes }) {
 
 // Enfileira emails de uma lista de linhas (envio em lote/automático),
 // sem duplicar envios existentes (a menos que reenviar=true).
-async function enfileirarLoteEmails({ linhas, entidadeTipo, link, assunto, corpo, userId, reenviar = false }) {
+// Opções avançadas:
+//  · mensagemDe(linha) → { assunto, corpo, corpo_html } (templates profissionais)
+//  · anexoDe(linha) → { nome, buffer } (PDF específico do destinatário)
+async function enfileirarLoteEmails({
+  linhas,
+  entidadeTipo,
+  link,
+  assunto,
+  corpo,
+  mensagemDe,
+  anexoDe,
+  userId,
+  reenviar = false,
+}) {
   let enfileirados = 0;
   let ignorados = 0;
   let semEmail = 0;
@@ -694,20 +709,35 @@ async function enfileirarLoteEmails({ linhas, entidadeTipo, link, assunto, corpo
       semEmail++;
       continue;
     }
+    let anexo = null;
+    if (anexoDe) {
+      try {
+        anexo = await anexoDe(linha);
+      } catch (err) {
+        console.error('[lote-anexo]', err.message);
+        anexo = null; // email avança sem anexo, com link
+      }
+    }
     for (const email of linha.emailsLista) {
       const ja = await existeEnvioPara({ entidadeTipo, entidadeId: linha.id, email });
       if (ja && !reenviar) {
         ignorados++;
         continue;
       }
+      const mensagem = mensagemDe
+        ? mensagemDe(linha)
+        : { assunto: assunto(linha), corpo_html: null, corpo: corpo(linha, link(linha)) };
       await enfileirarEmailFila({
         destinatario_email: email,
         destinatario_nome: linha.condominos !== '—' ? linha.condominos : null,
-        assunto: assunto(linha),
-        corpo: corpo(linha, link(linha)),
+        assunto: mensagem.assunto,
+        corpo: mensagem.corpo,
+        corpo_html: mensagem.corpo_html || null,
         entidade_tipo: entidadeTipo,
         entidade_id: linha.id,
         userId,
+        anexoNome: anexo ? anexo.nome : null,
+        anexoBuffer: anexo ? anexo.buffer : null,
       });
       enfileirados++;
     }
@@ -728,6 +758,9 @@ router.post('/quotas/enviar', async (req, res) => {
 
   const alvos = ctx.linhas.filter((l) => (modoPendentes ? l.temEmail && l.estado !== 'enviado' : pedidoIds.has(l.id)));
   const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const condEm = await getCondominio();
+  const condNome = (condEm && String(condEm.designacao || '').trim()) || '';
+  const adminNome = (condEm && String(condEm.administracao_nome || '').trim()) || '';
   const r = await enfileirarLoteEmails({
     linhas: alvos,
     entidadeTipo: 'Quota',
@@ -736,6 +769,23 @@ router.post('/quotas/enviar', async (req, res) => {
     link: (l) => `${baseUrl}/admin/quotas/${l.id}/aviso`,
     assunto: (l) => `Aviso de quota ${l.numero} — ${l.periodo}`,
     corpo: (l, url) => `Fração ${l.fracao}\nPeríodo: ${l.periodo}\nValor: ${l.valor} €\n\nAviso de quota: ${url}`,
+    mensagemDe: (l) => {
+      const url = `${baseUrl}/admin/quotas/${l.id}/aviso`;
+      const nome = l.condominos && l.condominos !== '—' ? String(l.condominos).split(',')[0].trim() : undefined;
+      const tpl = comporEmail('quota', {
+        destinatarioNome: nome,
+        condominio: condNome,
+        administracao: adminNome,
+        periodo: l.periodo,
+        valor: `${l.valor} €`,
+        urlOnline: url,
+      });
+      return { assunto: tpl.assunto, corpo: tpl.text, corpo_html: tpl.html };
+    },
+    anexoDe: async (l) => {
+      const { buffer } = await construirAvisoQuota(l.id);
+      return { nome: nomeFicheiroEmail('quota', { ano: String(l.ano || ''), mes: l.mes || '', fracao: l.fracao }), buffer };
+    },
   });
   await audit({
     userId: req.user.id,
@@ -966,41 +1016,44 @@ router.post('/pagamentos/enviar-recibos', async (req, res) => {
   const reenviar = req.body.reenviar === '1' || req.body.reenviar === 'on';
   const modoPendentes = req.body.modo === 'pendentes';
   const alvos = ctx.linhas.filter((l) => (modoPendentes ? l.temEmail && l.estado !== 'enviado' : pedidoIds.has(l.id)));
-
-  let enfileirados = 0;
-  let ignorados = 0;
-  let semEmail = 0;
-  for (const linha of alvos) {
-    if (!linha.temEmail) {
-      semEmail++;
-      continue;
-    }
-    for (const email of linha.emailsLista) {
-      const ja = await existeEnvioPara({ entidadeTipo: 'Pagamento', entidadeId: linha.id, email });
-      if (ja && !reenviar) {
-        ignorados++;
-        continue;
-      }
-      const linkRecibo = `${req.protocol}://${req.get('host')}/admin/pagamentos/${linha.id}/recibo`;
-      await enfileirarEmailFila({
-        destinatario_email: email,
-        destinatario_nome: linha.condominos !== '—' ? linha.condominos : null,
-        assunto: `Recibo ${linha.numero || ''} — ${linha.fracao}`.trim(),
-        corpo: `Fração ${linha.fracao}\nValor: ${linha.valor} €\nData: ${String(linha.data || '')}\n\nRecibo: ${linkRecibo}`,
-        entidade_tipo: 'Pagamento',
-        entidade_id: linha.id,
-        userId: req.user.id,
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const condEm = await getCondominio();
+  const condNome = (condEm && String(condEm.designacao || '').trim()) || '';
+  const adminNome = (condEm && String(condEm.administracao_nome || '').trim()) || '';
+  const r = await enfileirarLoteEmails({
+    linhas: alvos,
+    entidadeTipo: 'Pagamento',
+    reenviar,
+    userId: req.user.id,
+    link: (l) => `${baseUrl}/admin/pagamentos/${l.id}/recibo`,
+    assunto: (l) => `Recibo ${l.numero || ''} — ${l.fracao}`.trim(),
+    corpo: (l, url) => `Fração ${l.fracao}\nValor: ${l.valor} €\nData: ${String(l.data || '')}\n\nRecibo: ${url}`,
+    mensagemDe: (l) => {
+      const url = `${baseUrl}/admin/pagamentos/${l.id}/recibo`;
+      const nome = l.condominos && l.condominos !== '—' ? String(l.condominos).split(',')[0].trim() : undefined;
+      const tpl = comporEmail('recibo', {
+        destinatarioNome: nome,
+        condominio: condNome,
+        administracao: adminNome,
+        valor: `${l.valor} €`,
+        referencia: l.numero,
+        data: String(l.data || ''),
+        urlOnline: url,
       });
-      enfileirados++;
-    }
-  }
+      return { assunto: tpl.assunto, corpo: tpl.text, corpo_html: tpl.html };
+    },
+    anexoDe: async (l) => {
+      const { buffer } = await construirRecibo(l.id);
+      return { nome: nomeFicheiroEmail('recibo', { numero: l.numero || l.id }), buffer };
+    },
+  });
   await audit({
     userId: req.user.id,
     acao: 'enviar_recibos_email',
     entidade: 'Pagamento',
-    detalhes: { enfileirados, ignorados, semEmail, reenviar },
+    detalhes: { enfileirados: r.enfileirados, ignorados: r.ignorados, semEmail: r.semEmail, reenviar },
   }).catch(() => {});
-  req.flash('success_msg', `${enfileirados} recibo(s) enfileirado(s).${ignorados ? ` ${ignorados} já tinham envio (não duplicados).` : ''}${semEmail ? ` ${semEmail} sem email.` : ''}`);
+  req.flash('success_msg', `${r.enfileirados} recibo(s) enfileirado(s).${r.ignorados ? ` ${r.ignorados} já tinham envio (não duplicados).` : ''}${r.semEmail ? ` ${r.semEmail} sem email.` : ''}`);
   res.redirect('/admin/pagamentos/enviar-recibos');
 });
 
