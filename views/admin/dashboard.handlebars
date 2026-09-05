@@ -13,7 +13,18 @@
   <a class="quick-action" href="/admin/avisos/nova"><span class="material-symbols-outlined">campaign</span>Novo aviso</a>
 </div>
 
-<div class="section-title">Finanças</div>
+{{!-- Atividade / alertas que requerem atenção (sem caixas pesadas) --}}
+<div class="section-title">Atividade e alertas</div>
+<div class="d-flex flex-wrap gap-2 mb-2">
+  {{#if (gt nVencidas 0)}}<a class="badge text-bg-danger text-decoration-none" href="/admin/quotas?estado=vencida">{{nVencidas}} quota(s) em atraso</a>{{/if}}
+  {{#if (gt nPagFornecedorPendentes 0)}}<a class="badge text-bg-warning text-decoration-none" href="/admin/fornecedores">{{nPagFornecedorPendentes}} pagamento(s) a fornecedores pendente(s)</a>{{/if}}
+  {{#if (gt sistema.filaErros 0)}}<a class="badge text-bg-danger text-decoration-none" href="/admin/emails?estado=erros">{{sistema.filaErros}} email(s) com erro</a>{{/if}}
+  {{#unless sistema.driveLigado}}<a class="badge text-bg-secondary text-decoration-none" href="/admin/config#google-drive">Google Drive desligado</a>{{/unless}}
+  {{#unless sistema.smtp}}<a class="badge text-bg-secondary text-decoration-none" href="/admin/emails#smtp">Email/SMTP não configurado</a>{{/unless}}
+  {{#unless (gt nVencidas 0)}}<span class="text-muted small align-self-center">Sem alertas pendentes.</span>{{/unless}}
+</div>
+
+<div class="section-title">Resumo financeiro</div>
 <div class="row g-3">
   <div class="col-6 col-md-4 col-lg">
     <div class="card stat-card"><div class="card-body">
