@@ -2,7 +2,7 @@
 // Utilização: node scripts/test-comunicacoes.js
 const assert = require('assert');
 const { normalizarDestinatarios } = require('../helpers/document-actions');
-const { mensagemErroAmigavel } = require('../helpers/mailer');
+const { mensagemErroAmigavel, comporConfigSmtp } = require('../helpers/mailer');
 
 async function main() {
   // 1. Normalização de destinatários (string, array, objetos)
@@ -57,6 +57,48 @@ async function main() {
   const t2 = compor('generico', { condominio: 'Condomínio X', destinatarioNome: 'Maria', mensagem: 'Informamos ainda que...' });
   assert.ok(t2.text.includes('Maria'), 'genérico personalizado');
   assert.ok(!t2.text.includes('CondoFy'), 'genérico sem CondoFy');
+
+  // 4. Resolução SMTP: BD sem smtp_pass + SMTP_PASS no .env → fallback por campo
+  const env = {
+    host: 'smtp.gmail.com',
+    port: '587',
+    user: 'condominio@gmail.com',
+    pass: 'app-password-do-env',
+    tls: 'true',
+    from: 'condominio@gmail.com',
+    fromName: 'Administração (env)',
+  };
+  const dbSemPass = {
+    smtp_host: 'smtp.gmail.com',
+    smtp_port: '587',
+    smtp_user: 'condominio@gmail.com',
+    smtp_tls: 'true',
+    smtp_from: 'condominio@gmail.com',
+    smtp_from_name: 'Administração do Condomínio',
+    // sem smtp_pass
+  };
+  const cfg1 = comporConfigSmtp(dbSemPass, env);
+  assert.strictEqual(cfg1.pass, 'app-password-do-env', 'BD sem smtp_pass → usa SMTP_PASS do .env');
+  assert.strictEqual(cfg1.fromName, 'Administração do Condomínio', 'BD from_name tem prioridade');
+  assert.strictEqual(cfg1.tls, 'true', 'BD tls mantido');
+  assert.strictEqual(cfg1.from, 'condominio@gmail.com', 'BD from mantido');
+
+  // smtp_pass vazio na BD → também usa o .env
+  const cfg2 = comporConfigSmtp({ ...dbSemPass, smtp_pass: '' }, env);
+  assert.strictEqual(cfg2.pass, 'app-password-do-env', 'smtp_pass vazio na BD → .env');
+
+  // smtp_pass preenchido na BD → a BD tem prioridade
+  const cfg3 = comporConfigSmtp({ ...dbSemPass, smtp_pass: 'app-password-da-bd' }, env);
+  assert.strictEqual(cfg3.pass, 'app-password-da-bd', 'smtp_pass na BD tem prioridade');
+
+  // Sem configuração na BD → .env completo
+  const cfg4 = comporConfigSmtp({}, env);
+  assert.strictEqual(cfg4.host, 'smtp.gmail.com', 'fallback .env host');
+  assert.strictEqual(cfg4.pass, 'app-password-do-env', 'fallback .env pass');
+
+  // A password nunca é incluída em saídas de estado/devoluções
+  const estadoMailer = { configurado: Boolean(cfg1.host), servidor: cfg1.host, temPassword: Boolean(cfg1.pass) };
+  assert.ok(!JSON.stringify(estadoMailer).includes(cfg1.pass), 'password não exposta no estado');
 
   console.log('✓ Testes de comunicações passaram (sem rede).');
 }

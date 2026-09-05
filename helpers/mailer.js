@@ -47,8 +47,30 @@ function configEnv() {
   };
 }
 
-// Configuração efetiva: BD com prioridade quando tem host/utilizador;
-// caso contrário, .env (compatibilidade com instalações atuais).
+// Funde a configuração da BD (prioridade) com a do .env, CAMPO A CAMPO:
+// se um valor não vazio existir na BD é usado; caso contrário, usa-se o
+// valor do .env (fallback). Isto garante que, por exemplo, uma BD sem
+// smtp_pass continua a autenticar com SMTP_PASS do .env — sem nunca
+// guardar a password do .env na BD nem expô-la.
+function comporConfigSmtp(db, env) {
+  const mapaDb = db || {};
+  const mapaEnv = env || configEnv();
+  const vazio = (v) => v === null || v === undefined || String(v).trim() === '';
+
+  const cfg = {};
+  for (const campo of Object.keys(CHAVES)) {
+    const chaveDb = CHAVES[campo];
+    const valorDb = mapaDb[chaveDb];
+    if (!vazio(valorDb)) {
+      cfg[campo] = campo === 'pass' ? String(valorDb) : String(valorDb).trim();
+    } else {
+      cfg[campo] = mapaEnv[campo] === undefined ? '' : mapaEnv[campo];
+    }
+  }
+  return cfg;
+}
+
+// Configuração efetiva: BD com prioridade por campo + fallback ao .env.
 async function obterConfigSmtp({ force = false } = {}) {
   const agora = Date.now();
   if (!force && _cache.dados && agora - _cache.at < TTL) return _cache.dados;
@@ -56,21 +78,11 @@ async function obterConfigSmtp({ force = false } = {}) {
   let cfg = null;
   try {
     const db = await lerChavesDb();
-    if (db[CHAVES.host] || db[CHAVES.user] || db[CHAVES.from]) {
-      cfg = {
-        host: db[CHAVES.host] || '',
-        port: db[CHAVES.port] || '587',
-        user: db[CHAVES.user] || '',
-        pass: db[CHAVES.pass] || '',
-        tls: db[CHAVES.tls] || 'true',
-        from: db[CHAVES.from] || '',
-        fromName: db[CHAVES.fromName] || 'Condomínio',
-      };
-    }
+    cfg = comporConfigSmtp(db, configEnv());
   } catch (err) {
-    // BD indisponível → usa .env
+    // BD indisponível → usa apenas o .env
+    cfg = comporConfigSmtp({}, configEnv());
   }
-  if (!cfg) cfg = configEnv();
   _cache = { at: agora, dados: cfg };
   return cfg;
 }
@@ -232,6 +244,7 @@ module.exports = {
   obterEstadoSmtp,
   guardarConfigSmtp,
   obterNomeRemetente,
+  comporConfigSmtp,
   limparCache,
   inicializar,
   mensagemErroAmigavel,
