@@ -12,6 +12,9 @@ module.exports = (sequelize) => {
       corpo_html: { type: DataTypes.TEXT, allowNull: true },
       documento_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       aviso_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+      entidade_tipo: { type: DataTypes.STRING(60), allowNull: true },
+      entidade_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+      user_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       tipo: {
         type: DataTypes.ENUM('normal', 'teste'),
         allowNull: false,

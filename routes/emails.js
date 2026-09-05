@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────
 const express = require('express');
 const { Op } = require('sequelize');
-const { EmailFila, Documento, Aviso } = require('../models');
+const { EmailFila, Documento, Aviso, User } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
 const mailer = require('../helpers/mailer');
@@ -46,6 +46,7 @@ router.get('/emails', async (req, res) => {
       include: [
         { model: Documento, as: 'documento', attributes: ['id', 'nome', 'drive_status', 'url'] },
         { model: Aviso, as: 'aviso', attributes: ['id', 'assunto'] },
+        { model: User, as: 'utilizador', attributes: ['id', 'nome'] },
       ],
       order: [['id', 'DESC']],
       limit: 200,

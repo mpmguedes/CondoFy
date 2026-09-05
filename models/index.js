@@ -156,6 +156,7 @@ AvisoDestinatario.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 // Fila de email
 EmailFila.belongsTo(Documento, { foreignKey: 'documento_id', as: 'documento' });
 EmailFila.belongsTo(Aviso, { foreignKey: 'aviso_id', as: 'aviso' });
+EmailFila.belongsTo(User, { foreignKey: 'user_id', as: 'utilizador' });
 
 // Auditoria
 AuditLog.belongsTo(User, { foreignKey: 'user_id', as: 'user' });

@@ -1,0 +1,149 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Enviar quotas por email</h1>
+    <p class="subtitle">{{titulo}}</p>
+  </div>
+  <a href="/admin/quotas" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Quotas</a>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <form action="/admin/quotas/enviar" method="GET" class="row g-2 align-items-end">
+      <div class="col-auto">
+        <label class="form-label small mb-0">Ano</label>
+        <select class="form-select form-select-sm" name="ano">
+          {{#each anos}}
+          <option value="{{this}}" {{#if (eq this ../ano)}}selected{{/if}}>{{this}}</option>
+          {{/each}}
+        </select>
+      </div>
+      <div class="col-auto">
+        <label class="form-label small mb-0">Mês</label>
+        <select class="form-select form-select-sm" name="mes">
+          {{#each meses}}
+          <option value="{{numero}}" {{#if (eq numero ../mes)}}selected{{/if}}>{{nome}}</option>
+          {{/each}}
+        </select>
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-outline-secondary btn-sm">Filtrar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{{#if total}}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Total</div><div class="stat-value">{{total}}</div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Com email</div><div class="stat-value">{{comEmail}}</div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Prontas para envio</div><div class="stat-value text-warning">{{pendentes}}</div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Já enviadas</div><div class="stat-value text-success">{{enviados}}</div></div></div></div>
+</div>
+
+<div class="card">
+  <form action="/admin/quotas/enviar" method="POST" id="formEnvios">
+    <input type="hidden" name="ano" value="{{ano}}" />
+    <input type="hidden" name="mes" value="{{mes}}" />
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th style="width:34px"><input type="checkbox" id="selTodos" /></th>
+            <th>Fração</th>
+            <th>Condómino</th>
+            <th>Email</th>
+            <th>Período</th>
+            <th class="text-end">Valor</th>
+            <th>Documento</th>
+            <th>Email</th>
+            <th>Último envio</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each linhas}}
+          <tr class="{{#unless temEmail}}table-light{{/unless}}">
+            <td><input type="checkbox" name="ids" value="{{id}}" class="sel-linha" data-estado="{{estado}}" data-ultimo="{{#if ultimoEnvio}}{{ultimoEnvio.email}}{{/if}}" {{#unless temEmail}}disabled{{/unless}} /></td>
+            <td class="fw-semibold">{{fracao}}</td>
+            <td>{{condominos}}</td>
+            <td class="small">{{#if emails}}{{emails}}{{else}}<span class="text-muted">Sem email</span>{{/if}}</td>
+            <td class="text-nowrap">{{periodo}}</td>
+            <td class="text-end">{{eur valor}}</td>
+            <td><a href="/admin/quotas/{{id}}/aviso" target="_blank" class="btn btn-sm btn-outline-primary" title="Aviso PDF"><span class="material-symbols-outlined">picture_as_pdf</span></a></td>
+            <td>
+              {{#if (eq estado 'enviado')}}<span class="badge text-bg-success">✓ Enviado</span>
+              {{else if (eq estado 'erro')}}<span class="badge text-bg-danger" title="Ver central de emails">Erro</span>
+              {{else if (eq estado 'pendente')}}<span class="badge text-bg-warning">Pendente</span>
+              {{else}}<span class="badge text-bg-secondary">Não enviado</span>{{/if}}
+            </td>
+            <td class="small text-muted">
+              {{#if ultimoEnvio}}{{formatDateTime ultimoEnvio.data}}<br />{{ultimoEnvio.email}}{{else}}—{{/if}}
+            </td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body border-top d-flex flex-wrap gap-2 align-items-center">
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="btnPendentes">☑ Selecionar não enviados</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="btnTodos">Selecionar todos</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="btnNenhum">Limpar</button>
+      <div class="form-check ms-lg-auto">
+        <input class="form-check-input" type="checkbox" name="reenviar" value="on" id="reenviar" />
+        <label class="form-check-label small" for="reenviar">Permitir reenviar já enviadas</label>
+      </div>
+      <button type="submit" name="modo" value="" class="btn btn-primary">Enviar selecionados</button>
+      <button type="submit" name="modo" value="pendentes" class="btn btn-success">Enviar todos os pendentes</button>
+    </div>
+  </form>
+</div>
+{{else}}
+{{> _empty-state icon="mail" titulo="Sem quotas neste período" descricao="Escolha outro mês/ano ou gere quotas primeiro." link="/admin/quotas/gerar" linkTexto="Gerar quotas"}}
+{{/if}}
+
+<script>
+(function () {
+  var form = document.getElementById('formEnvios');
+  if (!form) return;
+  var caixas = Array.prototype.slice.call(form.querySelectorAll('.sel-linha'));
+  var todos = document.getElementById('selTodos');
+  function atualizarTodos() {
+    if (!todos) return;
+    var visiveis = caixas.filter(function (c) { return !c.disabled; });
+    todos.checked = visiveis.length > 0 && visiveis.every(function (c) { return c.checked; });
+  }
+  if (todos) {
+    todos.addEventListener('change', function () {
+      caixas.forEach(function (c) { if (!c.disabled) c.checked = todos.checked; });
+    });
+  }
+  caixas.forEach(function (c) { c.addEventListener('change', atualizarTodos); });
+
+  function marcar(fn) {
+    caixas.forEach(function (c) {
+      if (!c.disabled && fn(c)) c.checked = true;
+      else c.checked = false;
+    });
+    atualizarTodos();
+  }
+  var bPend = document.getElementById('btnPendentes');
+  if (bPend) bPend.addEventListener('click', function () { marcar(function (c) { return c.dataset.estado !== 'enviado'; }); });
+  var bTodos = document.getElementById('btnTodos');
+  if (bTodos) bTodos.addEventListener('click', function () { marcar(function () { return true; }); });
+  var bNenhum = document.getElementById('btnNenhum');
+  if (bNenhum) bNenhum.addEventListener('click', function () { marcar(function () { return false; }); });
+
+  form.addEventListener('submit', function (e) {
+    var reenviarOk = document.getElementById('reenviar') && document.getElementById('reenviar').checked;
+    var selecionadas = caixas.filter(function (c) { return !c.disabled && c.checked; });
+    var jaEnviadas = selecionadas.filter(function (c) { return c.dataset.estado === 'enviado'; });
+    if (!reenviarOk && jaEnviadas.length) {
+      var msg = jaEnviadas.length + ' quota(s) já foram enviada(s)';
+      var alvo = jaEnviadas[0];
+      if (alvo.dataset.ultimo) msg += ' (ex.: ' + alvo.dataset.ultimo + ')';
+      msg += '.\nAssinale "Permitir reenviar já enviadas" para reenviar.';
+      e.preventDefault();
+      alert(msg);
+    }
+  });
+})();
+</script>

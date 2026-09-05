@@ -16,6 +16,7 @@ const {
   OrcamentoRubrica,
   Documento,
   Fornecedor,
+  EmailFila,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
@@ -535,6 +536,144 @@ router.post('/quotas/gerar', async (req, res) => {
     req.flash('error_msg', 'Não foi possível gerar as quotas. Verifique os dados e tente novamente.');
   }
   res.redirect('/admin/quotas');
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// QUOTAS — envio em lote por email (com histórico e sem duplicados)
+// ═══════════════════════════════════════════════════════════════════
+const { enfileirarEmail: enfileirarEmailFila } = require('../helpers/email-fila');
+const { existeEnvioPara, ultimoEnvioConcluido } = require('../helpers/envios');
+
+// Proprietários/condóminos de uma fração (preferência a "proprietario").
+async function pessoasDaFracao(fracaoId) {
+  const vinculos = await FracaoPessoa.findAll({
+    where: { fracao_id: fracaoId },
+    include: [{ model: Pessoa, as: 'pessoa' }],
+  });
+  const ordem = { proprietario: 0, condomino: 1, arrendatario: 2 };
+  return vinculos
+    .filter((v) => v.pessoa)
+    .sort((a, b) => (ordem[a.vinculo] ?? 3) - (ordem[b.vinculo] ?? 3))
+    .map((v) => v.pessoa);
+}
+
+function emailsUnicos(pessoas) {
+  const mapa = new Map();
+  pessoas
+    .filter((p) => p.email)
+    .forEach((p) => mapa.set(String(p.email).toLowerCase(), p.email));
+  return [...mapa.values()];
+}
+
+// Lista de quotas com destinatários/estado para a página de envio em lote.
+async function contextoEnvioQuotas({ ano, mes }) {
+  const agora = new Date();
+  const anoNum = parseInt(ano, 10) || agora.getFullYear();
+  const mesNum = parseInt(mes, 10) || agora.getMonth() + 1;
+
+  const quotas = await Quota.findAll({
+    where: { ano: anoNum, mes: mesNum },
+    include: [{ model: Fracao, as: 'fracao' }],
+    order: [[{ model: Fracao, as: 'fracao' }, 'designacao', 'ASC']],
+  });
+
+  const ids = quotas.map((q) => q.id);
+  const envios = ids.length
+    ? await EmailFila.findAll({ where: { entidade_tipo: 'Quota', entidade_id: { [Op.in]: ids } }, order: [['id', 'ASC']] })
+    : [];
+  const porQuota = {};
+  for (const e of envios) {
+    (porQuota[e.entidade_id] = porQuota[e.entidade_id] || []).push(e);
+  }
+
+  const linhas = [];
+  for (const q of quotas) {
+    const pessoas = await pessoasDaFracao(q.fracao_id);
+    const emails = emailsUnicos(pessoas);
+    const registos = porQuota[q.id] || [];
+    const enviados = registos.filter((r) => r.estado === 'enviado');
+    const temErro = registos.some((r) => r.estado === 'erro');
+    const pendente = registos.some((r) => ['pendente', 'a_enviar'].includes(r.estado));
+    const ultimo = enviados[enviados.length - 1] || null;
+    linhas.push({
+      id: q.id,
+      fracao: q.fracao.designacao,
+      numero: q.numero_documento,
+      periodo: `${monthName(q.mes)} ${q.ano}`,
+      valor: q.valor,
+      condominos: pessoas.map((p) => p.nome).join(', ') || '—',
+      emails: emails.join(', ') || '',
+      temEmail: emails.length > 0,
+      emailsLista: emails,
+      estado: enviados.length ? 'enviado' : temErro ? 'erro' : pendente ? 'pendente' : 'nao_enviado',
+      ultimoEnvio: ultimo ? { data: ultimo.data_enviada, email: ultimo.destinatario_email } : null,
+    });
+  }
+
+  return {
+    ano: anoNum,
+    mes: mesNum,
+    titulo: `Quotas — ${monthName(mesNum)} ${anoNum}`,
+    anos: Array.from({ length: 7 }, (_, i) => new Date().getFullYear() - 3 + i),
+    meses: MESES.map((nome, i) => ({ numero: i + 1, nome })),
+    total: linhas.length,
+    comEmail: linhas.filter((l) => l.temEmail).length,
+    enviados: linhas.filter((l) => l.estado === 'enviado').length,
+    pendentes: linhas.filter((l) => l.temEmail && l.estado !== 'enviado').length,
+    semEmail: linhas.filter((l) => !l.temEmail).length,
+    comErro: linhas.filter((l) => l.estado === 'erro').length,
+    linhas,
+  };
+}
+
+router.get('/quotas/enviar', async (req, res) => {
+  const ctx = await contextoEnvioQuotas({ ano: req.query.ano, mes: req.query.mes });
+  res.render('admin/quotas/enviar', { titulo: 'Enviar quotas por email', driveLigado: drive.isConfigured(), ...ctx });
+});
+
+router.post('/quotas/enviar', async (req, res) => {
+  const ctx = await contextoEnvioQuotas({ ano: req.body.ano, mes: req.body.mes });
+  const pedidoIds = new Set((Array.isArray(req.body.ids) ? req.body.ids : req.body.ids ? [req.body.ids] : []).map(Number));
+  const reenviar = req.body.reenviar === '1' || req.body.reenviar === 'on';
+  const modoPendentes = req.body.modo === 'pendentes';
+
+  const alvos = ctx.linhas.filter((l) => (modoPendentes ? l.temEmail && l.estado !== 'enviado' : pedidoIds.has(l.id)));
+
+  let enfileirados = 0;
+  let ignorados = 0;
+  let semEmail = 0;
+  for (const linha of alvos) {
+    if (!linha.temEmail) {
+      semEmail++;
+      continue;
+    }
+    for (const email of linha.emailsLista) {
+      const ja = await existeEnvioPara({ entidadeTipo: 'Quota', entidadeId: linha.id, email });
+      if (ja && !reenviar) {
+        ignorados++;
+        continue;
+      }
+      const linkAviso = `${req.protocol}://${req.get('host')}/admin/quotas/${linha.id}/aviso`;
+      await enfileirarEmailFila({
+        destinatario_email: email,
+        destinatario_nome: linha.condominos !== '—' ? linha.condominos : null,
+        assunto: `Aviso de quota ${linha.numero} — ${linha.periodo}`,
+        corpo: `Fração ${linha.fracao}\nPeríodo: ${linha.periodo}\nValor: ${linha.valor} €\n\nAviso de quota: ${linkAviso}`,
+        entidade_tipo: 'Quota',
+        entidade_id: linha.id,
+        userId: req.user.id,
+      });
+      enfileirados++;
+    }
+  }
+  await audit({
+    userId: req.user.id,
+    acao: 'enviar_quotas_email',
+    entidade: 'Quota',
+    detalhes: { ano: ctx.ano, mes: ctx.mes, enfileirados, ignorados, semEmail, reenviar },
+  }).catch(() => {});
+  req.flash('success_msg', `${enfileirados} email(s) enfileirado(s).${ignorados ? ` ${ignorados} já tinham envio (não duplicados).` : ''}${semEmail ? ` ${semEmail} sem email.` : ''}`);
+  res.redirect(`/admin/quotas/enviar?ano=${ctx.ano}&mes=${ctx.mes}`);
 });
 
 router.get('/quotas/:id', async (req, res) => {

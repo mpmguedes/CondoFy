@@ -59,6 +59,7 @@
               <th>Documento</th>
               <th>Estado</th>
               <th>Tent.</th>
+              <th>Utilizador</th>
               <th class="text-end">Ações</th>
             </tr>
           </thead>
@@ -90,6 +91,10 @@
                 {{#if (eq estado 'erro')}}<div class="small text-danger text-truncate" style="max-width:140px" title="{{erro}}">{{erro}}</div>{{/if}}
               </td>
               <td>{{tentativas}}</td>
+              <td class="small">
+                {{#if utilizador}}{{utilizador.nome}}{{else}}—{{/if}}
+                {{#if entidade_tipo}}<div class="badge text-bg-light border">{{entidade_tipo}}</div>{{/if}}
+              </td>
               <td class="text-end text-nowrap">
                 {{#if (or (eq estado 'pendente') (eq estado 'erro'))}}
                 <form action="/admin/emails/{{id}}/reenviar" method="POST" class="d-inline">
@@ -104,7 +109,7 @@
               </td>
             </tr>
             {{else}}
-            <tr><td colspan="7" class="text-center text-muted py-4">Sem emails neste filtro.</td></tr>
+            <tr><td colspan="8" class="text-center text-muted py-4">Sem emails neste filtro.</td></tr>
             {{/each}}
           </tbody>
         </table>
