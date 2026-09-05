@@ -6,6 +6,9 @@ const { eAdmin } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
 const drive = require('../helpers/drive');
 const documentActions = require('../helpers/document-actions');
+const { enfileirarEmail: enfileirarEmailFila } = require('../helpers/email-fila');
+const { compor: comporEmail, nomeFicheiro: nomeFicheiroEmail } = require('../helpers/email-templates');
+const { getCondominio } = require('../helpers/condominio');
 
 const router = express.Router();
 router.use(eAdmin);
@@ -171,21 +174,70 @@ router.post('/documentos/:id/email', async (req, res) => {
     for (const p of pessoas) destinatarios.push({ email: p.email, nome: p.nome });
   }
 
-  const assunto = String(req.body.assunto || '').trim() || `Documento: ${documento.nome}`;
-  const mensagem = String(req.body.mensagem || '').trim();
-
-  const r = await documentActions.enviarDocumentoPorEmail({
-    destinatarios,
-    assunto,
-    mensagem,
-    documentoId: documento.id,
-    userId: req.user.id,
-  });
-  if (r.ok) {
-    req.flash('success_msg', `Documento enfileirado para envio a ${r.enviados} destinatário(s).`);
-  } else {
-    req.flash('error_msg', r.erro || 'Não foi possível enfileirar o envio.');
+  // Anexo (cópia independente): descarrega o ficheiro do Drive quando disponível.
+  let anexoBuffer = null;
+  let anexoNome = null;
+  if (documento.drive_file_id && drive.isConfigured()) {
+    try {
+      anexoBuffer = await drive.descargarArquivo(documento.drive_file_id);
+      anexoNome = String(documento.nome || '').trim() || 'documento.pdf';
+    } catch (err) {
+      console.error('[documento-email] sem anexo:', err.message);
+      anexoBuffer = null; // segue com link
+    }
   }
+  const comAnexo = Boolean(anexoBuffer);
+
+  const cond = await getCondominio();
+  const condNome = (cond && String(cond.designacao || '').trim()) || '';
+  const adminNome = (cond && String(cond.administracao_nome || '').trim()) || '';
+  const tipoDoc = ['convocatoria', 'recibo'].includes(documento.tipo) ? documento.tipo : 'documento';
+  const urlOnline = documento.url || null;
+
+  const notaManual = String(req.body.mensagem || '').trim();
+  let enfileirados = 0;
+  for (const dest of destinatarios) {
+    const tpl = notaManual
+      ? comporEmail('generico', {
+          destinatarioNome: dest.nome || undefined,
+          condominio: condNome,
+          administracao: adminNome,
+          titulo: documento.nome,
+          mensagem: notaManual,
+          urlOnline,
+          urlTexto: 'Consultar documento',
+        })
+      : comporEmail(tipoDoc, {
+          destinatarioNome: dest.nome || undefined,
+          condominio: condNome,
+          administracao: adminNome,
+          nomeDocumento: documento.nome,
+          urlOnline,
+          anexo: comAnexo,
+        });
+    await enfileirarEmailFila({
+      destinatario_email: dest.email,
+      destinatario_nome: dest.nome || null,
+      assunto: tpl.assunto,
+      corpo: tpl.text,
+      corpo_html: tpl.html,
+      documento_id: documento.id,
+      entidade_tipo: 'Documento',
+      entidade_id: documento.id,
+      userId: req.user.id,
+      anexoNome: comAnexo ? anexoNome : null,
+      anexoBuffer: comAnexo ? anexoBuffer : null,
+    });
+    enfileirados++;
+  }
+  await audit({
+    userId: req.user.id,
+    acao: 'enviar_documento_email',
+    entidade: 'Documento',
+    entidadeId: documento.id,
+    detalhes: { destinatarios: destinatarios.length, comAnexo },
+  }).catch(() => {});
+  req.flash('success_msg', `Documento enfileirado para envio a ${enfileirados} destinatário(s).${comAnexo ? ' (com PDF em anexo)' : ' (link online; sem anexo — configure o Drive para anexar)'}`);
   res.redirect('/admin/documentos');
 });
 

@@ -91,7 +91,7 @@ function montar({ assunto, saudacaoTexto, paragrafos, botoes = [], assinaturaBlo
 
 // ── Templates por tipo ──────────────────────────────────────────────
 // contexto mínimo: { destinatarioNome, condominio, administracao, urlOnline }
-function recibo({ destinatarioNome, condominio, administracao, valor, fração, data, referencia, urlOnline }) {
+function recibo({ destinatarioNome, condominio, administracao, valor, fração, data, referencia, urlOnline, anexo = true }) {
   const bloco = assinatura({ administracao, condominio });
   const paragrafos = [];
   paragrafos.push(`Vimos por este meio enviar o recibo referente ao pagamento efetuado no valor de <strong>${esc(valor)}</strong>.`);
@@ -100,7 +100,9 @@ function recibo({ destinatarioNome, condominio, administracao, valor, fração, 
   if (referencia) extras.push(`Recibo: ${esc(referencia)}`);
   if (data) extras.push(`Data do pagamento: ${esc(data)}`);
   if (extras.length) paragrafos.push(extras.join('<br/>'));
-  paragrafos.push('O respetivo recibo encontra-se em anexo a este email.');
+  paragrafos.push(anexo
+    ? 'O respetivo recibo encontra-se em anexo a este email.'
+    : 'Pode consultar o recibo através do link online (área do condómino no GesCondu).');
   const botoes = urlOnline ? [{ url: urlOnline, texto: 'Consultar recibo online' }] : [];
   return montar({
     assunto: `Recibo de pagamento — ${condominio || 'GesCondu'}`,
@@ -113,7 +115,7 @@ function recibo({ destinatarioNome, condominio, administracao, valor, fração, 
   });
 }
 
-function aviso({ destinatarioNome, condominio, administracao, tituloAviso, urlOnline }) {
+function aviso({ destinatarioNome, condominio, administracao, tituloAviso, urlOnline, anexo = true }) {
   const bloco = assinatura({ administracao, condominio });
   const assuntoTitulo = tituloAviso || 'Aviso';
   return montar({
@@ -122,7 +124,7 @@ function aviso({ destinatarioNome, condominio, administracao, tituloAviso, urlOn
     saudacaoTexto: saudacao(destinatarioNome),
     paragrafos: [
       `Vimos por este meio enviar o aviso referente ao condomínio <strong>${esc(condominio || '')}</strong>.`,
-      'O documento encontra-se em anexo para sua consulta.',
+      anexo ? 'O documento encontra-se em anexo para sua consulta.' : 'Pode consultar o documento através do link online.',
     ],
     botoes: urlOnline ? [{ url: urlOnline, texto: 'Consultar aviso online' }] : [],
     assinaturaBloco: bloco,
@@ -130,12 +132,14 @@ function aviso({ destinatarioNome, condominio, administracao, tituloAviso, urlOn
   });
 }
 
-function quota({ destinatarioNome, condominio, administracao, periodo, valor, urlOnline, atrasada }) {
+function quota({ destinatarioNome, condominio, administracao, periodo, valor, urlOnline, atrasada, anexo = true }) {
   const bloco = assinatura({ administracao, condominio });
   const paragrafos = [];
   paragrafos.push(`Vimos por este meio enviar a informação referente à quota de condomínio do período <strong>${esc(periodo || '')}</strong>.`);
   if (valor) paragrafos.push(`<strong>Valor: ${esc(valor)}</strong>`);
-  paragrafos.push('O documento correspondente encontra-se em anexo.');
+  paragrafos.push(anexo
+    ? 'O documento correspondente encontra-se em anexo.'
+    : 'Pode consultar a informação através do link online (área do condómino no GesCondu).');
   const nota = atrasada
     ? 'A quota encontra-se em atraso. Agradecemos a regularização com a maior brevidade.'
     : 'Agradecemos a sua atenção e colaboração.';
@@ -150,7 +154,7 @@ function quota({ destinatarioNome, condominio, administracao, periodo, valor, ur
   });
 }
 
-function convocatoria({ destinatarioNome, condominio, administracao, urlOnline }) {
+function convocatoria({ destinatarioNome, condominio, administracao, urlOnline, anexo = true }) {
   const bloco = assinatura({ administracao, condominio });
   return montar({
     assunto: `Convocatória para Assembleia — ${condominio || 'GesCondu'}`,
@@ -158,7 +162,9 @@ function convocatoria({ destinatarioNome, condominio, administracao, urlOnline }
     saudacaoTexto: saudacao(destinatarioNome),
     paragrafos: [
       `Vimos por este meio enviar a convocatória para a Assembleia do condomínio <strong>${esc(condominio || '')}</strong>.`,
-      'A convocatória encontra-se em anexo a este email para sua consulta.',
+      anexo
+        ? 'A convocatória encontra-se em anexo a este email para sua consulta.'
+        : 'Pode consultar a convocatória através do link online.',
     ],
     botoes: urlOnline ? [{ url: urlOnline, texto: 'Consultar assembleia' }] : [],
     assinaturaBloco: bloco,
@@ -166,7 +172,7 @@ function convocatoria({ destinatarioNome, condominio, administracao, urlOnline }
   });
 }
 
-function documento({ destinatarioNome, condominio, administracao, nomeDocumento, urlOnline }) {
+function documento({ destinatarioNome, condominio, administracao, nomeDocumento, urlOnline, anexo = true }) {
   const bloco = assinatura({ administracao, condominio });
   return montar({
     assunto: `Documento — ${condominio || 'GesCondu'}`,
@@ -174,7 +180,7 @@ function documento({ destinatarioNome, condominio, administracao, nomeDocumento,
     saudacaoTexto: saudacao(destinatarioNome),
     paragrafos: [
       `Vimos por este meio enviar o documento <strong>${esc(nomeDocumento || '')}</strong>, referente ao condomínio <strong>${esc(condominio || '')}</strong>.`,
-      'O documento encontra-se em anexo a este email.',
+      anexo ? 'O documento encontra-se em anexo a este email.' : 'Pode consultá-lo através do link online (área do condómino no GesCondu).',
     ],
     botoes: urlOnline ? [{ url: urlOnline, texto: 'Consultar documento' }] : [],
     assinaturaBloco: bloco,

@@ -48,6 +48,9 @@ async function main() {
   assert.ok(recibo.html.includes('Consultar recibo online'), 'link no HTML');
   assert.ok(recibo.html.includes('45,20 €'), 'valor no corpo');
   assert.ok(!recibo.html.includes('CondoFy'), 'sem referência a CondoFy');
+  const semAnexo = compor('recibo', { condominio: 'X', destinatarioNome: 'Ana', urlOnline: 'https://gescondu.xyz/r', anexo: false });
+  assert.ok(!semAnexo.text.includes('em anexo'), 'sem anexo não afirma anexo');
+  assert.ok(semAnexo.text.includes('Consultar recibo online'), 'sem anexo mantém link');
   assert.strictEqual(saudacao(''), 'Exmo./Exma. Senhor(a),', 'saudação neutra');
   assert.strictEqual(nomeFicheiro('recibo', { numero: '2026/002' }), 'Recibo_2026_002.pdf', 'nome de ficheiro normalizado');
   assert.strictEqual(nomeFicheiro('quota', { ano: '2026', mes: 9, fracao: 'Fração A' }), 'Quota_2026_09_Fracao_A.pdf', 'ficheiro de quota sem acentos');
