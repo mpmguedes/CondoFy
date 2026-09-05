@@ -54,10 +54,10 @@ async function main() {
   delete process.env.GOOGLE_REDIRECT_URI;
   const ru = drive.obterRedirectUri({ protocol: 'http', get: () => 'localhost:3000' });
   assert.strictEqual(ru, 'http://localhost:3000/admin/config/drive/callback', 'redirect derivado');
-  process.env.GOOGLE_REDIRECT_URI = 'https://condofy.exemplo.pt/admin/config/drive/callback';
+  process.env.GOOGLE_REDIRECT_URI = 'https://gescondu.xyz/admin/config/drive/callback';
   assert.strictEqual(
     drive.obterRedirectUri({ protocol: 'http', get: () => 'localhost:3000' }),
-    'https://condofy.exemplo.pt/admin/config/drive/callback',
+    'https://gescondu.xyz/admin/config/drive/callback',
     'GOOGLE_REDIRECT_URI tem prioridade'
   );
 

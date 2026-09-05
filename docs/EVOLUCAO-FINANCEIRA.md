@@ -1,4 +1,4 @@
-# CondoFy — Evolução do módulo financeiro (orçamento, quotas, FCR, quotas extra)
+# GesCondu — Evolução do módulo financeiro (orçamento, quotas, FCR, quotas extra)
 
 ## Análise do existente (reutilizar, não duplicar)
 

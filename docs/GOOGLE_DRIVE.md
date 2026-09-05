@@ -1,4 +1,4 @@
-# Google Drive no CondoFy
+# Google Drive no GesCondu
 
 Esta página descreve como ativar a integração com o **Google Drive**: criar as
 credenciais no Google Cloud Console, configurar o `.env` e ligar a conta Google
@@ -23,7 +23,7 @@ na aplicação.
 A aplicação cria (uma única vez, reutilizando se já existirem):
 
 ```
-CondoFy/
+GesCondu/
 ├── <ano>/
 │   ├── Assembleias/   (atas, convocatórias, anexos)
 │   ├── Quotas/
@@ -34,7 +34,9 @@ CondoFy/
 └── Backups/
 ```
 
-A pasta raiz pode ser alterada com `GOOGLE_DRIVE_ROOT_FOLDER` no `.env`.
+A pasta raiz é configurável na aplicação (Configuração → Google Drive →
+“Alterar pasta”). A pasta antiga `CondoFy` continua a ser uma opção válida e é
+reutilizada se existir — nunca são criadas pastas duplicadas.
 As pastas são encontradas pelo nome — nunca são criadas duplicadas quando se
 volta a ligar a conta.
 
@@ -58,7 +60,7 @@ volta a ligar a conta.
    * Em **URIs de redirecionamento autorizados** adicione **exatamente** o
      valor de `GOOGLE_REDIRECT_URI` que vai usar, por exemplo:
      * Desenvolvimento: `http://localhost:3000/admin/config/drive/callback`
-     * Produção: `https://condofy.exemplo.pt/admin/config/drive/callback`
+     * Produção: `https://gescondu.xyz/admin/config/drive/callback`
    * Guarde o **Client ID** e o **Client Secret**.
 
 ## 2. Configuração no `.env`
@@ -85,7 +87,7 @@ GOOGLE_REDIRECT_URI=http://localhost:3000/admin/config/drive/callback
 | `GOOGLE_CLIENT_SECRET` | Sim | Client Secret OAuth (Google Cloud) |
 | `GOOGLE_REDIRECT_URI` | Sim | Redirect URI registado na consola Google |
 | `GOOGLE_REFRESH_TOKEN` | Não (legado) | Permite ligação direta sem fluxo OAuth na aplicação |
-| `GOOGLE_DRIVE_ROOT_FOLDER` | Não | Pasta raiz no Drive (padrão: `CondoFy`) |
+| `GOOGLE_DRIVE_ROOT_FOLDER` | Não | Pasta raiz no Drive (fallback `.env`; a configuração da BD tem prioridade; padrão: `GesCondu`) |
 
 ## 3. Ligar a conta na aplicação
 
@@ -126,9 +128,10 @@ Para voltar a ligar mais tarde, basta clicar em **Ligar Google Drive**.
 
 Em **Configuração → Google Drive** (quando ligado) existe ainda:
 
-* **Pasta raiz** — configurável (BD, chave `google_drive_root_folder`), com
-  precedência: `.env` (`GOOGLE_DRIVE_ROOT_FOLDER`) → BD → `CondoFy`. A pasta é
-  reutilizada, nunca duplicada.
+* **Pasta de destino** — configurável na BD (chave `google_drive_root_folder`),
+  com precedência: **BD → `.env` (`GOOGLE_DRIVE_ROOT_FOLDER`) → `GesCondu`**. A
+  pasta configurada é sempre a utilizada (a antiga `CondoFy` continua válida e é
+  reutilizada, nunca duplicada).
 * **Guardar backups no Google Drive** (chave `drive_auto_backups`, padrão
   ativo). Se desligado, os backups ficam apenas em cópia local.
 * **Testar ligação** — verifica a conta sem criar nada.

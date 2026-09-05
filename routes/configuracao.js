@@ -218,7 +218,7 @@ router.post('/config/drive/estrutura', async (req, res) => {
   try {
     const estrutura = await drive.criarEstruturaPastas();
     await audit({ userId: req.user.id, acao: 'criar_estrutura_drive', entidade: 'GoogleDrive' });
-    req.flash('success_msg', 'Estrutura de pastas criada/verificada no Google Drive (CondoFy).');
+    req.flash('success_msg', 'Estrutura de pastas criada/verificada no Google Drive (na pasta de destino configurada).');
   } catch (err) {
     console.error(err);
     req.flash('error_msg', err.message);

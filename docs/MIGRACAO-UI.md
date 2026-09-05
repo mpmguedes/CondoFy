@@ -1,7 +1,7 @@
-# CondoFy — Plano de migração da UI (SaaS + Material Design)
+# GesCondu — Plano de migração da UI (SaaS + Material Design)
 
 Referência conceptual: Adm-Condominio.pt (sidebar esquerda + header compacto + dashboard de cards).
-Identidade própria do CondoFy. Não copiar textos/logo.
+Identidade própria do GesCondu. Não copiar textos/logo.
 
 ## Auditoria do estado atual
 

@@ -1,10 +1,10 @@
-# Condofy — Modelo de dados (MariaDB / Sequelize)
+# GesCondu — Modelo de dados (MariaDB / Sequelize)
 
 O CondoSystem original usava MongoDB e um modelo com vários problemas estruturais
 (valores monetários em `String`, relações por **nome**, saldos derivados guardados
 como texto, sem frações, sem numeração persistente, sem auditoria).
 
-O Condofy redesenha o modelo como uma base de dados **relacional correta**. Todas as
+O GesCondu redesenha o modelo como uma base de dados **relacional correta**. Todas as
 relações usam **IDs e chaves estrangeiras (foreign keys)**. Nenhuma relação é feita
 por nome.
 

@@ -1,4 +1,4 @@
-# Email / SMTP no CondoFy
+# Email / SMTP no GesCondu
 
 Documentação da integração de email: configuração SMTP (com Gmail),
 fila de emails, retry, envio de teste e preferências de notificação.
@@ -38,7 +38,7 @@ O Gmail **não aceita a palavra-passe normal** em SMTP. Use uma **App Password**
 2. Em **Segurança → Palavras-passe de aplicações** (App passwords), crie uma
    para “Correio”/“Mail”.
 3. Copie a palavra-passe de 16 caracteres gerada.
-4. Configure no CondoFy:
+4. Configure no GesCondu:
    * Servidor: `smtp.gmail.com`
    * Porta: `587`
    * Segurança: TLS ativo

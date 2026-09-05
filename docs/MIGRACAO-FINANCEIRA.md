@@ -1,4 +1,4 @@
-# CondoFy — Migração do modelo financeiro
+# GesCondu — Migração do modelo financeiro
 
 Este documento descreve a estratégia de evolução do modelo financeiro para o fluxo:
 

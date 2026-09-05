@@ -1,7 +1,7 @@
 {
   "name": "condofy",
   "version": "1.0.0",
-  "description": "Condofy — Gestão de condomínios em Portugal (PT-PT): quotas, pagamentos, despesas, documentos, comunicação e backups.",
+  "description": "GesCondu — Gestão de condomínios em Portugal (PT-PT): quotas, pagamentos, despesas, documentos, comunicação e backups.",
   "main": "app.js",
   "scripts": {
     "start": "node app.js",

@@ -1,4 +1,4 @@
-# Condofy — Análise do projeto base e plano de implementação
+# GesCondu — Análise do projeto base e plano de implementação
 
 ## 1. O que existe no projeto base (correaito/condosystem)
 

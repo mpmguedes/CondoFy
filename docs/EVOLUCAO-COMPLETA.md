@@ -1,4 +1,4 @@
-# CondoFy — Evolução completa do sistema de gestão de condomínios
+# GesCondu — Evolução completa do sistema de gestão de condomínios
 
 ## 1. Auditoria (arquitetura encontrada)
 

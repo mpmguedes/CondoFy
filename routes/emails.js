@@ -142,8 +142,8 @@ router.post('/emails/teste', async (req, res) => {
   }
   const r = await mailer.enviarEmailTeste({
     para,
-    assunto: req.body.assunto || 'Teste SMTP — CondoFy',
-    mensagem: req.body.mensagem || 'Este é um email de teste do CondoFy.',
+    assunto: req.body.assunto || 'Teste SMTP — GesCondu',
+    mensagem: req.body.mensagem || 'Este é um email de teste do GesCondu.',
   });
   await audit({
     userId: req.user.id,

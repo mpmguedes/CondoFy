@@ -1,6 +1,6 @@
-<p align="center"><img src="public/img/logo.png" alt="Condofy" width="180" /></p>
+<p align="center"><img src="public/img/logo_gescondu.png" alt="GesCondu" width="180" /></p>
 
-# Condofy
+# GesCondu
 
 Aplicação moderna, simples e profissional de **gestão de condomínios em Portugal**
 (PT-PT), desenhada para correr num servidor pequeno/LXC.
