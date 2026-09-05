@@ -19,6 +19,7 @@ const { eAdmin } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
 const drive = require('../helpers/drive');
 const mailer = require('../helpers/mailer');
+const { compor: comporEmail } = require('../helpers/email-templates');
 const { getCondominio } = require('../helpers/condominio');
 
 const router = express.Router();
@@ -376,17 +377,42 @@ router.post('/fornecedores/:id/pagamentos/:pid/comprovativo/enviar', async (req,
     const buffer = await drive.descargarArquivo(pagamento.comprovativo.drive_file_id);
     const nomeAnexo = pagamento.comprovativo.nome || 'comprovativo.pdf';
 
+    // Template central de fornecedor (mantém saudação/assinatura). Se o
+    // administrador editou a mensagem, é usada a versão personalizada.
+    const cond = await getCondominio();
+    const condNome = String((cond && cond.designacao) || '').trim();
+    const adminNome = String((cond && cond.administracao_nome) || '').trim();
+    const tpl = comporEmail('fornecedor', {
+      fornecedorNome: fornecedor.nome,
+      destinatarioEmail: para,
+      condominio: condNome,
+      administracao: adminNome,
+      referencia: pagamento.referencia,
+      urlOnline: pagamento.comprovativo.url || null,
+    });
+    const assunto = String(req.body.assunto || '').trim() || tpl.assunto;
+    const custom = String(req.body.mensagem || '').trim();
+    const defaultMsg =
+      'Exmos. Senhores,\n\nEnviamos em anexo o comprovativo da transferência bancária referente ao pagamento da fatura indicada.\n\nCom os melhores cumprimentos,\nAdministração do Condomínio';
+    const personalizada = custom && custom !== defaultMsg.trim();
+    const corpoTexto = personalizada ? custom : tpl.text;
+    const corpoHtml = personalizada
+      ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#1f2937;">${custom.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br/>')}</div>`
+      : tpl.html;
+
     const resEmail = await mailer.sendMail({
       to: para,
-      subject: req.body.assunto || 'Comprovativo de pagamento',
-      text: req.body.mensagem || '',
+      subject: assunto,
+      text: corpoTexto,
+      html: corpoHtml,
       attachments: [{ filename: nomeAnexo, content: buffer }],
     });
     await EmailFila.create({
       destinatario_email: para,
       destinatario_nome: fornecedor.nome || null,
-      assunto: req.body.assunto || 'Comprovativo de pagamento',
-      corpo: req.body.mensagem || null,
+      assunto,
+      corpo: corpoTexto,
+      corpo_html: corpoHtml,
       documento_id: pagamento.comprovativo.id,
       entidade_tipo: 'PagamentoFornecedor',
       entidade_id: pagamento.id,
