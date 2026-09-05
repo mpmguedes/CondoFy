@@ -1,0 +1,108 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Enviar recibos por email</h1>
+    <p class="subtitle">Recibos de pagamentos confirmados — envio em lote com histórico</p>
+  </div>
+  <a href="/admin/pagamentos" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Pagamentos</a>
+</div>
+
+{{#if total}}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Recibos</div><div class="stat-value">{{total}}</div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Com email</div><div class="stat-value">{{comEmail}}</div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Prontos para envio</div><div class="stat-value text-warning">{{pendentes}}</div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Já enviados</div><div class="stat-value text-success">{{enviados}}</div></div></div></div>
+</div>
+
+<div class="card">
+  <form action="/admin/pagamentos/enviar-recibos" method="POST" id="formEnvios">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th style="width:34px"><input type="checkbox" id="selTodos" /></th>
+            <th>Fração</th>
+            <th>Condómino</th>
+            <th>Email</th>
+            <th>Recibo</th>
+            <th>Data</th>
+            <th class="text-end">Valor</th>
+            <th>PDF</th>
+            <th>Email</th>
+            <th>Último envio</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each linhas}}
+          <tr class="{{#unless temEmail}}table-light{{/unless}}">
+            <td><input type="checkbox" name="ids" value="{{id}}" class="sel-linha" data-estado="{{estado}}" data-ultimo="{{#if ultimoEnvio}}{{ultimoEnvio.email}}{{/if}}" {{#unless temEmail}}disabled{{/unless}} /></td>
+            <td class="fw-semibold">{{fracao}}</td>
+            <td>{{condominos}}</td>
+            <td class="small">{{#if emails}}{{emails}}{{else}}<span class="text-muted">Sem email</span>{{/if}}</td>
+            <td>{{#if numero}}{{numero}}{{else}}#{{id}}{{/if}}</td>
+            <td class="text-nowrap">{{formatDate data}}</td>
+            <td class="text-end">{{eur valor}}</td>
+            <td class="text-nowrap">
+              <a href="/admin/pagamentos/{{id}}/recibo" target="_blank" class="btn btn-sm btn-outline-primary" title="Recibo PDF"><span class="material-symbols-outlined">picture_as_pdf</span></a>
+              {{#if ../driveLigado}}
+              <form action="/admin/pagamentos/{{id}}/recibo/drive" method="POST" class="d-inline">
+                <button class="btn btn-sm btn-outline-secondary" title="Guardar recibo no Google Drive"><span class="material-symbols-outlined">cloud_upload</span></button>
+              </form>
+              {{/if}}
+            </td>
+            <td>
+              {{#if (eq estado 'enviado')}}<span class="badge text-bg-success">✓ Enviado</span>
+              {{else if (eq estado 'erro')}}<span class="badge text-bg-danger">Erro</span>
+              {{else if (eq estado 'pendente')}}<span class="badge text-bg-warning">Pendente</span>
+              {{else}}<span class="badge text-bg-secondary">Não enviado</span>{{/if}}
+            </td>
+            <td class="small text-muted">{{#if ultimoEnvio}}{{formatDateTime ultimoEnvio.data}}<br />{{ultimoEnvio.email}}{{else}}—{{/if}}</td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body border-top d-flex flex-wrap gap-2 align-items-center">
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="btnPendentes">☑ Selecionar não enviados</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="btnTodos">Selecionar todos</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="btnNenhum">Limpar</button>
+      <div class="form-check ms-lg-auto">
+        <input class="form-check-input" type="checkbox" name="reenviar" value="on" id="reenviar" />
+        <label class="form-check-label small" for="reenviar">Permitir reenviar já enviados</label>
+      </div>
+      <button type="submit" name="modo" value="" class="btn btn-primary">Enviar selecionados</button>
+      <button type="submit" name="modo" value="pendentes" class="btn btn-success">Enviar todos os pendentes</button>
+    </div>
+  </form>
+</div>
+{{else}}
+{{> _empty-state icon="receipt_long" titulo="Sem recibos" descricao="Não há pagamentos confirmados para enviar." link="/admin/pagamentos" linkTexto="Pagamentos"}}
+{{/if}}
+
+<script>
+(function () {
+  var form = document.getElementById('formEnvios');
+  if (!form) return;
+  var caixas = Array.prototype.slice.call(form.querySelectorAll('.sel-linha'));
+  var todos = document.getElementById('selTodos');
+  function atualizarTodos() {
+    if (!todos) return;
+    var visiveis = caixas.filter(function (c) { return !c.disabled; });
+    todos.checked = visiveis.length > 0 && visiveis.every(function (c) { return c.checked; });
+  }
+  if (todos) todos.addEventListener('change', function () { caixas.forEach(function (c) { if (!c.disabled) c.checked = todos.checked; }); });
+  caixas.forEach(function (c) { c.addEventListener('change', atualizarTodos); });
+  function marcar(fn) { caixas.forEach(function (c) { c.checked = !c.disabled && fn(c); }); atualizarTodos(); }
+  var b1 = document.getElementById('btnPendentes'); if (b1) b1.addEventListener('click', function () { marcar(function (c) { return c.dataset.estado !== 'enviado'; }); });
+  var b2 = document.getElementById('btnTodos'); if (b2) b2.addEventListener('click', function () { marcar(function () { return true; }); });
+  var b3 = document.getElementById('btnNenhum'); if (b3) b3.addEventListener('click', function () { marcar(function () { return false; }); });
+  form.addEventListener('submit', function (e) {
+    var reenviarOk = document.getElementById('reenviar') && document.getElementById('reenviar').checked;
+    var ja = caixas.filter(function (c) { return !c.disabled && c.checked && c.dataset.estado === 'enviado'; });
+    if (!reenviarOk && ja.length) {
+      e.preventDefault();
+      alert(ja.length + ' recibo(s) já foram enviados.\nAssinale "Permitir reenviar já enviados" para reenviar.');
+    }
+  });
+})();
+</script>

@@ -68,7 +68,13 @@
             <td class="small">{{#if emails}}{{emails}}{{else}}<span class="text-muted">Sem email</span>{{/if}}</td>
             <td class="text-nowrap">{{periodo}}</td>
             <td class="text-end">{{eur valor}}</td>
-            <td><a href="/admin/quotas/{{id}}/aviso" target="_blank" class="btn btn-sm btn-outline-primary" title="Aviso PDF"><span class="material-symbols-outlined">picture_as_pdf</span></a></td>
+            <td><a href="/admin/quotas/{{id}}/aviso" target="_blank" class="btn btn-sm btn-outline-primary" title="Aviso PDF"><span class="material-symbols-outlined">picture_as_pdf</span></a>
+              {{#if ../driveLigado}}
+              <form action="/admin/quotas/{{id}}/aviso/drive" method="POST" class="d-inline">
+                <button class="btn btn-sm btn-outline-secondary" title="Guardar aviso no Google Drive"><span class="material-symbols-outlined">cloud_upload</span></button>
+              </form>
+              {{/if}}
+            </td>
             <td>
               {{#if (eq estado 'enviado')}}<span class="badge text-bg-success">✓ Enviado</span>
               {{else if (eq estado 'erro')}}<span class="badge text-bg-danger" title="Ver central de emails">Erro</span>

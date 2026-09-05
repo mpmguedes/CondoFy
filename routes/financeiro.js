@@ -804,6 +804,110 @@ router.post('/pagamentos', async (req, res) => {
   res.redirect('/admin/pagamentos');
 });
 
+// ═══════════════════════════════════════════════════════════════════
+// RECIBOS — envio em lote por email (mesmo padrão das quotas)
+// ═══════════════════════════════════════════════════════════════════
+async function contextoEnvioRecibos() {
+  const pagamentos = await Pagamento.findAll({
+    where: { estado: 'confirmado' },
+    include: [
+      { model: Fracao, as: 'fracao' },
+      { model: MetodoPagamento, as: 'metodo_pagamento' },
+    ],
+    order: [['data_pagamento', 'DESC'], ['id', 'DESC']],
+  });
+  const ids = pagamentos.map((p) => p.id);
+  const envios = ids.length
+    ? await EmailFila.findAll({ where: { entidade_tipo: 'Pagamento', entidade_id: { [Op.in]: ids } }, order: [['id', 'ASC']] })
+    : [];
+  const porPagamento = {};
+  for (const e of envios) (porPagamento[e.entidade_id] = porPagamento[e.entidade_id] || []).push(e);
+
+  const linhas = [];
+  for (const p of pagamentos) {
+    const pessoas = await pessoasDaFracao(p.fracao_id);
+    const emails = emailsUnicos(pessoas);
+    const registos = porPagamento[p.id] || [];
+    const enviados = registos.filter((r) => r.estado === 'enviado');
+    const temErro = registos.some((r) => r.estado === 'erro');
+    const pendente = registos.some((r) => ['pendente', 'a_enviar'].includes(r.estado));
+    const ultimo = enviados[enviados.length - 1] || null;
+    linhas.push({
+      id: p.id,
+      fracao: p.fracao ? p.fracao.designacao : '—',
+      numero: p.numero_documento,
+      data: p.data_pagamento,
+      valor: p.valor,
+      metodo: p.metodo_pagamento ? p.metodo_pagamento.nome : '—',
+      condominos: pessoas.map((x) => x.nome).join(', ') || '—',
+      emails: emails.join(', ') || '',
+      temEmail: emails.length > 0,
+      emailsLista: emails,
+      estado: enviados.length ? 'enviado' : temErro ? 'erro' : pendente ? 'pendente' : 'nao_enviado',
+      ultimoEnvio: ultimo ? { data: ultimo.data_enviada, email: ultimo.destinatario_email } : null,
+    });
+  }
+  return {
+    titulo: 'Recibos',
+    total: linhas.length,
+    comEmail: linhas.filter((l) => l.temEmail).length,
+    enviados: linhas.filter((l) => l.estado === 'enviado').length,
+    pendentes: linhas.filter((l) => l.temEmail && l.estado !== 'enviado').length,
+    semEmail: linhas.filter((l) => !l.temEmail).length,
+    comErro: linhas.filter((l) => l.estado === 'erro').length,
+    linhas,
+  };
+}
+
+router.get('/pagamentos/enviar-recibos', async (req, res) => {
+  const ctx = await contextoEnvioRecibos();
+  res.render('admin/pagamentos/enviar-recibos', { titulo: 'Enviar recibos por email', driveLigado: drive.isConfigured(), ...ctx });
+});
+
+router.post('/pagamentos/enviar-recibos', async (req, res) => {
+  const ctx = await contextoEnvioRecibos();
+  const pedidoIds = new Set((Array.isArray(req.body.ids) ? req.body.ids : req.body.ids ? [req.body.ids] : []).map(Number));
+  const reenviar = req.body.reenviar === '1' || req.body.reenviar === 'on';
+  const modoPendentes = req.body.modo === 'pendentes';
+  const alvos = ctx.linhas.filter((l) => (modoPendentes ? l.temEmail && l.estado !== 'enviado' : pedidoIds.has(l.id)));
+
+  let enfileirados = 0;
+  let ignorados = 0;
+  let semEmail = 0;
+  for (const linha of alvos) {
+    if (!linha.temEmail) {
+      semEmail++;
+      continue;
+    }
+    for (const email of linha.emailsLista) {
+      const ja = await existeEnvioPara({ entidadeTipo: 'Pagamento', entidadeId: linha.id, email });
+      if (ja && !reenviar) {
+        ignorados++;
+        continue;
+      }
+      const linkRecibo = `${req.protocol}://${req.get('host')}/admin/pagamentos/${linha.id}/recibo`;
+      await enfileirarEmailFila({
+        destinatario_email: email,
+        destinatario_nome: linha.condominos !== '—' ? linha.condominos : null,
+        assunto: `Recibo ${linha.numero || ''} — ${linha.fracao}`.trim(),
+        corpo: `Fração ${linha.fracao}\nValor: ${linha.valor} €\nData: ${String(linha.data || '')}\n\nRecibo: ${linkRecibo}`,
+        entidade_tipo: 'Pagamento',
+        entidade_id: linha.id,
+        userId: req.user.id,
+      });
+      enfileirados++;
+    }
+  }
+  await audit({
+    userId: req.user.id,
+    acao: 'enviar_recibos_email',
+    entidade: 'Pagamento',
+    detalhes: { enfileirados, ignorados, semEmail, reenviar },
+  }).catch(() => {});
+  req.flash('success_msg', `${enfileirados} recibo(s) enfileirado(s).${ignorados ? ` ${ignorados} já tinham envio (não duplicados).` : ''}${semEmail ? ` ${semEmail} sem email.` : ''}`);
+  res.redirect('/admin/pagamentos/enviar-recibos');
+});
+
 router.get('/pagamentos/:id', async (req, res) => {
   const pagamento = await Pagamento.findByPk(req.params.id, {
     include: [
@@ -981,7 +1085,7 @@ router.post('/quotas/:id/aviso/drive', async (req, res) => {
     console.error('[aviso-drive]', err.message);
     req.flash('error_msg', `Não foi possível guardar no Drive: ${err.message}`);
   }
-  res.redirect('/admin/quotas');
+  res.redirect(req.get('Referer') || '/admin/quotas');
 });
 
 router.post('/pagamentos/:id/recibo/drive', async (req, res) => {
@@ -1002,7 +1106,7 @@ router.post('/pagamentos/:id/recibo/drive', async (req, res) => {
     console.error('[recibo-drive]', err.message);
     req.flash('error_msg', `Não foi possível guardar no Drive: ${err.message}`);
   }
-  res.redirect('/admin/pagamentos');
+  res.redirect(req.get('Referer') || '/admin/pagamentos');
 });
 
 module.exports = router;
