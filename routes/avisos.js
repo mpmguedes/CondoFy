@@ -7,11 +7,12 @@ const {
   Documento,
   EmailFila,
 } = require('../models');
+const { Op } = require('sequelize');
 const { eAdmin } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
 const { resolverDestinatarios } = require('../helpers/avisos');
-const { enfileirarEmail } = require('../helpers/email-fila');
 const { smtpConfigured } = require('../helpers/mailer');
+const documentActions = require('../helpers/document-actions');
 
 const router = express.Router();
 router.use(eAdmin);
@@ -97,24 +98,45 @@ router.post('/avisos/:id/enviar', async (req, res) => {
     include: [{ model: Pessoa, as: 'pessoa' }],
   });
 
-  const docLink = aviso.documento && aviso.documento.url ? `\n\nDocumento: ${aviso.documento.url}` : '';
-  let enfileirados = 0;
-  for (const d of destinatarios) {
-    if (d.pessoa && d.pessoa.email) {
-      await enfileirarEmail({
-        destinatario_email: d.pessoa.email,
-        destinatario_nome: d.pessoa.nome,
-        assunto: aviso.assunto,
-        corpo: `${aviso.mensagem || ''}${docLink}`,
-        aviso_id: aviso.id,
-        documento_id: aviso.documento_id,
-      });
-      enfileirados++;
-    }
+  // Previne duplicados: não volta a enfileirar emails já pendentes/enviados
+  // para o mesmo aviso e destinatário.
+  const existentes = await EmailFila.findAll({
+    where: {
+      aviso_id: aviso.id,
+      estado: { [Op.in]: ['pendente', 'a_enviar', 'enviado'] },
+    },
+    attributes: ['destinatario_email'],
+  });
+  const jaEnviados = new Set(existentes.map((e) => String(e.destinatario_email).toLowerCase()));
+
+  const lista = destinatarios
+    .filter((d) => d.pessoa && d.pessoa.email)
+    .map((d) => ({ email: d.pessoa.email, nome: d.pessoa.nome }))
+    .filter((d) => !jaEnviados.has(String(d.email).toLowerCase()));
+
+  if (!lista.length) {
+    req.flash('success_msg', 'Não há novos destinatários para enfileirar (envio já agendado/enviado).');
+    return res.redirect(`/admin/avisos/${aviso.id}`);
   }
 
-  await audit({ userId: req.user.id, acao: 'enviar_aviso', entidade: 'Aviso', entidadeId: aviso.id, detalhes: { enfileirados } });
-  req.flash('success_msg', `Foram enfileirados ${enfileirados} email(s).`);
+  const mensagem = aviso.mensagem || '';
+  const r = await documentActions.enviarDocumentoPorEmail({
+    destinatarios: lista,
+    assunto: aviso.assunto,
+    mensagem,
+    documentoId: aviso.documento_id || null,
+    avisoId: aviso.id,
+    userId: req.user.id,
+  });
+
+  await audit({
+    userId: req.user.id,
+    acao: 'enviar_aviso',
+    entidade: 'Aviso',
+    entidadeId: aviso.id,
+    detalhes: { enfileirados: r.enviados, falhas: r.falhas },
+  }).catch(() => {});
+  req.flash('success_msg', `Foram enfileirados ${r.enviados} email(s).`);
   res.redirect(`/admin/avisos/${aviso.id}`);
 });
 

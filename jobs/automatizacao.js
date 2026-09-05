@@ -7,6 +7,7 @@ const { getQuotaConfig } = require('../helpers/quotas-config');
 const { calcularQuota } = require('../helpers/quotas-calc');
 const { resolverDestinatarios } = require('../helpers/avisos');
 const { enfileirarEmail } = require('../helpers/email-fila');
+const { estaAtivo } = require('../helpers/notificacoes');
 
 async function getConfigNumero(chave, fallback) {
   const reg = await Configuracao.findOne({ where: { chave } });
@@ -85,6 +86,8 @@ async function enviarLembretesAutomaticos() {
   let enviados = 0;
   for (const q of alvos) {
     const ehAtraso = q.data_vencimento === atrasoISO;
+    // Avisos de atraso respeitam a preferência "Quotas em atraso → email".
+    if (ehAtraso && !(await estaAtivo('quotas_atraso', 'email'))) continue;
     const dest = await resolverDestinatarios({ modo: 'fracoes', fracoes: [q.fracao_id] });
     const assunto = ehAtraso
       ? 'Aviso de atraso — quota em dívida'

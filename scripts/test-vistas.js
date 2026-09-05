@@ -123,19 +123,85 @@ const condConfig = {
 };
 const ctxConfig = { titulo: 'Configuração do condomínio', condominio: condConfig };
 
-html = config({ ...ctxConfig, driveLigado: false, driveEstado: { ativo: true, credenciais: true, ligado: false, viaEnv: false, conta: null, redirectUriDefinido: true } });
+html = config({ ...ctxConfig, driveLigado: false, driveEstado: { ativo: true, credenciais: true, ligado: false, viaEnv: false, conta: null, redirectUriDefinido: true }, driveOpcoes: { pastaRaiz: 'CondoFy', backupsDrive: true }, ultimoBackup: null });
 assert.ok(html.includes('Ligar Google Drive'), 'config: botão ligar quando não ligado');
 assert.ok(html.includes('Não ligado'), 'config: estado não ligado');
 
-html = config({ ...ctxConfig, driveLigado: true, driveEstado: { ativo: true, credenciais: true, ligado: true, viaEnv: false, conta: 'admin@gmail.com', redirectUriDefinido: true } });
+html = config({ ...ctxConfig, driveLigado: true, driveEstado: { ativo: true, credenciais: true, ligado: true, viaEnv: false, conta: 'admin@gmail.com', redirectUriDefinido: true }, driveOpcoes: { pastaRaiz: 'CondoFy', backupsDrive: true }, ultimoBackup: null });
 assert.ok(html.includes('admin@gmail.com'), 'config: conta ligada visível');
 assert.ok(html.includes('Desligar'), 'config: botão desligar');
 assert.ok(html.includes('Abrir Google Drive'), 'config: abrir drive');
+assert.ok(html.includes('Testar ligação'), 'config: testar ligação');
+assert.ok(html.includes('Pasta raiz no Google Drive'), 'config: opções de armazenamento');
 
-html = config({ ...ctxConfig, driveLigado: true, driveEstado: { ativo: true, credenciais: true, ligado: true, viaEnv: true, conta: null, redirectUriDefinido: true } });
+html = config({ ...ctxConfig, driveLigado: true, driveEstado: { ativo: true, credenciais: true, ligado: true, viaEnv: true, conta: null, redirectUriDefinido: true }, driveOpcoes: { pastaRaiz: 'CondoFy', backupsDrive: true }, ultimoBackup: { data: new Date(), tipo: 'diario', estado: 'concluido', erro: null } });
 assert.ok(html.includes('via .env'), 'config: estado legado via .env');
+assert.ok(html.includes('Último backup'), 'config: último backup visível');
 
-html = config({ ...ctxConfig, driveLigado: false, driveEstado: { ativo: false, credenciais: false, ligado: false, viaEnv: false, conta: null, redirectUriDefinido: false } });
+html = config({ ...ctxConfig, driveLigado: false, driveEstado: { ativo: false, credenciais: false, ligado: false, viaEnv: false, conta: null, redirectUriDefinido: false }, driveOpcoes: { pastaRaiz: 'CondoFy', backupsDrive: true }, ultimoBackup: null });
 assert.ok(html.includes('Desativado'), 'config: integração desativada');
+
+// 7. Central de Emails (vista)
+const emailsView = handlebars.compile(ler('admin/emails/index.handlebars'));
+const estadoSmtp = { configurado: true, servidor: 'smtp.gmail.com', porta: '587', utilizador: 'condominio@gmail.com', remetente: 'condominio@gmail.com', nomeRemetente: 'Administração', seguranca: 'STARTTLS (587)', temPassword: true };
+const preferencias = [{ evento: 'recibos', rotulo: 'Recibos', email: true, drive: false }, { evento: 'quotas_atraso', rotulo: 'Quotas em atraso', email: true, drive: false }];
+html = emailsView({
+  titulo: 'Emails',
+  emails: [{
+    id: 1,
+    destinatario_email: 'joao@exemplo.pt',
+    destinatario_nome: 'João',
+    assunto: 'Recibo 2026/1',
+    estado: 'pendente',
+    tentativas: 0,
+    message_id: null,
+    erro: null,
+    createdAt: new Date(),
+    documento: null,
+    aviso: null,
+  }],
+  filtro: 'pendentes',
+  contagens: { total: 1, pendentes: 1, enviados: 0, erros: 0, cancelados: 0 },
+  estadoSmtp,
+  preferencias,
+  estadosLabel: { pendente: 'Pendente', a_enviar: 'A enviar', enviado: 'Enviado', erro: 'Erro', cancelado: 'Cancelado' },
+});
+assert.ok(html.includes('joao@exemplo.pt'), 'emails: destinatário na lista');
+assert.ok(html.includes('smtp.gmail.com'), 'emails: SMTP visível');
+assert.ok(html.includes('Enviar email de teste'), 'emails: botão de teste');
+assert.ok(html.includes('reenviar'), 'emails: ação reenviar');
+assert.ok(html.includes('Notificações automáticas'), 'emails: secção notificações');
+assert.ok(html.includes('notif_recibos_email'), 'emails: preferência recibo');
+
+html = emailsView({ titulo: 'Emails', emails: [], filtro: 'todas', contagens: { total: 0, pendentes: 0, enviados: 0, erros: 0, cancelados: 0 }, estadoSmtp: { configurado: false, servidor: null, porta: null, utilizador: null, remetente: null, nomeRemetente: null, seguranca: 'Sem TLS', temPassword: false }, preferencias: [], estadosLabel: {} });
+assert.ok(html.includes('Sem emails neste filtro'), 'emails: estado vazio');
+assert.ok(html.includes('Não configurado'), 'emails: SMTP vazio');
+
+// 8. Navegação — novo item Emails
+html = layout({ body: 'ok', user: contexto.user, isAdmin: true, condominio: contexto.condominio, currentPath: '/admin/emails' });
+assert.ok(html.includes('/admin/emails'), 'link de navegação Emails');
+
+// 9. Documentos — lista com estado Drive + ações
+const docsListar = handlebars.compile(ler('admin/documentos/listar.handlebars'));
+html = docsListar({
+  titulo: 'Documentos',
+  documentos: [{ id: 5, nome: 'Ata 10/01', pasta: 'atas', tipo: 'ata', data: new Date('2026-01-10'), url: 'https://drive.google.com/x', drive_status: 'guardado', drive_erro: null }],
+  pasta: null,
+  pastas: { atas: 'Atas', convocatorias: 'Convocatórias', contratos: 'Contratos', regulamentos: 'Regulamentos', recibos: 'Recibos de Pagamento', assembleias: 'Assembleias', apolices: 'Seguros — Apólices', comprovativos: 'Seguros — Comprovativos', faturas: 'Faturas', outros: 'Outros' },
+  driveLigado: true,
+});
+assert.ok(html.includes('☁ Guardado'), 'documentos: estado guardado visível');
+assert.ok(html.includes('/admin/documentos/5/email'), 'documentos: ação enviar email');
+
+// 10. Documentos — página de envio por email
+const docsEmail = handlebars.compile(ler('admin/documentos/email.handlebars'));
+html = docsEmail({
+  titulo: 'Enviar documento por email',
+  documento: { id: 5, nome: 'Ata 10/01', pasta: 'atas', data: new Date('2026-01-10'), url: 'https://drive.google.com/x', drive_status: 'guardado' },
+  pessoas: [{ id: 1, nome: 'João Silva', email: 'joao@exemplo.pt' }],
+  driveLigado: true,
+});
+assert.ok(html.includes('joao@exemplo.pt'), 'email doc: destinatários');
+assert.ok(html.includes('Abrir no Google Drive'), 'email doc: link do documento');
 
 console.log('✓ Todas as vistas da convocatória renderizam corretamente.');

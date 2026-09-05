@@ -1,0 +1,257 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Emails</h1>
+    <p class="subtitle">Central de emails, fila de envio e configuração SMTP</p>
+  </div>
+  <a href="/admin/avisos" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">campaign</span>Comunicações (avisos)</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Total</div>
+      <div class="stat-value">{{contagens.total}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Pendentes</div>
+      <div class="stat-value text-warning">{{contagens.pendentes}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Enviados</div>
+      <div class="stat-value text-success">{{contagens.enviados}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Erros</div>
+      <div class="stat-value text-danger">{{contagens.erros}}</div>
+    </div></div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-xl-8">
+    {{!-- Filtros --}}
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="d-flex flex-wrap gap-2">
+          <a href="/admin/emails" class="btn btn-sm {{#if (eq filtro 'todas')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Todas</a>
+          <a href="/admin/emails?estado=pendentes" class="btn btn-sm {{#if (eq filtro 'pendentes')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Pendentes</a>
+          <a href="/admin/emails?estado=enviados" class="btn btn-sm {{#if (eq filtro 'enviados')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Enviados</a>
+          <a href="/admin/emails?estado=erros" class="btn btn-sm {{#if (eq filtro 'erros')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Erros</a>
+          <a href="/admin/emails?estado=cancelados" class="btn btn-sm {{#if (eq filtro 'cancelados')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Cancelados</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Data</th>
+              <th>Destinatário</th>
+              <th>Assunto</th>
+              <th>Documento</th>
+              <th>Estado</th>
+              <th>Tent.</th>
+              <th class="text-end">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#each emails}}
+            <tr>
+              <td class="text-nowrap small">{{formatDateTime createdAt}}</td>
+              <td>
+                <div class="fw-semibold">{{#if destinatario_nome}}{{destinatario_nome}}{{else}}—{{/if}}</div>
+                <div class="small text-muted">{{destinatario_email}}</div>
+              </td>
+              <td>
+                <div class="fw-semibold small">{{assunto}}</div>
+                {{#if message_id}}<div class="small text-muted" title="{{message_id}}">ID: {{message_id}}</div>{{/if}}
+              </td>
+              <td>
+                {{#if documento}}
+                  <span class="badge text-bg-light border">{{documento.nome}}</span>
+                {{else}}
+                  {{#if aviso}}<span class="badge text-bg-light border">Aviso: {{aviso.assunto}}</span>{{else}}—{{/if}}
+                {{/if}}
+              </td>
+              <td>
+                {{#if (eq estado 'pendente')}}<span class="badge text-bg-warning">Pendente</span>
+                {{else if (eq estado 'a_enviar')}}<span class="badge text-bg-info">A enviar</span>
+                {{else if (eq estado 'enviado')}}<span class="badge text-bg-success">Enviado</span>
+                {{else if (eq estado 'cancelado')}}<span class="badge text-bg-dark">Cancelado</span>
+                {{else}}<span class="badge text-bg-danger" title="{{erro}}">Erro</span>{{/if}}
+                {{#if (eq estado 'erro')}}<div class="small text-danger text-truncate" style="max-width:140px" title="{{erro}}">{{erro}}</div>{{/if}}
+              </td>
+              <td>{{tentativas}}</td>
+              <td class="text-end text-nowrap">
+                {{#if (or (eq estado 'pendente') (eq estado 'erro'))}}
+                <form action="/admin/emails/{{id}}/reenviar" method="POST" class="d-inline">
+                  <button class="btn btn-sm btn-outline-primary" title="Reenviar"><span class="material-symbols-outlined">refresh</span></button>
+                </form>
+                {{/if}}
+                {{#if (and (ne estado 'enviado') (ne estado 'cancelado'))}}
+                <form action="/admin/emails/{{id}}/cancelar" method="POST" class="d-inline" onsubmit="return confirm('Cancelar este email?');">
+                  <button class="btn btn-sm btn-outline-danger" title="Cancelar"><span class="material-symbols-outlined">close</span></button>
+                </form>
+                {{/if}}
+              </td>
+            </tr>
+            {{else}}
+            <tr><td colspan="7" class="text-center text-muted py-4">Sem emails neste filtro.</td></tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-4">
+    {{!-- SMTP --}}
+    <div class="card mb-3" id="smtp">
+      <div class="card-header bg-white"><i class="bi bi-envelope me-1"></i>Email / SMTP</div>
+      <div class="card-body">
+        {{#if estadoSmtp.configurado}}
+        <p class="mb-1"><span class="badge text-bg-success">🟢 SMTP configurado</span></p>
+        {{else}}
+        <p class="mb-1"><span class="badge text-bg-danger">🔴 Não configurado</span></p>
+        {{/if}}
+        <dl class="row small mb-2">
+          <dt class="col-5">Servidor</dt><dd class="col-7">{{#if estadoSmtp.servidor}}{{estadoSmtp.servidor}}{{else}}—{{/if}}</dd>
+          <dt class="col-5">Porta</dt><dd class="col-7">{{#if estadoSmtp.porta}}{{estadoSmtp.porta}}{{else}}—{{/if}}</dd>
+          <dt class="col-5">Utilizador</dt><dd class="col-7">{{#if estadoSmtp.utilizador}}{{estadoSmtp.utilizador}}{{else}}—{{/if}}</dd>
+          <dt class="col-5">Remetente</dt><dd class="col-7">{{#if estadoSmtp.remetente}}{{estadoSmtp.remetente}}<br />{{estadoSmtp.nomeRemetente}}{{else}}—{{/if}}</dd>
+          <dt class="col-5">Segurança</dt><dd class="col-7">{{estadoSmtp.seguranca}}</dd>
+          <dt class="col-5">Password</dt><dd class="col-7">{{#if estadoSmtp.temPassword}}Definida{{else}}Em falta{{/if}}</dd>
+        </dl>
+
+        <form action="/admin/emails/smtp/testar" method="POST" class="mb-2">
+          <button type="submit" class="btn btn-outline-primary w-100"><i class="bi bi-plug me-1"></i>Testar ligação</button>
+        </form>
+
+        <button class="btn btn-outline-secondary w-100 mb-2" type="button" data-bs-toggle="collapse" data-bs-target="#smtpFormulario" aria-expanded="false">
+          <i class="bi bi-gear me-1"></i>Configurar SMTP
+        </button>
+        <div class="collapse" id="smtpFormulario">
+          <form action="/admin/emails/smtp" method="POST" class="border-top pt-3">
+            <div class="mb-2">
+              <label class="form-label small">Servidor SMTP</label>
+              <input type="text" class="form-control form-control-sm" name="host" value="{{estadoSmtp.servidor}}" placeholder="smtp.gmail.com" />
+            </div>
+            <div class="row">
+              <div class="col-6 mb-2">
+                <label class="form-label small">Porta</label>
+                <input type="text" class="form-control form-control-sm" name="port" value="{{estadoSmtp.porta}}" placeholder="587" />
+              </div>
+              <div class="col-6 mb-2">
+                <label class="form-label small">Segurança</label>
+                <select class="form-select form-select-sm" name="tls">
+                  <option value="true" selected>Usar TLS (587/465)</option>
+                  <option value="false">Sem TLS</option>
+                </select>
+              </div>
+            </div>
+            <div class="mb-2">
+              <label class="form-label small">Utilizador</label>
+              <input type="text" class="form-control form-control-sm" name="user" value="{{estadoSmtp.utilizador}}" autocomplete="off" />
+            </div>
+            <div class="mb-2">
+              <label class="form-label small">Password (deixe vazio para manter a atual)</label>
+              <input type="password" class="form-control form-control-sm" name="pass" autocomplete="new-password" placeholder="••••••••" />
+            </div>
+            <div class="mb-2">
+              <label class="form-label small">Email do remetente</label>
+              <input type="email" class="form-control form-control-sm" name="from" value="{{estadoSmtp.remetente}}" placeholder="condominio@gmail.com" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label small">Nome do remetente</label>
+              <input type="text" class="form-control form-control-sm" name="from_name" value="{{estadoSmtp.nomeRemetente}}" placeholder="Administração do Condomínio" />
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Guardar SMTP</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    {{!-- Enviar email de teste (imediato) --}}
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-send me-1"></i>Enviar email de teste</div>
+      <div class="card-body">
+        <form action="/admin/emails/teste" method="POST">
+          <div class="mb-2">
+            <label class="form-label small">Para</label>
+            <input type="email" class="form-control form-control-sm" name="para" required placeholder="voce@exemplo.pt" />
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Assunto</label>
+            <input type="text" class="form-control form-control-sm" name="assunto" value="Teste SMTP — CondoFy" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Mensagem</label>
+            <textarea class="form-control form-control-sm" name="mensagem" rows="2">Este é um email de teste do CondoFy.</textarea>
+          </div>
+          <button type="submit" class="btn btn-success w-100" {{#unless estadoSmtp.configurado}}disabled{{/unless}}>
+            <i class="bi bi-send-check me-1"></i>Enviar email de teste
+          </button>
+          {{#unless estadoSmtp.configurado}}
+          <div class="form-text">Guarde primeiro a configuração SMTP acima.</div>
+          {{/unless}}
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{!-- Notificações automáticas --}}
+<div class="card mt-4" id="notificacoes">
+  <div class="card-header bg-white">
+    <i class="bi bi-bell me-1"></i>Notificações automáticas
+  </div>
+  <div class="card-body">
+    <form action="/admin/emails/notificacoes" method="POST">
+      <div class="table-responsive">
+        <table class="table align-middle mb-3">
+          <thead class="table-light">
+            <tr>
+              <th>Evento</th>
+              <th style="width:120px"><i class="bi bi-envelope me-1"></i>Enviar email</th>
+              <th style="width:140px"><i class="bi bi-cloud me-1"></i>Guardar no Drive</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#each preferencias}}
+            <tr>
+              <td class="fw-semibold">{{rotulo}}</td>
+              <td>
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" role="switch" id="notif_{{evento}}_email" name="notif_{{evento}}_email" value="on" {{#if email}}checked{{/if}} />
+                  <label class="form-check-label small" for="notif_{{evento}}_email">Email</label>
+                </div>
+              </td>
+              <td>
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" role="switch" id="notif_{{evento}}_drive" name="notif_{{evento}}_drive" value="on" {{#if drive}}checked{{/if}} />
+                  <label class="form-check-label small" for="notif_{{evento}}_drive">Drive</label>
+                </div>
+              </td>
+            </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+      <div class="form-text mb-3">
+        <i class="bi bi-info-circle me-1"></i>
+        A preferência aplica-se aos envios automáticos existentes (recibo do pagamento e avisos
+        de quotas em atraso). O canal “Guardar no Drive” fica disponível para os fluxos automáticos
+        futuros; nos restantes documentos a ação “Guardar no Drive” é manual em cada módulo.
+      </div>
+      <button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i>Guardar notificações</button>
+    </form>
+  </div>
+</div>

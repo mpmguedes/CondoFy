@@ -192,10 +192,13 @@ router.post('/convocatorias', async (req, res) => {
           nome: `${doc.textos.titulo}${valores.reuniao_numero ? ` — ${valores.reuniao_numero}` : ''}`,
           pasta: 'convocatorias',
           drive_file_id: up.driveFileId,
+          drive_folder_id: pastaId,
           mime_type: 'application/pdf',
           tamanho: up.tamanho,
           data: valores.data || new Date(),
           url: up.url,
+          drive_status: 'guardado',
+          drive_uploaded_at: new Date(),
           created_by: req.user.id,
         });
         req.flash('success_msg', 'Convocatória guardada no Google Drive.');

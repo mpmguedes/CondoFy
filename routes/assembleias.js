@@ -260,6 +260,8 @@ router.post('/assembleias/:id/anexos', upload.single('ficheiro'), async (req, re
       entidade_tipo: 'Assembleia',
       entidade_id: assembleia.id,
       url: up.url,
+      drive_status: 'guardado',
+      drive_uploaded_at: new Date(),
       created_by: req.user.id,
     });
     req.flash('success_msg', 'Anexo adicionado.');
@@ -393,6 +395,8 @@ router.post('/assembleias/:id/convocatoria/drive', async (req, res) => {
       entidade_tipo: 'Assembleia',
       entidade_id: assembleia.id,
       url: up.url,
+      drive_status: 'guardado',
+      drive_uploaded_at: new Date(),
       created_by: req.user.id,
     });
     await assembleia.update({ convocatoria_documento_id: doc.id });
@@ -446,6 +450,8 @@ router.post('/assembleias/:id/ata/drive', async (req, res) => {
       entidade_tipo: 'Assembleia',
       entidade_id: assembleia.id,
       url: up.url,
+      drive_status: 'guardado',
+      drive_uploaded_at: new Date(),
       created_by: req.user.id,
     });
     await assembleia.update({ ata_documento_id: doc.id });

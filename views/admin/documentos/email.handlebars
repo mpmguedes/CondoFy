@@ -1,0 +1,64 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <h1>Enviar documento por email</h1>
+  <a href="/admin/documentos" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
+</div>
+
+<div class="row">
+  <div class="col-12 col-lg-7">
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-send me-1"></i>Enviar documento</div>
+      <div class="card-body">
+        <form action="/admin/documentos/{{documento.id}}/email" method="POST">
+          <div class="mb-3">
+            <label class="form-label">Destinatários</label>
+            <select class="form-select" name="pessoas" multiple size="8">
+              {{#each pessoas}}
+              <option value="{{id}}">{{nome}} — {{email}}</option>
+              {{/each}}
+            </select>
+            <div class="form-text">Ctrl/Shift para selecionar vários condóminos.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Ou emails manuais (separados por vírgula)</label>
+            <textarea class="form-control" name="emails" rows="2" placeholder="joao@exemplo.pt, maria@exemplo.pt"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Assunto</label>
+            <input type="text" class="form-control" name="assunto" value="Documento: {{documento.nome}}" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Mensagem</label>
+            <textarea class="form-control" name="mensagem" rows="3" placeholder="Mensagem opcional para os destinatários."></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-send me-1"></i>Enviar</button>
+          <div class="form-text mt-2">O envio é feito através da fila de emails; o link do documento (Google Drive) é incluído quando disponível.</div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-5">
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-file-earmark me-1"></i>Documento</div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-4">Nome</dt><dd class="col-8">{{documento.nome}}</dd>
+          <dt class="col-4">Pasta</dt><dd class="col-8">{{documento.pasta}}</dd>
+          <dt class="col-4">Data</dt><dd class="col-8">{{formatDate documento.data}}</dd>
+          <dt class="col-4">Estado Drive</dt>
+          <dd class="col-8">
+            {{#if (eq documento.drive_status 'guardado')}}<span class="badge text-bg-success">☁ Guardado</span>
+            {{else if (eq documento.drive_status 'erro')}}<span class="badge text-bg-danger">Erro</span>
+            {{else if (eq documento.drive_status 'pendente')}}<span class="badge text-bg-warning">Pendente</span>
+            {{else}}<span class="badge text-bg-secondary">Não guardado</span>{{/if}}
+          </dd>
+        </dl>
+        {{#if documento.url}}
+        <a href="{{documento.url}}" target="_blank" rel="noopener" class="btn btn-outline-primary w-100 mt-3">
+          <i class="bi bi-box-arrow-up-right me-1"></i>Abrir no Google Drive
+        </a>
+        {{/if}}
+      </div>
+    </div>
+  </div>
+</div>

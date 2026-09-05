@@ -62,6 +62,8 @@ docker compose up -d --build
 | `npm run db:seed` | Aplica seeds |
 | `npm run db:setup` | Migrations + seeds |
 | `node scripts/test-financeiro.js` | Testes do modelo financeiro (distribuição, plano, PDFs) |
+| `node scripts/test-drive.js` | Testes do helper Google Drive (sem rede) |
+| `node scripts/test-comunicacoes.js` | Testes das comunicações (destinatários, mensagens SMTP) |
 | `node scripts/check-templates.js` | Valida que as vistas Handlebars compilam/renderizam |
 
 ## Documentação
@@ -69,6 +71,8 @@ docker compose up -d --build
 - [`docs/MODELO-DADOS.md`](docs/MODELO-DADOS.md) — modelo de dados e relações
 - [`docs/MIGRACAO-FINANCEIRA.md`](docs/MIGRACAO-FINANCEIRA.md) — novo modelo financeiro e fases
 - [`docs/PLANO.md`](docs/PLANO.md) — análise do projeto base e fases de implementação
+- [`docs/GOOGLE_DRIVE.md`](docs/GOOGLE_DRIVE.md) — integração Google Drive (OAuth, pastas, uploads, backups)
+- [`docs/EMAIL_SMTP.md`](docs/EMAIL_SMTP.md) — integração Email/SMTP (Gmail, fila, retry, envio de teste)
 
 ## Funcionalidades
 
@@ -78,6 +82,7 @@ docker compose up -d --build
 - **Documentos PDF**: avisos de quota, recibos, convocatórias e atas (profissionais, PT-PT, EUR).
 - **Google Drive**: repositório documental + estrutura automática de pastas + backups.
 - **Comunicação**: avisos (manual/programado/automático), fila de email, SMTP configurável.
+- **Ações sobre documentos**: ver/descarregar, guardar no Google Drive e enviar por email de forma transversal (Documentos, Avisos, Assembleias/Convocatórias).
 - **Automatização**: node-cron (quotas, lembretes, fila de email, backups).
 - **Segurança e auditoria**: autenticação local (preparada para OAuth), recuperação de password, registo de operações.
 - **Dashboards**: administrador (financeiro, quotas, orçamento, sistema) e condómino (situação própria + transparência global).

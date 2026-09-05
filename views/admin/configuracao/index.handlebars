@@ -124,14 +124,21 @@
                 <p class="text-muted small mb-3">
                   Ligado à conta Google. Os documentos do condomínio podem ser guardados no Drive.
                 </p>
-                <a href="https://drive.google.com" target="_blank" rel="noopener" class="btn btn-outline-primary w-100 mb-2">
-                  <i class="bi bi-box-arrow-up-right me-1"></i>Abrir Google Drive
-                </a>
-                <form action="/admin/config/drive/estrutura" method="POST" class="mb-2">
-                  <button type="submit" class="btn btn-outline-secondary w-100">
-                    <i class="bi bi-diagram-3 me-1"></i>Criar/verificar estrutura de pastas
-                  </button>
-                </form>
+                <div class="d-grid gap-2 mb-2">
+                  <a href="https://drive.google.com" target="_blank" rel="noopener" class="btn btn-outline-primary">
+                    <i class="bi bi-box-arrow-up-right me-1"></i>Abrir Google Drive
+                  </a>
+                  <form action="/admin/config/drive/testar" method="POST">
+                    <button type="submit" class="btn btn-outline-secondary w-100">
+                      <i class="bi bi-plug me-1"></i>Testar ligação
+                    </button>
+                  </form>
+                  <form action="/admin/config/drive/estrutura" method="POST">
+                    <button type="submit" class="btn btn-outline-secondary w-100">
+                      <i class="bi bi-diagram-3 me-1"></i>Criar/verificar estrutura de pastas
+                    </button>
+                  </form>
+                </div>
                 <form action="/admin/config/drive/desligar" method="POST"
                       onsubmit="return confirm('Desligar o Google Drive? Os ficheiros já guardados no Drive não serão apagados.');">
                   <button type="submit" class="btn btn-outline-danger w-100">
@@ -174,5 +181,40 @@
         {{/if}}
       </div>
     </div>
+
+    {{#if driveLigado}}
+    <div class="card mb-3" id="armazenamento">
+      <div class="card-header bg-white"><i class="bi bi-diagram-3 me-1"></i>Armazenamento &amp; backups</div>
+      <div class="card-body">
+        <form action="/admin/config/drive/opcoes" method="POST">
+          <div class="mb-2">
+            <label class="form-label small">Pasta raiz no Google Drive</label>
+            <input type="text" class="form-control" name="pasta_raiz" value="{{driveOpcoes.pastaRaiz}}" placeholder="CondoFy" />
+            <div class="form-text">Se a pasta existir, é reutilizada (nunca são criadas duplicadas).</div>
+          </div>
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" name="backups_drive" value="on" id="backupsDrive" {{#if driveOpcoes.backupsDrive}}checked{{/if}} />
+            <label class="form-check-label small" for="backupsDrive">Guardar backups da base de dados no Google Drive</label>
+          </div>
+          <button type="submit" class="btn btn-outline-primary w-100">Guardar opções</button>
+        </form>
+
+        {{#if ultimoBackup}}
+        <hr />
+        <div class="small">
+          <div class="fw-semibold mb-1">Último backup</div>
+          <div class="d-flex justify-content-between"><span class="text-muted">Data</span><span>{{formatDateTime ultimoBackup.data}}</span></div>
+          <div class="d-flex justify-content-between"><span class="text-muted">Tipo</span><span>{{ultimoBackup.tipo}}</span></div>
+          <div class="d-flex justify-content-between">
+            <span class="text-muted">Estado</span>
+            {{#if (eq ultimoBackup.estado 'concluido')}}<span class="badge text-bg-success">Concluído</span>
+            {{else if (eq ultimoBackup.estado 'erro')}}<span class="badge text-bg-danger" title="{{ultimoBackup.erro}}">Erro</span>
+            {{else}}<span class="badge text-bg-warning">Em curso</span>{{/if}}
+          </div>
+        </div>
+        {{/if}}
+      </div>
+    </div>
+    {{/if}}
   </div>
 </div>

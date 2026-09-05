@@ -268,6 +268,25 @@ async function operacaoDrive(fn) {
   }
 }
 
+// Testa a ligação atual ao Google Drive (sem alterar nada).
+async function testarLigacao() {
+  if (!isConfigured()) {
+    return { ok: false, erro: 'Google Drive não está ligado.' };
+  }
+  try {
+    const resultado = await operacaoDrive(async () => {
+      const about = await google.drive({ version: 'v3', auth: obterClienteAutenticado() }).about.get({
+        fields: 'user(emailAddress, displayName)',
+      });
+      const u = about.data.user || {};
+      return { conta: u.emailAddress || u.displayName || null };
+    });
+    return { ok: true, conta: resultado.conta };
+  } catch (err) {
+    return { ok: false, erro: err.message };
+  }
+}
+
 // ── Pastas ──────────────────────────────────────────────────────────
 // Encontra uma pasta pelo nome (e pasta-mãe) ou cria-a — nunca duplica.
 async function encontrarOuCriarPasta(nome, parentId) {
@@ -294,8 +313,17 @@ async function encontrarOuCriarPasta(nome, parentId) {
 
 // Estrutura: CondoFy/<ano>/<pastas> e CondoFy/Backups.
 // A pasta raiz ("CondoFy" por omissão) é reutilizada se já existir.
+// Precedência: GOOGLE_DRIVE_ROOT_FOLDER (.env) → google_drive_root_folder (BD) → CondoFy.
 async function criarEstruturaPastas(ano = new Date().getFullYear()) {
-  const raizNome = process.env.GOOGLE_DRIVE_ROOT_FOLDER || 'CondoFy';
+  let raizNome = (process.env.GOOGLE_DRIVE_ROOT_FOLDER || '').trim();
+  if (!raizNome) {
+    try {
+      raizNome = String((await getConfig('google_drive_root_folder', '')) || '').trim();
+    } catch (err) {
+      raizNome = '';
+    }
+  }
+  if (!raizNome) raizNome = 'CondoFy';
   const raizId = await encontrarOuCriarPasta(raizNome);
   const anoId = await encontrarOuCriarPasta(String(ano), raizId);
 
@@ -354,6 +382,7 @@ module.exports = {
   getDrive,
   inicializar,
   estadoLigacao,
+  testarLigacao,
   obterRedirectUri,
   construirUrlAutorizacao,
   trocarCodigo,

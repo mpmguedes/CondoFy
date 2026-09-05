@@ -12,6 +12,7 @@ const sequelize = require('./config/database');
 const handlebarsHelpers = require('./helpers/handlebars-helpers');
 const { getCondominio } = require('./helpers/condominio');
 const drive = require('./helpers/drive');
+const mailer = require('./helpers/mailer');
 require('./config/passport')(passport);
 
 const app = express();
@@ -96,6 +97,7 @@ app.use('/admin', require('./routes/assembleias'));
 app.use('/admin', require('./routes/convocatorias'));
 app.use('/admin', require('./routes/documentos'));
 app.use('/admin', require('./routes/avisos'));
+app.use('/admin', require('./routes/emails'));
 app.use('/admin', require('./routes/configuracao'));
 app.use('/admin', require('./routes/sistema'));
 app.use('/admin', require('./routes/placeholders'));
@@ -125,6 +127,7 @@ sequelize
   .then(async () => {
     console.log('Ligação à base de dados (MariaDB) estabelecida.');
     await drive.inicializar(); // carrega o estado do Google Drive (tokens na BD)
+    await mailer.inicializar(); // carrega a configuração SMTP (BD/.env)
     app.listen(PORT, () => {
       console.log(`Condofy a correr em http://localhost:${PORT}`);
       require('./jobs/scheduler').iniciar();

@@ -3,10 +3,11 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
-const { Condominio } = require('../models');
+const { Condominio, BackupLog } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
 const { getCondominio, clearCondominioCache } = require('../helpers/condominio');
+const { getConfig, setConfig } = require('../helpers/config');
 const drive = require('../helpers/drive');
 
 const router = express.Router();
@@ -20,11 +21,22 @@ const upload = multer({
 router.get('/config', async (req, res) => {
   const condominio = await getCondominio({ force: true });
   const driveEstado = await drive.estadoLigacao();
+
+  const [ultimoBackup, raizDb, backupsDb] = await Promise.all([
+    BackupLog.findOne({ order: [['id', 'DESC']] }).catch(() => null),
+    getConfig('google_drive_root_folder', '').catch(() => ''),
+    getConfig('drive_auto_backups', '1').catch(() => '1'),
+  ]);
+
+  const raizEfetiva = (process.env.GOOGLE_DRIVE_ROOT_FOLDER || '').trim() || String(raizDb || '').trim() || 'CondoFy';
+
   res.render('admin/configuracao/index', {
     titulo: 'Configuração do condomínio',
     condominio: condominio ? condominio.toJSON() : null,
     driveLigado: driveEstado.ligado,
     driveEstado,
+    driveOpcoes: { pastaRaiz: raizEfetiva, backupsDrive: String(backupsDb) !== '0' },
+    ultimoBackup: ultimoBackup ? ultimoBackup.toJSON() : null,
   });
 });
 
@@ -139,6 +151,34 @@ router.post('/config/drive/desligar', async (req, res) => {
   } catch (err) {
     console.error('[drive] erro ao desligar:', err.message);
     req.flash('error_msg', `Não foi possível desligar o Google Drive: ${err.message}`);
+  }
+  res.redirect('/admin/config#google-drive');
+});
+
+// Guarda opções de armazenamento: pasta raiz do Drive e backups automáticos.
+router.post('/config/drive/opcoes', async (req, res) => {
+  try {
+    const pastaRaiz = String(req.body.pasta_raiz || '').trim();
+    const backupsDrive = req.body.backups_drive === 'on' || req.body.backups_drive === '1';
+    await setConfig('google_drive_root_folder', pastaRaiz);
+    await setConfig('drive_auto_backups', backupsDrive ? '1' : '0');
+    await audit({ userId: req.user.id, acao: 'configurar_armazenamento_drive', entidade: 'GoogleDrive', detalhes: { pastaRaiz, backupsDrive } }).catch(() => {});
+    req.flash('success_msg', 'Opções de armazenamento guardadas.');
+  } catch (err) {
+    console.error('[drive] opções:', err.message);
+    req.flash('error_msg', 'Não foi possível guardar as opções de armazenamento.');
+  }
+  res.redirect('/admin/config#google-drive');
+});
+
+// Testa a ligação atual ao Google Drive (sem criar pastas nem enviar nada).
+router.post('/config/drive/testar', async (req, res) => {
+  const r = await drive.testarLigacao();
+  if (r.ok) {
+    await audit({ userId: req.user.id, acao: 'testar_google_drive', entidade: 'GoogleDrive', detalhes: { ok: true } }).catch(() => {});
+    req.flash('success_msg', r.conta ? `✓ Ligação ao Google Drive estabelecida (${r.conta}).` : '✓ Ligação ao Google Drive estabelecida.');
+  } else {
+    req.flash('error_msg', `✕ Não foi possível testar o Google Drive: ${r.erro}`);
   }
   res.redirect('/admin/config#google-drive');
 });

@@ -5,6 +5,7 @@ const path = require('path');
 const { Op } = require('sequelize');
 const { BackupLog } = require('../models');
 const drive = require('../helpers/drive');
+const { getConfig } = require('../helpers/config');
 
 function executarMysqldump() {
   return new Promise((resolve, reject) => {
@@ -68,7 +69,9 @@ async function executarBackup(tipo = 'diario') {
     const gz = zlib.gzipSync(dump);
     const nome = `backup_${tipo}_${new Date().toISOString().slice(0, 10)}_${Date.now()}.sql.gz`;
 
-    if (drive.isConfigured()) {
+    // Preferência "Guardar backups no Google Drive" (Configuração → Google Drive).
+    const backupsNoDrive = (await getConfig('drive_auto_backups', '1')) === '1';
+    if (drive.isConfigured() && backupsNoDrive) {
       const estrutura = await drive.criarEstruturaPastas();
       const up = await drive.uploadArquivo({
         nome,

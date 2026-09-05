@@ -31,7 +31,7 @@
           <th>Pasta</th>
           <th>Tipo</th>
           <th>Data</th>
-          <th>Tamanho</th>
+          <th>Drive</th>
           <th class="text-end">Ações</th>
         </tr>
       </thead>
@@ -51,10 +51,16 @@
             {{else if (eq tipo 'relatorio')}}Relatório
             {{else}}Outro{{/if}}
           </td>
-          <td>{{formatDate data}}</td>
-          <td>{{#if tamanho}}{{tamanho}} B{{else}}—{{/if}}</td>
-          <td class="text-end">
-            {{#if url}}<a href="{{url}}" target="_blank" class="btn btn-sm btn-outline-primary" title="Download/Ver"><span class="material-symbols-outlined">download</span></a>{{/if}}
+          <td class="text-nowrap">{{formatDate data}}</td>
+          <td>
+            {{#if (eq drive_status 'guardado')}}<span class="badge text-bg-success" title="Guardado no Google Drive">☁ Guardado</span>
+            {{else if (eq drive_status 'erro')}}<span class="badge text-bg-danger" title="{{drive_erro}}">Erro Drive</span>
+            {{else if (eq drive_status 'pendente')}}<span class="badge text-bg-warning">A guardar</span>
+            {{else}}<span class="badge text-bg-secondary">Não guardado</span>{{/if}}
+          </td>
+          <td class="text-end text-nowrap">
+            {{#if url}}<a href="{{url}}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" title="Ver/Descarregar"><span class="material-symbols-outlined">download</span></a>{{/if}}
+            <a href="/admin/documentos/{{id}}/email" class="btn btn-sm btn-outline-secondary" title="Enviar por email"><span class="material-symbols-outlined">mail</span></a>
             <form action="/admin/documentos/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar este documento?');">
               <button class="btn btn-sm btn-outline-danger" title="Eliminar"><span class="material-symbols-outlined">delete</span></button>
             </form>

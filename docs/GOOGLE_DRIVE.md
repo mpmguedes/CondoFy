@@ -121,3 +121,40 @@ Para voltar a ligar mais tarde, basta clicar em **Ligar Google Drive**.
   a Gmail, contactos, calendário ou à Drive inteira.
 * Não são usadas credenciais reais no repositório; o `.env` está no
   `.gitignore`.
+
+## Opções de armazenamento (interface)
+
+Em **Configuração → Google Drive** (quando ligado) existe ainda:
+
+* **Pasta raiz** — configurável (BD, chave `google_drive_root_folder`), com
+  precedência: `.env` (`GOOGLE_DRIVE_ROOT_FOLDER`) → BD → `CondoFy`. A pasta é
+  reutilizada, nunca duplicada.
+* **Guardar backups no Google Drive** (chave `drive_auto_backups`, padrão
+  ativo). Se desligado, os backups ficam apenas em cópia local.
+* **Testar ligação** — verifica a conta sem criar nada.
+* **Último backup** — data/tipo/estado do último `BackupLog`.
+
+## Ações sobre documentos (transversais)
+
+Existe uma camada reutilizável (`helpers/document-actions.js`) com
+`guardarDocumentoNoDrive`, `enviarDocumentoPorEmail`, `guardarEEnviarDocumento`
+e `obterLinkDrive`. Falhas do Drive nunca bloqueiam a geração/uso local do PDF.
+
+Onde estão disponíveis:
+
+* **Documentos** (biblioteca): estado ☁ Guardado/Erro, “Abrir no Google Drive”,
+  “Enviar por email”, eliminar.
+* **Assembleias**: guardar convocatória/ata no Drive e anexos (botões existentes).
+* **Convocatórias (Nova Convocatória)**: opção “Guardar também no Google Drive”.
+* **Avisos**: envio por email centralizado (fila), sem duplicados.
+* **Backups**: cópia automática para `Backups` (com a preferência acima).
+
+## Estado dos documentos na base de dados
+
+A migration `20260101000046-add-documento-drive-estado` adiciona a `documentos`:
+
+* `drive_file_id` (já existente — referência principal) e `url`
+* `drive_status` — `nao_guardado | pendente | guardado | erro`
+* `drive_erro`, `drive_uploaded_at`, `drive_folder_id`
+
+Ficheiros já no Drive no momento da migração ficam marcados como `guardado`.

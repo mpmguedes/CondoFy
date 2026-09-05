@@ -27,6 +27,7 @@ const { sincronizarMovimentoDespesa } = require('../helpers/movimentos');
 const { gerarAvisoQuotaPDF, gerarReciboPDF } = require('../helpers/pdf');
 const { resolverDestinatarios } = require('../helpers/avisos');
 const { enfileirarEmail } = require('../helpers/email-fila');
+const { estaAtivo } = require('../helpers/notificacoes');
 const { getQuotaConfig, setQuotaConfig } = require('../helpers/quotas-config');
 const { calcularQuota, calcularQuotasOrcamento } = require('../helpers/quotas-calc');
 const { validarPermilagem } = require('../helpers/permilagem');
@@ -608,20 +609,23 @@ router.post('/pagamentos', async (req, res) => {
     });
     await audit({ userId: req.user.id, acao: 'registar_pagamento', entidade: 'Pagamento', entidadeId: resultado.pagamento.id });
 
-    // Envio automático do recibo (fila de email)
-    try {
-      const dest = await resolverDestinatarios({ modo: 'fracoes', fracoes: [fracao_id] });
-      const linkRecibo = `${req.protocol}://${req.get('host')}/admin/pagamentos/${resultado.pagamento.id}/recibo`;
-      for (const d of dest) {
-        await enfileirarEmail({
-          destinatario_email: d.email,
-          destinatario_nome: d.nome,
-          assunto: `Recibo ${resultado.pagamento.numero_documento}`,
-          corpo: `Foi registado um pagamento no valor de ${resultado.pagamento.valor} €.\nRecibo: ${linkRecibo}`,
-        });
+    // Envio automático do recibo (fila de email) — respeita a preferência
+    // "Recibos → email" configurada em Emails → Notificações.
+    if (await estaAtivo('recibos', 'email')) {
+      try {
+        const dest = await resolverDestinatarios({ modo: 'fracoes', fracoes: [fracao_id] });
+        const linkRecibo = `${req.protocol}://${req.get('host')}/admin/pagamentos/${resultado.pagamento.id}/recibo`;
+        for (const d of dest) {
+          await enfileirarEmail({
+            destinatario_email: d.email,
+            destinatario_nome: d.nome,
+            assunto: `Recibo ${resultado.pagamento.numero_documento}`,
+            corpo: `Foi registado um pagamento no valor de ${resultado.pagamento.valor} €.\nRecibo: ${linkRecibo}`,
+          });
+        }
+      } catch (err) {
+        console.error('[recibo-email]', err.message);
       }
-    } catch (err) {
-      console.error('[recibo-email]', err.message);
     }
 
     const msg = `Pagamento registado (recibo ${resultado.pagamento.numero_documento}).`;

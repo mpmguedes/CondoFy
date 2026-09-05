@@ -35,6 +35,12 @@
         <div class="d-grid gap-2">
           <a href="/admin/assembleias/{{assembleia.id}}/convocatoria" target="_blank" class="btn btn-outline-primary"><i class="bi bi-file-earmark-pdf me-1"></i>Gerar convocatória (PDF)</a>
           <a href="/admin/assembleias/{{assembleia.id}}/ata" target="_blank" class="btn btn-outline-primary"><i class="bi bi-file-earmark-pdf me-1"></i>Gerar ata (PDF)</a>
+          {{#if assembleia.convocatoria.url}}
+          <a href="/admin/documentos/{{assembleia.convocatoria.id}}/email" class="btn btn-outline-secondary"><i class="bi bi-send me-1"></i>Enviar convocatória por email</a>
+          {{/if}}
+          {{#if assembleia.ata.url}}
+          <a href="/admin/documentos/{{assembleia.ata.id}}/email" class="btn btn-outline-secondary"><i class="bi bi-send me-1"></i>Enviar ata por email</a>
+          {{/if}}
           <form action="/admin/assembleias/{{assembleia.id}}/convocatoria/drive" method="POST">
             <button class="btn btn-outline-secondary w-100" {{#unless driveLigado}}disabled{{/unless}}><i class="bi bi-cloud-arrow-up me-1"></i>Guardar convocatória no Drive</button>
           </form>
