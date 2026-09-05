@@ -1,0 +1,62 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Fornecedores</h1>
+    <p class="subtitle">Fornecedores do condomínio (faturas, pagamentos e comprovativos)</p>
+  </div>
+  <a href="/admin/fornecedores/novo" class="btn btn-primary"><span class="material-symbols-outlined me-1">add</span>Novo fornecedor</a>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="d-flex flex-wrap gap-2">
+      <a href="/admin/fornecedores" class="btn btn-sm {{#if (eq filtro 'ativos')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Ativos</a>
+      <a href="/admin/fornecedores?estado=inativos" class="btn btn-sm {{#if (eq filtro 'inativos')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Inativos</a>
+      <a href="/admin/fornecedores?estado=todos" class="btn btn-sm {{#if (eq filtro 'todos')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Todos</a>
+    </div>
+  </div>
+</div>
+
+{{#if fornecedores}}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Nome</th>
+          <th>NIF</th>
+          <th>Contacto</th>
+          <th>Email</th>
+          <th>Telefone</th>
+          <th>Telemóvel</th>
+          <th>IBAN</th>
+          <th>Estado</th>
+          <th class="text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each fornecedores}}
+        <tr>
+          <td class="fw-semibold">{{nome}}</td>
+          <td>{{#if nif}}{{nif}}{{else}}—{{/if}}</td>
+          <td>{{#if morada}}{{morada}}{{else}}—{{/if}}</td>
+          <td>{{#if email}}{{email}}{{else}}—{{/if}}</td>
+          <td>{{#if telefone}}{{telefone}}{{else}}—{{/if}}</td>
+          <td>{{#if telemovel}}{{telemovel}}{{else}}—{{/if}}</td>
+          <td class="font-monospace small">{{#if iban}}{{iban}}{{else}}—{{/if}}</td>
+          <td>{{#if ativo}}<span class="badge text-bg-success">Ativo</span>{{else}}<span class="badge text-bg-secondary">Inativo</span>{{/if}}</td>
+          <td class="text-end text-nowrap">
+            <a href="/admin/fornecedores/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
+            <a href="/admin/fornecedores/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
+            <form action="/admin/fornecedores/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar este fornecedor? As despesas associadas ficam sem fornecedor.');">
+              <button class="btn btn-sm btn-outline-danger" title="Apagar"><span class="material-symbols-outlined">delete</span></button>
+            </form>
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{else}}
+{{> _empty-state icon="local_shipping" titulo="Sem fornecedores" descricao="Registe os fornecedores do condomínio." link="/admin/fornecedores/novo" linkTexto="Novo fornecedor"}}
+{{/if}}

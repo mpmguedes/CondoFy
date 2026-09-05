@@ -1,0 +1,97 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>{{fornecedor.nome}}</h1>
+    <p class="subtitle">Ficha do fornecedor</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/admin/fornecedores/{{fornecedor.id}}/editar" class="btn btn-outline-primary"><span class="material-symbols-outlined me-1">edit</span>Editar</a>
+    <a href="/admin/fornecedores" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-5">
+    <div class="card mb-3">
+      <div class="card-header bg-white"><i class="bi bi-shop me-1"></i>Fornecedor</div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-5">Nome</dt><dd class="col-7">{{fornecedor.nome}}</dd>
+          {{#if fornecedor.nif}}<dt class="col-5">NIF</dt><dd class="col-7">{{fornecedor.nif}}</dd>{{/if}}
+          {{#if fornecedor.morada}}<dt class="col-5">Morada</dt><dd class="col-7">{{fornecedor.morada}}</dd>{{/if}}
+          {{#if fornecedor.codigo_postal}}<dt class="col-5">Código postal</dt><dd class="col-7">{{fornecedor.codigo_postal}} {{fornecedor.localidade}}</dd>{{/if}}
+          {{#if fornecedor.email}}<dt class="col-5">Email</dt><dd class="col-7">{{fornecedor.email}}</dd>{{/if}}
+          {{#if fornecedor.telefone}}<dt class="col-5">Telefone</dt><dd class="col-7">{{fornecedor.telefone}}</dd>{{/if}}
+          {{#if fornecedor.telemovel}}<dt class="col-5">Telemóvel</dt><dd class="col-7">{{fornecedor.telemovel}}</dd>{{/if}}
+          {{#if fornecedor.iban}}<dt class="col-5">IBAN</dt><dd class="col-7 font-monospace">{{fornecedor.iban}}</dd>{{/if}}
+          {{#if fornecedor.notas}}<dt class="col-5">Notas</dt><dd class="col-7">{{fornecedor.notas}}</dd>{{/if}}
+          <dt class="col-5">Estado</dt>
+          <dd class="col-7">{{#if fornecedor.ativo}}<span class="badge text-bg-success">Ativo</span>{{else}}<span class="badge text-bg-secondary">Inativo</span>{{/if}}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-7">
+    {{!-- Despesas --}}
+    <div class="card mb-3">
+      <div class="card-header bg-white"><i class="bi bi-credit-card me-1"></i>Despesas</div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr><th>Data</th><th>Descrição</th><th>Categoria</th><th class="text-end">Valor</th><th>Estado</th></tr>
+          </thead>
+          <tbody>
+            {{#each despesas}}
+            <tr>
+              <td class="text-nowrap">{{formatDate data}}</td>
+              <td class="fw-semibold">{{descricao}}</td>
+              <td>{{#if categoria}}{{categoria.nome}}{{else}}—{{/if}}</td>
+              <td class="text-end">{{eur valor}}</td>
+              <td>
+                {{#if (eq estado 'paga')}}<span class="badge text-bg-success">Paga</span>
+                {{else if (eq estado 'anulada')}}<span class="badge text-bg-secondary">Anulada</span>
+                {{else}}<span class="badge text-bg-warning">Registada</span>{{/if}}
+              </td>
+            </tr>
+            {{else}}
+            <tr><td colspan="5" class="text-center text-muted py-3">Sem despesas associadas.</td></tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {{!-- Documentos --}}
+    <div class="card mb-3">
+      <div class="card-header bg-white"><i class="bi bi-file-earmark me-1"></i>Documentos</div>
+      <ul class="list-group list-group-flush">
+        {{#each documentos}}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span class="fw-semibold">{{nome}}</span>
+          <span>
+            {{#if url}}<a href="{{url}}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">Ver</a>{{/if}}
+            {{#if (eq drive_status 'guardado')}}<span class="badge text-bg-success ms-1">☁ Drive</span>{{/if}}
+          </span>
+        </li>
+        {{else}}
+        <li class="list-group-item text-muted">Sem documentos associados.</li>
+        {{/each}}
+      </ul>
+    </div>
+
+    {{!-- Pagamentos e comunicações (próximas fases) --}}
+    <div class="card mb-3">
+      <div class="card-header bg-white"><i class="bi bi-cash-coin me-1"></i>Pagamentos</div>
+      <div class="card-body text-muted small">
+        Os pagamentos a fornecedores (com comprovativos e envio por email) serão registados
+        nesta ficha quando forem efetuados.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-envelope me-1"></i>Comunicações</div>
+      <div class="card-body text-muted small">
+        Os emails enviados ao fornecedor aparecerão aqui (histórico de comunicações).
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,72 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>{{titulo}}</h1>
+    <p class="subtitle">Dados do fornecedor</p>
+  </div>
+  <a href="/admin/fornecedores" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
+</div>
+
+<div class="row">
+  <div class="col-12 col-lg-8">
+    <div class="card">
+      <div class="card-body">
+        <form action="{{#if fornecedor}}/admin/fornecedores/{{fornecedor.id}}{{else}}/admin/fornecedores{{/if}}" method="POST">
+          <div class="mb-3">
+            <label class="form-label">Nome *</label>
+            <input type="text" class="form-control" name="nome" value="{{fornecedor.nome}}" required placeholder="Ex.: Empresa XYZ, Lda." />
+          </div>
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label">NIF</label>
+              <input type="text" class="form-control" name="nif" value="{{fornecedor.nif}}" placeholder="Opcional" />
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Email</label>
+              <input type="email" class="form-control" name="email" value="{{fornecedor.email}}" />
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Telefone</label>
+              <input type="text" class="form-control" name="telefone" value="{{fornecedor.telefone}}" />
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Telemóvel</label>
+              <input type="text" class="form-control" name="telemovel" value="{{fornecedor.telemovel}}" />
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">IBAN</label>
+              <input type="text" class="form-control" name="iban" value="{{fornecedor.iban}}" placeholder="PT50 ..." />
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Estado</label>
+              <select class="form-select" name="ativo">
+                <option value="on" {{#if (or fornecedor.ativo (not fornecedor))}}selected{{/if}}>Ativo</option>
+                <option value="" {{#if (and fornecedor (not fornecedor.ativo))}}selected{{/if}}>Inativo</option>
+              </select>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Morada</label>
+            <input type="text" class="form-control" name="morada" value="{{fornecedor.morada}}" />
+          </div>
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Código postal</label>
+              <input type="text" class="form-control" name="codigo_postal" value="{{fornecedor.codigo_postal}}" placeholder="0000-000" />
+            </div>
+            <div class="col-md-8 mb-3">
+              <label class="form-label">Localidade</label>
+              <input type="text" class="form-control" name="localidade" value="{{fornecedor.localidade}}" />
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Notas</label>
+            <textarea class="form-control" name="notas" rows="3">{{fornecedor.notas}}</textarea>
+          </div>
+          <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1">save</span>Guardar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

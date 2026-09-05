@@ -35,6 +35,7 @@ const {
   Pagamento,
   PagamentoQuota,
   Despesa,
+  Fornecedor,
   Documento,
   Assembleia,
   AssembleiaParticipante,
@@ -96,6 +97,8 @@ PagamentoQuota.belongsTo(Quota, { foreignKey: 'quota_id', as: 'quota' });
 Despesa.belongsTo(Categoria, { foreignKey: 'categoria_id', as: 'categoria' });
 Despesa.belongsTo(ContaBancaria, { foreignKey: 'conta_bancaria_id', as: 'conta_bancaria' });
 Despesa.belongsTo(MetodoPagamento, { foreignKey: 'metodo_pagamento_id', as: 'metodo_pagamento' });
+Despesa.belongsTo(Fornecedor, { foreignKey: 'fornecedor_id', as: 'fornecedorReg' });
+Fornecedor.hasMany(Despesa, { foreignKey: 'fornecedor_id', as: 'despesas' });
 
 // Movimentos bancários
 MovimentoBancario.belongsTo(ContaBancaria, { foreignKey: 'conta_bancaria_id', as: 'conta_bancaria' });

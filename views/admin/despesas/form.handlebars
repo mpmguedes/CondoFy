@@ -37,7 +37,14 @@
             </div>
             <div class="col-md-4 mb-3">
               <label class="form-label">Fornecedor</label>
-              <input type="text" class="form-control" name="fornecedor" value="{{despesa.fornecedor}}" />
+              <select class="form-select" name="fornecedor_id">
+                <option value="">— Sem fornecedor —</option>
+                {{#each fornecedores}}
+                <option value="{{id}}" {{selected ../despesa.fornecedor_id id}}>{{nome}}</option>
+                {{/each}}
+              </select>
+              <div class="form-text">Ou, se não estiver registado:</div>
+              <input type="text" class="form-control form-control-sm mt-1" name="fornecedor" value="{{despesa.fornecedor}}" placeholder="Nome do fornecedor (manual)" />
             </div>
             <div class="col-md-4 mb-3">
               <label class="form-label">Estado</label>
@@ -48,7 +55,7 @@
             </div>
           </div>
           <div class="row">
-            <div class="col-md-6 mb-3">
+            <div class="col-md-4 mb-3">
               <label class="form-label">Conta bancária</label>
               <select class="form-select" name="conta_bancaria_id">
                 <option value="">— Sem conta —</option>
@@ -57,7 +64,7 @@
                 {{/each}}
               </select>
             </div>
-            <div class="col-md-6 mb-3">
+            <div class="col-md-4 mb-3">
               <label class="form-label">Método de pagamento</label>
               <select class="form-select" name="metodo_pagamento_id">
                 <option value="">— Sem método —</option>

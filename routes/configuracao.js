@@ -8,6 +8,7 @@ const { eAdmin } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
 const { getCondominio, clearCondominioCache } = require('../helpers/condominio');
 const { getConfig, setConfig } = require('../helpers/config');
+const { listarAutomacoes, guardarAutomacoes } = require('../helpers/automacoes');
 const drive = require('../helpers/drive');
 
 const router = express.Router();
@@ -82,6 +83,29 @@ router.post('/config', upload.single('logotipo'), async (req, res) => {
     req.flash('error_msg', 'Erro ao guardar a configuração.');
   }
   res.redirect('/admin/config');
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Documentos e Automações (Configurações)
+// ═══════════════════════════════════════════════════════════════════
+router.get('/config/automacoes', async (req, res) => {
+  const grupos = await listarAutomacoes();
+  res.render('admin/configuracao/automacoes', {
+    titulo: 'Documentos e Automações',
+    grupos,
+  });
+});
+
+router.post('/config/automacoes', async (req, res) => {
+  try {
+    const r = await guardarAutomacoes(req.body);
+    await audit({ userId: req.user.id, acao: 'configurar_automacoes', entidade: 'Configuracao', detalhes: { tipos: r.tipos } }).catch(() => {});
+    req.flash('success_msg', 'Automações de documentos guardadas.');
+  } catch (err) {
+    console.error('[automacoes]', err.message);
+    req.flash('error_msg', 'Não foi possível guardar as automações.');
+  }
+  res.redirect('/admin/config/automacoes');
 });
 
 // ═══════════════════════════════════════════════════════════════════

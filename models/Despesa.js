@@ -13,6 +13,7 @@ module.exports = (sequelize) => {
       competencia_ano: { type: DataTypes.INTEGER, allowNull: true },
       competencia_mes: { type: DataTypes.INTEGER, allowNull: true },
       fornecedor: { type: DataTypes.STRING(191), allowNull: true },
+      fornecedor_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       conta_bancaria_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       metodo_pagamento_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       observacoes: { type: DataTypes.TEXT, allowNull: true },

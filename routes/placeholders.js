@@ -10,7 +10,6 @@ const MODULOS = {
   calendario: { titulo: 'Calendário', icono: 'calendar_month' },
   amenidades: { titulo: 'Amenidades', icono: 'weekend' },
   tickets: { titulo: 'Tickets', icono: 'confirmation_number' },
-  fornecedores: { titulo: 'Fornecedores', icono: 'local_shipping' },
   seguros: { titulo: 'Seguros', icono: 'shield' },
 };
 

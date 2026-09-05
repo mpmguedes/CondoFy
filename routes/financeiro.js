@@ -15,6 +15,7 @@ const {
   Orcamento,
   OrcamentoRubrica,
   Documento,
+  Fornecedor,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
@@ -155,18 +156,29 @@ router.get('/despesas', async (req, res) => {
 });
 
 router.get('/despesas/nova', async (req, res) => {
-  const [categorias, contas, metodos] = await Promise.all([
+  const [categorias, contas, metodos, fornecedores] = await Promise.all([
     Categoria.findAll({ where: { tipo: 'despesa', ativa: true }, order: [['nome', 'ASC']] }),
     ContaBancaria.findAll({ where: { ativa: true }, order: [['nome', 'ASC']] }),
     MetodoPagamento.findAll({ where: { ativo: true }, order: [['nome', 'ASC']] }),
+    Fornecedor.findAll({ where: { ativo: true }, order: [['nome', 'ASC']] }),
   ]);
-  res.render('admin/despesas/form', { titulo: 'Nova despesa', despesa: null, categorias, contas, metodos });
+  res.render('admin/despesas/form', { titulo: 'Nova despesa', despesa: null, categorias, contas, metodos, fornecedores });
 });
 
 router.post('/despesas', async (req, res) => {
   const { descricao, categoria_id, valor, data, fornecedor, conta_bancaria_id, metodo_pagamento_id, observacoes, estado } = req.body;
   const dataObj = data ? new Date(data) : new Date();
   const numero = await proximoNumero('despesa', { ano: dataObj.getFullYear() });
+
+  // Fornecedor: estruturado (id) com texto legado sincronizado para compatibilidade.
+  let fornecedor_id = parseInt(req.body.fornecedor_id, 10) || null;
+  let fornecedorTexto = (fornecedor || '').trim();
+  if (fornecedor_id) {
+    const f = await Fornecedor.findByPk(fornecedor_id);
+    if (!f) fornecedor_id = null;
+    else fornecedorTexto = f.nome;
+  }
+
   const despesa = await Despesa.create({
     numero_documento: numero,
     descricao,
@@ -175,7 +187,8 @@ router.post('/despesas', async (req, res) => {
     data: dataObj,
     competencia_ano: dataObj.getFullYear(),
     competencia_mes: dataObj.getMonth() + 1,
-    fornecedor,
+    fornecedor: fornecedorTexto || null,
+    fornecedor_id,
     conta_bancaria_id: conta_bancaria_id || null,
     metodo_pagamento_id: metodo_pagamento_id || null,
     observacoes,
@@ -190,12 +203,13 @@ router.post('/despesas', async (req, res) => {
 router.get('/despesas/:id/editar', async (req, res) => {
   const despesa = await Despesa.findByPk(req.params.id);
   if (!despesa) return res.redirect('/admin/despesas');
-  const [categorias, contas, metodos] = await Promise.all([
+  const [categorias, contas, metodos, fornecedores] = await Promise.all([
     Categoria.findAll({ where: { tipo: 'despesa' }, order: [['nome', 'ASC']] }),
     ContaBancaria.findAll({ order: [['nome', 'ASC']] }),
     MetodoPagamento.findAll({ order: [['nome', 'ASC']] }),
+    Fornecedor.findAll({ order: [['nome', 'ASC']] }),
   ]);
-  res.render('admin/despesas/form', { titulo: 'Editar despesa', despesa, categorias, contas, metodos });
+  res.render('admin/despesas/form', { titulo: 'Editar despesa', despesa, categorias, contas, metodos, fornecedores });
 });
 
 router.post('/despesas/:id', async (req, res) => {
@@ -203,6 +217,15 @@ router.post('/despesas/:id', async (req, res) => {
   if (!despesa) return res.redirect('/admin/despesas');
   const { descricao, categoria_id, valor, data, fornecedor, conta_bancaria_id, metodo_pagamento_id, observacoes, estado } = req.body;
   const dataObj = data ? new Date(data) : new Date();
+
+  let fornecedor_id = parseInt(req.body.fornecedor_id, 10) || null;
+  let fornecedorTexto = (fornecedor || '').trim();
+  if (fornecedor_id) {
+    const f = await Fornecedor.findByPk(fornecedor_id);
+    if (!f) fornecedor_id = null;
+    else fornecedorTexto = f.nome;
+  }
+
   await despesa.update({
     descricao,
     categoria_id: categoria_id || null,
@@ -210,7 +233,8 @@ router.post('/despesas/:id', async (req, res) => {
     data: dataObj,
     competencia_ano: dataObj.getFullYear(),
     competencia_mes: dataObj.getMonth() + 1,
-    fornecedor,
+    fornecedor: fornecedorTexto || null,
+    fornecedor_id,
     conta_bancaria_id: conta_bancaria_id || null,
     metodo_pagamento_id: metodo_pagamento_id || null,
     observacoes,
