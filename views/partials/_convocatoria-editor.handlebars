@@ -120,11 +120,17 @@
 </div>
 
 {{!-- ═══ Ações ═══ --}}
-<div class="cv-acoes d-flex flex-wrap gap-2">
+<div class="cv-acoes d-flex flex-wrap gap-2 align-items-center">
   <button type="submit" name="_acao" value="preview" class="btn btn-outline-primary btn-lg">
     <span class="material-symbols-outlined me-1">visibility</span>Pré-visualizar
   </button>
   <button type="submit" name="_acao" value="pdf" class="btn btn-success btn-lg">
     <span class="material-symbols-outlined me-1">picture_as_pdf</span>Gerar PDF
   </button>
+  {{#if driveLigado}}
+  <div class="form-check ms-lg-auto mb-0">
+    <input class="form-check-input" type="checkbox" name="guardar_drive" value="on" id="guardarDrive" />
+    <label class="form-check-label small" for="guardarDrive">Guardar também no Google Drive</label>
+  </div>
+  {{/if}}
 </div>

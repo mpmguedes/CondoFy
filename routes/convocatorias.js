@@ -3,10 +3,11 @@
 // ─────────────────────────────────────────────────────────────────────
 const express = require('express');
 const { Op } = require('sequelize');
-const { Assembleia } = require('../models');
+const { Assembleia, Documento } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
 const { getCondominio } = require('../helpers/condominio');
 const { audit } = require('../helpers/audit');
+const drive = require('../helpers/drive');
 const {
   construirDocumento,
   normalizarPontos,
@@ -123,6 +124,7 @@ router.get('/convocatorias/nova', async (req, res) => {
     titulo: 'Nova Convocatória',
     valores: valoresPorOmissao(c, numero),
     previa: null,
+    driveLigado: drive.isConfigured(),
   });
 });
 
@@ -151,6 +153,7 @@ router.post('/convocatorias', async (req, res) => {
     titulo: 'Nova Convocatória',
     valores,
     previa: acao === 'preview' ? doc : null,
+    driveLigado: drive.isConfigured(),
   };
 
   if (acao === 'pdf') {
@@ -163,6 +166,46 @@ router.post('/convocatorias', async (req, res) => {
     const cond = await getCondominio();
     const buffer = await gerarConvocatoriaCartaPDF(cond ? cond.toJSON() : {}, doc);
 
+    const refSlug = slug(valores.reuniao_numero || valores.data || doc.tipoLabel);
+    const nomeFicheiro = ['convocatoria', slug(doc.tipoLabel), refSlug !== 'convocatoria' ? refSlug : '']
+      .filter(Boolean)
+      .join('-');
+
+    // Opcional: guardar também no Google Drive (antes de devolver o PDF).
+    const guardarDrive = req.body.guardar_drive === 'on' || req.body.guardar_drive === '1';
+    if (guardarDrive) {
+      if (!drive.isConfigured()) {
+        req.flash('error_msg', 'O Google Drive não está ligado — ligue a conta em Configuração ou remova a opção.');
+        return res.render('admin/convocatorias/nova', base);
+      }
+      try {
+        const ano = valores.data ? Number(valores.data.slice(0, 4)) : new Date().getFullYear();
+        const pastaId = await drive.pastaParaDocumento('convocatoria', ano);
+        const up = await drive.uploadArquivo({
+          nome: `${nomeFicheiro}.pdf`,
+          mimeType: 'application/pdf',
+          buffer,
+          parentFolderId: pastaId,
+        });
+        await Documento.create({
+          tipo: 'convocatoria',
+          nome: `${doc.textos.titulo}${valores.reuniao_numero ? ` — ${valores.reuniao_numero}` : ''}`,
+          pasta: 'convocatorias',
+          drive_file_id: up.driveFileId,
+          mime_type: 'application/pdf',
+          tamanho: up.tamanho,
+          data: valores.data || new Date(),
+          url: up.url,
+          created_by: req.user.id,
+        });
+        req.flash('success_msg', 'Convocatória guardada no Google Drive.');
+      } catch (err) {
+        console.error('[convocatoria] erro ao guardar no Drive:', err.message);
+        req.flash('error_msg', err.message);
+        return res.render('admin/convocatorias/nova', base);
+      }
+    }
+
     try {
       await audit({
         userId: req.user.id,
@@ -173,11 +216,6 @@ router.post('/convocatorias', async (req, res) => {
     } catch (err) {
       // auditoria é auxiliar — nunca impede a geração do documento
     }
-
-    const refSlug = slug(valores.reuniao_numero || valores.data || doc.tipoLabel);
-    const nomeFicheiro = ['convocatoria', slug(doc.tipoLabel), refSlug !== 'convocatoria' ? refSlug : '']
-      .filter(Boolean)
-      .join('-');
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${nomeFicheiro}.pdf"`);

@@ -34,12 +34,12 @@
     <details class="cv-editor-details">
       <summary>Editar dados da convocatória (mantém tudo o que introduziu)</summary>
       <div class="cv-editor-inner">
-        {{> _convocatoria-editor v=valores}}
+        {{> _convocatoria-editor v=valores driveLigado=driveLigado}}
       </div>
     </details>
   </div>
   {{else}}
-  {{> _convocatoria-editor v=valores}}
+  {{> _convocatoria-editor v=valores driveLigado=driveLigado}}
   {{/if}}
 </form>
 

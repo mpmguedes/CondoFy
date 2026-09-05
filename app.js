@@ -11,6 +11,7 @@ const methodOverride = require('method-override');
 const sequelize = require('./config/database');
 const handlebarsHelpers = require('./helpers/handlebars-helpers');
 const { getCondominio } = require('./helpers/condominio');
+const drive = require('./helpers/drive');
 require('./config/passport')(passport);
 
 const app = express();
@@ -121,8 +122,9 @@ const PORT = process.env.PORT || 3000;
 
 sequelize
   .authenticate()
-  .then(() => {
+  .then(async () => {
     console.log('Ligação à base de dados (MariaDB) estabelecida.');
+    await drive.inicializar(); // carrega o estado do Google Drive (tokens na BD)
     app.listen(PORT, () => {
       console.log(`Condofy a correr em http://localhost:${PORT}`);
       require('./jobs/scheduler').iniciar();

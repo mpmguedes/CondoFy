@@ -103,4 +103,39 @@ assert.ok(html.includes('value="19:47"'), 'hora preservada no editor');
 html = layout({ body: 'ok', user: contexto.user, isAdmin: true, condominio: contexto.condominio, currentPath: '/admin/convocatorias/nova' });
 assert.ok(html.includes('/admin/convocatorias/nova'), 'link de navegação Convocatórias');
 
+// 6. Página de Configuração — estados do Google Drive
+const config = handlebars.compile(ler('admin/configuracao/index.handlebars'));
+const condConfig = {
+  designacao: 'Condomínio Teste',
+  administracao_nome: 'Gestão, Lda.',
+  website: null,
+  nif: '500000000',
+  morada: 'Rua X',
+  codigo_postal: '1000-000',
+  localidade: 'Lisboa',
+  email: null,
+  telefone: null,
+  iban_principal: null,
+  outros_meios_pagamento: null,
+  dados_bancarios_adicionais: null,
+  identidade_visual: 'designacao',
+  logotipo: null,
+};
+const ctxConfig = { titulo: 'Configuração do condomínio', condominio: condConfig };
+
+html = config({ ...ctxConfig, driveLigado: false, driveEstado: { ativo: true, credenciais: true, ligado: false, viaEnv: false, conta: null, redirectUriDefinido: true } });
+assert.ok(html.includes('Ligar Google Drive'), 'config: botão ligar quando não ligado');
+assert.ok(html.includes('Não ligado'), 'config: estado não ligado');
+
+html = config({ ...ctxConfig, driveLigado: true, driveEstado: { ativo: true, credenciais: true, ligado: true, viaEnv: false, conta: 'admin@gmail.com', redirectUriDefinido: true } });
+assert.ok(html.includes('admin@gmail.com'), 'config: conta ligada visível');
+assert.ok(html.includes('Desligar'), 'config: botão desligar');
+assert.ok(html.includes('Abrir Google Drive'), 'config: abrir drive');
+
+html = config({ ...ctxConfig, driveLigado: true, driveEstado: { ativo: true, credenciais: true, ligado: true, viaEnv: true, conta: null, redirectUriDefinido: true } });
+assert.ok(html.includes('via .env'), 'config: estado legado via .env');
+
+html = config({ ...ctxConfig, driveLigado: false, driveEstado: { ativo: false, credenciais: false, ligado: false, viaEnv: false, conta: null, redirectUriDefinido: false } });
+assert.ok(html.includes('Desativado'), 'config: integração desativada');
+
 console.log('✓ Todas as vistas da convocatória renderizam corretamente.');

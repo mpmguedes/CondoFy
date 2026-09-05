@@ -89,19 +89,89 @@
   </div>
 
   <div class="col-12 col-lg-4">
-    <div class="card mb-3">
+    <div class="card mb-3" id="google-drive">
       <div class="card-header bg-white"><i class="bi bi-cloud me-1"></i>Google Drive</div>
       <div class="card-body">
-        <p class="mb-2">
-          {{#if driveLigado}}<span class="badge text-bg-success">🟢 Ligado</span>
-          {{else}}<span class="badge text-bg-secondary">⚪ Não configurado</span>{{/if}}
-        </p>
-        <p class="text-muted small mb-3">Configure <code>GOOGLE_DRIVE_ENABLED</code>, <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code> e <code>GOOGLE_REFRESH_TOKEN</code> no <code>.env</code>.</p>
-        <form action="/admin/config/drive/estrutura" method="POST">
-          <button type="submit" class="btn btn-outline-primary w-100" {{#unless driveLigado}}disabled{{/unless}}>
-            <i class="bi bi-diagram-3 me-1"></i>Criar estrutura de pastas
-          </button>
-        </form>
+        {{#if driveEstado.ativo}}
+          {{#if driveEstado.credenciais}}
+            {{#if driveEstado.ligado}}
+              {{#if driveEstado.viaEnv}}
+                {{!-- Ligado através do .env (legado) --}}
+                <p class="mb-2"><span class="badge text-bg-success">🟢 Ligado (via .env)</span></p>
+                <p class="text-muted small mb-3">
+                  A ligação está configurada através de <code>GOOGLE_REFRESH_TOKEN</code> no
+                  <code>.env</code>. Pode mantê-la ou passar a usar a conta Google ligada pela
+                  aplicação (recomendado).
+                </p>
+                <a href="/admin/config/drive/ligar" class="btn btn-primary w-100 mb-2">
+                  <i class="bi bi-google me-1"></i>Ligar com a conta Google
+                </a>
+                <form action="/admin/config/drive/estrutura" method="POST">
+                  <button type="submit" class="btn btn-outline-primary w-100 mb-2">
+                    <i class="bi bi-diagram-3 me-1"></i>Criar estrutura de pastas
+                  </button>
+                </form>
+                <p class="form-text mb-0">
+                  Para desligar completamente, remova <code>GOOGLE_REFRESH_TOKEN</code> do
+                  <code>.env</code>.
+                </p>
+              {{else}}
+                {{!-- Ligado à conta Google --}}
+                <p class="mb-2"><span class="badge text-bg-success">🟢 Ligado</span></p>
+                {{#if driveEstado.conta}}
+                <p class="mb-1 fw-semibold small"><i class="bi bi-person-circle me-1"></i>{{driveEstado.conta}}</p>
+                {{/if}}
+                <p class="text-muted small mb-3">
+                  Ligado à conta Google. Os documentos do condomínio podem ser guardados no Drive.
+                </p>
+                <a href="https://drive.google.com" target="_blank" rel="noopener" class="btn btn-outline-primary w-100 mb-2">
+                  <i class="bi bi-box-arrow-up-right me-1"></i>Abrir Google Drive
+                </a>
+                <form action="/admin/config/drive/estrutura" method="POST" class="mb-2">
+                  <button type="submit" class="btn btn-outline-secondary w-100">
+                    <i class="bi bi-diagram-3 me-1"></i>Criar/verificar estrutura de pastas
+                  </button>
+                </form>
+                <form action="/admin/config/drive/desligar" method="POST"
+                      onsubmit="return confirm('Desligar o Google Drive? Os ficheiros já guardados no Drive não serão apagados.');">
+                  <button type="submit" class="btn btn-outline-danger w-100">
+                    <i class="bi bi-plug me-1"></i>Desligar
+                  </button>
+                </form>
+              {{/if}}
+            {{else}}
+              {{!-- Não ligado --}}
+              <p class="mb-2"><span class="badge text-bg-secondary">⚪ Não ligado</span></p>
+              <p class="text-muted small mb-3">
+                Ligue a conta Google para guardar documentos (convocatórias, atas, recibos,
+                anexos e backups) no Google Drive.
+              </p>
+              {{#unless driveEstado.redirectUriDefinido}}
+              <p class="alert alert-warning small py-2 px-3">
+                Defina também <code>GOOGLE_REDIRECT_URI</code> no <code>.env</code> antes de ligar.
+              </p>
+              {{/unless}}
+              <a href="/admin/config/drive/ligar" class="btn btn-primary w-100">
+                <i class="bi bi-google me-1"></i>Ligar Google Drive
+              </a>
+            {{/if}}
+          {{else}}
+            {{!-- Credenciais em falta --}}
+            <p class="mb-2"><span class="badge text-bg-secondary">⚪ Não configurado</span></p>
+            <p class="text-muted small mb-0">
+              Adicione as credenciais OAuth do Google no <code>.env</code>:
+              <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code> e
+              <code>GOOGLE_REDIRECT_URI</code>.
+            </p>
+          {{/if}}
+        {{else}}
+          {{!-- Integração desativada --}}
+          <p class="mb-2"><span class="badge text-bg-secondary">Desativado</span></p>
+          <p class="text-muted small mb-0">
+            A integração está desativada. Defina <code>GOOGLE_DRIVE_ENABLED=true</code> e as
+            credenciais OAuth no <code>.env</code>.
+          </p>
+        {{/if}}
       </div>
     </div>
   </div>
