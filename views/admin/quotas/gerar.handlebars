@@ -115,6 +115,29 @@
       </div>
     </div>
   </div>
+
+{{!-- Documentos e comunicação (dentro do formulário — submetido com a geração) --}}
+<div class="card mt-4">
+  <div class="card-header bg-white"><i class="bi bi-file-earmark-plus me-1"></i>Documentos e comunicação</div>
+  <div class="card-body">
+    <div class="form-check form-switch mb-2">
+      <input class="form-check-input" type="checkbox" role="switch" id="guardarDrive" name="guardar_drive" value="on" {{#if autoQuotas.drive}}checked{{/if}} {{#unless driveLigado}}disabled{{/unless}} />
+      <label class="form-check-label" for="guardarDrive">Guardar automaticamente no Google Drive</label>
+      {{#unless driveLigado}}<div class="form-text">Ligue o Google Drive em Configuração para ativar esta opção.</div>{{/unless}}
+    </div>
+    <div class="form-check form-switch mb-2">
+      <input class="form-check-input" type="checkbox" role="switch" id="enviarEmail" name="enviar_email" value="on" {{#if autoQuotas.email}}checked{{/if}} />
+      <label class="form-check-label" for="enviarEmail">Enviar quotas por email (imediatamente após gerar)</label>
+    </div>
+    <div class="form-check form-switch mb-1">
+      <input class="form-check-input" type="checkbox" role="switch" id="envioAutomatico" name="envio_automatico" value="on" {{#if autoQuotas.automatico}}checked{{/if}} disabled />
+      <label class="form-check-label" for="envioAutomatico">Envio automático ativo (Configurações → Documentos e Automações)</label>
+    </div>
+    <p class="form-text mt-1 mb-0">
+      Depois de gerar, pode enviar em lote (incluindo reenvios) em <strong>Quotas → Enviar por email</strong>.
+    </p>
+  </div>
+</div>
 </form>
 
 <script>

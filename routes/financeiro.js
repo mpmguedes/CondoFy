@@ -31,6 +31,7 @@ const { gerarAvisoQuotaPDF, gerarReciboPDF } = require('../helpers/pdf');
 const { resolverDestinatarios } = require('../helpers/avisos');
 const { enfileirarEmail } = require('../helpers/email-fila');
 const { estaAtivo } = require('../helpers/notificacoes');
+const { estaAtivo: automacaoAtiva } = require('../helpers/automacoes');
 const { getQuotaConfig, setQuotaConfig } = require('../helpers/quotas-config');
 const { calcularQuota, calcularQuotasOrcamento } = require('../helpers/quotas-calc');
 const { validarPermilagem } = require('../helpers/permilagem');
@@ -434,6 +435,12 @@ router.get('/quotas/gerar', async (req, res) => {
     existentesSet[`${q.fracao_id}|${q.ano}|${q.mes}`] = true;
   });
 
+  const [autoQuotasDrive, autoQuotasEmail, autoQuotasAutomatico] = await Promise.all([
+    automacaoAtiva('quotas', 'drive'),
+    automacaoAtiva('quotas', 'email'),
+    automacaoAtiva('quotas', 'automatico'),
+  ]);
+
   res.render('admin/quotas/gerar', {
     titulo: 'Gerar quotas',
     fracoes,
@@ -442,6 +449,8 @@ router.get('/quotas/gerar', async (req, res) => {
     orcamentosJson: JSON.stringify(orcamentosJson),
     fracoesJson: JSON.stringify(fracoes.map((f) => ({ id: f.id, designacao: f.designacao, permilagem: f.permilagem }))),
     existentesJson: JSON.stringify(existentesSet),
+    driveLigado: drive.isConfigured(),
+    autoQuotas: { drive: autoQuotasDrive, email: autoQuotasEmail, automatico: autoQuotasAutomatico },
   });
 });
 
@@ -495,6 +504,7 @@ router.post('/quotas/gerar', async (req, res) => {
   const t = await sequelize.transaction();
   let criadas = 0;
   let ignoradas = 0;
+  const criadasLista = [];
   try {
     for (const f of fracoes) {
       const v = valoresPorFracao.get(f.id);
@@ -505,7 +515,7 @@ router.post('/quotas/gerar', async (req, res) => {
           continue;
         }
         const numero = await proximoNumero('aviso_quota', { ano: anoNum, transaction: t });
-        await Quota.create(
+        const nova = await Quota.create(
           {
             numero_documento: numero,
             fracao_id: f.id,
@@ -524,12 +534,58 @@ router.post('/quotas/gerar', async (req, res) => {
           },
           { transaction: t }
         );
+        criadasLista.push(nova);
         criadas++;
       }
     }
     await t.commit();
     await audit({ userId: req.user.id, acao: 'gerar_quotas', entidade: 'Quota', detalhes: { ano: anoNum, mes: mesNum, escopo, metodo: metodoLabel, criadas } });
-    req.flash('success_msg', `Geradas ${criadas} quota(s)${ignoradas ? `; ${ignoradas} já existiam (não duplicadas)` : ''} (${metodoLabel}).`);
+
+    // ── Documentos e comunicação (automações + opções do formulário) ──
+    let extraMsg = '';
+    try {
+      if (criadas > 0 && (req.body.enviar_email === 'on' || (await automacaoAtiva('quotas', 'automatico')))) {
+        const cctx = await contextoEnvioQuotas({ ano: anoNum, mes: mesNum });
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const r = await enfileirarLoteEmails({
+          linhas: cctx.linhas.filter((l) => l.temEmail),
+          entidadeTipo: 'Quota',
+          userId: req.user.id,
+          link: (l) => `${baseUrl}/admin/quotas/${l.id}/aviso`,
+          assunto: (l) => `Aviso de quota ${l.numero} — ${l.periodo}`,
+          corpo: (l, url) => `Fração ${l.fracao}\nPeríodo: ${l.periodo}\nValor: ${l.valor} €\n\nAviso de quota: ${url}`,
+        });
+        extraMsg += ` ${r.enfileirados} email(s) enfileirado(s) para envio.`;
+      }
+      if (criadas > 0 && (req.body.guardar_drive === 'on' || (await automacaoAtiva('quotas', 'drive'))) && drive.isConfigured()) {
+        let okDrive = 0;
+        let errDrive = 0;
+        for (const q of criadasLista) {
+          try {
+            const { buffer } = await construirAvisoQuota(q.id);
+            const { doc } = await guardarPdfFinanceiroDrive({
+              tipo: 'aviso_quota',
+              numeroDocumento: q.numero_documento,
+              nome: `Aviso de quota ${q.numero_documento || q.id}`,
+              buffer,
+              anoData: q.ano,
+              userId: req.user.id,
+            });
+            await doc.update({ entidade_tipo: 'Quota', entidade_id: q.id }).catch(() => {});
+            okDrive++;
+          } catch (e) {
+            console.error('[quotas-drive]', e.message);
+            errDrive++;
+          }
+        }
+        extraMsg += ` ${okDrive} aviso(s) guardado(s) no Google Drive${errDrive ? ` (${errDrive} com erro)` : ''}.`;
+      }
+    } catch (e) {
+      console.error('[quotas-automacao]', e.message);
+      extraMsg += ' (a automação de envio/Drive falhou — verifique os envios na central de emails).';
+    }
+
+    req.flash('success_msg', `Geradas ${criadas} quota(s)${ignoradas ? `; ${ignoradas} já existiam (não duplicadas)` : ''} (${metodoLabel}).${extraMsg}`);
   } catch (err) {
     await t.rollback();
     console.error(err);
@@ -626,6 +682,38 @@ async function contextoEnvioQuotas({ ano, mes }) {
   };
 }
 
+// Enfileira emails de uma lista de linhas (envio em lote/automático),
+// sem duplicar envios existentes (a menos que reenviar=true).
+async function enfileirarLoteEmails({ linhas, entidadeTipo, link, assunto, corpo, userId, reenviar = false }) {
+  let enfileirados = 0;
+  let ignorados = 0;
+  let semEmail = 0;
+  for (const linha of linhas) {
+    if (!linha.temEmail) {
+      semEmail++;
+      continue;
+    }
+    for (const email of linha.emailsLista) {
+      const ja = await existeEnvioPara({ entidadeTipo, entidadeId: linha.id, email });
+      if (ja && !reenviar) {
+        ignorados++;
+        continue;
+      }
+      await enfileirarEmailFila({
+        destinatario_email: email,
+        destinatario_nome: linha.condominos !== '—' ? linha.condominos : null,
+        assunto: assunto(linha),
+        corpo: corpo(linha, link(linha)),
+        entidade_tipo: entidadeTipo,
+        entidade_id: linha.id,
+        userId,
+      });
+      enfileirados++;
+    }
+  }
+  return { enfileirados, ignorados, semEmail };
+}
+
 router.get('/quotas/enviar', async (req, res) => {
   const ctx = await contextoEnvioQuotas({ ano: req.query.ano, mes: req.query.mes });
   res.render('admin/quotas/enviar', { titulo: 'Enviar quotas por email', driveLigado: drive.isConfigured(), ...ctx });
@@ -638,41 +726,23 @@ router.post('/quotas/enviar', async (req, res) => {
   const modoPendentes = req.body.modo === 'pendentes';
 
   const alvos = ctx.linhas.filter((l) => (modoPendentes ? l.temEmail && l.estado !== 'enviado' : pedidoIds.has(l.id)));
-
-  let enfileirados = 0;
-  let ignorados = 0;
-  let semEmail = 0;
-  for (const linha of alvos) {
-    if (!linha.temEmail) {
-      semEmail++;
-      continue;
-    }
-    for (const email of linha.emailsLista) {
-      const ja = await existeEnvioPara({ entidadeTipo: 'Quota', entidadeId: linha.id, email });
-      if (ja && !reenviar) {
-        ignorados++;
-        continue;
-      }
-      const linkAviso = `${req.protocol}://${req.get('host')}/admin/quotas/${linha.id}/aviso`;
-      await enfileirarEmailFila({
-        destinatario_email: email,
-        destinatario_nome: linha.condominos !== '—' ? linha.condominos : null,
-        assunto: `Aviso de quota ${linha.numero} — ${linha.periodo}`,
-        corpo: `Fração ${linha.fracao}\nPeríodo: ${linha.periodo}\nValor: ${linha.valor} €\n\nAviso de quota: ${linkAviso}`,
-        entidade_tipo: 'Quota',
-        entidade_id: linha.id,
-        userId: req.user.id,
-      });
-      enfileirados++;
-    }
-  }
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const r = await enfileirarLoteEmails({
+    linhas: alvos,
+    entidadeTipo: 'Quota',
+    reenviar,
+    userId: req.user.id,
+    link: (l) => `${baseUrl}/admin/quotas/${l.id}/aviso`,
+    assunto: (l) => `Aviso de quota ${l.numero} — ${l.periodo}`,
+    corpo: (l, url) => `Fração ${l.fracao}\nPeríodo: ${l.periodo}\nValor: ${l.valor} €\n\nAviso de quota: ${url}`,
+  });
   await audit({
     userId: req.user.id,
     acao: 'enviar_quotas_email',
     entidade: 'Quota',
-    detalhes: { ano: ctx.ano, mes: ctx.mes, enfileirados, ignorados, semEmail, reenviar },
+    detalhes: { ano: ctx.ano, mes: ctx.mes, enfileirados: r.enfileirados, ignorados: r.ignorados, semEmail: r.semEmail, reenviar },
   }).catch(() => {});
-  req.flash('success_msg', `${enfileirados} email(s) enfileirado(s).${ignorados ? ` ${ignorados} já tinham envio (não duplicados).` : ''}${semEmail ? ` ${semEmail} sem email.` : ''}`);
+  req.flash('success_msg', `${r.enfileirados} email(s) enfileirado(s).${r.ignorados ? ` ${r.ignorados} já tinham envio (não duplicados).` : ''}${r.semEmail ? ` ${r.semEmail} sem email.` : ''}`);
   res.redirect(`/admin/quotas/enviar?ano=${ctx.ano}&mes=${ctx.mes}`);
 });
 
