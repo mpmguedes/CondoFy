@@ -688,4 +688,95 @@ a:hover { color: var(--c-primary-dark); }
   object-fit: contain;
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   Design system GesCondu — compacto e profissional (SaaS)
+   Sobreposições globais: tipografia menor, controlos densos,
+   cartões discretos e tabelas compactas.
+   ══════════════════════════════════════════════════════════════════ */
+body { font-size: 13.5px; }
+
+.page-heading { margin-bottom: 14px; }
+.page-heading h1 { font-size: 22px; margin-bottom: 2px; }
+.page-heading .subtitle { font-size: 12.5px; margin: 0; }
+
+.section-title {
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--c-text-muted);
+  font-weight: 700;
+  margin: 18px 0 8px;
+}
+
+/* Cartões discretos */
+.card {
+  border-color: #e6e9ee;
+  box-shadow: none;
+}
+.card-header {
+  padding: 8px 14px;
+  font-size: 13px;
+  background: #fafbfc;
+  border-bottom: 1px solid #eef0f3;
+}
+.card-body { padding: 12px 14px; }
+.card-body .card-body { padding: 0; }
+
+/* Tipografia secundária */
+.form-text { font-size: 11px; margin-top: 3px; }
+.text-muted, small { font-size: 12px; }
+
+/* Controlos de formulário densos */
+.form-label { font-size: 12px; margin-bottom: 3px; font-weight: 600; color: #3d4854; }
+.form-control,
+.form-select {
+  min-height: 36px;
+  padding: 5px 10px;
+  font-size: 13.5px;
+  border-radius: 7px;
+}
+textarea.form-control { min-height: auto; }
+.form-check-input { width: 1em; height: 1em; margin-top: 0.18em; }
+.input-group-text { padding: 5px 10px; font-size: 13px; }
+.mb-3 { margin-bottom: 0.8rem !important; }
+
+/* Botões compactos */
+.btn { font-size: 13px; padding: 5px 12px; border-radius: 7px; }
+.btn-lg { font-size: 14px; padding: 7px 16px; }
+.btn-sm { font-size: 12px; padding: 3px 9px; }
+
+/* Tabelas compactas */
+.table { font-size: 13px; }
+.table > :not(caption) > * > * { padding: 0.45rem 0.6rem; }
+.table thead th { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; color: #5f6b7a; font-weight: 600; }
+.table .badge { font-size: 11px; }
+
+/* Badges e listas */
+.badge { font-weight: 600; font-size: 11.5px; padding: 0.35em 0.6em; }
+.list-group-item { padding: 0.5rem 0.85rem; }
+
+/* KPIs discretos e alinhados */
+.stat-card .card-body { padding: 10px 12px; }
+.stat-label { font-size: 11px; letter-spacing: 0.03em; color: var(--c-text-muted); font-weight: 600; }
+.stat-value { font-size: 22px; line-height: 1.2; font-weight: 700; }
+.stat-sub { font-size: 11.5px; color: var(--c-text-muted); }
+
+/* Ações rápidas compactas (altura ~36px) */
+.quick-actions { gap: 6px; }
+.quick-action {
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+.quick-action .material-symbols-outlined { font-size: 18px; }
+
+/* Alertas/mensagens menos volumosos */
+.alert { font-size: 13px; padding: 8px 12px; border-radius: 8px; }
+
+/* Formulários com menos espaço vertical */
+.row.g-3 > [class*='col-'] { padding-top: 0.5rem; }
+.row.g-3 { row-gap: 0.15rem; }
+
+
 
