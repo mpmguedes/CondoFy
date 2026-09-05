@@ -13,6 +13,10 @@ const { audit } = require('../helpers/audit');
 const { resolverDestinatarios } = require('../helpers/avisos');
 const { smtpConfigured } = require('../helpers/mailer');
 const documentActions = require('../helpers/document-actions');
+const { enfileirarEmail: enfileirarEmailFila } = require('../helpers/email-fila');
+const { compor: comporEmail } = require('../helpers/email-templates');
+const { getCondominio } = require('../helpers/condominio');
+const drive = require('../helpers/drive');
 
 const router = express.Router();
 router.use(eAdmin);
@@ -120,23 +124,70 @@ router.post('/avisos/:id/enviar', async (req, res) => {
   }
 
   const mensagem = aviso.mensagem || '';
-  const r = await documentActions.enviarDocumentoPorEmail({
-    destinatarios: lista,
-    assunto: aviso.assunto,
-    mensagem,
-    documentoId: aviso.documento_id || null,
-    avisoId: aviso.id,
-    userId: req.user.id,
-  });
+
+  // Anexo: descarrega o documento associado (Drive) quando disponível.
+  const doc = aviso.documento || null;
+  let anexoBuffer = null;
+  let anexoNome = null;
+  if (doc && doc.drive_file_id && drive.isConfigured()) {
+    try {
+      anexoBuffer = await drive.descargarArquivo(doc.drive_file_id);
+      anexoNome = String(doc.nome || '').trim() || 'documento.pdf';
+    } catch (err) {
+      anexoBuffer = null;
+    }
+  }
+  const comAnexo = Boolean(anexoBuffer);
+  const cond = await getCondominio();
+  const condNome = (cond && String(cond.designacao || '').trim()) || '';
+  const adminNome = (cond && String(cond.administracao_nome || '').trim()) || '';
+  const urlOnline = doc && doc.url ? doc.url : null;
+
+  let enfileirados = 0;
+  for (const dest of lista) {
+    const tpl = mensagem
+      ? comporEmail('generico', {
+          destinatarioNome: dest.nome,
+          condominio: condNome,
+          administracao: adminNome,
+          titulo: aviso.assunto,
+          mensagem,
+          urlOnline,
+          urlTexto: 'Consultar aviso online',
+        })
+      : comporEmail('aviso', {
+          destinatarioNome: dest.nome,
+          condominio: condNome,
+          administracao: adminNome,
+          tituloAviso: aviso.assunto,
+          urlOnline,
+          anexo: comAnexo,
+        });
+    await enfileirarEmailFila({
+      destinatario_email: dest.email,
+      destinatario_nome: dest.nome,
+      assunto: tpl.assunto,
+      corpo: tpl.text,
+      corpo_html: tpl.html,
+      documento_id: aviso.documento_id || null,
+      aviso_id: aviso.id,
+      entidade_tipo: 'Aviso',
+      entidade_id: aviso.id,
+      userId: req.user.id,
+      anexoNome: comAnexo ? anexoNome : null,
+      anexoBuffer: comAnexo ? anexoBuffer : null,
+    });
+    enfileirados++;
+  }
 
   await audit({
     userId: req.user.id,
     acao: 'enviar_aviso',
     entidade: 'Aviso',
     entidadeId: aviso.id,
-    detalhes: { enfileirados: r.enviados, falhas: r.falhas },
+    detalhes: { enfileirados, comAnexo },
   }).catch(() => {});
-  req.flash('success_msg', `Foram enfileirados ${r.enviados} email(s).`);
+  req.flash('success_msg', `Foram enfileirados ${enfileirados} email(s).${comAnexo ? ' (com documento em anexo)' : ''}`);
   res.redirect(`/admin/avisos/${aviso.id}`);
 });
 

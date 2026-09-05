@@ -148,11 +148,15 @@ router.get('/documentos/:id/email', async (req, res) => {
     where: { ativo: true, email: { [Op.ne]: null } },
     order: [['nome', 'ASC']],
   });
+  const cond = await getCondominio();
+  const emissorNome = String((cond && (cond.administracao_nome || cond.designacao)) || '').trim() || 'GesCondu';
   res.render('admin/documentos/email', {
     titulo: 'Enviar documento por email',
     documento,
     pessoas,
     driveLigado: drive.isConfigured(),
+    emissorNome,
+    temAnexo: Boolean(documento.drive_file_id),
   });
 });
 
