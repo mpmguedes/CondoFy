@@ -1,0 +1,80 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Novo pagamento a fornecedor</h1>
+    <p class="subtitle">{{fornecedor.nome}}</p>
+  </div>
+  <a href="/admin/fornecedores/{{fornecedor.id}}" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Fornecedor</a>
+</div>
+
+<div class="row">
+  <div class="col-12 col-lg-8">
+    <div class="card">
+      <div class="card-body">
+        <form action="/admin/fornecedores/{{fornecedor.id}}/pagamentos" method="POST">
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Valor (€) *</label>
+              <input type="text" class="form-control" name="valor" required placeholder="0,00" />
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Data</label>
+              <input type="date" class="form-control" name="data_pagamento" value="{{dateInput today}}" />
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Estado</label>
+              <select class="form-select" name="estado">
+                <option value="pendente" selected>Pendente</option>
+                <option value="pago">Pago</option>
+                <option value="cancelado">Cancelado</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Despesa associada</label>
+              <select class="form-select" name="despesa_id">
+                <option value="">— Sem despesa —</option>
+                {{#each despesas}}
+                <option value="{{id}}">{{descricao}} ({{eur valor}})</option>
+                {{/each}}
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Método de pagamento</label>
+              <select class="form-select" name="metodo_pagamento_id">
+                <option value="">— Sem método —</option>
+                {{#each metodos}}
+                <option value="{{id}}">{{nome}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Conta bancária</label>
+              <select class="form-select" name="conta_bancaria_id">
+                <option value="">— Sem conta —</option>
+                {{#each contas}}
+                <option value="{{id}}">{{nome}}</option>
+                {{/each}}
+              </select>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">IBAN utilizado</label>
+              <input type="text" class="form-control" name="iban_utilizado" value="{{fornecedor.iban}}" placeholder="PT50 ..." />
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Referência</label>
+              <input type="text" class="form-control" name="referencia" placeholder="ex.: Fatura 123/2026" />
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Observações</label>
+            <textarea class="form-control" name="observacoes" rows="2"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Registar pagamento</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

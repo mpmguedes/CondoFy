@@ -1,0 +1,58 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Enviar comprovativo ao fornecedor</h1>
+    <p class="subtitle">{{pagamento.fornecedor.nome}} — {{eur pagamento.valor}}</p>
+  </div>
+  <a href="/admin/fornecedores/{{fornecedorId}}/pagamentos/{{pagamento.id}}" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Pagamento</a>
+</div>
+
+<div class="alert alert-warning small d-flex align-items-center gap-2">
+  <i class="bi bi-shield-check me-1"></i>
+  <span>O comprovativo é enviado <strong>imediatamente</strong> ao email indicado. Se alterar o email do
+  fornecedor nesta página, confirme antes de enviar.</span>
+</div>
+
+<div class="row">
+  <div class="col-12 col-lg-8">
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-send me-1"></i>Mensagem</div>
+      <div class="card-body">
+        <form action="/admin/fornecedores/{{fornecedorId}}/pagamentos/{{pagamento.id}}/comprovativo/enviar" method="POST" onsubmit="return confirmarDestinatario();">
+          <div class="mb-3">
+            <label class="form-label">Para (email do fornecedor)</label>
+            <input type="email" class="form-control" name="para" id="campoPara" value="{{emailFornecedor}}" required />
+            <input type="hidden" id="emailOriginal" value="{{emailFornecedor}}" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Assunto</label>
+            <input type="text" class="form-control" name="assunto" value="{{assuntoSugerido}}" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Mensagem</label>
+            <textarea class="form-control" name="mensagem" rows="6">{{mensagemSugerida}}</textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Anexo</label>
+            <div class="border rounded p-2 d-flex align-items-center gap-2">
+              <i class="bi bi-paperclip"></i>
+              <span class="fw-semibold">{{comprovativo.nome}}</span>
+              <span class="badge text-bg-success ms-auto">☁ Drive</span>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-send me-1"></i>Enviar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function confirmarDestinatario() {
+  var para = document.getElementById('campoPara');
+  var original = document.getElementById('emailOriginal');
+  if (para && original && para.value.trim().toLowerCase() !== original.value.trim().toLowerCase()) {
+    return confirm('O email foi alterado (o email registado do fornecedor é ' + original.value + '). Enviar para ' + para.value.trim() + '?');
+  }
+  return true;
+}
+</script>

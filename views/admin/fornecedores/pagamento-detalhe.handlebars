@@ -1,0 +1,90 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Pagamento a fornecedor</h1>
+    <p class="subtitle">{{pagamento.fornecedor.nome}}{{#if pagamento.referencia}} — {{pagamento.referencia}}{{/if}}</p>
+  </div>
+  <a href="/admin/fornecedores/{{fornecedorId}}" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Fornecedor</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-6">
+    <div class="card mb-3">
+      <div class="card-header bg-white"><i class="bi bi-cash-coin me-1"></i>Dados do pagamento</div>
+      <div class="card-body">
+        <dl class="row mb-2">
+          <dt class="col-5">Fornecedor</dt><dd class="col-7">{{pagamento.fornecedor.nome}}</dd>
+          <dt class="col-5">Valor</dt><dd class="col-7 fw-bold">{{eur pagamento.valor}}</dd>
+          <dt class="col-5">Data</dt><dd class="col-7">{{formatDate pagamento.data_pagamento}}</dd>
+          <dt class="col-5">Despesa</dt><dd class="col-7">{{#if pagamento.despesa}}{{pagamento.despesa.descricao}}{{else}}—{{/if}}</dd>
+          <dt class="col-5">Método</dt><dd class="col-7">{{#if pagamento.metodo_pagamento}}{{pagamento.metodo_pagamento.nome}}{{else}}—{{/if}}</dd>
+          <dt class="col-5">Conta</dt><dd class="col-7">{{#if pagamento.conta_bancaria}}{{pagamento.conta_bancaria.nome}}{{else}}—{{/if}}</dd>
+          <dt class="col-5">IBAN</dt><dd class="col-7 font-monospace">{{#if pagamento.iban_utilizado}}{{pagamento.iban_utilizado}}{{else}}—{{/if}}</dd>
+          <dt class="col-5">Referência</dt><dd class="col-7">{{#if pagamento.referencia}}{{pagamento.referencia}}{{else}}—{{/if}}</dd>
+          <dt class="col-5">Registado por</dt><dd class="col-7">{{#if pagamento.criador}}{{pagamento.criador.nome}}{{else}}—{{/if}}</dd>
+        </dl>
+        {{#if pagamento.observacoes}}<p class="small text-muted mb-2">{{pagamento.observacoes}}</p>{{/if}}
+        <div class="d-flex gap-2">
+          {{#if (eq pagamento.estado 'pendente')}}<span class="badge text-bg-warning align-self-center">Pendente</span>{{/if}}
+          {{#if (eq pagamento.estado 'pago')}}<span class="badge text-bg-success align-self-center">Pago</span>{{/if}}
+          {{#if (eq pagamento.estado 'cancelado')}}<span class="badge text-bg-secondary align-self-center">Cancelado</span>{{/if}}
+          {{#if (ne pagamento.estado 'pago')}}
+          <form action="/admin/fornecedores/{{fornecedorId}}/pagamentos/{{pagamento.id}}/estado" method="POST">
+            <input type="hidden" name="estado" value="pago" />
+            <button class="btn btn-sm btn-outline-success">Marcar como pago</button>
+          </form>
+          {{/if}}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-6">
+    {{!-- Comprovativo --}}
+    <div class="card mb-3">
+      <div class="card-header bg-white"><i class="bi bi-paperclip me-1"></i>Comprovativo</div>
+      <div class="card-body">
+        {{#if pagamento.comprovativo}}
+        <p class="mb-2">
+          <span class="badge text-bg-success">☁ Guardado no Google Drive</span>
+        </p>
+        <p class="small text-muted mb-3">{{pagamento.comprovativo.nome}} — {{formatDateTime pagamento.comprovativo.drive_uploaded_at}}</p>
+        <div class="d-grid gap-2">
+          {{#if pagamento.comprovativo.url}}
+          <a href="{{pagamento.comprovativo.url}}" target="_blank" rel="noopener" class="btn btn-outline-primary"><i class="bi bi-eye me-1"></i>Ver comprovativo</a>
+          {{/if}}
+          <a href="/admin/fornecedores/{{fornecedorId}}/pagamentos/{{pagamento.id}}/comprovativo/enviar" class="btn btn-primary"><i class="bi bi-send me-1"></i>Enviar comprovativo ao fornecedor</a>
+        </div>
+        {{else}}
+        {{#if driveLigado}}
+        <form action="/admin/fornecedores/{{fornecedorId}}/pagamentos/{{pagamento.id}}/comprovativo" method="POST" enctype="multipart/form-data">
+          <label class="form-label small">Carregar comprovativo (PDF/JPG/PNG)</label>
+          <input type="file" class="form-control mb-2" name="ficheiro" accept=".pdf,.jpg,.jpeg,.png,.webp" required />
+          <button class="btn btn-outline-primary w-100"><i class="bi bi-cloud-arrow-up me-1"></i>Guardar comprovativo no Google Drive</button>
+        </form>
+        {{else}}
+        <p class="text-muted small mb-0">Ligue o Google Drive (Configuração) para guardar o comprovativo.</p>
+        {{/if}}
+        {{/if}}
+      </div>
+    </div>
+
+    {{!-- Histórico de envios --}}
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-envelope me-1"></i>Envio do comprovativo</div>
+      <ul class="list-group list-group-flush">
+        {{#each envios}}
+        <li class="list-group-item">
+          <div class="d-flex justify-content-between align-items-center">
+            {{#if (eq estado 'enviado')}}<span class="badge text-bg-success">✓ Enviado</span>
+            {{else if (eq estado 'erro')}}<span class="badge text-bg-danger">Erro</span>
+            {{else}}<span class="badge text-bg-warning">{{estado}}</span>{{/if}}
+            <span class="small text-muted">{{formatDateTime data_enviada}} — para {{destinatario_email}}{{#if utilizador}} · por {{utilizador.nome}}{{/if}}</span>
+          </div>
+        </li>
+        {{else}}
+        <li class="list-group-item text-muted">Ainda não foi enviado ao fornecedor.</li>
+        {{/each}}
+      </ul>
+    </div>
+  </div>
+</div>

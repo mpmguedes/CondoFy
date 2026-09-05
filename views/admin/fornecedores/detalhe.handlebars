@@ -79,19 +79,59 @@
       </ul>
     </div>
 
-    {{!-- Pagamentos e comunicações (próximas fases) --}}
+    {{!-- Pagamentos --}}
     <div class="card mb-3">
-      <div class="card-header bg-white"><i class="bi bi-cash-coin me-1"></i>Pagamentos</div>
-      <div class="card-body text-muted small">
-        Os pagamentos a fornecedores (com comprovativos e envio por email) serão registados
-        nesta ficha quando forem efetuados.
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-cash-coin me-1"></i>Pagamentos</span>
+        <a href="/admin/fornecedores/{{fornecedor.id}}/pagamentos/novo" class="btn btn-sm btn-outline-primary">+ Novo pagamento</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr><th>Data</th><th>Valor</th><th>Método</th><th>Estado</th><th>Comprovativo</th><th class="text-end">Ações</th></tr>
+          </thead>
+          <tbody>
+            {{#each pagamentos}}
+            <tr>
+              <td class="text-nowrap">{{formatDate data_pagamento}}</td>
+              <td class="fw-semibold">{{eur valor}}</td>
+              <td>{{#if metodo_pagamento}}{{metodo_pagamento.nome}}{{else}}—{{/if}}</td>
+              <td>
+                {{#if (eq estado 'pago')}}<span class="badge text-bg-success">Pago</span>
+                {{else if (eq estado 'cancelado')}}<span class="badge text-bg-secondary">Cancelado</span>
+                {{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}
+              </td>
+              <td>{{#if comprovativo}}<span class="badge text-bg-success">☁</span>{{else}}—{{/if}}</td>
+              <td class="text-end">
+                <a href="/admin/fornecedores/{{../fornecedor.id}}/pagamentos/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
+              </td>
+            </tr>
+            {{else}}
+            <tr><td colspan="6" class="text-center text-muted py-3">Sem pagamentos registados.</td></tr>
+            {{/each}}
+          </tbody>
+        </table>
       </div>
     </div>
+
+    {{!-- Comunicações --}}
     <div class="card">
-      <div class="card-header bg-white"><i class="bi bi-envelope me-1"></i>Comunicações</div>
-      <div class="card-body text-muted small">
-        Os emails enviados ao fornecedor aparecerão aqui (histórico de comunicações).
-      </div>
+      <div class="card-header bg-white"><i class="bi bi-envelope me-1"></i>Comunicações (envios)</div>
+      <ul class="list-group list-group-flush">
+        {{#each comunicacoes}}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div>
+            <span class="fw-semibold small">{{assunto}}</span>
+            <div class="small text-muted">para {{destinatario_email}}{{#if utilizador}} · por {{utilizador.nome}}{{/if}}</div>
+          </div>
+          {{#if (eq estado 'enviado')}}<span class="badge text-bg-success">Enviado</span>
+          {{else if (eq estado 'erro')}}<span class="badge text-bg-danger">Erro</span>
+          {{else}}<span class="badge text-bg-warning">{{estado}}</span>{{/if}}
+        </li>
+        {{else}}
+        <li class="list-group-item text-muted">Ainda não foram enviados emails a este fornecedor.</li>
+        {{/each}}
+      </ul>
     </div>
   </div>
 </div>

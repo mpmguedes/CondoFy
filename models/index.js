@@ -36,6 +36,7 @@ const {
   PagamentoQuota,
   Despesa,
   Fornecedor,
+  PagamentoFornecedor,
   Documento,
   Assembleia,
   AssembleiaParticipante,
@@ -99,6 +100,15 @@ Despesa.belongsTo(ContaBancaria, { foreignKey: 'conta_bancaria_id', as: 'conta_b
 Despesa.belongsTo(MetodoPagamento, { foreignKey: 'metodo_pagamento_id', as: 'metodo_pagamento' });
 Despesa.belongsTo(Fornecedor, { foreignKey: 'fornecedor_id', as: 'fornecedorReg' });
 Fornecedor.hasMany(Despesa, { foreignKey: 'fornecedor_id', as: 'despesas' });
+
+// Pagamentos a fornecedores
+PagamentoFornecedor.belongsTo(Fornecedor, { foreignKey: 'fornecedor_id', as: 'fornecedor' });
+Fornecedor.hasMany(PagamentoFornecedor, { foreignKey: 'fornecedor_id', as: 'pagamentos' });
+PagamentoFornecedor.belongsTo(Despesa, { foreignKey: 'despesa_id', as: 'despesa' });
+PagamentoFornecedor.belongsTo(MetodoPagamento, { foreignKey: 'metodo_pagamento_id', as: 'metodo_pagamento' });
+PagamentoFornecedor.belongsTo(ContaBancaria, { foreignKey: 'conta_bancaria_id', as: 'conta_bancaria' });
+PagamentoFornecedor.belongsTo(Documento, { foreignKey: 'comprovativo_documento_id', as: 'comprovativo' });
+PagamentoFornecedor.belongsTo(User, { foreignKey: 'created_by', as: 'criador' });
 
 // Movimentos bancários
 MovimentoBancario.belongsTo(ContaBancaria, { foreignKey: 'conta_bancaria_id', as: 'conta_bancaria' });

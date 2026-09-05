@@ -311,10 +311,8 @@ async function encontrarOuCriarPasta(nome, parentId) {
   });
 }
 
-// Estrutura: CondoFy/<ano>/<pastas> e CondoFy/Backups.
-// A pasta raiz ("CondoFy" por omissão) é reutilizada se já existir.
-// Precedência: GOOGLE_DRIVE_ROOT_FOLDER (.env) → google_drive_root_folder (BD) → CondoFy.
-async function criarEstruturaPastas(ano = new Date().getFullYear()) {
+// Resolve o nome da pasta raiz (precedência: .env → BD → "CondoFy").
+async function obterNomeRaiz() {
   let raizNome = (process.env.GOOGLE_DRIVE_ROOT_FOLDER || '').trim();
   if (!raizNome) {
     try {
@@ -323,8 +321,13 @@ async function criarEstruturaPastas(ano = new Date().getFullYear()) {
       raizNome = '';
     }
   }
-  if (!raizNome) raizNome = 'CondoFy';
-  const raizId = await encontrarOuCriarPasta(raizNome);
+  return raizNome || 'CondoFy';
+}
+
+// Estrutura: CondoFy/<ano>/<pastas> e CondoFy/Backups.
+// A pasta raiz ("CondoFy" por omissão) é reutilizada se já existir.
+async function criarEstruturaPastas(ano = new Date().getFullYear()) {
+  const raizId = await encontrarOuCriarPasta(await obterNomeRaiz());
   const anoId = await encontrarOuCriarPasta(String(ano), raizId);
 
   const nomes = ['Assembleias', 'Quotas', 'Recibos', 'Despesas', 'Contratos', 'Outros'];
@@ -353,6 +356,29 @@ async function pastaParaDocumento(tipo, ano) {
   };
   const sub = mapa[tipo] || 'Outros';
   return estrutura.subpastas[sub];
+}
+
+// Pasta de um fornecedor:
+// CondoFy/<ano>/Fornecedores/<nome>/<subpasta>
+// (nunca cria pastas duplicadas; reutiliza as existentes pelo nome).
+async function pastaParaFornecedor({ nome, ano, subpasta = 'Comprovativos' }) {
+  const anoNum = ano || new Date().getFullYear();
+  const raizId = await encontrarOuCriarPasta(await obterNomeRaiz());
+  const anoId = await encontrarOuCriarPasta(String(anoNum), raizId);
+  const fornecedoresId = await encontrarOuCriarPasta('Fornecedores', anoId);
+  const fornecedorId = await encontrarOuCriarPasta(String(nome || 'Fornecedor'), fornecedoresId);
+  const subId = await encontrarOuCriarPasta(String(subpasta || 'Outros'), fornecedorId);
+  return { raizId, anoId, fornecedoresId, fornecedorId, subpastaId: subId };
+}
+
+// Descarrega um ficheiro do Drive para um Buffer (para anexar em email).
+async function descargarArquivo(fileId) {
+  return operacaoDrive(async () => {
+    const res = await getDrive().files.get({ fileId, alt: 'media' }, { responseType: 'stream' });
+    const chunks = [];
+    for await (const c of res.data) chunks.push(c);
+    return Buffer.concat(chunks);
+  });
 }
 
 // ── Upload ──────────────────────────────────────────────────────────
@@ -389,6 +415,8 @@ module.exports = {
   desligar,
   criarEstruturaPastas,
   pastaParaDocumento,
+  pastaParaFornecedor,
+  descargarArquivo,
   uploadArquivo,
   encontrarOuCriarPasta,
 };
