@@ -83,6 +83,8 @@ docker compose up -d --build
 - **Google Drive**: repositório documental + estrutura automática de pastas + backups.
 - **Comunicação**: avisos (manual/programado/automático), fila de email, SMTP configurável.
 - **Ações sobre documentos**: ver/descarregar, guardar no Google Drive e enviar por email de forma transversal (Documentos, Avisos, Assembleias/Convocatórias).
+- **Automações de documentos**: comportamento automático por tipo (Drive/email/automático) em **Configurações → Documentos e Automações**.
+- **Envios em lote**: quotas e recibos por email com histórico, sem duplicados e reenvio controlado.
 - **Automatização**: node-cron (quotas, lembretes, fila de email, backups).
 - **Segurança e auditoria**: autenticação local (preparada para OAuth), recuperação de password, registo de operações.
 - **Dashboards**: administrador (financeiro, quotas, orçamento, sistema) e condómino (situação própria + transparência global).

@@ -75,6 +75,11 @@ Na lista **Documentos**, cada documento tem a ação **Enviar por email**:
 escolha condóminos e/ou emails manuais, assunto e mensagem. O envio é
 enfileirado e o link do documento (Google Drive) é incluído quando disponível.
 
+**Envios em lote**: em **Quotas → Enviar por email** e **Pagamentos → Enviar
+recibos** é possível enviar vários documentos de uma vez (selecionados ou todos
+os pendentes), com estatísticas, prevenção de duplicados e reenvio controlado —
+cada envio fica no histórico da entidade e na central **Emails**.
+
 Em **Avisos**, o envio aos destinatários é enfileirado sem duplicar mensagens
 já pendentes/enviadas para o mesmo aviso.
 
