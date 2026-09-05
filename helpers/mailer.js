@@ -98,15 +98,35 @@ function construirTransporte(cfg) {
   });
 }
 
-async function sendMail({ to, subject, text, html, attachments = [] }) {
+// Nome visível do remetente (display name). Prioridade:
+// 1. nome da administração configurada no condomínio;
+// 2. designação do condomínio;
+// 3. "GesCondu" (fallback — nunca "CondoFy").
+async function obterNomeRemetente() {
+  try {
+    const { getCondominio } = require('./condominio');
+    const c = await getCondominio();
+    if (!c) return '';
+    const admin = String(c.administracao_nome || '').trim();
+    if (admin) return admin;
+    const designacao = String(c.designacao || '').trim();
+    if (designacao) return designacao;
+    return '';
+  } catch (err) {
+    return '';
+  }
+}
+
+async function sendMail({ to, subject, text, html, attachments = [], displayName }) {
   const cfg = await obterConfigSmtp();
   if (!cfg.host) {
     console.log('[mailer] SMTP não configurado — email NÃO enviado.');
     return { enviado: false, motivo: 'SMTP não configurado' };
   }
   const transport = construirTransporte(cfg);
+  const nomeRemetente = String(displayName || (await obterNomeRemetente()) || cfg.fromName || 'GesCondu').trim();
   const info = await transport.sendMail({
-    from: `"${cfg.fromName || 'Condomínio'}" <${cfg.from || 'noreply@localhost'}>`,
+    from: `"${nomeRemetente.replace(/"/g, '')}" <${cfg.from || 'noreply@localhost'}>`,
     to,
     subject,
     text,
@@ -211,6 +231,7 @@ module.exports = {
   enviarEmailTeste,
   obterEstadoSmtp,
   guardarConfigSmtp,
+  obterNomeRemetente,
   limparCache,
   inicializar,
   mensagemErroAmigavel,

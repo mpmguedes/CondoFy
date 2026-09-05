@@ -10,12 +10,50 @@
 //  · se o processo cair com um email em "a_enviar", é retomado como
 //    pendente após um período de segurança (sem duplicar envios reais).
 // ─────────────────────────────────────────────────────────────────────
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 const { Op } = require('sequelize');
 const { EmailFila } = require('../models');
 const { sendMail } = require('./mailer');
 
 const MAX_TENTATIVAS = 3;
 const STALE_MS = 5 * 60 * 1000; // "a_enviar" preso há mais de 5 min → repõe pendente
+
+const DIR_ANEXOS = path.join(__dirname, '..', 'storage', 'email_anexos');
+
+function garantirDirAnexos() {
+  fs.mkdirSync(DIR_ANEXOS, { recursive: true });
+  return DIR_ANEXOS;
+}
+
+function nomeSeguro(nome) {
+  return String(nome || 'anexo')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9._-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+}
+
+// Guarda um anexo (buffer) em disco e devolve o caminho; o ficheiro é
+// eliminado após o envio. Nunca depende do Google Drive.
+function gravarAnexo(buffer, nome) {
+  garantirDirAnexos();
+  const token = crypto.randomBytes(8).toString('hex');
+  const caminho = path.join(DIR_ANEXOS, `${token}_${nomeSeguro(nome)}`);
+  fs.writeFileSync(caminho, buffer);
+  return caminho;
+}
+
+function limparAnexo(caminho) {
+  if (!caminho) return;
+  try {
+    if (fs.existsSync(caminho)) fs.unlinkSync(caminho);
+  } catch (err) {
+    // ficheiro já não existe — ignorar
+  }
+}
 
 function escaparHtml(t) {
   return String(t == null ? '' : t)
@@ -39,8 +77,15 @@ async function enfileirarEmail({
   userId,
   data_prevista,
   tipo = 'normal',
+  anexoNome,
+  anexoBuffer,
+  anexoCaminho,
 }) {
   if (!destinatario_email) throw new Error('Destinatário sem email.');
+
+  let caminhoAnexo = anexoCaminho || null;
+  if (anexoBuffer) caminhoAnexo = gravarAnexo(anexoBuffer, anexoNome || 'anexo');
+
   return EmailFila.create({
     destinatario_email,
     destinatario_nome: destinatario_nome || null,
@@ -56,19 +101,30 @@ async function enfileirarEmail({
     data_prevista: data_prevista || new Date(),
     estado: 'pendente',
     tentativas: 0,
+    anexo_nome: anexoNome || null,
+    anexo_caminho: caminhoAnexo,
   });
 }
 
 async function enviarItem(item) {
   await item.update({ estado: 'a_enviar' });
+
+  // Anexo persistido localmente (PDF por destinatário) — independente do Drive.
+  const attachments = [];
+  if (item.anexo_caminho && fs.existsSync(item.anexo_caminho)) {
+    attachments.push({ filename: item.anexo_nome || 'documento.pdf', path: item.anexo_caminho });
+  }
+
   const res = await sendMail({
     to: item.destinatario_email,
     subject: item.assunto,
     text: item.corpo || '',
     html: item.corpo_html || escaparHtml(item.corpo),
+    attachments,
   });
   if (res.enviado) {
-    await item.update({ estado: 'enviado', data_enviada: new Date(), message_id: res.message_id || res.messageId || null, erro: null });
+    limparAnexo(item.anexo_caminho); // remove cópia local após envio (mantém registo do nome)
+    await item.update({ estado: 'enviado', data_enviada: new Date(), message_id: res.message_id || res.messageId || null, erro: null, anexo_caminho: null });
     return { ok: true, item };
   }
   throw new Error(res.motivo || 'Falha ao enviar');

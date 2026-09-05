@@ -6,4 +6,5 @@ public/uploads/*
 !public/uploads/.gitkeep
 backups/local/
 storage/tmp/
+storage/email_anexos/
 .DS_Store

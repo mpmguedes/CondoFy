@@ -28,6 +28,7 @@ const { proximoNumero } = require('../helpers/numeracao');
 const { registarPagamento, anularPagamento } = require('../helpers/pagamentos');
 const { sincronizarMovimentoDespesa } = require('../helpers/movimentos');
 const { gerarAvisoQuotaPDF, gerarReciboPDF } = require('../helpers/pdf');
+const { compor: comporEmail, nomeFicheiro: nomeFicheiroEmail } = require('../helpers/email-templates');
 const { resolverDestinatarios } = require('../helpers/avisos');
 const { enfileirarEmail } = require('../helpers/email-fila');
 const { estaAtivo } = require('../helpers/notificacoes');
@@ -848,17 +849,42 @@ router.post('/pagamentos', async (req, res) => {
 
     // Envio automático do recibo (fila de email) — respeita a preferência
     // "Recibos → email" configurada em Emails → Notificações.
+    // Comunicação profissional com anexo PDF por destinatário + link online.
     if (await estaAtivo('recibos', 'email')) {
       try {
         const dest = await resolverDestinatarios({ modo: 'fracoes', fracoes: [fracao_id] });
-        const linkRecibo = `${req.protocol}://${req.get('host')}/admin/pagamentos/${resultado.pagamento.id}/recibo`;
-        for (const d of dest) {
-          await enfileirarEmail({
-            destinatario_email: d.email,
-            destinatario_nome: d.nome,
-            assunto: `Recibo ${resultado.pagamento.numero_documento}`,
-            corpo: `Foi registado um pagamento no valor de ${resultado.pagamento.valor} €.\nRecibo: ${linkRecibo}`,
-          });
+        if (dest.length) {
+          const linkRecibo = `${req.protocol}://${req.get('host')}/admin/pagamentos/${resultado.pagamento.id}/recibo`;
+          const cond = await getCondominio();
+          const condNome = (cond && String(cond.designacao || '').trim()) || '';
+          const adminNome = (cond && String(cond.administracao_nome || '').trim()) || '';
+          const { buffer, pagamento: reciboRow } = await construirRecibo(resultado.pagamento.id);
+          const anexoNome = nomeFicheiroEmail('recibo', { numero: resultado.pagamento.numero_documento });
+          const valorTxt = `${resultado.pagamento.valor} €`;
+          for (const d of dest) {
+            const tpl = comporEmail('recibo', {
+              destinatarioNome: d.nome,
+              condominio: condNome,
+              administracao: adminNome,
+              valor: valorTxt,
+              fração: reciboRow && reciboRow.fracao ? reciboRow.fracao.designacao : undefined,
+              referencia: resultado.pagamento.numero_documento,
+              data: reciboRow && reciboRow.data_pagamento ? String(reciboRow.data_pagamento) : undefined,
+              urlOnline: linkRecibo,
+            });
+            await enfileirarEmail({
+              destinatario_email: d.email,
+              destinatario_nome: d.nome,
+              assunto: tpl.assunto,
+              corpo: tpl.text,
+              corpo_html: tpl.html,
+              entidade_tipo: 'Pagamento',
+              entidade_id: resultado.pagamento.id,
+              userId: req.user.id,
+              anexoNome,
+              anexoBuffer: buffer,
+            });
+          }
         }
       } catch (err) {
         console.error('[recibo-email]', err.message);

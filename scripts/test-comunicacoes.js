@@ -33,6 +33,28 @@ async function main() {
   const e4 = mensagemErroAmigavel(new Error('token secreto=abc123'));
   assert.ok(!e4.includes('abc123'), 'não expõe detalhes sensíveis na mensagem');
 
+  // 3. Templates de email profissionais (recibo e genérico)
+  const { compor, saudacao, nomeFicheiro } = require('../helpers/email-templates');
+  const recibo = compor('recibo', {
+    destinatarioNome: 'João Silva',
+    condominio: 'Condomínio Jardim das Flores',
+    administracao: 'Gestão de Condomínios ABC',
+    valor: '45,20 €',
+    referencia: '2026/002',
+    urlOnline: 'https://gescondu.xyz/recibo/1',
+  });
+  assert.ok(recibo.assunto.includes('Recibo de pagamento') && recibo.assunto.includes('Jardim das Flores'), 'assunto recibo');
+  assert.ok(recibo.text.includes('Exmo./Exma. Senhor(a) João Silva'), 'saudação personalizada');
+  assert.ok(recibo.html.includes('Consultar recibo online'), 'link no HTML');
+  assert.ok(recibo.html.includes('45,20 €'), 'valor no corpo');
+  assert.ok(!recibo.html.includes('CondoFy'), 'sem referência a CondoFy');
+  assert.strictEqual(saudacao(''), 'Exmo./Exma. Senhor(a),', 'saudação neutra');
+  assert.strictEqual(nomeFicheiro('recibo', { numero: '2026/002' }), 'Recibo_2026_002.pdf', 'nome de ficheiro normalizado');
+  assert.strictEqual(nomeFicheiro('quota', { ano: '2026', mes: 9, fracao: 'Fração A' }), 'Quota_2026_09_Fracao_A.pdf', 'ficheiro de quota sem acentos');
+  const t2 = compor('generico', { condominio: 'Condomínio X', destinatarioNome: 'Maria', mensagem: 'Informamos ainda que...' });
+  assert.ok(t2.text.includes('Maria'), 'genérico personalizado');
+  assert.ok(!t2.text.includes('CondoFy'), 'genérico sem CondoFy');
+
   console.log('✓ Testes de comunicações passaram (sem rede).');
 }
 

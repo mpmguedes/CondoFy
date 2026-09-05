@@ -30,6 +30,8 @@ module.exports = (sequelize) => {
       erro: { type: DataTypes.TEXT, allowNull: true },
       tentativas: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       message_id: { type: DataTypes.STRING(255), allowNull: true },
+      anexo_nome: { type: DataTypes.STRING(255), allowNull: true },
+      anexo_caminho: { type: DataTypes.STRING(500), allowNull: true },
     },
     { tableName: 'email_fila', underscored: true }
   );
