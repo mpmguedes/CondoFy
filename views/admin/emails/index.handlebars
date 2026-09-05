@@ -89,6 +89,7 @@
                 {{else}}
                   {{#if aviso}}<span class="badge text-bg-light border">Aviso: {{aviso.assunto}}</span>{{else}}—{{/if}}
                 {{/if}}
+                {{#if anexo_nome}}<div class="small text-muted"><i class="bi bi-paperclip me-1"></i>{{anexo_nome}}</div>{{/if}}
               </td>
               <td>
                 {{#if (eq estado 'pendente')}}<span class="badge text-bg-warning">Pendente</span>

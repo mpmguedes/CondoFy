@@ -83,6 +83,28 @@ cada envio fica no histórico da entidade e na central **Emails**.
 Em **Avisos**, o envio aos destinatários é enfileirado sem duplicar mensagens
 já pendentes/enviadas para o mesmo aviso.
 
+## Comunicações profissionais (templates e anexos)
+
+O GesCondu usa um **sistema central de templates** (`helpers/email-templates.js`)
+para recibos, avisos, quotas, convocatórias, documentos, fornecedores e
+comunicações genéricas, sempre em PT-PT:
+
+* **HTML profissional + versão texto**; saudação personalizada
+  (“Exmo./Exma. Senhor(a) [Nome]”) ou neutra.
+* **Remetente** (display name): nome da administração → nome do condomínio →
+  “GesCondu” (nunca “CondoFy”).
+* **Anexo + link**: o PDF é gerado/obtido por destinatário e anexado ao email;
+  o link online é sempre complementar. Se não houver PDF disponível, envia-se
+  apenas o link (sem bloquear o envio).
+* Os PDFs em fila são guardados localmente (`storage/email_anexos/`) e anexados
+  no momento do envio — **independentes do Google Drive** (se o Drive estiver
+  indisponível, o email continua a funcionar).
+* A **central Emails** mostra o nome do anexo quando presente.
+
+**Personalização**: onde existe envio manual (documentos, comprovativos de
+fornecedores, avisos) pode acrescentar/editar a mensagem — a saudação, o anexo,
+o link e a assinatura são mantidos automaticamente.
+
 ## Preferências de notificação
 
 **Emails → Notificações automáticas** permite ativar/desativar por evento o
