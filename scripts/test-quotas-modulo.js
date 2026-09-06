@@ -510,6 +510,18 @@ async function testPdfUmaPagina() {
   assert.ok(textosPdf(reciboLongo).includes('JARDINS DA SERRA'), 'nome longo presente sem cortes');
   assert.ok(textosPdf(reciboLongo).includes('RCP-2026-0009'), 'coluna direita intacta com nome longo');
 
+  // Nomes de referência (até ~40 caracteres e acima) — completos, sem corte.
+  const nomesReferencia = [
+    'Condomínio Jardim das Flores',
+    'Condomínio Residencial Jardim das Flores',
+    'CONDOMÍNIO JARDINS DA SERRA E DAS OLIVEIRAS DO MONTE ALTO',
+  ];
+  for (const nome of nomesReferencia) {
+    const reciboNome = await gerarReciboPDF({ ...cond, designacao: nome }, base);
+    assert.strictEqual(paginasPdf(reciboNome), 1, `recibo com "${nome}" numa única página`);
+    assert.ok(textosPdf(reciboNome).includes(nome), `nome completo visível: ${nome}`);
+  }
+
   // Valores elevados mantêm título+valor na mesma linha e a página única.
   for (const valor of [1250, 12500.5]) {
     const alto = await gerarReciboPDF(cond, { ...base, valor });

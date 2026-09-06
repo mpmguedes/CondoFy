@@ -117,19 +117,24 @@ class Layout {
     const rightW = T.LARGURA_PAGINA - T.MARGEM - rightX; // 245
     const leftW = Math.max(110, rightX - xTexto - 16);
 
-    // Nome do condomínio SEMPRE numa única linha, completo e nunca cortado:
-    // reduz-se a fonte de forma proporcional e controlada até caber na largura
-    // reservada à coluna esquerda (a coluna direita permanece intacta).
-    const larguraNome15 = this.doc.font(T.FONTE_BOLD).widthOfString(designacao, { fontSize: 15 });
-    let nomeSize = larguraNome15 <= leftW ? 15 : Math.max(5, Math.floor((15 * leftW) / larguraNome15));
-    this.doc.font(T.FONTE_BOLD);
-    while (nomeSize > 5 && this.doc.widthOfString(designacao, { fontSize: nomeSize }) > leftW) {
-      nomeSize -= 0.5;
+    // Largura real do nome em cada tamanho: o PDFKit ignora "fontSize" nas
+    // opções de medição — é preciso definir o tamanho no documento primeiro.
+    const larguraNomeEm = (tamanho) => {
+      this.doc.font(T.FONTE_BOLD).fontSize(tamanho);
+      return this.doc.widthOfString(designacao);
+    };
+    // Nome do condomínio SEMPRE numa única linha e completo: começa no tamanho
+    // normal (15) e reduz progressivamente (mínimo legível 6) até caber na
+    // largura reservada à coluna esquerda (a direita nunca é invadida).
+    let nomeSize = 15;
+    while (nomeSize >= 6 && larguraNomeEm(nomeSize) > leftW) {
+      nomeSize -= 1;
     }
 
     const alturaDe = (texto, tamanho, bold, width) => {
       const f = bold ? T.FONTE_BOLD : T.FONTE;
-      return this.doc.font(f).heightOfString(String(texto ?? ''), { width, fontSize: tamanho }) + 3;
+      this.doc.font(f).fontSize(tamanho);
+      return this.doc.heightOfString(String(texto ?? ''), { width }) + 3;
     };
 
     const esq = [{ texto: designacao, tamanho: nomeSize, bold: true, cor: T.COR_TEXTO, semQuebra: true }];
