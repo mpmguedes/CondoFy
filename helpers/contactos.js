@@ -59,4 +59,43 @@ async function listarContactos(pessoaId) {
   };
 }
 
-module.exports = { emailsPreferidosPorPessoa, emailPreferido, telefonePreferido, listarContactos };
+// Substitui os contactos de uma pessoa pela lista submetida na ficha e
+// sincroniza pessoas.email/telefone com o contacto principal de cada tipo.
+// emails/telefones: [{ id?, valor, etiqueta?, principal }] — um principal por tipo;
+// se nenhum estiver marcado, o primeiro torna-se principal (substituição
+// idempotente ao guardar a ficha).
+async function sincronizarContactosPessoa(pessoa, emails = [], telefones = []) {
+  await ContactoPessoa.destroy({ where: { pessoa_id: pessoa.id } });
+
+  const montar = (tipo, lista) => {
+    const temPrincipal = lista.some((c) => c.principal);
+    return lista
+      .map((c, i) => ({
+        pessoa_id: pessoa.id,
+        tipo,
+        valor: String(c.valor || '').trim(),
+        etiqueta: String(c.etiqueta || '').trim() || null,
+        principal: temPrincipal ? Boolean(c.principal) : i === 0,
+        ativo: true,
+      }))
+      .filter((r) => r.valor);
+  };
+  const linhas = [...montar('email', emails), ...montar('telefone', telefones)];
+  if (linhas.length) await ContactoPessoa.bulkCreate(linhas);
+
+  const emailPrincipal = emails.find((c) => c.principal)?.valor || emails[0]?.valor || null;
+  const telefonePrincipal = telefones.find((c) => c.principal)?.valor || telefones[0]?.valor || null;
+  await pessoa.update({
+    email: emailPrincipal ? String(emailPrincipal).trim() : null,
+    telefone: telefonePrincipal ? String(telefonePrincipal).trim() : null,
+  });
+  return { email: emailPrincipal, telefone: telefonePrincipal };
+}
+
+module.exports = {
+  emailsPreferidosPorPessoa,
+  emailPreferido,
+  telefonePreferido,
+  listarContactos,
+  sincronizarContactosPessoa,
+};
