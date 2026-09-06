@@ -19,6 +19,7 @@ fs.readdirSync(__dirname)
 const {
   User,
   Pessoa,
+  ContactoPessoa,
   Fracao,
   FracaoPessoa,
   ContaBancaria,
@@ -68,6 +69,10 @@ Pessoa.belongsToMany(Fracao, {
 });
 FracaoPessoa.belongsTo(Fracao, { foreignKey: 'fracao_id', as: 'fracao' });
 FracaoPessoa.belongsTo(Pessoa, { foreignKey: 'pessoa_id', as: 'pessoa' });
+
+// Contactos flexíveis por pessoa (vários emails/telefones)
+Pessoa.hasMany(ContactoPessoa, { foreignKey: 'pessoa_id', as: 'contactos' });
+ContactoPessoa.belongsTo(Pessoa, { foreignKey: 'pessoa_id', as: 'pessoa' });
 
 // Quotas
 Quota.belongsTo(Fracao, { foreignKey: 'fracao_id', as: 'fracao' });
