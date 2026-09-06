@@ -209,8 +209,9 @@ class Layout {
   caixa(titulo, corpo, cor = T.COR_PRIMARIA, fundo = T.COR_FUNDO_CAIXA, opts = {}) {
     // Espaçamento entre blocos (secções visualmente independentes).
     const gapBloco = 10;
+    const hideTitle = opts.hideTitle === true;
     const tituloFontSize = opts.tituloFontSize || T.TITULO_CAIXA_SIZE;
-    const tituloBloco = tituloFontSize + 6;
+    const tituloBloco = hideTitle ? 0 : tituloFontSize + 6;
     if (!this.medindo) this.y += gapBloco;
     const yInicio = this.y;
     const prevCx = this.cx;
@@ -232,12 +233,14 @@ class Layout {
     // Fundo suave arredondado SEM border/linhas delimitadoras.
     this.doc.roundedRect(T.MARGEM, this.y, T.LARGURA_CONTEUDO, alturaTotal, 8).fill(fundo);
     this.y += T.PADDING;
-    this.doc
-      .font(T.FONTE_BOLD)
-      .fontSize(tituloFontSize)
-      .fillColor(cor)
-      .text(titulo, T.MARGEM + T.PADDING, this.y, { width: T.LARGURA_CONTEUDO - 2 * T.PADDING });
-    this.y += tituloBloco;
+    if (!hideTitle) {
+      this.doc
+        .font(T.FONTE_BOLD)
+        .fontSize(tituloFontSize)
+        .fillColor(cor)
+        .text(titulo, T.MARGEM + T.PADDING, this.y, { width: T.LARGURA_CONTEUDO - 2 * T.PADDING });
+      this.y += tituloBloco;
+    }
 
     corpo(this);
 
@@ -430,32 +433,39 @@ async function gerarReciboPDF(condominio, d) {
     );
   }
 
-  // ── Bloco 3 — VALOR DO RECIBO (elemento de maior destaque) ─────────
+  // ── Bloco 3 — VALOR DO RECIBO (título e valor NA MESMA LINHA) ─────
   L.caixa(
-    'VALOR DO RECIBO',
+    '',
     (C) => {
-      const avancarValor = 34;
-      const avancarSaldo = 14;
+      const topo = C.y;
+      const valorY = topo;
+      const tituloY = topo + 8; // bases alinhadas (título maior com 20pt)
       if (!C.medindo) {
+        // Valor à direita, título à esquerda, mesma linha — valor é o destaque.
         C.doc
           .font(T.FONTE_BOLD)
           .fontSize(30)
           .fillColor('#14532d')
-          .text(formatEUR(d.valor), C.cx, C.y, { width: C.cw, align: 'right', lineGap: 0 });
+          .text(formatEUR(d.valor), C.cx, valorY, { width: C.cw, align: 'right', lineGap: 0 });
+        C.doc
+          .font(T.FONTE_BOLD)
+          .fontSize(20)
+          .fillColor('#14532d')
+          .text('VALOR DO RECIBO', C.cx, tituloY, { width: C.cw - 100, align: 'left', lineGap: 0 });
       }
-      C.y += avancarValor;
+      const saldoY = topo + 40;
       if (!C.medindo) {
         C.doc
           .font(T.FONTE)
           .fontSize(T.TEXTO_SIZE_SMALL)
           .fillColor(T.COR_VERDE)
-          .text(`Saldo após pagamento: ${formatEUR(d.saldoAposPagamento)}`, C.cx, C.y, { width: C.cw, align: 'right' });
+          .text(`Saldo após pagamento: ${formatEUR(d.saldoAposPagamento)}`, C.cx, saldoY, { width: C.cw, align: 'right' });
       }
-      C.y += avancarSaldo;
+      C.y = saldoY + 14;
     },
     T.COR_VERDE,
     T.COR_FUNDO_VERDE,
-    { tituloFontSize: 20 }
+    { hideTitle: true }
   );
 
   // Recibos anulados mantêm todo o conteúdo histórico, mas ficam marcados de
