@@ -66,10 +66,12 @@ function toBuffer(doc) {
 
 // ── Layout: controla o cursor vertical, quebras de página e caixas ──
 class Layout {
-  constructor(doc, condominio, titulo) {
+  constructor(doc, condominio, titulo, cabecalhoDireita = null) {
     this.doc = doc;
     this.condominio = condominio || {};
     this.titulo = titulo;
+    // Coluna direita opcional do cabeçalho: [{texto, tamanho, negrito, cor}]
+    this.cabecalhoDireita = cabecalhoDireita;
     this.y = 0;
     this.medindo = false;
     this.cx = T.MARGEM; // x do conteúdo (recuado dentro de caixas)
@@ -112,11 +114,26 @@ class Layout {
       this.doc.text(`NIF: ${this.condominio.nif}`, xTexto, 74, { width: 250 });
     }
 
-    this.doc
-      .font(T.FONTE_BOLD)
-      .fontSize(T.TITULO_DOC_SIZE)
-      .fillColor(T.COR_TEXTO)
-      .text(this.titulo, 300, 45, { width: 245, align: 'right' });
+    if (this.cabecalhoDireita && this.cabecalhoDireita.length) {
+      // Coluna direita com 3 linhas (recibo/aviso): alinhada à direita, com a
+      // mesma hierarquia tipográfica da coluna esquerda (1.ª linha em destaque).
+      const xDir = 300;
+      const wDir = 245;
+      const posY = [45, 63, 75];
+      this.cabecalhoDireita.forEach((linha, i) => {
+        this.doc
+          .font(linha.negrito ? T.FONTE_BOLD : T.FONTE)
+          .fontSize(linha.tamanho || T.TEXTO_SIZE_SMALL)
+          .fillColor(linha.cor || T.COR_MUTED)
+          .text(String(linha.texto ?? ''), xDir, posY[i] || 45, { width: wDir, align: 'right', lineBreak: false });
+      });
+    } else {
+      this.doc
+        .font(T.FONTE_BOLD)
+        .fontSize(T.TITULO_DOC_SIZE)
+        .fillColor(T.COR_TEXTO)
+        .text(this.titulo, 300, 45, { width: 245, align: 'right' });
+    }
 
     this.doc
       .moveTo(T.MARGEM, 96)
@@ -353,12 +370,40 @@ function marcarAnulado(doc) {
 // ═══════════════════════════════════════════════════════════════════
 async function gerarReciboPDF(condominio, d) {
   const doc = criarDocumento();
-  const L = new Layout(doc, condominio, 'RECIBO');
+  const L = new Layout(doc, condominio, 'RECIBO', [
+    { texto: d.numero ? `Recibo n.º ${d.numero}` : 'Recibo', tamanho: 15, negrito: true, cor: T.COR_TEXTO },
+    { texto: `Código de verificação: ${d.codigoVerificacao || '—'}`, tamanho: T.TEXTO_SIZE_SMALL, negrito: false, cor: T.COR_MUTED },
+    { texto: `Emitido em ${d.data ? formatDateExtenso(d.data) : '—'}`, tamanho: T.TEXTO_SIZE_SMALL, negrito: false, cor: T.COR_MUTED },
+  ]);
 
-  L.texto(d.numero ? `Recibo n.º ${d.numero}` : 'Recibo', { bold: true, fontSize: 13 });
-  L.texto(`Código de verificação: ${d.codigoVerificacao || '—'}`, { cor: T.COR_MUTED });
-  L.texto(`Emitido em ${d.data ? formatDateExtenso(d.data) : '—'}`, { cor: T.COR_MUTED });
-  L.espaco(4);
+  // ── Zona do destinatário (documento/ofício) ─────────────────────────
+  if (d.destinatario) {
+    const linhas = [];
+    const dest = d.destinatario;
+    linhas.push({ t: 'Exmo(a) Sr.(a)', bold: false });
+    if (dest.nome) linhas.push({ t: dest.nome, bold: true });
+    if (dest.fracao) linhas.push({ t: dest.fracao, bold: false });
+    if (dest.morada) linhas.push({ t: dest.morada, bold: false });
+    if (dest.codigoPostalLocalidade) linhas.push({ t: dest.codigoPostalLocalidade, bold: false });
+    L.caixa(
+      '',
+      (C) => {
+        linhas.forEach((l) => {
+          if (!C.medindo) {
+            C.doc
+              .font(l.bold ? T.FONTE_BOLD : T.FONTE)
+              .fontSize(l.bold ? T.TEXTO_SIZE + 1 : T.TEXTO_SIZE)
+              .fillColor(l.bold ? T.COR_TEXTO : '#334155')
+              .text(l.t, C.cx, C.y, { width: C.cw, lineGap: 1 });
+          }
+          C.y += l.bold ? 15 : 13;
+        });
+      },
+      '#334155',
+      '#eef6f2',
+      { hideTitle: true }
+    );
+  }
 
   // ── Bloco 1 — Dados do pagamento (método/data/referência vêm do pagamento) ──
   // Para o módulo de recibos vêm de pagamentosDasQuotas(); para chamadas
@@ -372,7 +417,9 @@ async function gerarReciboPDF(condominio, d) {
   L.caixa(
     'Dados do pagamento',
     (C) => {
-      C.linha('Condómino', d.condominoNome || '—');
+      // O condómino fica identificado na zona do destinatário (quando existe);
+      // nas chamadas legadas sem destinatário mantém-se a linha aqui.
+      if (!d.destinatario) C.linha('Condómino', d.condominoNome || '—');
       const fracaoTexto = d.fracaoPermilagem
         ? `${d.fracaoDesignacao || '—'} — ${d.fracaoPermilagem}`
         : d.fracaoDesignacao || '—';

@@ -666,11 +666,22 @@ async function pdfDeRecibo(recibo, condRow) {
   const quotas = (recibo.quotas || []).sort((a, b) => (a.ano - b.ano) || (a.mes - b.mes));
   const pagamentos = await recibosHelper.pagamentosDasQuotas(quotas.map((q) => q.id));
 
+  // Zona do destinatário: morador + identificação da fração + morada/CP do
+  // edifício (o sistema não guarda morada própria do condómino).
+  const cpLocalidade = [condRow.codigo_postal, condRow.localidade].filter(Boolean).join(' ');
+  const destinatario = {
+    nome: morador || null,
+    fracao: fracao ? fracao.designacao : null,
+    morada: condRow.morada || null,
+    codigoPostalLocalidade: cpLocalidade || null,
+  };
+
   return gerarReciboPDF(condRow, {
     numero: recibo.codigo,
     codigoVerificacao: recibo.codigo_verificacao,
     data: recibo.data_emissao || new Date(),
     condominoNome: morador || 'Condómino',
+    destinatario,
     fracaoDesignacao: fracao ? descricaoFracao(fracao) : '—',
     fracaoPermilagem:
       fracao && fracao.permilagem !== null && fracao.permilagem !== undefined && String(fracao.permilagem).trim() !== ''
