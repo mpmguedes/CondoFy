@@ -117,13 +117,14 @@ class Layout {
     const rightW = T.LARGURA_PAGINA - T.MARGEM - rightX; // 245
     const leftW = Math.max(110, rightX - xTexto - 16);
 
-    // Nome do condomínio SEMPRE numa única linha: usa a maior fonte (≤15) que
-    // caiba na largura da coluna esquerda; nomes excecionais reduzem de forma
-    // proporcional e controlada (nunca quebram nem invadem a coluna direita).
-    let nomeSize = 15;
+    // Nome do condomínio SEMPRE numa única linha, completo e nunca cortado:
+    // reduz-se a fonte de forma proporcional e controlada até caber na largura
+    // reservada à coluna esquerda (a coluna direita permanece intacta).
+    const larguraNome15 = this.doc.font(T.FONTE_BOLD).widthOfString(designacao, { fontSize: 15 });
+    let nomeSize = larguraNome15 <= leftW ? 15 : Math.max(5, Math.floor((15 * leftW) / larguraNome15));
     this.doc.font(T.FONTE_BOLD);
-    while (nomeSize > 8 && this.doc.widthOfString(designacao, { fontSize: nomeSize }) > leftW) {
-      nomeSize -= 1;
+    while (nomeSize > 5 && this.doc.widthOfString(designacao, { fontSize: nomeSize }) > leftW) {
+      nomeSize -= 0.5;
     }
 
     const alturaDe = (texto, tamanho, bold, width) => {
@@ -131,7 +132,7 @@ class Layout {
       return this.doc.font(f).heightOfString(String(texto ?? ''), { width, fontSize: tamanho }) + 3;
     };
 
-    const esq = [{ texto: designacao, tamanho: nomeSize, bold: true, cor: T.COR_TEXTO }];
+    const esq = [{ texto: designacao, tamanho: nomeSize, bold: true, cor: T.COR_TEXTO, semQuebra: true }];
     if (morada) esq.push({ texto: morada, tamanho: T.TEXTO_SIZE_SMALL, bold: false, cor: T.COR_MUTED });
     if (nifTexto) esq.push({ texto: nifTexto, tamanho: T.TEXTO_SIZE_SMALL, bold: false, cor: T.COR_MUTED });
 
@@ -151,11 +152,13 @@ class Layout {
     let yEsq = startTop;
     for (const l of esq) {
       if (!this.medindo) {
+        const opts = { width: leftW, lineGap: 1 };
+        if (l.semQuebra) opts.lineBreak = false; // o nome nunca quebra
         this.doc
           .font(l.bold ? T.FONTE_BOLD : T.FONTE)
           .fontSize(l.tamanho)
           .fillColor(l.cor)
-          .text(l.texto, xTexto, yEsq, { width: leftW, lineGap: 1 });
+          .text(l.texto, xTexto, yEsq, opts);
       }
       yEsq += alturaDe(l.texto, l.tamanho, l.bold, leftW);
     }
@@ -299,22 +302,14 @@ class Layout {
 }
 
 // ── Rodapé + paginação ─────────────────────────────────────────────
-function finalizarPaginacao(doc, condominio) {
+function finalizarPaginacao(doc) {
   const range = doc.bufferedPageRange();
-  const nomeReal = (condominio && String(condominio.designacao || '').trim()) || '';
-  // Sem duplicar "Condomínio" quando o nome já começa por essa palavra.
-  const começaComCondominio = /^condom[ií]nio\b/i.test(nomeReal);
-  const nomeRodape = começaComCondominio || !nomeReal ? nomeReal : `Condomínio ${nomeReal}`;
   const largura = T.LARGURA_CONTEUDO;
   for (let i = range.start; i < range.start + range.count; i++) {
     doc.switchToPage(i);
-    // Linha 1 — condomínio à esquerda, página à direita.
-    if (nomeRodape) {
-      doc.font(T.FONTE).fontSize(8).fillColor('#555555').text(nomeRodape, T.MARGEM, 783, { width: 380, align: 'left', lineBreak: false });
-    }
-    doc.font(T.FONTE).fontSize(8).fillColor('#555555').text(`Página ${i + 1} de ${range.count}`, 450, 783, { width: 95, align: 'right', lineBreak: false });
-    // Linha 2 — discreta e alinhada à esquerda, por baixo do condomínio.
-    doc.font(T.FONTE).fontSize(7).fillColor('#777777').text('Documento processado por GesCondu - Gestão de Condomínios', T.MARGEM, 791, { width: largura, align: 'left' });
+    // Rodapé com uma ÚNICA linha: documento à esquerda, página à direita.
+    doc.font(T.FONTE).fontSize(7).fillColor('#777777').text('Documento processado por GesCondu - Gestão de Condomínios', T.MARGEM, 786, { width: 400, align: 'left', lineBreak: false });
+    doc.font(T.FONTE).fontSize(7).fillColor('#777777').text(`Página ${i + 1} de ${range.count}`, 455, 786, { width: 90, align: 'right', lineBreak: false });
   }
 }
 
