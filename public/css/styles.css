@@ -801,5 +801,36 @@ textarea.form-control { min-height: auto; }
 .row.g-3 > [class*='col-'] { padding-top: 0.5rem; }
 .row.g-3 { row-gap: 0.15rem; }
 
+/* Painel — faixas horizontais agrupadas (sem um card por número) */
+.painel-strip {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+.strip-item {
+  flex: 1 1 0;
+  min-width: 120px;
+  padding: 0 16px;
+  border-left: 1px solid #eceff2;
+  color: inherit;
+}
+.strip-item:first-child { border-left: none; padding-left: 0; }
+.strip-label {
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--c-text-muted);
+  font-weight: 600;
+}
+.strip-value {
+  font-size: 17px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+.painel-strip .strip-item:hover { background: transparent; }
+
+@media (max-width: 767.98px) {
+  .strip-item { flex: 1 1 45%; border-left: none; padding: 6px 12px; }
+}
+
 
 
