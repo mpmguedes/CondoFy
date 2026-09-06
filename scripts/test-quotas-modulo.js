@@ -201,7 +201,9 @@ function testVistaRecibos() {
       meses: [mesJan, mesFev, mesMar, mesAbr],
     },
   ];
-  const porEmitirJson = JSON.stringify([{ fracaoId: 1, meses: porEmitir[0].meses }]);
+  // Tal como a rota envia: um ARRAY de {fracaoId, meses} (o helper json é que
+  // faz JSON.stringify; nunca pré-serializar aqui — senão fica duplamente codificado).
+  const porEmitirJson = [{ fracaoId: 1, meses: porEmitir[0].meses }];
   const recibos = [
     {
       id: 5,
@@ -238,6 +240,26 @@ function testVistaRecibos() {
   assert.ok(html.includes('3 mês/meses disponíveis'), 'número de meses visível');
   assert.ok(html.includes('modalEmitir') && html.includes('Emitir recibo'), 'modal abre pelo botão');
   assert.ok(html.includes('/admin/quotas/recibos/5/pdf'), 'ver PDF');
+
+  // O payload JSON do modal tem de chegar INESCAPED (triple-stash) e com dados:
+  // era {{json ...}} → Handlebars escapava para &quot; e o JSON.parse falhava,
+  // deixando a modal sem meses (valores a 0).
+  assert.ok(!html.includes('&quot;quotaId&quot;'), 'JSON do modal não está escapado para entidades');
+  const blocoJson = /<script type="application\/json" id="dadosPorEmitir">([\s\S]*?)<\/script>/.exec(html);
+  assert.ok(blocoJson, 'bloco JSON presente na página');
+  const dados = JSON.parse(blocoJson[1]);
+  assert.strictEqual(dados.length, 1, 'uma fração no payload');
+  const mesesJson = dados[0].meses;
+  assert.ok(mesesJson.length >= 4, 'meses chegam ao frontend (nenhum é perdido)');
+  const out = mesesJson.find((m) => m.quotaId === 12);
+  assert.ok(out, 'Outubro presente no payload');
+  assert.strictEqual(out.disponivel, 20, 'Outubro parcial: disponível = 20 (não zero)');
+  const abr = mesesJson.find((m) => m.quotaId === 13);
+  assert.ok(abr && abr.pode === false, 'mês sem pagamento vem marcado como não selecionável');
+  for (const m of mesesJson) {
+    assert.ok(Number.isInteger(m.quotaId) && Number.isInteger(m.mes) && Number.isInteger(m.ano), 'campos de identificação presentes');
+    assert.ok(Number.isFinite(m.pago) && Number.isFinite(m.disponivel) && Number.isFinite(m.quota), 'valores numéricos presentes (nunca a zero por engano de formato)');
+  }
 }
 
 function testVistaDetalhePagamento() {
