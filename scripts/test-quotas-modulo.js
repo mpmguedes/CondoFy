@@ -345,9 +345,67 @@ async function testModosDistribuicao() {
   );
 }
 
+// ── 5. Distribuição FIFO de pagamentos (anulados nunca contam) ──
+function testFIFOPagamentos() {
+  const { alocarFIFO, somarAplicacoesConfirmadas } = require('../helpers/pagamentos');
+  const quota = (id, valor) => ({ id, valor });
+  const quotas = [quota(1, 50), quota(2, 55.66), quota(3, 61.23)];
+
+  // Pagamentos anulados existem no histórico mas não contam para o saldo.
+  const apenasAnulados = [
+    { quota_id: 1, valor_aplicado: '50.00', pagamento: { estado: 'anulado' } },
+    { quota_id: 2, valor_aplicado: '55.66', pagamento: { estado: 'anulado' } },
+    { quota_id: 3, valor_aplicado: '30.00', pagamento: { estado: 'anulado' } },
+  ];
+  const vazio = somarAplicacoesConfirmadas(apenasAnulados);
+  assert.strictEqual(vazio.size, 0, 'aplicações anuladas não contam para saldo');
+
+  let r = alocarFIFO({ quotas, pagoConfirmadoC: vazio, valorC: 10000 });
+  assert.deepStrictEqual(
+    r.alocacoes.map((a) => ({ id: a.quotaId, valor: a.aplicarC })),
+    [{ id: 1, valor: 5000 }, { id: 2, valor: 5000 }],
+    'novo pagamento volta a começar na primeira quota em aberto (FIFO)'
+  );
+  assert.strictEqual(r.restanteC, 0, '100 € aplicados por completo');
+
+  // Com uma aplicação confirmada, essa quota deixa de ser alvo.
+  const comConfirmado = [
+    { quota_id: 1, valor_aplicado: '50.00', pagamento: { estado: 'anulado' } },
+    { quota_id: 1, valor_aplicado: '50.00', pagamento: { estado: 'confirmado' } },
+  ];
+  const pago = somarAplicacoesConfirmadas(comConfirmado);
+  assert.strictEqual(pago.get(1), 5000, 'só a aplicação confirmada é contada');
+  r = alocarFIFO({ quotas, pagoConfirmadoC: pago, valorC: 6000 });
+  assert.strictEqual(r.alocacoes[0].quotaId, 2, 'Janeiro já pago → começa em Fevereiro');
+  assert.strictEqual(r.alocacoes[0].aplicarC, 5566, 'Fevereiro pago por completo (55,66)');
+  assert.strictEqual(r.alocacoes[1].aplicarC, 434, 'restante vai para Março');
+
+  // Pagamento superior ao saldo → excedente devolvido, sem aplicações a mais.
+  r = alocarFIFO({ quotas, pagoConfirmadoC: vazio, valorC: 100000 });
+  const totalC = r.alocacoes.reduce((s, a) => s + a.aplicarC, 0);
+  assert.strictEqual(totalC, 5000 + 5566 + 6123, 'aplica no máximo o saldo das quotas');
+  assert.strictEqual(r.restanteC, 100000 - totalC, 'excedente devolvido (crédito)');
+
+  // Pagamentos múltiplos acumulam corretamente (estados intermediários).
+  const r1 = alocarFIFO({ quotas, pagoConfirmadoC: vazio, valorC: 10000 });
+  const acumulado = new Map([[1, 5000], [2, 5000]]);
+  const r2 = alocarFIFO({ quotas, pagoConfirmadoC: acumulado, valorC: 6123 });
+  assert.deepStrictEqual(
+    r2.alocacoes.map((a) => ({ id: a.quotaId, valor: a.aplicarC })),
+    [{ id: 2, valor: 566 }, { id: 3, valor: 5557 }],
+    'segundo pagamento continua na primeira quota ainda em aberto'
+  );
+
+  // Ordem cronológica ano/mês é respeitada (lista já ordenada pelo chamador).
+  const multiAno = [{ id: 10, valor: 50 }, { id: 11, valor: 50 }];
+  const rr = alocarFIFO({ quotas: multiAno, pagoConfirmadoC: vazio, valorC: 10000 });
+  assert.strictEqual(rr.alocacoes.length, 2, 'aplica por ordem recebida (ano/mês)');
+}
+
 async function main() {
   testRegras();
   testTransitadosParser();
+  testFIFOPagamentos();
   testVistaMapa();
   testVistaComprovativos();
   testVistaRecibos();

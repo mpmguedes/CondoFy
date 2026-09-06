@@ -28,6 +28,39 @@ async function recalcularEstadoQuota(quotaId, transaction) {
   await quota.update({ estado }, { transaction });
 }
 
+// Pura, testável: soma por quota apenas aplicações cujo pagamento está
+// confirmado. Aplicações de pagamentos anulados ficam no histórico mas nunca
+// contam para saldos/estados/disponibilidade.
+function somarAplicacoesConfirmadas(aplicacoes) {
+  const mapa = new Map();
+  for (const a of aplicacoes || []) {
+    if (!a || !a.pagamento || a.pagamento.estado !== 'confirmado') continue;
+    mapa.set(a.quota_id, (mapa.get(a.quota_id) || 0) + toCents(a.valor_aplicado));
+  }
+  return mapa;
+}
+
+// Distribuição FIFO (pura, testável): quotas já ordenadas por ano/mês.
+// pagoConfirmadoC: Map quota_id → cêntimos já pagos (APENAS pagamentos
+// confirmados — aplicações de pagamentos anulados não contam).
+// Devolve { alocacoes: [{quotaId, jaPagoC, aplicarC, novoPagoC}], restanteC }.
+function alocarFIFO({ quotas, pagoConfirmadoC = new Map(), valorC }) {
+  const alocacoes = [];
+  let restanteC = Math.max(0, Number(valorC) || 0); // já em cêntimos
+  for (const quota of quotas) {
+    if (restanteC <= 0) break;
+    const jaPagoC = pagoConfirmadoC.get(quota.id) || 0;
+    const emAbertoC = toCents(quota.valor) - jaPagoC;
+    if (emAbertoC <= 0) continue; // quota sem saldo real em aberto (confirmado)
+    const aplicarC = Math.min(emAbertoC, restanteC);
+    if (aplicarC > 0) {
+      alocacoes.push({ quotaId: quota.id, jaPagoC, aplicarC, novoPagoC: jaPagoC + aplicarC });
+      restanteC -= aplicarC;
+    }
+  }
+  return { alocacoes, restanteC };
+}
+
 // Regista um pagamento e distribui-o pelas quotas em aberto (FIFO).
 // Cria o movimento bancário de entrada quando há conta bancária.
 // comprovativo (opcional): { ficheiro, nome, mime } — ficheiro já gravado em
@@ -88,44 +121,48 @@ async function registarPagamento({
       });
     }
 
+    // Todas as quotas da fração (não anuladas), por ordem cronológica — a
+    // distribuição é FIFO sobre o SALDO REAL em aberto (confirmado), nunca
+    // sobre o estado guardado (que pode estar desatualizado/artificial).
     const quotas = await Quota.findAll({
-      where: {
-        fracao_id: fracaoId,
-        estado: { [Op.in]: ['pendente', 'parcialmente_paga', 'vencida'] },
-      },
+      where: { fracao_id: fracaoId, estado: { [Op.ne]: 'anulada' } },
       order: [['ano', 'ASC'], ['mes', 'ASC']],
       lock: t.LOCK.UPDATE,
       transaction: t,
     });
 
-    let restanteC = valorC;
-    for (const quota of quotas) {
-      if (restanteC <= 0) break;
-      const jaPagoC = toCents(
-        await PagamentoQuota.sum('valor_aplicado', {
-          where: { quota_id: quota.id },
-          transaction: t,
-        })
-      );
-      const emAbertoC = toCents(quota.valor) - jaPagoC;
-      if (emAbertoC <= 0) continue;
+    if (!quotas.length) {
+      await t.commit();
+      return { pagamento, excedente: fromCents(valorC) };
+    }
 
-      const aplicarC = Math.min(emAbertoC, restanteC);
+    // Valor efetivamente pago por quota — só aplicações de pagamentos
+    // CONFIRMADOS (anulados mantêm-se no histórico mas nunca contam).
+    const ids = quotas.map((q) => q.id);
+    const aplicacoes = await PagamentoQuota.findAll({
+      where: { quota_id: { [Op.in]: ids } },
+      include: [{ model: Pagamento, as: 'pagamento', attributes: ['estado'] }],
+      transaction: t,
+    });
+    const pagoConfirmadoC = somarAplicacoesConfirmadas(aplicacoes);
+
+    const { alocacoes, restanteC } = alocarFIFO({ quotas, pagoConfirmadoC, valorC });
+    for (const aloc of alocacoes) {
       await PagamentoQuota.create(
         {
           pagamento_id: pagamento.id,
-          quota_id: quota.id,
-          valor_aplicado: fromCents(aplicarC),
+          quota_id: aloc.quotaId,
+          valor_aplicado: fromCents(aloc.aplicarC),
         },
         { transaction: t }
       );
-
-      const novoPagoC = jaPagoC + aplicarC;
-      await quota.update(
-        { estado: novoPagoC >= toCents(quota.valor) ? 'paga' : 'parcialmente_paga' },
-        { transaction: t }
-      );
-      restanteC -= aplicarC;
+      const quota = quotas.find((q) => q.id === aloc.quotaId);
+      if (quota) {
+        await quota.update(
+          { estado: aloc.novoPagoC >= toCents(quota.valor) ? 'paga' : 'parcialmente_paga' },
+          { transaction: t }
+        );
+      }
     }
 
     await t.commit();
@@ -172,4 +209,4 @@ async function anularPagamento(pagamentoId) {
   }
 }
 
-module.exports = { registarPagamento, anularPagamento, recalcularEstadoQuota };
+module.exports = { registarPagamento, anularPagamento, recalcularEstadoQuota, alocarFIFO, somarAplicacoesConfirmadas };

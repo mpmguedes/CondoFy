@@ -27,7 +27,7 @@ const {
 const { eAdmin } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
 const { toCents, fromCents, toNumber } = require('../helpers/money');
-const { estadoEfetivo, resumoFracao } = require('../helpers/saldos');
+const { resumoFracao } = require('../helpers/saldos');
 const { getQuotaConfig } = require('../helpers/quotas-config');
 const { calcularQuota } = require('../helpers/quotas-calc');
 const { validarPermilagem } = require('../helpers/permilagem');
@@ -123,11 +123,28 @@ router.get('/quotas', async (req, res) => {
     parcialmente_paga: { key: 'seminfo', sim: '?', rot: 'Parcialmente paga' },
     anulada: { key: 'semquota', sim: '*', rot: 'Anulada' },
   };
+  // Estado do mês DERIVADO dos pagamentos confirmados (aplicações reais) —
+  // nunca do estado guardado da quota, que pode ficar desatualizado quando
+  // pagamentos são anulados.
+  const estadoMapa = (q, pagoC) => {
+    if (q.estado === 'anulada') return 'anulada';
+    const valorC = toCents(q.valor);
+    if (pagoC >= valorC) return 'paga';
+    if (pagoC > 0) return 'parcialmente_paga';
+    if (q.data_vencimento) {
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      const vencimento = new Date(q.data_vencimento);
+      vencimento.setHours(0, 0, 0, 0);
+      if (hoje > vencimento) return 'vencida';
+    }
+    return 'pendente';
+  };
   for (const q of quotasAno) {
     if (!porFracaoMes[q.fracao_id]) porFracaoMes[q.fracao_id] = {};
     const pagoC = pagoAnoMap.get(q.id) || 0;
     const cobertoC = cobertoAnoMap.get(q.id) || 0;
-    const celula = ESTADO_CELULA[estadoEfetivo(q)] || ESTADO_CELULA.pendente;
+    const celula = ESTADO_CELULA[estadoMapa(q, pagoC)] || ESTADO_CELULA.pendente;
     porFracaoMes[q.fracao_id][q.mes] = {
       id: q.id,
       numero_documento: q.numero_documento,
