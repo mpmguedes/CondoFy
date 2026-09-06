@@ -4,6 +4,7 @@ const { Op } = require('sequelize');
 const {
   Fracao,
   Pessoa,
+  ContactoPessoa,
   FracaoPessoa,
   User,
   Categoria,
@@ -29,6 +30,7 @@ const { resumoFinanceiroMes, resumoEmAtraso, orcamentoDoAno } = require('../help
 const drive = require('../helpers/drive');
 const { smtpConfigured } = require('../helpers/mailer');
 const background = require('../helpers/background-jobs');
+const { listarContactos } = require('../helpers/contactos');
 
 const router = express.Router();
 
@@ -493,6 +495,67 @@ router.post('/utilizadores/:id/eliminar', async (req, res) => {
 router.get('/tarefas', async (req, res) => {
   const tarefas = background.listarTarefas(100);
   res.render('admin/sistema/tarefas', { titulo: 'Processamento em segundo plano', tarefas });
+});
+
+// ── Contactos flexíveis do condómino ────────────────────────────────
+router.get('/condominos/:id/contactos', async (req, res) => {
+  const pessoa = await Pessoa.findByPk(req.params.id);
+  if (!pessoa) return res.redirect('/admin/condominos');
+  const { emails, telefones } = await listarContactos(pessoa.id);
+  res.render('admin/condominos/contactos', { titulo: 'Contactos', pessoa: pessoa.toJSON(), emails, telefones });
+});
+
+router.post('/condominos/:id/contactos', async (req, res) => {
+  const pessoa = await Pessoa.findByPk(req.params.id);
+  if (!pessoa) return res.redirect('/admin/condominos');
+  const tipo = req.body.tipo === 'email' ? 'email' : 'telefone';
+  const valor = String(req.body.valor || '').trim();
+  if (!valor) {
+    req.flash('error_msg', 'Indique o valor do contacto.');
+    return res.redirect(`/admin/condominos/${pessoa.id}/contactos`);
+  }
+  const existentes = await ContactoPessoa.count({ where: { pessoa_id: pessoa.id, tipo } });
+  const contacto = await ContactoPessoa.create({
+    pessoa_id: pessoa.id,
+    tipo,
+    valor,
+    principal: existentes === 0, // o primeiro contacto de cada tipo fica principal
+    etiqueta: String(req.body.etiqueta || '').trim() || null,
+    ativo: true,
+  });
+  if (contacto.principal) {
+    await ContactoPessoa.update({ principal: false }, { where: { pessoa_id: pessoa.id, tipo, id: { [Op.ne]: contacto.id } } }).catch(() => {});
+  }
+  await audit({ userId: req.user.id, acao: 'criar_contacto_pessoa', entidade: 'ContactoPessoa', entidadeId: contacto.id }).catch(() => {});
+  req.flash('success_msg', 'Contacto adicionado.');
+  res.redirect(`/admin/condominos/${pessoa.id}/contactos`);
+});
+
+router.post('/condominos/contactos/:cid/principal', async (req, res) => {
+  const contacto = await ContactoPessoa.findByPk(req.params.cid);
+  if (!contacto) return res.redirect('/admin/condominos');
+  await ContactoPessoa.update({ principal: false }, { where: { pessoa_id: contacto.pessoa_id, tipo: contacto.tipo } });
+  await contacto.update({ principal: true });
+  await audit({ userId: req.user.id, acao: 'contacto_principal', entidade: 'ContactoPessoa', entidadeId: contacto.id }).catch(() => {});
+  req.flash('success_msg', 'Contacto definido como principal.');
+  res.redirect(`/admin/condominos/${contacto.pessoa_id}/contactos`);
+});
+
+router.post('/condominos/contactos/:cid/eliminar', async (req, res) => {
+  const contacto = await ContactoPessoa.findByPk(req.params.cid);
+  if (!contacto) return res.redirect('/admin/condominos');
+  const pessoaId = contacto.pessoa_id;
+  const eraPrincipal = contacto.principal;
+  const tipo = contacto.tipo;
+  await contacto.destroy();
+  // Se o principal foi removido, promove o primeiro ativo restante.
+  if (eraPrincipal) {
+    const proximo = await ContactoPessoa.findOne({ where: { pessoa_id: pessoaId, tipo, ativo: true }, order: [['id', 'ASC']] });
+    if (proximo) await proximo.update({ principal: true });
+  }
+  await audit({ userId: req.user.id, acao: 'eliminar_contacto_pessoa', entidade: 'ContactoPessoa', entidadeId: req.params.cid }).catch(() => {});
+  req.flash('success_msg', 'Contacto eliminado.');
+  res.redirect(`/admin/condominos/${pessoaId}/contactos`);
 });
 
 module.exports = router;

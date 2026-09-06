@@ -1,0 +1,87 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Contactos — {{pessoa.nome}}</h1>
+    <p class="subtitle">Múltiplos emails e telefones (o principal é usado nas comunicações automáticas)</p>
+  </div>
+  <a href="/admin/condominos/{{pessoa.id}}/editar" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-6">
+    <div class="card mb-3">
+      <div class="card-header bg-white"><i class="bi bi-envelope me-1"></i>Email</div>
+      <ul class="list-group list-group-flush">
+        {{#each emails}}
+        <li class="list-group-item">
+          <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+            <div>
+              <span class="fw-semibold">{{valor}}</span>
+              {{#if principal}}<span class="badge text-bg-success ms-1">Principal</span>{{/if}}
+              {{#if etiqueta}}<span class="badge text-bg-light border ms-1">{{etiqueta}}</span>{{/if}}
+            </div>
+            <div class="d-flex gap-1 align-items-center">
+              {{#unless principal}}
+              <form action="/admin/condominos/contactos/{{id}}/principal" method="POST" class="d-inline">
+                <button class="btn btn-sm btn-outline-primary" title="Definir principal"><span class="material-symbols-outlined">star</span></button>
+              </form>
+              {{/unless}}
+              <form action="/admin/condominos/contactos/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar este contacto?');">
+                <button class="btn btn-sm btn-outline-danger"><span class="material-symbols-outlined">delete</span></button>
+              </form>
+            </div>
+          </div>
+        </li>
+        {{else}}
+        <li class="list-group-item text-muted">Sem emails registados.</li>
+        {{/each}}
+      </ul>
+      <div class="card-body border-top">
+        <form action="/admin/condominos/{{pessoa.id}}/contactos" method="POST" class="row g-2 align-items-end">
+          <input type="hidden" name="tipo" value="email" />
+          <div class="col-md-5"><input type="email" class="form-control" name="valor" placeholder="email@exemplo.pt" required /></div>
+          <div class="col-md-4"><input type="text" class="form-control" name="etiqueta" placeholder="Trabalho/Casa" /></div>
+          <div class="col-md-3"><button class="btn btn-outline-primary w-100">+ Adicionar email</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-6">
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-telephone me-1"></i>Telefones</div>
+      <ul class="list-group list-group-flush">
+        {{#each telefones}}
+        <li class="list-group-item">
+          <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+            <div>
+              <span class="fw-semibold">{{valor}}</span>
+              {{#if principal}}<span class="badge text-bg-success ms-1">Principal</span>{{/if}}
+              {{#if etiqueta}}<span class="badge text-bg-light border ms-1">{{etiqueta}}</span>{{/if}}
+            </div>
+            <div class="d-flex gap-1 align-items-center">
+              {{#unless principal}}
+              <form action="/admin/condominos/contactos/{{id}}/principal" method="POST" class="d-inline">
+                <button class="btn btn-sm btn-outline-primary" title="Definir principal"><span class="material-symbols-outlined">star</span></button>
+              </form>
+              {{/unless}}
+              <form action="/admin/condominos/contactos/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar este contacto?');">
+                <button class="btn btn-sm btn-outline-danger"><span class="material-symbols-outlined">delete</span></button>
+              </form>
+            </div>
+          </div>
+        </li>
+        {{else}}
+        <li class="list-group-item text-muted">Sem telefones registados.</li>
+        {{/each}}
+      </ul>
+      <div class="card-body border-top">
+        <form action="/admin/condominos/{{pessoa.id}}/contactos" method="POST" class="row g-2 align-items-end">
+          <input type="hidden" name="tipo" value="telefone" />
+          <div class="col-md-5"><input type="text" class="form-control" name="valor" placeholder="912 345 678" required /></div>
+          <div class="col-md-4"><input type="text" class="form-control" name="etiqueta" placeholder="Telemóvel/Casa" /></div>
+          <div class="col-md-3"><button class="btn btn-outline-primary w-100">+ Adicionar telefone</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
