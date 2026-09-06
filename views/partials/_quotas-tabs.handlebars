@@ -1,0 +1,12 @@
+{{!-- Tabs superiores do módulo Quotas — recebe "ativo": mapa | comprovativos | recibos --}}
+<nav class="quotas-tabs" aria-label="Secções do módulo Quotas">
+  <a class="quotas-tab {{#if (eq ativo 'mapa')}}active{{/if}}" href="/admin/quotas">
+    <span class="material-symbols-outlined">grid_view</span>Mapa de Quotas
+  </a>
+  <a class="quotas-tab {{#if (eq ativo 'comprovativos')}}active{{/if}}" href="/admin/quotas/comprovativos">
+    <span class="material-symbols-outlined">payments</span>Comprovativos
+  </a>
+  <a class="quotas-tab {{#if (eq ativo 'recibos')}}active{{/if}}" href="/admin/quotas/recibos">
+    <span class="material-symbols-outlined">receipt_long</span>Recibos
+  </a>
+</nav>

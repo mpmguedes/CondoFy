@@ -178,11 +178,12 @@ router.get('/fracoes/nova', (req, res) => {
 
 router.post('/fracoes', async (req, res) => {
   try {
-    const { designacao, permilagem, andar, observacoes, estado } = req.body;
+    const { designacao, permilagem, andar, porta, observacoes, estado } = req.body;
     const fracao = await Fracao.create({
       designacao,
       permilagem: parseDecimal(permilagem),
       andar,
+      porta,
       observacoes,
       estado: estado || 'ativo',
     });
@@ -214,11 +215,12 @@ router.post('/fracoes/:id', async (req, res) => {
     req.flash('error_msg', 'Fração não encontrada.');
     return res.redirect('/admin/fracoes');
   }
-  const { designacao, permilagem, andar, observacoes, estado } = req.body;
+  const { designacao, permilagem, andar, porta, observacoes, estado } = req.body;
   await fracao.update({
     designacao,
     permilagem: parseDecimal(permilagem),
     andar,
+    porta,
     observacoes,
     estado: estado || 'ativo',
   });

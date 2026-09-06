@@ -1,0 +1,387 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Recibos</h1>
+    <p class="subtitle">Emissão, envio e anulação de recibos formais (RCP)</p>
+  </div>
+</div>
+
+{{> _quotas-tabs ativo='recibos'}}
+
+<div class="row g-2 mb-3 mt-1">
+  <div class="col-6 col-lg-2"><div class="card mini-stat h-100"><div class="card-body">
+    <div class="mini-stat-label">Emitidos</div>
+    <div class="mini-stat-value">{{resumo.emitidos}}</div>
+    <div class="mini-stat-sub">recibos válidos</div>
+  </div></div></div>
+  <div class="col-6 col-lg-2"><div class="card mini-stat h-100"><div class="card-body">
+    <div class="mini-stat-label">Enviados</div>
+    <div class="mini-stat-value text-success">{{resumo.enviados}}</div>
+    <div class="mini-stat-sub">por email</div>
+  </div></div></div>
+  <div class="col-6 col-lg-2"><div class="card mini-stat h-100"><div class="card-body">
+    <div class="mini-stat-label">Por enviar</div>
+    <div class="mini-stat-value text-danger">{{resumo.porEnviar}}</div>
+    <div class="mini-stat-sub">ainda não enviados</div>
+  </div></div></div>
+</div>
+
+{{!-- 3.1 Recibos por emitir --}}
+<h2 class="section-title">Por emitir</h2>
+{{#if porEmitir}}
+<div class="card mb-4">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Fração</th>
+          <th class="text-end">Pago</th>
+          <th class="text-end">Enviado</th>
+          <th class="text-end">Por emitir</th>
+          <th class="text-center">Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each porEmitir}}
+        <tr>
+          <td class="qmap-fracao">
+            <div class="fw-semibold text-nowrap">{{designacao}}</div>
+            {{#if andar}}<div class="small text-muted text-nowrap">{{andar}}{{#if porta}} · {{porta}}{{/if}}</div>{{/if}}
+          </td>
+          <td class="text-end text-nowrap">{{eur pago}}</td>
+          <td class="text-end text-nowrap">{{eur enviado}}</td>
+          <td class="text-end fw-semibold text-nowrap text-primary">{{eur porEmitir}}</td>
+          <td class="text-center">
+            <button type="button" class="btn btn-sm btn-outline-primary btn-emitir" data-fracao="{{fracaoId}}" data-designacao="{{designacao}}">
+              <span class="material-symbols-outlined me-1" style="font-size:1rem">receipt_long</span>Emitir recibo
+            </button>
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{else}}
+<div class="alert alert-light border small">Sem valores pagos por emitir recibo. Os recibos são criados a partir dos pagamentos já recebidos.</div>
+{{/if}}
+
+{{!-- 3.2 Recibos emitidos --}}
+<h2 class="section-title">Emitidos ({{resumo.emitidos}}) — ({{resumo.porEnviar}}) por enviar</h2>
+{{#if recibos}}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0 qmap">
+      <thead class="table-light">
+        <tr>
+          <th>Nº</th>
+          <th>Fração / Morador</th>
+          <th>Período</th>
+          <th class="text-end">Valor</th>
+          <th>Tipo</th>
+          <th>Emitido</th>
+          <th>Enviado</th>
+          <th class="text-center">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each recibos}}
+        <tr class="{{#unless (eq estado 'emitido')}}qmap-inativa{{/unless}}">
+          <td>
+            <div class="fw-semibold text-nowrap">{{numero}}</div>
+            <div class="small text-muted text-nowrap">{{codigo}}</div>
+          </td>
+          <td class="qmap-fracao">
+            <div class="fw-semibold text-nowrap">{{fracao}}</div>
+            {{#if morador}}<div class="small text-muted text-nowrap">{{morador}}</div>{{/if}}
+          </td>
+          <td class="small text-nowrap">{{periodo}}</td>
+          <td class="text-end fw-semibold text-nowrap">{{eur valor}}</td>
+          <td class="small">{{#if (eq tipo 'extraordinario')}}Extraordinário{{else}}Ordinário{{/if}}</td>
+          <td class="text-nowrap small">{{formatDate data_emissao}}</td>
+          <td>
+            {{#if (eq estado 'emitido')}}
+              {{#if enviado_at}}<span class="text-success small fw-semibold text-nowrap">Enviado {{formatDate enviado_at}}</span>
+              {{else}}<span class="text-danger small fw-semibold text-nowrap">Por enviar</span>{{/if}}
+            {{else}}
+              <span class="badge text-bg-secondary" title="{{#if motivo_anulacao}}Motivo: {{motivo_anulacao}}{{/if}}">Anulado</span>
+            {{/if}}
+          </td>
+          <td class="text-center text-nowrap">
+            <a href="/admin/quotas/recibos/{{id}}/pdf" target="_blank" class="btn btn-sm btn-outline-primary px-1" title="Ver PDF"><span class="material-symbols-outlined" style="font-size:1rem">picture_as_pdf</span></a>
+            {{#if (eq estado 'emitido')}}
+              {{#unless enviado_at}}
+              <form action="/admin/quotas/recibos/{{id}}/enviar" method="POST" class="d-inline">
+                <button class="btn btn-sm btn-outline-success px-1" title="Enviar recibo por email"><span class="material-symbols-outlined" style="font-size:1rem">mail</span></button>
+              </form>
+              {{/unless}}
+              <button type="button" class="btn btn-sm btn-outline-danger px-1 btn-anular" data-id="{{id}}" data-codigo="{{codigo}}" title="Anular recibo"><span class="material-symbols-outlined" style="font-size:1rem">block</span></button>
+            {{/if}}
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{else}}
+<div class="alert alert-light border small">Ainda não há recibos emitidos.</div>
+{{/if}}
+
+{{!-- Dados por emitir (para a modal) --}}
+<script type="application/json" id="dadosPorEmitir">{{json porEmitirJson}}</script>
+
+{{!-- Modal Emitir recibo --}}
+<div class="modal fade" id="modalEmitir" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <form id="formEmitir" method="POST" action="/admin/quotas/recibos/emitir">
+        <input type="hidden" name="fracao_id" id="emitirFracaoId" />
+        <div class="modal-header">
+          <h5 class="modal-title">Emitir recibo</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-3" id="emitirFracaoTexto"></p>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-5">
+              <label class="form-label">Valor a emitir</label>
+              <div class="input-group input-group-sm">
+                <input type="text" class="form-control text-end" name="valor_global" id="emitirValor" value="0,00" inputmode="decimal" disabled />
+                <span class="input-group-text">€</span>
+              </div>
+              <div class="form-text">Máx. valor já pago</div>
+            </div>
+            <div class="col-md-7">
+              <label class="form-label">Distribuição</label>
+              <select class="form-select form-select-sm" name="modo" id="emitirModo">
+                <option value="plano">Cadência do plano (1 recibo por mês)</option>
+                <option value="unico">Um recibo (tudo junto)</option>
+                <option value="mes">Um recibo por mês</option>
+                <option value="selecionar">Selecionar meses</option>
+              </select>
+              <div class="form-text mt-1">Os meses marcados ficam cobertos e saem de "por emitir".</div>
+            </div>
+          </div>
+
+          <label class="form-label">Meses a incluir</label>
+          <div class="table-responsive border rounded">
+            <table class="table table-sm align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th style="width:40px"></th>
+                  <th>Mês</th>
+                  <th class="text-end">Valor</th>
+                  <th class="text-end">FCR</th>
+                </tr>
+              </thead>
+              <tbody id="emitirMeses"></tbody>
+            </table>
+          </div>
+
+          <div class="mt-2">
+            <label class="form-label">Tipo</label>
+            <select class="form-select form-select-sm" name="tipo" style="max-width:220px">
+              <option value="ordinario">Ordinário</option>
+              <option value="extraordinario">Extraordinário</option>
+            </select>
+          </div>
+
+          <div class="alert alert-light border small mt-3 mb-0" id="emitirContagem">Vai criar 0 recibos.</div>
+
+          <div class="form-check mt-3">
+            <input class="form-check-input" type="checkbox" name="enviar_email" id="emitirEmail" />
+            <label class="form-check-label small" for="emitirEmail">Enviar por email ao condómino (após a emissão)</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Emitir recibo</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{{!-- Modal Anular recibo --}}
+<div class="modal fade" id="modalAnular" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="formAnular" method="POST">
+        <div class="modal-header">
+          <h5 class="modal-title" id="anularTitulo">Anular recibo</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small">Este recibo já foi enviado ao condómino. Ao anulá-lo, deixará de ser válido e os meses abrangidos voltarão a ficar disponíveis para emissão.</p>
+          <div class="alert alert-light border small">
+            <strong>A anulação remove a cobertura deste recibo.</strong> Os meses abrangidos voltam ao estado "Por emitir". O registo do recibo não é eliminado: fica permanentemente marcado como anulado.
+          </div>
+          <label class="form-label">Motivo (opcional)</label>
+          <textarea class="form-control" name="motivo" rows="3" placeholder="Ex.: recibo emitido por engano, valor incorreto..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-danger">Anular recibo</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var CURTO = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+  var bruto = document.getElementById('dadosPorEmitir');
+  var porFracao = {};
+  try {
+    var dados = JSON.parse(bruto.textContent);
+    (dados || []).forEach(function (f) {
+      porFracao[String(f.fracaoId)] = (f.meses || []).map(function (m) {
+        return {
+          quotaId: m.quotaId,
+          mes: m.mes,
+          ano: m.ano,
+          rotulo: CURTO[(m.mes - 1)] + ' ' + m.ano,
+          valor: Number(m.valorDisp || 0),
+          fcr: Number(m.fcrDisp || 0),
+        };
+      });
+    });
+  } catch (e) { /* sem dados */ }
+
+  var modalEmitir = document.getElementById('modalEmitir');
+  var formEmitir = document.getElementById('formEmitir');
+  var lista = document.getElementById('emitirMeses');
+  var campoValor = document.getElementById('emitirValor');
+  var selectModo = document.getElementById('emitirModo');
+  var contagem = document.getElementById('emitirContagem');
+  var fracaoTexto = document.getElementById('emitirFracaoTexto');
+  var mesesAtuais = [];
+
+  function eur(n) {
+    return (n / 100).toFixed(2).replace('.', ',') + ' €';
+  }
+
+  function selecionados() {
+    return mesesAtuais.filter(function (m) { return m.cbx && m.cbx.checked; });
+  }
+
+  function totalSelecionado() {
+    return selecionados().reduce(function (s, m) { return s + m.valor; }, 0);
+  }
+
+  function atualizar() {
+    var modo = selectModo.value;
+    var sel = selecionados().length;
+    if (modo === 'unico') {
+      campoValor.disabled = false;
+      campoValor.value = (totalSelecionado() / 100).toFixed(2).replace('.', ',');
+      contagem.textContent = sel > 0 ? 'Vai criar 1 recibo.' : 'Selecione pelo menos um mês.';
+    } else {
+      campoValor.disabled = true;
+      campoValor.value = '0,00';
+      contagem.textContent = sel > 0 ? 'Vai criar ' + sel + ' recibo(s).' : 'Selecione pelo menos um mês.';
+    }
+  }
+
+  function abrirModal(fracaoId, designacao) {
+    var meses = porFracao[String(fracaoId)] || [];
+    mesesAtuais = [];
+    lista.innerHTML = '';
+    fracaoTexto.innerHTML = 'Frações: <strong>' + designacao + '</strong>';
+    meses.forEach(function (m, i) {
+      var tr = document.createElement('tr');
+      var tdCheck = document.createElement('td');
+      var cbx = document.createElement('input');
+      cbx.type = 'checkbox';
+      cbx.className = 'form-check-input emitir-mes';
+      cbx.checked = true;
+      cbx.dataset.valor = String(m.valor);
+      tdCheck.appendChild(cbx);
+      var tdMes = document.createElement('td');
+      tdMes.className = 'small text-nowrap';
+      tdMes.textContent = m.rotulo;
+      var tdValor = document.createElement('td');
+      tdValor.className = 'text-end small text-nowrap';
+      tdValor.textContent = eur(m.valor);
+      var tdFcr = document.createElement('td');
+      tdFcr.className = 'text-end small text-muted text-nowrap';
+      tdFcr.textContent = eur(m.fcr);
+      tr.appendChild(tdCheck);
+      tr.appendChild(tdMes);
+      tr.appendChild(tdValor);
+      tr.appendChild(tdFcr);
+      cbx.addEventListener('change', atualizar);
+      m.cbx = cbx;
+      mesesAtuais.push(m);
+      lista.appendChild(tr);
+    });
+    atualizar();
+  }
+
+  formEmitir.addEventListener('submit', function (e) {
+    var sel = selecionados();
+    if (!sel.length) {
+      e.preventDefault();
+      return;
+    }
+    // Remove checkboxes antigas e submete os meses escolhidos.
+    var existentes = formEmitir.querySelectorAll('input[name="meses"]');
+    for (var i = 0; i < existentes.length; i++) existentes[i].remove();
+    sel.forEach(function (m) {
+      var input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'meses';
+      input.value = String(m.quotaId);
+      formEmitir.appendChild(input);
+    });
+  });
+
+  if (modalEmitir) {
+    modalEmitir.addEventListener('show.bs.modal', function (e) {
+      var btn = e.relatedTarget;
+      if (!btn) return;
+      abrirModal(btn.dataset.fracao, btn.dataset.designacao);
+    });
+  }
+  if (selectModo) {
+    selectModo.addEventListener('change', function () {
+      if (selectModo.value === 'plano') {
+        mesesAtuais.forEach(function (m) { if (m.cbx) m.cbx.checked = true; });
+      }
+      atualizar();
+    });
+  }
+
+  // Auto-abrir quando chega com ?emitir=<fracao>
+  var auto = {{#if abrirEmitirFracaoId}}{{abrirEmitirFracaoId}}{{else}}null{{/if}};
+  if (auto && window.bootstrap && porFracao[String(auto)]) {
+    var alvo = document.querySelector('.btn-emitir[data-fracao="' + auto + '"]');
+    if (alvo) {
+      var modalObj = bootstrap.Modal.getOrCreateInstance(modalEmitir);
+      // popula manualmente e abre
+      var designacao = alvo.dataset.designacao || '';
+      modalObj.show();
+      modalEmitir.addEventListener('shown.bs.modal', function () {
+        abrirModal(String(auto), designacao);
+      }, { once: true });
+    }
+  }
+
+  // Modal anular
+  var modalAnular = document.getElementById('modalAnular');
+  var formAnular = document.getElementById('formAnular');
+  var anularTitulo = document.getElementById('anularTitulo');
+  if (modalAnular) {
+    modalAnular.addEventListener('show.bs.modal', function (e) {
+      var btn = e.relatedTarget;
+      if (!btn) return;
+      formAnular.action = '/admin/quotas/recibos/' + btn.dataset.id + '/anular';
+      anularTitulo.textContent = 'Anular recibo ' + btn.dataset.codigo;
+    });
+  }
+})();
+</script>

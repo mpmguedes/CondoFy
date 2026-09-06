@@ -35,6 +35,8 @@ const {
   Quota,
   Pagamento,
   PagamentoQuota,
+  Recibo,
+  ReciboQuota,
   Despesa,
   Fornecedor,
   PagamentoFornecedor,
@@ -73,6 +75,27 @@ FracaoPessoa.belongsTo(Pessoa, { foreignKey: 'pessoa_id', as: 'pessoa' });
 // Contactos flexíveis por pessoa (vários emails/telefones)
 Pessoa.hasMany(ContactoPessoa, { foreignKey: 'pessoa_id', as: 'contactos' });
 ContactoPessoa.belongsTo(Pessoa, { foreignKey: 'pessoa_id', as: 'pessoa' });
+
+// Recibos formais (RCP) por fração, com meses/quotas cobertos.
+Fracao.hasMany(Recibo, { foreignKey: 'fracao_id', as: 'recibos' });
+Recibo.belongsTo(Fracao, { foreignKey: 'fracao_id', as: 'fracao' });
+Recibo.hasMany(ReciboQuota, { foreignKey: 'recibo_id', as: 'meses' });
+ReciboQuota.belongsTo(Recibo, { foreignKey: 'recibo_id', as: 'recibo' });
+Quota.hasMany(ReciboQuota, { foreignKey: 'quota_id', as: 'coberturas_recibo' });
+ReciboQuota.belongsTo(Quota, { foreignKey: 'quota_id', as: 'quota' });
+Recibo.belongsToMany(Quota, {
+  through: ReciboQuota,
+  foreignKey: 'recibo_id',
+  otherKey: 'quota_id',
+  as: 'quotas',
+});
+Quota.belongsToMany(Recibo, {
+  through: ReciboQuota,
+  foreignKey: 'quota_id',
+  otherKey: 'recibo_id',
+  as: 'recibos',
+});
+Recibo.belongsTo(User, { foreignKey: 'created_by', as: 'criador' });
 
 // Quotas
 Quota.belongsTo(Fracao, { foreignKey: 'fracao_id', as: 'fracao' });

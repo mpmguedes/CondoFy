@@ -92,6 +92,8 @@ app.use((req, res, next) => {
 app.use('/', require('./routes'));
 app.use('/', require('./routes/auth'));
 app.use('/admin', require('./routes/admin'));
+const rotasQuotasModulo = require('./routes/quotas-modulo');
+app.use('/admin', rotasQuotasModulo);
 const rotasFinanceiro = require('./routes/financeiro');
 app.use('/admin', rotasFinanceiro);
 background.registar('quotas_pos_processamento', rotasFinanceiro.processarPosGeracaoQuotas);

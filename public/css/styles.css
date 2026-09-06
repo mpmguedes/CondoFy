@@ -834,3 +834,87 @@ textarea.form-control { min-height: auto; }
 
 
 
+
+/* ---------------------------------------------------------------
+   Módulo Quotas — Mapa | Comprovativos | Recibos
+   --------------------------------------------------------------- */
+.quotas-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 0 var(--sp-4);
+  border-bottom: 1px solid var(--c-border);
+  flex-wrap: wrap;
+}
+.quotas-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  margin-bottom: -1px;
+  border: 1px solid transparent;
+  border-bottom: 2px solid transparent;
+  color: var(--c-text-muted);
+  font-size: 0.86rem;
+  font-weight: 500;
+  text-decoration: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.quotas-tab .material-symbols-outlined { font-size: 1.05rem; }
+.quotas-tab:hover { color: var(--c-text); background: var(--c-surface-2); }
+.quotas-tab.active {
+  color: var(--c-primary);
+  border-color: var(--c-border) var(--c-border) transparent var(--c-border);
+  border-bottom-color: var(--c-primary);
+  background: var(--c-surface);
+}
+
+.mini-stat { border-radius: var(--radius-sm); }
+.mini-stat .card-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 1px; }
+.mini-stat-label { color: var(--c-text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.mini-stat-value { font-size: 1.25rem; font-weight: 600; line-height: 1.2; }
+.mini-stat-sub { color: var(--c-text-muted); font-size: 0.72rem; }
+
+/* Mapa — tabela condensada */
+.qmap thead th {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--c-text-muted);
+  padding: 6px 6px;
+  white-space: nowrap;
+}
+.qmap tbody td { padding: 5px 6px; font-size: 0.8rem; }
+.qmap-fracao { min-width: 130px; }
+.qmap-transitado { width: 86px; }
+.qmap-mes { width: 42px; }
+.qmap-cel { padding: 2px !important; }
+.qmap-saldo { min-width: 86px; }
+.qmap-emitir { min-width: 96px; }
+.qmap-emitir-badge { font-weight: 500; font-size: 0.72rem; }
+.qmap-inativa { opacity: 0.55; }
+
+.qmap-legend { align-items: center; }
+.qmap-legend > span { display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; }
+
+/* Indicadores de estado mensal (fundo de baixa opacidade) */
+.q-ind {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 0.86rem;
+  line-height: 1;
+  text-decoration: none !important;
+  vertical-align: middle;
+}
+a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
+.q-paga { color: var(--c-success); background: rgba(24, 128, 56, 0.10); }
+.q-incumprimento { color: var(--c-error); background: rgba(217, 48, 37, 0.10); }
+.q-pendente { color: var(--c-primary); background: rgba(26, 115, 232, 0.10); }
+.q-seminfo { color: #b45309; background: rgba(249, 171, 0, 0.16); }
+.q-semquota { color: var(--c-text-muted); background: rgba(95, 99, 104, 0.12); }
+
+.modal-transitados-lista { max-height: 45vh; }

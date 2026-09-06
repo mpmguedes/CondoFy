@@ -1,0 +1,168 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Mapa de Quotas</h1>
+    <p class="subtitle">Estado mensal das quotas por fração — {{ano}}</p>
+  </div>
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <form action="/admin/quotas" method="GET" class="d-flex align-items-center gap-2">
+      <select class="form-select form-select-sm" name="ano" onchange="this.form.submit()" title="Ano do mapa">
+        {{#if anos}}{{#each anos}}<option value="{{this}}" {{selected ../ano this}}>{{this}}</option>{{/each}}{{else}}<option value="{{ano}}">{{ano}}</option>{{/if}}
+      </select>
+    </form>
+    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalTransitados" title="Definir/importar valores transitados">
+      <span class="material-symbols-outlined me-1" style="font-size:1rem">swap_horiz</span>Transitados
+    </button>
+    <a class="btn btn-sm btn-outline-secondary" href="/admin/quotas/enviar" title="Enviar avisos de quota por email">
+      <span class="material-symbols-outlined me-1" style="font-size:1rem">mail</span>Enviar quotas
+    </a>
+    <a class="btn btn-sm btn-primary" href="/admin/quotas/gerar" title="Gerar quotas do ano">
+      <span class="material-symbols-outlined me-1" style="font-size:1rem">auto_awesome</span>Gerar quotas
+    </a>
+  </div>
+</div>
+
+{{> _quotas-tabs ativo='mapa'}}
+
+{{#unless permilagem.ok}}
+<div class="alert alert-warning py-2 px-3 small d-flex align-items-center gap-2 mt-3">
+  <span class="material-symbols-outlined" style="font-size:1.1rem">warning</span>
+  <span>A soma das permilagens é <strong>{{permilagem.total}}‰</strong> (recomendado 1000‰).</span>
+</div>
+{{/unless}}
+
+{{!-- Resumo compacto --}}
+<div class="row g-2 mb-3 mt-1">
+  <div class="col-6 col-lg-2"><div class="card mini-stat h-100"><div class="card-body">
+    <div class="mini-stat-label">Quotas {{ano}}</div>
+    <div class="mini-stat-value">{{eur resumo.quotasAno}}</div>
+    <div class="mini-stat-sub">{{nFracoes}} frações</div>
+  </div></div></div>
+  <div class="col-6 col-lg-2"><div class="card mini-stat h-100"><div class="card-body">
+    <div class="mini-stat-label">Permilagem total</div>
+    <div class="mini-stat-value">{{permilagemTotal}}‰</div>
+    <div class="mini-stat-sub">soma das frações</div>
+  </div></div></div>
+  <div class="col-6 col-lg-2"><div class="card mini-stat h-100"><div class="card-body">
+    <div class="mini-stat-label">FCR</div>
+    <div class="mini-stat-value">{{quotaConfig.fcrPercentagem}}%</div>
+    <div class="mini-stat-sub">≈ {{eur fcrMensalPrevisto}}/mês</div>
+  </div></div></div>
+  <div class="col-6 col-lg-2"><div class="card mini-stat h-100"><div class="card-body">
+    <div class="mini-stat-label">Recebido {{ano}}</div>
+    <div class="mini-stat-value text-success">{{eur resumo.recebidoAno}}</div>
+    <div class="mini-stat-sub">pagamentos confirmados</div>
+  </div></div></div>
+  <div class="col-6 col-lg-2"><div class="card mini-stat h-100"><div class="card-body">
+    <div class="mini-stat-label">Pendente {{ano}}</div>
+    <div class="mini-stat-value text-primary">{{eur resumo.pendenteAno}}</div>
+    <div class="mini-stat-sub">por receber no ano</div>
+  </div></div></div>
+  <div class="col-6 col-lg-2"><div class="card mini-stat h-100"><div class="card-body">
+    <div class="mini-stat-label">Em dívida</div>
+    <div class="mini-stat-value text-danger">{{eur resumo.emDivida}}</div>
+    <div class="mini-stat-sub">total por cobrar</div>
+  </div></div></div>
+</div>
+
+{{!-- Legenda --}}
+<div class="qmap-legend d-flex flex-wrap gap-3 small text-muted mb-2">
+  <span><span class="q-ind q-paga">✓</span> Pago</span>
+  <span><span class="q-ind q-incumprimento">✗</span> Em incumprimento</span>
+  <span><span class="q-ind q-pendente">•</span> Pendente</span>
+  <span><span class="q-ind q-seminfo">?</span> Parcialmente paga</span>
+  <span><span class="q-ind q-semquota">*</span> Sem quota</span>
+</div>
+
+{{#if linhas}}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0 qmap">
+      <thead class="table-light">
+        <tr>
+          <th class="qmap-fracao">Fração</th>
+          <th class="qmap-transitado text-end">Transitado</th>
+          {{#each meses}}<th class="text-center qmap-mes">{{this}}</th>{{/each}}
+          <th class="qmap-saldo text-end">Saldo</th>
+          <th class="qmap-emitir text-center">Por emitir</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each linhas}}
+        <tr class="{{#unless (eq estado 'ativo')}}qmap-inativa{{/unless}}">
+          <td class="qmap-fracao">
+            <div class="fw-semibold text-nowrap">{{designacao}}</div>
+            {{#if andar}}<div class="small text-muted text-nowrap">{{andar}}{{#if porta}} · {{porta}}{{/if}}</div>{{else}}{{#if porta}}<div class="small text-muted text-nowrap">{{porta}}</div>{{/if}}{{/if}}
+          </td>
+          <td class="text-end small text-muted text-nowrap">{{eur transitado}}</td>
+          {{#each meses}}
+          <td class="text-center qmap-cel">
+            {{#if temQuota}}
+              <a class="q-ind q-{{key}}" href="/admin/quotas/{{id}}" title="{{rot}} · {{eur valor}}{{#if (gt pago 0)}} · pago {{eur pago}}{{/if}}">{{sim}}</a>
+            {{else}}
+              <span class="q-ind q-semquota" title="Sem quota">*</span>
+            {{/if}}
+          </td>
+          {{/each}}
+          <td class="text-end qmap-saldo">
+            {{#if emDivida}}<span class="fw-semibold text-danger text-nowrap">-{{eur absSaldo}}</span>
+            {{else}}{{#if (gt saldo 0)}}<span class="text-nowrap">{{eur saldo}}</span>{{else}}<span class="text-muted text-nowrap">0,00 €</span>{{/if}}{{/if}}
+          </td>
+          <td class="text-center qmap-emitir">
+            {{#if porEmitirMeses}}
+            <a href="/admin/quotas/recibos?emitir={{id}}" class="badge text-bg-primary text-decoration-none qmap-emitir-badge" title="{{porEmitirMeses}} mês/meses pago(s) sem recibo">{{porEmitirMeses}} recibo(s)</a>
+            {{else}}<span class="text-muted">—</span>{{/if}}
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{else}}
+{{> _empty-state icon="grid_view" titulo="Sem frações" descricao="Crie frações para gerar o mapa de quotas." link="/admin/fracoes/nova" linkTexto="Criar fração"}}
+{{/if}}
+
+{{!-- Valores transitados --}}
+<div class="modal fade" id="modalTransitados" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <form action="/admin/quotas/transitados?ano={{ano}}" method="POST">
+        <div class="modal-header">
+          <h5 class="modal-title">Valores transitados</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-3">Saldo de cada fração trazido do período anterior. Positivo = dívida a favor do condomínio; negativo = crédito a favor da fração. Pode preencher na tabela ou importar em bloco.</p>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead class="table-light">
+                <tr><th>Fração</th><th class="text-end" style="width:180px">Transitado (€)</th></tr>
+              </thead>
+              <tbody class="modal-transitados-lista">
+                {{#each linhas}}
+                <tr>
+                  <td>
+                    <span class="fw-semibold">{{designacao}}</span>
+                    {{#if andar}}<span class="small text-muted ms-1">{{andar}}{{#if porta}} · {{porta}}{{/if}}</span>{{/if}}
+                  </td>
+                  <td><input type="text" class="form-control form-control-sm text-end" name="transitados[{{id}}]" value="{{transitadoTxt}}" inputmode="decimal" placeholder="0,00" /></td>
+                </tr>
+                {{else}}
+                <tr><td colspan="2" class="text-center text-muted py-3">Sem frações registadas.</td></tr>
+                {{/each}}
+              </tbody>
+            </table>
+          </div>
+          <details class="mt-2">
+            <summary class="small">Importar em bloco (Designação;valor por linha)</summary>
+            <textarea class="form-control form-control-sm mt-1 font-monospace" name="importar" rows="4" placeholder="Fração A;150,00&#10;Fração B;-25,50"></textarea>
+          </details>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar transitados</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

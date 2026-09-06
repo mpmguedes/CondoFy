@@ -22,19 +22,25 @@
             </div>
             <div class="col-6 mb-3">
               <label class="form-label">Andar</label>
-              <input type="text" class="form-control" name="andar" value="{{fracao.andar}}" />
+              <input type="text" class="form-control" name="andar" value="{{fracao.andar}}" placeholder="ex.: 3.º" />
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-6 mb-3">
+              <label class="form-label">Porta</label>
+              <input type="text" class="form-control" name="porta" value="{{fracao.porta}}" placeholder="ex.: 3.º Esq." />
+            </div>
+            <div class="col-6 mb-3">
+              <label class="form-label">Estado</label>
+              <select class="form-select" name="estado">
+                <option value="ativo" {{selected fracao.estado 'ativo'}}>Ativa</option>
+                <option value="inativo" {{selected fracao.estado 'inativo'}}>Inativa</option>
+              </select>
             </div>
           </div>
           <div class="mb-3">
             <label class="form-label">Observações</label>
             <textarea class="form-control" name="observacoes" rows="2">{{fracao.observacoes}}</textarea>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Estado</label>
-            <select class="form-select" name="estado">
-              <option value="ativo" {{selected fracao.estado 'ativo'}}>Ativa</option>
-              <option value="inativo" {{selected fracao.estado 'inativo'}}>Inativa</option>
-            </select>
           </div>
           <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1">save</span>Guardar</button>
         </form>

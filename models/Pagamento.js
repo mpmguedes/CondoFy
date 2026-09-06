@@ -18,6 +18,16 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: 'confirmado',
       },
+      // Comprovativo de recebimento anexado (ficheiro local) + validação.
+      comprovativo_ficheiro: { type: DataTypes.STRING(255), allowNull: true },
+      comprovativo_nome: { type: DataTypes.STRING(255), allowNull: true },
+      comprovativo_mime: { type: DataTypes.STRING(120), allowNull: true },
+      comprovativo_estado: {
+        type: DataTypes.ENUM('pendente', 'validado', 'rejeitado'),
+        allowNull: true,
+      },
+      comprovativo_motivo: { type: DataTypes.TEXT, allowNull: true },
+      comprovativo_data: { type: DataTypes.DATE, allowNull: true },
     },
     { tableName: 'pagamentos', underscored: true }
   );
