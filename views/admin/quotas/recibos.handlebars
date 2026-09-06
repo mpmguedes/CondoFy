@@ -91,7 +91,7 @@
         <tr class="{{#unless (eq estado 'emitido')}}qmap-inativa{{/unless}}">
           <td>
             <div class="fw-semibold text-nowrap">{{numero}}</div>
-            <div class="small text-muted text-nowrap">{{codigo}}</div>
+            <div class="small text-muted text-nowrap" title="{{#if codigo_verificacao}}Verificação: {{codigo_verificacao}}{{else}}{{codigo}}{{/if}}">{{codigo}}</div>
           </td>
           <td class="qmap-fracao">
             <div class="fw-semibold text-nowrap">{{fracao}}</div>

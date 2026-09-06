@@ -473,22 +473,33 @@ async function testPdfUmaPagina() {
   const cond = { designacao: 'Condomínio Jardim das Flores', morada: 'Rua Doutor António José de Almeida, 1234', codigo_postal: '1000-000', localidade: 'Lisboa', nif: '500000000', logotipo: null, identidade_visual: 'designacao' };
   const curto = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
   const meses = curto.map((c, i) => ({ numero: '2026/' + String(100 + i + 1), periodo: c + ' 2026', valorAplicado: 61.23 }));
+  const pagamentos = [
+    { data_pagamento: '2026-09-06', metodo: 'Transferência Bancária (TB)', referencia: 'TRF123456', valor: 300 },
+    { data_pagamento: '2026-09-08', metodo: 'MB WAY', referencia: 'XYZ789', valor: 434.76 },
+  ];
   const base = {
-    numero: 'RCP-2026-0006',
-    data: new Date('2026-02-01T00:00:00'),
-    dataPagamento: new Date('2026-02-01T00:00:00'),
+    numero: 'RCP-2026-0009',
+    codigoVerificacao: '2026-E8D57089',
+    data: new Date('2026-09-10T00:00:00'),
     condominoNome: 'João Maria da Silva Santos',
     fracaoDesignacao: 'Fração A',
-    metodoPagamento: 'Transferência bancária',
-    referencia: 'RCP-2026-0006',
+    fracaoPermilagem: '125,000 ‰',
     valor: 734.76,
     saldoAposPagamento: 0,
     quotas: meses,
+    pagamentos,
   };
   const recibo = await gerarReciboPDF(cond, base);
   assert.strictEqual(recibo.slice(0, 5).toString(), '%PDF-', 'recibo normal gerado');
   assert.strictEqual(paginasPdf(recibo), 1, 'recibo normal ocupa uma única página A4');
-  assert.ok(!textosPdf(recibo).includes('ANULADO'), 'recibo normal não tem marca de anulado');
+  const texto = textosPdf(recibo);
+  assert.ok(!texto.includes('ANULADO'), 'recibo normal não tem marca de anulado');
+  // Conteúdo real no PDF: código, verificação, fração/permilagem e pagamentos.
+  assert.ok(texto.includes('RCP-2026-0009'), 'n.º do recibo visível');
+  assert.ok(texto.includes('2026-E8D57089'), 'código de verificação visível');
+  assert.ok(texto.includes('Fração A'), 'fração visível');
+  assert.ok(texto.includes('125'), 'permilagem visível');
+  assert.ok(texto.includes('TRF123456') && texto.includes('MB WAY') && texto.includes('XYZ789'), 'métodos/referências dos pagamentos visíveis');
 
   const anulado = await gerarReciboPDF(cond, { ...base, anulado: true });
   assert.strictEqual(paginasPdf(anulado), 1, 'recibo anulado também ocupa uma única página');
@@ -515,6 +526,38 @@ async function testPdfUmaPagina() {
     instrucoesPagamento: 'Obrigado pelo cumprimento.',
   });
   assert.strictEqual(paginasPdf(aviso), 1, 'aviso de quota ocupa uma única página A4');
+}
+
+// ── 6b. Código de verificação: único e estável ─────────────────────
+function testCodigoVerificacao() {
+  const { gerarCodigoVerificacao } = require('../helpers/recibos');
+  const a = gerarCodigoVerificacao(2026, 'RCP-2026-0009');
+  assert.ok(/^2026-[0-9A-F]{8}$/.test(a), 'formato ano-HEX8');
+  assert.strictEqual(a, gerarCodigoVerificacao(2026, 'RCP-2026-0009'), 'estável ao reabrir o recibo');
+  assert.notStrictEqual(a, gerarCodigoVerificacao(2026, 'RCP-2026-0010'), 'diferente para outro recibo');
+}
+
+// ── 6c. Pagamentos contribuintes do recibo (só confirmados) ────────
+async function testPagamentosDasQuotas() {
+  const models = require('../models');
+  const { pagamentosDasQuotas } = require('../helpers/recibos');
+  const linhas = [
+    { quota_id: 1, valor_aplicado: '300.00', pagamento: { id: 10, numero_documento: '2026/010', data_pagamento: '2026-09-06', referencia: 'TRF123456', estado: 'confirmado', metodo_pagamento: { nome: 'Transferência Bancária' } } },
+    { quota_id: 2, valor_aplicado: '434.76', pagamento: { id: 11, numero_documento: '2026/011', data_pagamento: '2026-09-08', referencia: 'XYZ789', estado: 'confirmado', metodo_pagamento: { nome: 'MB WAY' } } },
+    { quota_id: 3, valor_aplicado: '999.00', pagamento: { id: 12, numero_documento: '2026/012', data_pagamento: '2026-01-01', referencia: 'ANUL', estado: 'anulado', metodo_pagamento: null } },
+  ];
+  const orig = models.PagamentoQuota.findAll;
+  models.PagamentoQuota.findAll = async () => linhas;
+  try {
+    const lista = await pagamentosDasQuotas([1, 2, 3]);
+    assert.strictEqual(lista.length, 2, 'pagamentos anulados excluídos');
+    const tb = lista.find((p) => p.referencia === 'TRF123456');
+    assert.ok(tb && tb.metodo === 'Transferência Bancária', 'método real do pagamento preservado');
+    assert.strictEqual(tb.data_pagamento, '2026-09-06', 'data do pagamento preservada');
+    assert.strictEqual(lista.find((p) => p.referencia === 'XYZ789').valor, 434.76, 'valor aplicado por pagamento');
+  } finally {
+    models.PagamentoQuota.findAll = orig;
+  }
 }
 
 // ── 7. Cobertura por recibos: apenas estado 'emitido' conta ─────────
@@ -592,6 +635,8 @@ async function main() {
   await testPdfUmaPagina();
   await testCoberturaPorEstado();
   await testAnularRecibo();
+  testCodigoVerificacao();
+  await testPagamentosDasQuotas();
   console.log('✓ Testes do módulo Quotas (mapa/comprovativos/recibos) passaram (sem base de dados).');
 }
 

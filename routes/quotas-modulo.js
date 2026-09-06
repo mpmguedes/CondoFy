@@ -480,6 +480,7 @@ router.get('/quotas/recibos', async (req, res) => {
     return {
       id: r.id,
       codigo: r.codigo,
+      codigo_verificacao: r.codigo_verificacao,
       numero: r.numero,
       ano: r.ano,
       tipo: r.tipo,
@@ -647,6 +648,46 @@ router.post('/quotas/recibos/:id/anular', async (req, res) => {
   res.redirect('/admin/quotas/recibos');
 });
 
+// Formata permilagem PT-PT (ex.: 125 → "125,000 ‰").
+function formatarPermilagem(valor) {
+  const n = Number(valor) || 0;
+  const partes = n.toFixed(3).split('.');
+  partes[0] = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${partes.join(',')} ‰`;
+}
+
+// Constrói (uma única vez, para qualquer vista/ação) os dados reais do recibo
+// para o PDF: método/data/referência vêm dos PAGAMENTOS confirmados que
+// cobrem as quotas do recibo (um ou vários), nunca são pedidos ao utilizador.
+async function pdfDeRecibo(recibo, condRow) {
+  const morador = await nomeMorador(recibo.fracao_id);
+  const resumo = await resumoFracao(recibo.fracao_id);
+  const fracao = recibo.fracao || null;
+  const quotas = (recibo.quotas || []).sort((a, b) => (a.ano - b.ano) || (a.mes - b.mes));
+  const pagamentos = await recibosHelper.pagamentosDasQuotas(quotas.map((q) => q.id));
+
+  return gerarReciboPDF(condRow, {
+    numero: recibo.codigo,
+    codigoVerificacao: recibo.codigo_verificacao,
+    data: recibo.data_emissao || new Date(),
+    condominoNome: morador || 'Condómino',
+    fracaoDesignacao: fracao ? descricaoFracao(fracao) : '—',
+    fracaoPermilagem:
+      fracao && fracao.permilagem !== null && fracao.permilagem !== undefined && String(fracao.permilagem).trim() !== ''
+        ? formatarPermilagem(fracao.permilagem)
+        : null,
+    valor: recibo.valor,
+    saldoAposPagamento: resumo ? resumo.emDivida : 0,
+    anulado: recibo.estado === 'anulado',
+    pagamentos,
+    quotas: quotas.map((q) => ({
+      numero: q.numero_documento || '',
+      periodo: recibosHelper.periodoLabel([{ ano: q.ano, mes: q.mes }]),
+      valorAplicado: q.ReciboQuota ? q.ReciboQuota.valor : q.valor,
+    })),
+  });
+}
+
 // Ver PDF do recibo.
 router.get('/quotas/recibos/:id/pdf', async (req, res) => {
   try {
@@ -666,27 +707,7 @@ router.get('/quotas/recibos/:id/pdf', async (req, res) => {
     }
     const condominio = await getCondominio();
     const condRow = condominio && condominio.toJSON ? condominio.toJSON() : condominio || {};
-    const morador = await nomeMorador(recibo.fracao_id);
-    const resumo = await resumoFracao(recibo.fracao_id);
-    const quotas = (recibo.quotas || []).sort((a, b) => (a.ano - b.ano) || (a.mes - b.mes));
-
-    const buffer = await gerarReciboPDF(condRow, {
-      numero: recibo.codigo,
-      data: recibo.data_emissao || new Date(),
-      dataPagamento: recibo.data_emissao || new Date(),
-      condominoNome: morador || 'Condómino',
-      fracaoDesignacao: recibo.fracao ? descricaoFracao(recibo.fracao) : '—',
-      metodoPagamento: '—',
-      referencia: recibo.codigo,
-      valor: recibo.valor,
-      saldoAposPagamento: resumo ? resumo.emDivida : 0,
-      anulado: recibo.estado === 'anulado', // PDF histórico marcado como ANULADO
-      quotas: quotas.map((q) => ({
-        numero: q.numero_documento || '',
-        periodo: `${recibosHelper.periodoLabel([{ ano: q.ano, mes: q.mes }])}`,
-        valorAplicado: q.ReciboQuota ? q.ReciboQuota.valor : q.valor,
-      })),
-    });
+    const buffer = await pdfDeRecibo(recibo, condRow);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="recibo_${recibo.codigo}.pdf"`);
     return res.send(buffer);
@@ -719,26 +740,7 @@ async function enfileirarReciboPorEmail(reciboId, { protocol, host, userId }) {
   const adminNome = condEm && condEm.administracao_nome ? String(condEm.administracao_nome) : '';
   const condRow = condEm && condEm.toJSON ? condEm.toJSON() : condEm || {};
   const fracaoDesig = recibo.fracao ? recibo.fracao.designacao : '—';
-  const morador = await nomeMorador(recibo.fracao_id);
-  const resumo = await resumoFracao(recibo.fracao_id);
-  const quotas = (recibo.quotas || []).sort((a, b) => (a.ano - b.ano) || (a.mes - b.mes));
-
-  const buffer = await gerarReciboPDF(condRow, {
-    numero: recibo.codigo,
-    data: recibo.data_emissao || new Date(),
-    dataPagamento: recibo.data_emissao || new Date(),
-    condominoNome: morador || 'Condómino',
-    fracaoDesignacao: fracaoDesig,
-    metodoPagamento: '—',
-    referencia: recibo.codigo,
-    valor: recibo.valor,
-    saldoAposPagamento: resumo ? resumo.emDivida : 0,
-    quotas: quotas.map((q) => ({
-      numero: q.numero_documento || '',
-      periodo: recibosHelper.periodoLabel([{ ano: q.ano, mes: q.mes }]),
-      valorAplicado: q.ReciboQuota ? q.ReciboQuota.valor : q.valor,
-    })),
-  });
+  const buffer = await pdfDeRecibo(recibo, condRow); // método/data/ref reais do pagamento
   const anexoNome = nomeFicheiroEmail('recibo', { numero: recibo.codigo });
 
   for (const d of dest) {

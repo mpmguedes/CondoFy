@@ -4,12 +4,7 @@
     <p class="subtitle">{{#if (eq pagamento.estado 'confirmado')}}Recebimento confirmado{{else}}Pagamento anulado{{/if}}</p>
   </div>
   <div class="d-flex gap-2 align-items-center flex-wrap">
-    <a href="/admin/pagamentos/{{pagamento.id}}/recibo" target="_blank" class="btn btn-sm btn-primary"><i class="bi bi-file-earmark-pdf me-1"></i>Recibo PDF</a>
-    {{#if driveLigado}}
-    <form action="/admin/pagamentos/{{pagamento.id}}/recibo/drive" method="POST" class="d-inline">
-      <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-cloud-arrow-up me-1"></i>Guardar no Drive</button>
-    </form>
-    {{/if}}
+    <a href="/admin/quotas/recibos" class="btn btn-sm btn-outline-primary"><i class="bi bi-receipt me-1"></i>Emitir recibo</a>
     <a href="/admin/quotas/comprovativos" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1" style="font-size:1rem">arrow_back</span>Comprovativos</a>
   </div>
 </div>

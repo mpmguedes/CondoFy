@@ -15,9 +15,10 @@
 //  · emissão idempotente por mês (nunca duplica cobertura);
 //  · anulação apenas marca o recibo (auditoria/histórico preservados).
 // ─────────────────────────────────────────────────────────────────────
+const crypto = require('crypto');
 const sequelize = require('../config/database');
 const { Op } = require('sequelize');
-const { Quota, Recibo, ReciboQuota, Numeracao, PagamentoQuota, Pagamento } = require('../models');
+const { Quota, Recibo, ReciboQuota, Numeracao, PagamentoQuota, Pagamento, MetodoPagamento } = require('../models');
 const { toCents, fromCents } = require('./money');
 
 const EPS = 1; // 1 cêntimo
@@ -62,9 +63,17 @@ function formatarNumero(sequencia) {
   return String(sequencia || 0).padStart(4, '0');
 }
 
-// Código único (ex.: RCP-2026-0006).
+// Código único do recibo (ex.: "RCP-2026-0009").
 function formatarCodigo(ano, sequencia) {
   return `RCP-${ano}-${formatarNumero(sequencia)}`;
+}
+
+// Código de verificação estável e único por recibo (ex.: "2026-E8D57089").
+// Deriva deterministicamente do código RCP (único por recibo) — nunca é
+// regenerado ao reabrir o PDF e fica guardado na BD.
+function gerarCodigoVerificacao(ano, codigo) {
+  const hash = crypto.createHash('sha1').update(`gescondu:recibo:${codigo}`).digest('hex').slice(0, 8).toUpperCase();
+  return `${ano}-${hash}`;
 }
 
 // Proporção base/FCR de um valor parcial de um mês (regra de três simples).
@@ -178,6 +187,46 @@ async function coberturaPorQuota(quotaIds, { apenasEnviados = false } = {}) {
 // Valor coberto por recibos válidos (export público).
 async function cobertoPorQuota(quotaIds) {
   return coberturaPorQuota(quotaIds);
+}
+
+// Pagamentos CONFIRMADOS que aplicaram valor às quotas indicadas — para o
+// recibo mostrar os métodos/datas/referências REAIS (um ou vários pagamentos).
+async function pagamentosDasQuotas(quotaIds) {
+  if (!quotaIds || !quotaIds.length) return [];
+  const aplicacoes = await PagamentoQuota.findAll({
+    where: { quota_id: { [Op.in]: quotaIds } },
+    include: [
+      {
+        model: Pagamento,
+        as: 'pagamento',
+        required: true,
+        include: [{ model: MetodoPagamento, as: 'metodo_pagamento' }],
+      },
+    ],
+  });
+  const porPagamento = new Map();
+  for (const a of aplicacoes) {
+    const p = a.pagamento;
+    if (!p || p.estado !== 'confirmado') continue;
+    const item = porPagamento.get(p.id) || {
+      id: p.id,
+      numero_documento: p.numero_documento,
+      data_pagamento: p.data_pagamento,
+      referencia: p.referencia || '',
+      metodo: p.metodo_pagamento ? p.metodo_pagamento.nome : '—',
+      valorC: 0,
+    };
+    item.valorC += toCents(a.valor_aplicado);
+    porPagamento.set(p.id, item);
+  }
+  return [...porPagamento.values()].map((p) => ({
+    id: p.id,
+    numero_documento: p.numero_documento,
+    data_pagamento: p.data_pagamento,
+    referencia: p.referencia,
+    metodo: p.metodo,
+    valor: fromCents(p.valorC),
+  }));
 }
 
 // Quotas de uma (ou todas as) fração(ões) com saldo de emissão:
@@ -348,6 +397,7 @@ async function emitirRecibos({ fracaoId, meses, modo = 'mes', valorGlobal, tipo 
         {
           fracao_id: fracaoId,
           codigo,
+          codigo_verificacao: gerarCodigoVerificacao(anoNum, codigo),
           numero,
           ano: anoNum,
           tipo,
@@ -381,6 +431,7 @@ async function emitirRecibos({ fracaoId, meses, modo = 'mes', valorGlobal, tipo 
           {
             fracao_id: fracaoId,
             codigo,
+            codigo_verificacao: gerarCodigoVerificacao(anoNum, codigo),
             numero,
             ano: anoNum,
             tipo,
@@ -439,11 +490,13 @@ async function anularRecibo(reciboId, { motivo, userId } = {}) {
 module.exports = {
   formatarNumero,
   formatarCodigo,
+  gerarCodigoVerificacao,
   periodoLabel,
   partilharValor,
   alocarMeses,
   pagoPorQuota,
   cobertoPorQuota,
+  pagamentosDasQuotas,
   mesesPorEmitir,
   porEmitirPorFracao,
   detalhePorEmitir,

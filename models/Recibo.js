@@ -8,6 +8,8 @@ module.exports = (sequelize) => {
       fracao_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
       // Código único e legível, ex.: RCP-2026-0006.
       codigo: { type: DataTypes.STRING(40), allowNull: false, unique: true },
+      // Código de verificação (autenticidade), ex.: 2026-E8D57089.
+      codigo_verificacao: { type: DataTypes.STRING(40), allowNull: false },
       // Número sequencial do ano (ex.: 0006).
       numero: { type: DataTypes.STRING(12), allowNull: false },
       ano: { type: DataTypes.INTEGER, allowNull: false },

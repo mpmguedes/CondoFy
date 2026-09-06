@@ -78,7 +78,7 @@
               <button type="button" class="btn btn-sm btn-outline-primary px-1 btn-anexar" data-bs-toggle="modal" data-bs-target="#modalAnexar" data-id="{{id}}" data-fracao="{{fracao}}" title="{{#if comprovativo_ficheiro}}Substituir comprovativo{{else}}Anexar comprovativo{{/if}}">
                 <span class="material-symbols-outlined" style="font-size:1rem">{{#if comprovativo_ficheiro}}sync{{else}}attach_file{{/if}}</span>
               </button>
-              <a href="/admin/pagamentos/{{id}}/recibo" target="_blank" class="btn btn-sm btn-outline-primary px-1" title="Recibo PDF"><span class="material-symbols-outlined" style="font-size:1rem">picture_as_pdf</span></a>
+              <a href="/admin/quotas/recibos" class="btn btn-sm btn-outline-secondary px-1" title="Emitir recibo (Quotas → Recibos)"><span class="material-symbols-outlined" style="font-size:1rem">receipt_long</span></a>
               <a href="/admin/pagamentos/{{id}}" class="btn btn-sm btn-outline-secondary px-1" title="Ver detalhe"><span class="material-symbols-outlined" style="font-size:1rem">visibility</span></a>
               <form action="/admin/pagamentos/{{id}}/anular" method="POST" class="d-inline" onsubmit="return confirm('Anular este pagamento?');">
                 <button class="btn btn-sm btn-outline-danger px-1" title="Anular pagamento"><span class="material-symbols-outlined" style="font-size:1rem">block</span></button>

@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
 const { formatEUR } = require('./money');
-const { formatDate } = require('./dates');
+const { formatDate, formatDateExtenso } = require('./dates');
 const { gerarConvocatoriaCartaPDF } = require('./pdf-convocatoria');
 
 // ── Constantes de layout (sem números mágicos espalhados) ──────────
@@ -207,6 +207,9 @@ class Layout {
   }
 
   caixa(titulo, corpo, cor = T.COR_PRIMARIA, fundo = T.COR_FUNDO_CAIXA) {
+    // Espaçamento entre blocos (secções visualmente independentes).
+    const gapBloco = 10;
+    if (!this.medindo) this.y += gapBloco;
     const yInicio = this.y;
     const prevCx = this.cx;
     const prevCw = this.cw;
@@ -221,21 +224,22 @@ class Layout {
     this.medindo = false;
     this.y = yInicio;
 
-    const alturaTotal = T.PADDING + 12 + 4 + alturaCorpo + T.PADDING;
+    const alturaTotal = T.PADDING + 16 + alturaCorpo + T.PADDING;
     this.garantirEspaco(alturaTotal);
 
-    this.doc.roundedRect(T.MARGEM, this.y, T.LARGURA_CONTEUDO, alturaTotal, 6).fillAndStroke(fundo, cor);
+    // Fundo suave arredondado SEM border/linhas delimitadoras.
+    this.doc.roundedRect(T.MARGEM, this.y, T.LARGURA_CONTEUDO, alturaTotal, 8).fill(fundo);
     this.y += T.PADDING;
     this.doc
       .font(T.FONTE_BOLD)
       .fontSize(T.TITULO_CAIXA_SIZE)
       .fillColor(cor)
       .text(titulo, T.MARGEM + T.PADDING, this.y, { width: T.LARGURA_CONTEUDO - 2 * T.PADDING });
-    this.y += 12 + 4;
+    this.y += 16;
 
     corpo(this);
 
-    this.y += T.PADDING;
+    this.y += T.PADDING + gapBloco;
     this.cx = prevCx;
     this.cw = prevCw;
   }
@@ -346,18 +350,66 @@ async function gerarReciboPDF(condominio, d) {
   const doc = criarDocumento();
   const L = new Layout(doc, condominio, 'RECIBO');
 
-  L.texto(`Recibo n.º ${d.numero || '—'}`, { bold: true, fontSize: 12 });
-  L.texto(`Data: ${formatDate(d.data)}`, { cor: T.COR_MUTED });
-  L.espaco(6);
+  L.texto(d.numero ? `Recibo n.º ${d.numero}` : 'Recibo', { bold: true, fontSize: 13 });
+  L.texto(`Código de verificação: ${d.codigoVerificacao || '—'}`, { cor: T.COR_MUTED });
+  L.texto(`Emitido em ${d.data ? formatDateExtenso(d.data) : '—'}`, { cor: T.COR_MUTED });
+  L.espaco(4);
 
-  L.caixa('Dados do pagamento', (C) => {
-    C.linha('Condómino', d.condominoNome || '—');
-    C.linha('Fração', d.fracaoDesignacao || '—');
-    C.linha('Data do pagamento', formatDate(d.dataPagamento));
-    C.linha('Método de pagamento', d.metodoPagamento || '—');
-    C.linha('Referência', d.referencia || '—');
-  });
+  // ── Bloco 1 — Dados do pagamento (método/data/referência vêm do pagamento) ──
+  // Para o módulo de recibos vêm de pagamentosDasQuotas(); para chamadas
+  // legadas (pagamento individual) sintetiza-se a partir dos campos antigos.
+  const pagamentos = (d.pagamentos && d.pagamentos.length)
+    ? d.pagamentos
+    : (d.dataPagamento || d.metodoPagamento || d.referencia)
+      ? [{ data_pagamento: d.dataPagamento, metodo: d.metodoPagamento || '—', referencia: d.referencia || '', valor: d.valor }]
+      : [];
+  const umPagamento = pagamentos.length === 1 ? pagamentos[0] : null;
+  L.caixa(
+    'Dados do pagamento',
+    (C) => {
+      C.linha('Condómino', d.condominoNome || '—');
+      const fracaoTexto = d.fracaoPermilagem
+        ? `${d.fracaoDesignacao || '—'} — ${d.fracaoPermilagem}`
+        : d.fracaoDesignacao || '—';
+      C.linha('Fração', fracaoTexto);
+      if (umPagamento) {
+        C.linha('Data do pagamento', umPagamento.data_pagamento ? formatDate(umPagamento.data_pagamento) : '—');
+        C.linha('Método de pagamento', umPagamento.metodo || '—');
+        C.linha('Referência', umPagamento.referencia || '—');
+      } else if (pagamentos.length > 1) {
+        C.linha('Pagamentos contribuintes', `${pagamentos.length} pagamentos (ver abaixo)`);
+      }
+    },
+    '#1d4ed8',
+    '#eef2fb'
+  );
 
+  // Bloco extra (apenas quando vários pagamentos contribuem para o recibo).
+  if (pagamentos.length > 1) {
+    L.caixa(
+      'Pagamentos que cobrem este recibo',
+      (C) => {
+        C.tabela(
+          [
+            { titulo: 'Data', x: 0, width: 90 },
+            { titulo: 'Método', x: 100, width: 115 },
+            { titulo: 'Referência', x: 225, width: 130 },
+            { titulo: 'Valor aplicado', x: 360, width: 95, align: 'right' },
+          ],
+          pagamentos.map((p) => [
+            p.data_pagamento ? formatDate(p.data_pagamento) : '—',
+            p.metodo || '—',
+            p.referencia || '—',
+            formatEUR(p.valor),
+          ])
+        );
+      },
+      '#1d4ed8',
+      '#eef2fb'
+    );
+  }
+
+  // ── Bloco 2 — Distribuição pelas quotas ──────────────────────────────
   if (d.quotas && d.quotas.length) {
     L.caixa(
       'Distribuição pelas quotas',
@@ -371,26 +423,21 @@ async function gerarReciboPDF(condominio, d) {
           d.quotas.map((q) => [q.numero || '', q.periodo || '', formatEUR(q.valorAplicado)])
         );
       },
-      T.COR_SUCESSO
+      T.COR_SUCESSO,
+      T.COR_FUNDO_VERDE
     );
   }
 
-  // Total
-  L.garantirEspaco(70);
-  const yTotal = L.y;
-  L.doc.roundedRect(T.MARGEM, yTotal, T.LARGURA_CONTEUDO, 64, 6).fillAndStroke(T.COR_FUNDO_VERDE, T.COR_VERDE);
-  L.doc.font(T.FONTE_BOLD).fontSize(11).fillColor('#166534').text('Valor recebido', T.MARGEM + T.PADDING, yTotal + 14);
-  L.doc
-    .font(T.FONTE_BOLD)
-    .fontSize(16)
-    .fillColor('#166534')
-    .text(formatEUR(d.valor), 300, yTotal + 12, { width: 220, align: 'right' });
-  L.doc
-    .font(T.FONTE)
-    .fontSize(T.TEXTO_SIZE_SMALL)
-    .fillColor('#166534')
-    .text(`Saldo após pagamento: ${formatEUR(d.saldoAposPagamento)}`, T.MARGEM + T.PADDING, yTotal + 40);
-  L.espaco(76);
+  // ── Bloco 3 — Valor recebido ────────────────────────────────────────
+  L.caixa(
+    'Valor recebido',
+    (C) => {
+      C.linha('Valor do recibo', formatEUR(d.valor), { cor: T.COR_VERDE });
+      C.linha('Saldo após pagamento', formatEUR(d.saldoAposPagamento), { cor: T.COR_VERDE });
+    },
+    T.COR_VERDE,
+    T.COR_FUNDO_VERDE
+  );
 
   // Recibos anulados mantêm todo o conteúdo histórico, mas ficam marcados de
   // forma inequívoca (faixa "ANULADO") sem poderem ser confundidos com válidos.
