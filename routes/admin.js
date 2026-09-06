@@ -498,11 +498,10 @@ router.get('/tarefas', async (req, res) => {
 });
 
 // ── Contactos flexíveis do condómino ────────────────────────────────
-router.get('/condominos/:id/contactos', async (req, res) => {
-  const pessoa = await Pessoa.findByPk(req.params.id);
-  if (!pessoa) return res.redirect('/admin/condominos');
-  const { emails, telefones } = await listarContactos(pessoa.id);
-  res.render('admin/condominos/contactos', { titulo: 'Contactos', pessoa: pessoa.toJSON(), emails, telefones });
+// Geridos na própria ficha (/editar). A página antiga mantém-se apenas
+// por compatibilidade e redireciona para a edição.
+router.get('/condominos/:id/contactos', (req, res) => {
+  res.redirect(`/admin/condominos/${req.params.id}/editar#contactos`);
 });
 
 router.post('/condominos/:id/contactos', async (req, res) => {
