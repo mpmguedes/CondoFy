@@ -59,6 +59,93 @@ async function listarContactos(pessoaId) {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Ficha de edição — leitura do formulário.
+// ─────────────────────────────────────────────────────────────────────
+
+// Normaliza um valor do body (string única ou array de strings repetidas).
+function asArray(value) {
+  if (value === undefined || value === null || value === '') return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+// Lê um grupo contactos[email] / contactos[telefone] submetido pela ficha:
+//   contactos[<tipo>][valor][]    — valores (ordem = ordem das linhas)
+//   contactos[<tipo>][etiqueta][] — etiquetas opcionais (alinhadas por índice)
+//   contactos[<tipo>][principal]  — índice da linha marcada como principal
+// Linhas completamente vazias são ignoradas.
+function lerGrupoContactos(grupo) {
+  if (!grupo || typeof grupo !== 'object') return [];
+  const valores = asArray(grupo.valor);
+  const etiquetas = asArray(grupo.etiqueta);
+  const principal = grupo.principal;
+  const idxPrincipal = Array.isArray(principal) ? principal[0] : principal;
+  return valores
+    .map((valor, i) => ({
+      valor: String(valor ?? '').trim(),
+      etiqueta: String(etiquetas[i] ?? '').trim(),
+      principal: idxPrincipal !== undefined && String(idxPrincipal) === String(i),
+    }))
+    .filter((c) => c.valor);
+}
+
+// Email razoavelmente simples (preenchido → tem de ter @ e domínio).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Lê os contactos submetidos na ficha do condómino.
+// Formato novo: body.contactos = { email: {...}, telefone: {...} }.
+// Compatibilidade: se o body vier da ficha antiga (campos únicos email/telefone,
+// sem body.contactos), converte esses valores em contactos principais — nunca se
+// perde o que já estava preenchido nem se duplica ao guardar.
+function parseContactosForm(body = {}) {
+  if (body.contactos && typeof body.contactos === 'object') {
+    return {
+      emails: lerGrupoContactos(body.contactos.email),
+      telefones: lerGrupoContactos(body.contactos.telefone),
+    };
+  }
+  const emails = [];
+  const telefones = [];
+  const email = String(body.email ?? '').trim();
+  const telefone = String(body.telefone ?? '').trim();
+  if (email) emails.push({ valor: email, etiqueta: '', principal: true });
+  if (telefone) telefones.push({ valor: telefone, etiqueta: '', principal: true });
+  return { emails, telefones };
+}
+
+// Validação da ficha: emails com formato válido quando preenchidos (linhas
+// vazias já foram ignoradas); telefones sem validação rígida (formatos PT
+// variados são aceites). Devolve null quando está tudo válido.
+function validarContactos({ emails = [], telefones = [] } = {}) {
+  for (const c of emails) {
+    if (!EMAIL_RE.test(c.valor)) return `Email inválido: ${c.valor}`;
+  }
+  return null;
+}
+
+// Contactos prontos para renderizar na ficha: usa os registos existentes em
+// contactos_pessoa; se um tipo não tiver registos mas existir o valor legado
+// em pessoa.email/telefone, apresenta esse valor como contacto (principal).
+async function contactosParaForm(pessoa) {
+  const { emails, telefones } = await listarContactos(pessoa.id);
+  const mapa = (lista) =>
+    lista.map((c) => ({
+      id: c.id,
+      valor: c.valor,
+      etiqueta: c.etiqueta || '',
+      principal: Boolean(c.principal),
+    }));
+  const emailsVista = mapa(emails);
+  const telefonesVista = mapa(telefones);
+  if (!emailsVista.length && pessoa.email) {
+    emailsVista.push({ id: null, valor: String(pessoa.email), etiqueta: '', principal: true, legado: true });
+  }
+  if (!telefonesVista.length && pessoa.telefone) {
+    telefonesVista.push({ id: null, valor: String(pessoa.telefone), etiqueta: '', principal: true, legado: true });
+  }
+  return { emails: emailsVista, telefones: telefonesVista };
+}
+
 // Substitui os contactos de uma pessoa pela lista submetida na ficha e
 // sincroniza pessoas.email/telefone com o contacto principal de cada tipo.
 // emails/telefones: [{ id?, valor, etiqueta?, principal }] — um principal por tipo;
@@ -98,4 +185,7 @@ module.exports = {
   telefonePreferido,
   listarContactos,
   sincronizarContactosPessoa,
+  parseContactosForm,
+  validarContactos,
+  contactosParaForm,
 };

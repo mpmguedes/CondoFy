@@ -3,7 +3,7 @@
   <a href="/admin/condominos" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
 </div>
 
-<form action="{{#if pessoa}}/admin/condominos/{{pessoa.id}}{{else}}/admin/condominos{{/if}}" method="POST">
+<form action="{{#if edicao}}/admin/condominos/{{pessoa.id}}{{else}}/admin/condominos{{/if}}" method="POST">
   <div class="row g-4">
     <div class="col-12 col-lg-7">
       <div class="card">
@@ -12,16 +12,81 @@
             <label class="form-label">Nome *</label>
             <input type="text" class="form-control" name="nome" value="{{pessoa.nome}}" required />
           </div>
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Email</label>
-              <input type="email" class="form-control" name="email" value="{{pessoa.email}}" />
+
+          {{!-- ═══ Contactos (emails e telefones repetíveis) ═══ --}}
+          <div id="contactos" class="mb-3">
+            <label class="form-label">Contactos</label>
+
+            <div class="mb-2">
+              <div class="small fw-semibold text-uppercase text-muted mb-1">Emails</div>
+              <div id="contactosEmail">
+                {{#each contactosForm.emails}}
+                <div class="contacto-linha row g-2 align-items-center mb-2">
+                  <div class="col-12 col-md-5">
+                    <input type="email" class="form-control form-control-sm contacto-valor" name="contactos[email][valor][]" value="{{valor}}" placeholder="email@exemplo.pt" autocomplete="off" />
+                  </div>
+                  <div class="col-6 col-md-3">
+                    <input type="text" class="form-control form-control-sm contacto-etiqueta" name="contactos[email][etiqueta][]" value="{{etiqueta}}" placeholder="Etiqueta" list="contactosEtiquetas" autocomplete="off" />
+                  </div>
+                  <div class="col-6 col-md-4">
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="form-check mb-0">
+                        <input class="form-check-input contacto-principal" type="radio" name="contactos[email][principal]" id="ctEmailPrincipal{{@index}}" value="{{@index}}" {{#if principal}}checked{{/if}} />
+                        <label class="form-check-label small text-nowrap" for="ctEmailPrincipal{{@index}}">Principal</label>
+                      </div>
+                      <button type="button" class="btn btn-outline-danger btn-sm contacto-remover px-1" title="Remover email" aria-label="Remover email"><span class="material-symbols-outlined" style="font-size: 1rem; line-height: 1">close</span></button>
+                    </div>
+                  </div>
+                </div>
+                {{else}}
+                <p class="text-muted small mb-2">Sem emails registados.</p>
+                {{/each}}
+              </div>
+              <button type="button" id="btnAdicionarContactoEmail" class="btn btn-sm btn-outline-primary mt-1">
+                <span class="material-symbols-outlined me-1" style="font-size: 1rem">add</span>Adicionar email
+              </button>
             </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Telefone</label>
-              <input type="text" class="form-control" name="telefone" value="{{pessoa.telefone}}" />
+
+            <div class="mb-2">
+              <div class="small fw-semibold text-uppercase text-muted mb-1">Telefones</div>
+              <div id="contactosTelefone">
+                {{#each contactosForm.telefones}}
+                <div class="contacto-linha row g-2 align-items-center mb-2">
+                  <div class="col-12 col-md-5">
+                    <input type="text" inputmode="tel" class="form-control form-control-sm contacto-valor" name="contactos[telefone][valor][]" value="{{valor}}" placeholder="912 345 678" autocomplete="off" />
+                  </div>
+                  <div class="col-6 col-md-3">
+                    <input type="text" class="form-control form-control-sm contacto-etiqueta" name="contactos[telefone][etiqueta][]" value="{{etiqueta}}" placeholder="Etiqueta" list="contactosEtiquetas" autocomplete="off" />
+                  </div>
+                  <div class="col-6 col-md-4">
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="form-check mb-0">
+                        <input class="form-check-input contacto-principal" type="radio" name="contactos[telefone][principal]" id="ctTelPrincipal{{@index}}" value="{{@index}}" {{#if principal}}checked{{/if}} />
+                        <label class="form-check-label small text-nowrap" for="ctTelPrincipal{{@index}}">Principal</label>
+                      </div>
+                      <button type="button" class="btn btn-outline-danger btn-sm contacto-remover px-1" title="Remover telefone" aria-label="Remover telefone"><span class="material-symbols-outlined" style="font-size: 1rem; line-height: 1">close</span></button>
+                    </div>
+                  </div>
+                </div>
+                {{else}}
+                <p class="text-muted small mb-2">Sem telefones registados.</p>
+                {{/each}}
+              </div>
+              <button type="button" id="btnAdicionarContactoTelefone" class="btn btn-sm btn-outline-primary mt-1">
+                <span class="material-symbols-outlined me-1" style="font-size: 1rem">add</span>Adicionar telefone
+              </button>
             </div>
           </div>
+
+          <datalist id="contactosEtiquetas">
+            <option value="Pessoal"></option>
+            <option value="Trabalho"></option>
+            <option value="Casa"></option>
+            <option value="Telemóvel"></option>
+            <option value="Empresa"></option>
+            <option value="Outro"></option>
+          </datalist>
+
           <div class="row">
             <div class="col-md-6 mb-3">
               <label class="form-label">NIF</label>
@@ -40,7 +105,7 @@
             <label class="form-label">Observações</label>
             <textarea class="form-control" name="observacoes" rows="2">{{pessoa.observacoes}}</textarea>
           </div>
-          {{#if pessoa}}
+          {{#if edicao}}
           <div class="form-check form-switch mb-3">
             <input class="form-check-input" type="checkbox" id="ativo" name="ativo" {{#if pessoa.ativo}}checked{{/if}} />
             <label class="form-check-label" for="ativo">Ativo</label>
@@ -81,3 +146,193 @@
     <button type="submit" class="btn btn-primary">Guardar</button>
   </div>
 </form>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Contactos repetíveis (emails/telefones) ────────────────────────
+  // Cada grupo (email/telefone) tem linhas com valor + etiqueta opcional +
+  // radio "Principal". Os valores são submetidos como arrays paralelos
+  // (contactos[<tipo>][valor][] / [etiqueta][]) e o radio principal envia o
+  // índice da linha escolhida — por isso os valores dos radios são reescritos
+  // sempre que uma linha é removida.
+
+  var NUMERO = 100; // contador global de ids, nunca decresce (evita ids duplicados)
+
+  function sufixoTipo(tipo) {
+    return tipo === 'email' ? 'Email' : 'Telefone';
+  }
+
+  function criarLinha(tipo, dados) {
+    dados = dados || {};
+    var ehEmail = tipo === 'email';
+    var numero = NUMERO++;
+    var linha = document.createElement('div');
+    linha.className = 'contacto-linha row g-2 align-items-center mb-2';
+
+    var colValor = document.createElement('div');
+    colValor.className = 'col-12 col-md-5';
+    var inputValor = document.createElement('input');
+    inputValor.type = ehEmail ? 'email' : 'text';
+    if (!ehEmail) inputValor.setAttribute('inputmode', 'tel');
+    inputValor.className = 'form-control form-control-sm contacto-valor';
+    inputValor.name = 'contactos[' + tipo + '][valor][]';
+    inputValor.placeholder = ehEmail ? 'email@exemplo.pt' : '912 345 678';
+    inputValor.value = dados.valor || '';
+    inputValor.setAttribute('autocomplete', 'off');
+    colValor.appendChild(inputValor);
+
+    var colEtiqueta = document.createElement('div');
+    colEtiqueta.className = 'col-6 col-md-3';
+    var inputEtiqueta = document.createElement('input');
+    inputEtiqueta.type = 'text';
+    inputEtiqueta.className = 'form-control form-control-sm contacto-etiqueta';
+    inputEtiqueta.name = 'contactos[' + tipo + '][etiqueta][]';
+    inputEtiqueta.placeholder = 'Etiqueta';
+    inputEtiqueta.value = dados.etiqueta || '';
+    inputEtiqueta.setAttribute('list', 'contactosEtiquetas');
+    inputEtiqueta.setAttribute('autocomplete', 'off');
+    colEtiqueta.appendChild(inputEtiqueta);
+
+    var colAcao = document.createElement('div');
+    colAcao.className = 'col-6 col-md-4';
+    var agrupar = document.createElement('div');
+    agrupar.className = 'd-flex align-items-center gap-2';
+    var formCheck = document.createElement('div');
+    formCheck.className = 'form-check mb-0';
+    var radioId = 'ctPrincipal' + sufixoTipo(tipo) + numero;
+    var radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.className = 'form-check-input contacto-principal';
+    radio.name = 'contactos[' + tipo + '][principal]';
+    radio.id = radioId;
+    radio.value = '0';
+    if (dados.principal) radio.checked = true;
+    var rotulo = document.createElement('label');
+    rotulo.className = 'form-check-label small text-nowrap';
+    rotulo.htmlFor = radioId;
+    rotulo.textContent = 'Principal';
+    formCheck.appendChild(radio);
+    formCheck.appendChild(rotulo);
+    var remover = document.createElement('button');
+    remover.type = 'button';
+    remover.className = 'btn btn-outline-danger btn-sm contacto-remover px-1';
+    remover.title = 'Remover ' + (ehEmail ? 'email' : 'telefone');
+    remover.setAttribute('aria-label', remover.title);
+    var icone = document.createElement('span');
+    icone.className = 'material-symbols-outlined';
+    icone.style.cssText = 'font-size: 1rem; line-height: 1';
+    icone.textContent = 'close';
+    remover.appendChild(icone);
+    agrupar.appendChild(formCheck);
+    agrupar.appendChild(remover);
+    colAcao.appendChild(agrupar);
+
+    linha.appendChild(colValor);
+    linha.appendChild(colEtiqueta);
+    linha.appendChild(colAcao);
+    return linha;
+  }
+
+  function containerDe(tipo) {
+    return document.getElementById('contactos' + sufixoTipo(tipo));
+  }
+
+  function linhasDe(tipo) {
+    var contentor = containerDe(tipo);
+    return contentor ? Array.prototype.slice.call(contentor.querySelectorAll('.contacto-linha')) : [];
+  }
+
+  // Reatribui o índice de cada radio após qualquer mudança estrutural.
+  function renumear(tipo) {
+    linhasDe(tipo).forEach(function (linha, i) {
+      var radio = linha.querySelector('.contacto-principal');
+      if (radio) radio.value = String(i);
+    });
+  }
+
+  function primeiroPreenchido(linhas) {
+    for (var i = 0; i < linhas.length; i++) {
+      var valor = linhas[i].querySelector('.contacto-valor');
+      if (valor && String(valor.value || '').trim()) return linhas[i];
+    }
+    return null;
+  }
+
+  // Invariante: com linhas presentes há sempre exatamente um principal.
+  //  · só uma linha → fica automaticamente principal;
+  //  · removido o principal com outros contactos → promove o primeiro;
+  //  · principal vazio mas com linhas preenchidas → promove a primeira preenchida.
+  function garantirPrincipal(tipo) {
+    var linhas = linhasDe(tipo);
+    if (!linhas.length) return;
+    var marcados = linhas.filter(function (linha) {
+      var radio = linha.querySelector('.contacto-principal');
+      return radio && radio.checked;
+    });
+    if (linhas.length === 1) {
+      var unico = linhas[0].querySelector('.contacto-principal');
+      if (unico) unico.checked = true;
+      return;
+    }
+    if (!marcados.length) {
+      var primeiro = linhas[0].querySelector('.contacto-principal');
+      if (primeiro) primeiro.checked = true;
+      return;
+    }
+    var marcado = marcados[0];
+    var valorDoMarcado = marcado.closest('.contacto-linha').querySelector('.contacto-valor');
+    if (valorDoMarcado && !String(valorDoMarcado.value || '').trim()) {
+      var alvo = primeiroPreenchido(linhas);
+      if (alvo) {
+        marcado.checked = false;
+        var radioAlvo = alvo.querySelector('.contacto-principal');
+        if (radioAlvo) radioAlvo.checked = true;
+      }
+    }
+  }
+
+  function ligarGrupo(tipo) {
+    var contentor = containerDe(tipo);
+    if (!contentor) return;
+    contentor.addEventListener('click', function (e) {
+      var botao = e.target.closest('.contacto-remover');
+      if (!botao) return;
+      var linha = botao.closest('.contacto-linha');
+      if (!linha) return;
+      linha.remove();
+      renumear(tipo);
+      garantirPrincipal(tipo);
+    });
+    contentor.addEventListener('input', function (e) {
+      if (e.target.classList.contains('contacto-valor')) garantirPrincipal(tipo);
+    });
+  }
+
+  function ligarBotaoAdicionar(tipo) {
+    var botao = document.getElementById('btnAdicionarContacto' + sufixoTipo(tipo));
+    if (!botao) return;
+    botao.addEventListener('click', function () {
+      var contentor = containerDe(tipo);
+      if (!contentor) return;
+      var linhas = linhasDe(tipo);
+      // Nova linha fica principal enquanto ainda não houver nada preenchido.
+      var semPreenchido = !primeiroPreenchido(linhas);
+      var nova = criarLinha(tipo, { principal: semPreenchido || linhas.length === 0 });
+      contentor.appendChild(nova);
+      renumear(tipo);
+      garantirPrincipal(tipo);
+      var valor = nova.querySelector('.contacto-valor');
+      if (valor) valor.focus();
+    });
+  }
+
+  ['email', 'telefone'].forEach(function (tipo) {
+    ligarGrupo(tipo);
+    ligarBotaoAdicionar(tipo);
+    renumear(tipo);
+    garantirPrincipal(tipo);
+  });
+})();
+</script>

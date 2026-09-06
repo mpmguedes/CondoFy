@@ -4,7 +4,6 @@ const { Op } = require('sequelize');
 const {
   Fracao,
   Pessoa,
-  ContactoPessoa,
   FracaoPessoa,
   User,
   Categoria,
@@ -30,7 +29,7 @@ const { resumoFinanceiroMes, resumoEmAtraso, orcamentoDoAno } = require('../help
 const drive = require('../helpers/drive');
 const { smtpConfigured } = require('../helpers/mailer');
 const background = require('../helpers/background-jobs');
-const { listarContactos } = require('../helpers/contactos');
+const { sincronizarContactosPessoa, parseContactosForm, validarContactos, contactosParaForm } = require('../helpers/contactos');
 
 const router = express.Router();
 
@@ -325,20 +324,55 @@ router.get('/condominos', async (req, res) => {
   res.render('admin/condominos/listar', { titulo: 'Condóminos', pessoas });
 });
 
+// Linhas de arranque da ficha "Novo condómino" (uma linha vazia de cada tipo).
+function contactosIniciaisForm() {
+  return {
+    emails: [{ id: null, valor: '', etiqueta: '', principal: true }],
+    telefones: [{ id: null, valor: '', etiqueta: '', principal: true }],
+  };
+}
+
 router.get('/condominos/nova', async (req, res) => {
   const fracoes = await Fracao.findAll({ order: [['designacao', 'ASC']] });
   res.render('admin/condominos/form', {
     titulo: 'Novo condómino',
+    edicao: false,
     pessoa: null,
+    contactosForm: contactosIniciaisForm(),
     fracoes: fracoes.map((f) => ({ ...f.toJSON(), associada: false })),
   });
 });
 
 router.post('/condominos', async (req, res) => {
-  const { nome, email, telefone, nif, tipo, observacoes } = req.body;
+  const { nome, nif, tipo, observacoes } = req.body;
   const vinculo = req.body.vinculo || 'proprietario';
+  const { emails, telefones } = parseContactosForm(req.body);
+  const erro = validarContactos({ emails, telefones });
   const fracoesSelecionadas = toArray(req.body.fracoes).map(Number);
-  const pessoa = await Pessoa.create({ nome, email, telefone, nif, tipo: tipo || 'proprietario', observacoes });
+
+  if (erro) {
+    const fracoes = await Fracao.findAll({ order: [['designacao', 'ASC']] });
+    const selecionadas = new Set(fracoesSelecionadas);
+    res.locals.error_msg = [erro];
+    return res.render('admin/condominos/form', {
+      titulo: 'Novo condómino',
+      edicao: false,
+      pessoa: { nome: nome || '', nif: nif || '', tipo: tipo || 'proprietario', observacoes: observacoes || '' },
+      contactosForm: { emails, telefones },
+      fracoes: fracoes.map((f) => ({ ...f.toJSON(), associada: selecionadas.has(f.id) })),
+    });
+  }
+
+  const pessoa = await Pessoa.create({
+    nome,
+    nif,
+    tipo: tipo || 'proprietario',
+    observacoes,
+    email: null,
+    telefone: null,
+  });
+  // Guarda os contactos (email/telefone legados ficam sincronizados com o principal).
+  await sincronizarContactosPessoa(pessoa, emails, telefones);
 
   for (const fid of fracoesSelecionadas) {
     await FracaoPessoa.create({ fracao_id: fid, pessoa_id: pessoa.id, vinculo });
@@ -359,9 +393,14 @@ router.get('/condominos/:id/editar', async (req, res) => {
   }
   const fracoes = await Fracao.findAll({ order: [['designacao', 'ASC']] });
   const associadasIds = new Set(pessoa.fracoes.map((f) => f.id));
+  // Mostra os contactos existentes; na ausência de registos de um tipo usa o
+  // valor legado pessoa.email/telefone (nunca desaparecem da ficha).
+  const contactosForm = await contactosParaForm(pessoa);
   res.render('admin/condominos/form', {
     titulo: 'Editar condómino',
+    edicao: true,
     pessoa,
+    contactosForm,
     fracoes: fracoes.map((f) => ({ ...f.toJSON(), associada: associadasIds.has(f.id) })),
   });
 });
@@ -369,20 +408,51 @@ router.get('/condominos/:id/editar', async (req, res) => {
 router.post('/condominos/:id', async (req, res) => {
   const pessoa = await Pessoa.findByPk(req.params.id);
   if (!pessoa) return res.redirect('/admin/condominos');
-  const { nome, email, telefone, nif, tipo, observacoes, ativo } = req.body;
+  const { nome, nif, tipo, observacoes } = req.body;
+  const ativo = req.body.ativo === 'on' || req.body.ativo === '1' || req.body.ativo === true;
   const vinculo = req.body.vinculo || 'proprietario';
+  const { emails, telefones } = parseContactosForm(req.body);
+  const erro = validarContactos({ emails, telefones });
+  const fracoesSelecionadas = toArray(req.body.fracoes).map(Number);
+
+  if (erro) {
+    // Reapresenta a ficha com os valores submetidos (sem perder nada).
+    const atuais = await FracaoPessoa.findAll({ where: { pessoa_id: pessoa.id } });
+    const atuaisIds = new Set(atuais.map((a) => a.fracao_id));
+    const selecionadas = new Set(fracoesSelecionadas);
+    const fracoes = await Fracao.findAll({ order: [['designacao', 'ASC']] });
+    res.locals.error_msg = [erro];
+    return res.render('admin/condominos/form', {
+      titulo: 'Editar condómino',
+      edicao: true,
+      pessoa: {
+        id: pessoa.id,
+        nome: nome || '',
+        nif: nif || '',
+        tipo: tipo || 'proprietario',
+        observacoes: observacoes || '',
+        ativo,
+      },
+      contactosForm: { emails, telefones },
+      fracoes: fracoes.map((f) => ({
+        ...f.toJSON(),
+        associada: atuaisIds.has(f.id) || selecionadas.has(f.id),
+      })),
+    });
+  }
+
   await pessoa.update({
     nome,
-    email,
-    telefone,
     nif,
     tipo: tipo || 'proprietario',
     observacoes,
-    ativo: ativo === 'on' || ativo === '1' || ativo === true,
+    ativo,
   });
+  // Substituição idempotente: a ficha submete sempre a lista completa, por isso
+  // os contactos são reconstruídos sem duplicar em gravações repetidas.
+  await sincronizarContactosPessoa(pessoa, emails, telefones);
 
   // Sincronizar frações: remove as desmarcadas, adiciona as novas com o vínculo escolhido.
-  const fracoesSelecionadas = toArray(req.body.fracoes).map(Number);
   const selecionadasIds = new Set(fracoesSelecionadas);
   const atuais = await FracaoPessoa.findAll({ where: { pessoa_id: pessoa.id } });
   const atuaisIds = new Set(atuais.map((a) => a.fracao_id));
@@ -498,63 +568,11 @@ router.get('/tarefas', async (req, res) => {
 });
 
 // ── Contactos flexíveis do condómino ────────────────────────────────
-// Geridos na própria ficha (/editar). A página antiga mantém-se apenas
-// por compatibilidade e redireciona para a edição.
+// Geridos na própria ficha (/editar) — criar/editar chamam
+// sincronizarContactosPessoa com a lista completa. A página antiga mantém-se
+// apenas por compatibilidade e redireciona para a edição.
 router.get('/condominos/:id/contactos', (req, res) => {
   res.redirect(`/admin/condominos/${req.params.id}/editar#contactos`);
-});
-
-router.post('/condominos/:id/contactos', async (req, res) => {
-  const pessoa = await Pessoa.findByPk(req.params.id);
-  if (!pessoa) return res.redirect('/admin/condominos');
-  const tipo = req.body.tipo === 'email' ? 'email' : 'telefone';
-  const valor = String(req.body.valor || '').trim();
-  if (!valor) {
-    req.flash('error_msg', 'Indique o valor do contacto.');
-    return res.redirect(`/admin/condominos/${pessoa.id}/contactos`);
-  }
-  const existentes = await ContactoPessoa.count({ where: { pessoa_id: pessoa.id, tipo } });
-  const contacto = await ContactoPessoa.create({
-    pessoa_id: pessoa.id,
-    tipo,
-    valor,
-    principal: existentes === 0, // o primeiro contacto de cada tipo fica principal
-    etiqueta: String(req.body.etiqueta || '').trim() || null,
-    ativo: true,
-  });
-  if (contacto.principal) {
-    await ContactoPessoa.update({ principal: false }, { where: { pessoa_id: pessoa.id, tipo, id: { [Op.ne]: contacto.id } } }).catch(() => {});
-  }
-  await audit({ userId: req.user.id, acao: 'criar_contacto_pessoa', entidade: 'ContactoPessoa', entidadeId: contacto.id }).catch(() => {});
-  req.flash('success_msg', 'Contacto adicionado.');
-  res.redirect(`/admin/condominos/${pessoa.id}/contactos`);
-});
-
-router.post('/condominos/contactos/:cid/principal', async (req, res) => {
-  const contacto = await ContactoPessoa.findByPk(req.params.cid);
-  if (!contacto) return res.redirect('/admin/condominos');
-  await ContactoPessoa.update({ principal: false }, { where: { pessoa_id: contacto.pessoa_id, tipo: contacto.tipo } });
-  await contacto.update({ principal: true });
-  await audit({ userId: req.user.id, acao: 'contacto_principal', entidade: 'ContactoPessoa', entidadeId: contacto.id }).catch(() => {});
-  req.flash('success_msg', 'Contacto definido como principal.');
-  res.redirect(`/admin/condominos/${contacto.pessoa_id}/contactos`);
-});
-
-router.post('/condominos/contactos/:cid/eliminar', async (req, res) => {
-  const contacto = await ContactoPessoa.findByPk(req.params.cid);
-  if (!contacto) return res.redirect('/admin/condominos');
-  const pessoaId = contacto.pessoa_id;
-  const eraPrincipal = contacto.principal;
-  const tipo = contacto.tipo;
-  await contacto.destroy();
-  // Se o principal foi removido, promove o primeiro ativo restante.
-  if (eraPrincipal) {
-    const proximo = await ContactoPessoa.findOne({ where: { pessoa_id: pessoaId, tipo, ativo: true }, order: [['id', 'ASC']] });
-    if (proximo) await proximo.update({ principal: true });
-  }
-  await audit({ userId: req.user.id, acao: 'eliminar_contacto_pessoa', entidade: 'ContactoPessoa', entidadeId: req.params.cid }).catch(() => {});
-  req.flash('success_msg', 'Contacto eliminado.');
-  res.redirect(`/admin/condominos/${pessoaId}/contactos`);
 });
 
 module.exports = router;
