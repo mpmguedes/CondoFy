@@ -49,7 +49,10 @@
           </td>
           <td class="text-end text-nowrap">{{eur pago}}</td>
           <td class="text-end text-nowrap">{{eur enviado}}</td>
-          <td class="text-end fw-semibold text-nowrap text-primary">{{eur porEmitir}}</td>
+          <td class="text-end fw-semibold text-nowrap text-primary">
+            {{eur porEmitir}}
+            <div class="small text-muted fw-normal">{{mesesN}} mês/meses disponíveis</div>
+          </td>
           <td class="text-center">
             <button type="button" class="btn btn-sm btn-outline-primary btn-emitir" data-bs-toggle="modal" data-bs-target="#modalEmitir" data-fracao="{{fracaoId}}" data-designacao="{{designacao}}">
               <span class="material-symbols-outlined me-1" style="font-size:1rem">receipt_long</span>Emitir recibo
@@ -127,14 +130,14 @@
 <div class="alert alert-light border small">Ainda não há recibos emitidos.</div>
 {{/if}}
 
-{{!-- Dados por emitir (para a modal) --}}
+{{!-- Dados por emitir (para a modal) — todos os meses da fração com saldos --}}
 <script type="application/json" id="dadosPorEmitir">{{json porEmitirJson}}</script>
 
 {{!-- Modal Emitir recibo --}}
 <div class="modal fade" id="modalEmitir" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
-      <form id="formEmitir" method="POST" action="/admin/quotas/recibos/emitir">
+      <form id="formEmitir" method="POST" action="/admin/quotas/recibos/emitir" novalidate>
         <input type="hidden" name="fracao_id" id="emitirFracaoId" />
         <div class="modal-header">
           <h5 class="modal-title">Emitir recibo</h5>
@@ -144,50 +147,68 @@
           <p class="mb-3" id="emitirFracaoTexto"></p>
 
           <div class="row g-3 mb-3">
-            <div class="col-md-5">
-              <label class="form-label">Valor a emitir</label>
+            <div class="col-12 col-lg-4">
+              <div class="border rounded p-2 small">
+                <div class="text-muted">Valor pago disponível</div>
+                <div class="fs-6 fw-semibold" id="emitirDisponivelTotal">0,00 €</div>
+              </div>
+            </div>
+            <div class="col-12 col-lg-4">
+              <div class="border rounded p-2 small">
+                <div class="text-muted">Valor máximo a emitir</div>
+                <div class="fs-6 fw-semibold" id="emitirMaximo">0,00 €</div>
+              </div>
+            </div>
+            <div class="col-12 col-lg-4">
+              <label class="form-label small mb-1">Valor do recibo (€)</label>
               <div class="input-group input-group-sm">
-                <input type="text" class="form-control text-end" name="valor_global" id="emitirValor" value="0,00" inputmode="decimal" disabled />
+                <input type="text" class="form-control text-end" name="valor_global" id="emitirValor" value="0,00" inputmode="decimal" />
                 <span class="input-group-text">€</span>
               </div>
-              <div class="form-text">Máx. valor já pago</div>
+              <div class="form-text">Não pode exceder o valor disponível para emissão.</div>
             </div>
-            <div class="col-md-7">
-              <label class="form-label">Distribuição</label>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-12 col-lg-6">
+              <label class="form-label small mb-1">Distribuição</label>
               <select class="form-select form-select-sm" name="modo" id="emitirModo">
                 <option value="plano">Cadência do plano (1 recibo por mês)</option>
                 <option value="unico">Um recibo (tudo junto)</option>
                 <option value="mes">Um recibo por mês</option>
                 <option value="selecionar">Selecionar meses</option>
               </select>
-              <div class="form-text mt-1">Os meses marcados ficam cobertos e saem de "por emitir".</div>
+            </div>
+            <div class="col-12 col-lg-6">
+              <label class="form-label small mb-1">Tipo</label>
+              <select class="form-select form-select-sm" name="tipo">
+                <option value="ordinario">Ordinário</option>
+                <option value="extraordinario">Extraordinário</option>
+              </select>
             </div>
           </div>
 
-          <label class="form-label">Meses a incluir</label>
+          <label class="form-label small mb-1">Meses disponíveis</label>
           <div class="table-responsive border rounded">
             <table class="table table-sm align-middle mb-0">
               <thead class="table-light">
                 <tr>
-                  <th style="width:40px"></th>
+                  <th style="width:38px"></th>
                   <th>Mês</th>
-                  <th class="text-end">Valor</th>
+                  <th class="text-end">Quota</th>
+                  <th class="text-end">Pago</th>
+                  <th class="text-end">Já em recibo</th>
+                  <th class="text-end">Disponível</th>
                   <th class="text-end">FCR</th>
                 </tr>
               </thead>
               <tbody id="emitirMeses"></tbody>
             </table>
           </div>
+          <div class="form-text mt-1">Os meses sem valor disponível ficam visíveis mas não são selecionáveis.</div>
 
-          <div class="mt-2">
-            <label class="form-label">Tipo</label>
-            <select class="form-select form-select-sm" name="tipo" style="max-width:220px">
-              <option value="ordinario">Ordinário</option>
-              <option value="extraordinario">Extraordinário</option>
-            </select>
-          </div>
-
-          <div class="alert alert-light border small mt-3 mb-0" id="emitirContagem">Vai criar 0 recibos.</div>
+          <div class="alert alert-light border small mt-3 mb-0" id="emitirContagem">Selecione os meses a emitir.</div>
+          <p class="text-danger small mt-2 mb-0 d-none" id="emitirErro"></p>
 
           <div class="form-check mt-3">
             <input class="form-check-input" type="checkbox" name="enviar_email" id="emitirEmail" />
@@ -244,9 +265,14 @@
           quotaId: m.quotaId,
           mes: m.mes,
           ano: m.ano,
-          rotulo: CURTO[(m.mes - 1)] + ' ' + m.ano,
-          valor: Number(m.valorDisp || 0),
-          fcr: Number(m.fcrDisp || 0),
+          rotulo: m.rotulo || (CURTO[(m.mes - 1)] + ' ' + m.ano),
+          quota: Number(m.quota || 0),
+          pago: Number(m.pago || 0),
+          coberto: Number(m.coberto || 0),
+          disponivel: Number(m.disponivel || 0),
+          fcr: Number(m.fcr || 0),
+          dispC: Math.round((Number(m.disponivel || 0)) * 100),
+          pode: Boolean(m.pode),
         };
       });
     });
@@ -258,36 +284,59 @@
   var campoValor = document.getElementById('emitirValor');
   var selectModo = document.getElementById('emitirModo');
   var contagem = document.getElementById('emitirContagem');
+  var erroEl = document.getElementById('emitirErro');
+  var disponivelTotal = document.getElementById('emitirDisponivelTotal');
+  var maximoEl = document.getElementById('emitirMaximo');
   var fracaoTexto = document.getElementById('emitirFracaoTexto');
   var mesesAtuais = [];
 
   function eur(n) {
-    return (n / 100).toFixed(2).replace('.', ',') + ' €';
+    return (Number(n) || 0).toFixed(2).replace('.', ',') + ' €';
+  }
+  function eurC(c) {
+    return ((c || 0) / 100).toFixed(2).replace('.', ',') + ' €';
+  }
+
+  function paraCents(texto) {
+    var t = String(texto || '').trim();
+    if (!t) return NaN;
+    var normalizado = t.includes(',')
+      ? t.replace(/\./g, '').replace(',', '.')
+      : t.replace(/,/g, '.');
+    var n = parseFloat(normalizado);
+    return Number.isFinite(n) ? Math.round(n * 100) : NaN;
   }
 
   function selecionados() {
-    return mesesAtuais.filter(function (m) { return m.cbx && m.cbx.checked; });
+    return mesesAtuais.filter(function (m) { return m.cbx && m.cbx.checked && m.pode; });
   }
 
-  function totalSelecionado() {
-    return selecionados().reduce(function (s, m) { return s + m.valor; }, 0);
+  function maxSelecionadoC() {
+    return selecionados().reduce(function (s, m) { return s + m.dispC; }, 0);
+  }
+
+  function mostrarErro(msg) {
+    if (!msg) { erroEl.classList.add('d-none'); return; }
+    erroEl.textContent = msg;
+    erroEl.classList.remove('d-none');
   }
 
   function atualizar() {
     var modo = selectModo.value;
     var sel = selecionados().length;
+    var maxC = maxSelecionadoC();
+    maximoEl.textContent = eurC(maxC);
+    var textoValor = (maxC / 100).toFixed(2).replace('.', ',');
     if (modo === 'unico') {
-      var total = totalSelecionado();
       campoValor.disabled = false;
-      campoValor.value = (total / 100).toFixed(2).replace('.', ',');
-      campoValor.setAttribute('max', (total / 100).toFixed(2));
+      campoValor.value = textoValor;
       contagem.textContent = sel > 0 ? 'Vai criar 1 recibo.' : 'Selecione pelo menos um mês.';
     } else {
       campoValor.disabled = true;
-      campoValor.value = '0,00';
-      campoValor.removeAttribute('max');
+      campoValor.value = textoValor;
       contagem.textContent = sel > 0 ? 'Vai criar ' + sel + ' recibo(s).' : 'Selecione pelo menos um mês.';
     }
+    mostrarErro(null);
   }
 
   function abrirModal(fracaoId, designacao) {
@@ -295,52 +344,73 @@
     mesesAtuais = [];
     lista.innerHTML = '';
     fracaoTexto.innerHTML = 'Fração: <strong>' + designacao + '</strong>';
+    var totalC = 0;
     if (!meses.length) {
       var trVazio = document.createElement('tr');
       var tdVazio = document.createElement('td');
-      tdVazio.colSpan = 4;
+      tdVazio.colSpan = 7;
       tdVazio.className = 'text-center text-muted py-3';
-      tdVazio.textContent = 'Sem meses disponíveis para emissão.';
+      tdVazio.textContent = 'Sem quotas disponíveis para esta fração.';
       trVazio.appendChild(tdVazio);
       lista.appendChild(trVazio);
     }
-    meses.forEach(function (m, i) {
+    meses.forEach(function (m) {
       var tr = document.createElement('tr');
       var tdCheck = document.createElement('td');
       var cbx = document.createElement('input');
       cbx.type = 'checkbox';
       cbx.className = 'form-check-input emitir-mes';
-      cbx.checked = true;
-      cbx.dataset.valor = String(m.valor);
+      if (m.pode) {
+        cbx.checked = true;
+        totalC += m.dispC;
+      } else {
+        cbx.disabled = true;
+      }
       tdCheck.appendChild(cbx);
-      var tdMes = document.createElement('td');
-      tdMes.className = 'small text-nowrap';
-      tdMes.textContent = m.rotulo;
-      var tdValor = document.createElement('td');
-      tdValor.className = 'text-end small text-nowrap';
-      tdValor.textContent = eur(m.valor);
-      var tdFcr = document.createElement('td');
-      tdFcr.className = 'text-end small text-muted text-nowrap';
-      tdFcr.textContent = eur(m.fcr);
+      var adicionarCel = function (texto, classe) {
+        var td = document.createElement('td');
+        td.className = (classe || 'text-end small text-nowrap');
+        td.textContent = texto;
+        tr.appendChild(td);
+      };
       tr.appendChild(tdCheck);
-      tr.appendChild(tdMes);
-      tr.appendChild(tdValor);
-      tr.appendChild(tdFcr);
+      adicionarCel(m.rotulo, 'small text-nowrap');
+      adicionarCel(eur(m.quota));
+      adicionarCel(eur(m.pago), 'text-end small text-muted text-nowrap');
+      adicionarCel(eur(m.coberto), 'text-end small text-muted text-nowrap');
+      adicionarCel(eur(m.disponivel), 'text-end small fw-semibold text-nowrap');
+      adicionarCel(eur(m.fcr), 'text-end small text-muted text-nowrap');
       cbx.addEventListener('change', atualizar);
       m.cbx = cbx;
       mesesAtuais.push(m);
       lista.appendChild(tr);
     });
+    disponivelTotal.textContent = eurC(totalC);
+    selectModo.value = 'plano';
     atualizar();
   }
 
   formEmitir.addEventListener('submit', function (e) {
     var sel = selecionados();
     if (!sel.length) {
+      mostrarErro('Selecione pelo menos um mês disponível.');
       e.preventDefault();
       return;
     }
-    // Remove checkboxes antigas e submete os meses escolhidos.
+    if (selectModo.value === 'unico') {
+      var valorC = paraCents(campoValor.value);
+      var maxC = maxSelecionadoC();
+      if (!Number.isFinite(valorC) || valorC <= 0) {
+        mostrarErro('Indique um valor válido a emitir.');
+        e.preventDefault();
+        return;
+      }
+      if (valorC > maxC) {
+        mostrarErro('O valor não pode ser superior ao valor disponível para emissão.');
+        e.preventDefault();
+        return;
+      }
+    }
     var existentes = formEmitir.querySelectorAll('input[name="meses"]');
     for (var i = 0; i < existentes.length; i++) existentes[i].remove();
     sel.forEach(function (m) {
@@ -350,6 +420,7 @@
       input.value = String(m.quotaId);
       formEmitir.appendChild(input);
     });
+    campoValor.disabled = false;
   });
 
   if (modalEmitir) {
@@ -362,11 +433,12 @@
   if (selectModo) {
     selectModo.addEventListener('change', function () {
       if (selectModo.value === 'plano') {
-        mesesAtuais.forEach(function (m) { if (m.cbx) m.cbx.checked = true; });
+        mesesAtuais.forEach(function (m) { if (m.pode && m.cbx) m.cbx.checked = true; });
       }
       atualizar();
     });
   }
+  if (campoValor) campoValor.addEventListener('input', function () { mostrarErro(null); });
 
   // Auto-abrir quando chega com ?emitir=<fracao> (aguarda o Bootstrap carregar).
   var auto = {{#if abrirEmitirFracaoId}}{{abrirEmitirFracaoId}}{{else}}null{{/if}};

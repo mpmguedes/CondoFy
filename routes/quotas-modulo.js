@@ -10,9 +10,6 @@
 // Nenhuma segunda implementação paralela de pagamentos/quotas foi criada.
 // ─────────────────────────────────────────────────────────────────────
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const multer = require('multer');
 const { Op } = require('sequelize');
 const sequelize = require('../config/database');
 const {
@@ -29,7 +26,7 @@ const {
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
-const { toCents, fromCents } = require('../helpers/money');
+const { toCents, fromCents, toNumber } = require('../helpers/money');
 const { estadoEfetivo, resumoFracao } = require('../helpers/saldos');
 const { getQuotaConfig } = require('../helpers/quotas-config');
 const { calcularQuota } = require('../helpers/quotas-calc');
@@ -39,32 +36,16 @@ const { gerarReciboPDF } = require('../helpers/pdf');
 const { compor: comporEmail, nomeFicheiro: nomeFicheiroEmail } = require('../helpers/email-templates');
 const { resolverDestinatarios } = require('../helpers/avisos');
 const { enfileirarEmail } = require('../helpers/email-fila');
+const comprovativos = require('../helpers/comprovativos');
 const recibosHelper = require('../helpers/recibos');
 
 const router = express.Router();
 router.use(eAdmin);
 
-const DIR_COMPROVATIVOS = path.join(__dirname, '..', 'storage', 'comprovativos');
-
 // Abreviaturas PT-PT de meses.
 const MESES_CURTO = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 // ── Utilidades locais ───────────────────────────────────────────────
-
-function nomeSeguro(nome) {
-  return String(nome || 'ficheiro')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^A-Za-z0-9._-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_|_$/g, '')
-    .slice(0, 120);
-}
-
-function garantirDirComprovativos() {
-  fs.mkdirSync(DIR_COMPROVATIVOS, { recursive: true });
-  return DIR_COMPROVATIVOS;
-}
 
 function nomeCurto(nome) {
   if (!nome) return '';
@@ -113,29 +94,6 @@ async function anosDisponiveis() {
 function toArray(value) {
   if (!value) return [];
   return Array.isArray(value) ? value : [value];
-}
-
-// ── Upload de comprovativo (ficheiro local, associado ao pagamento) ──
-const uploadComprovativo = multer({
-  storage: multer.diskStorage({
-    destination(req, file, cb) {
-      cb(null, garantirDirComprovativos());
-    },
-    filename(req, file, cb) {
-      cb(null, `${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${nomeSeguro(file.originalname)}`);
-    },
-  }),
-  limits: { fileSize: 12 * 1024 * 1024 },
-  fileFilter(req, file, cb) {
-    const permitidos = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (permitidos.includes(String(file.mimetype || '').toLowerCase())) cb(null, true);
-    else cb(new Error('Formato não suportado (PDF, JPG, PNG, WEBP ou GIF).'));
-  },
-}).single('comprovativo');
-
-function caminhoComprovativo(pagamento) {
-  if (!pagamento || !pagamento.comprovativo_ficheiro) return null;
-  return path.join(DIR_COMPROVATIVOS, path.basename(pagamento.comprovativo_ficheiro));
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -201,9 +159,15 @@ router.get('/quotas', async (req, res) => {
   const dividaC = new Map(totalQuotaPorFracao.map((r) => [r.fracao_id, toCents(Number(r.total) || 0)]));
   const pagoFracaoC = new Map(totalPagoPorFracao.map((r) => [r.fracao_id, toCents(Number(r.total) || 0)]));
 
-  // Meses do ano por emitir (para a coluna "Por emitir").
+  // Meses do ano por emitir (para a coluna "Por emitir" — valor real + meses).
   const linhasDetalhe = await recibosHelper.detalhePorEmitir({ ano });
-  const porEmitirAno = new Map(linhasDetalhe.map((l) => [l.fracaoId, l.meses.length]));
+  const porEmitirAno = new Map();
+  for (const grupo of linhasDetalhe) {
+    const disponiveis = grupo.meses.filter((m) => m.pode);
+    if (!disponiveis.length) continue;
+    const valorC = disponiveis.reduce((s, m) => s + toCents(m.disponivel), 0);
+    porEmitirAno.set(grupo.fracaoId, { meses: disponiveis.length, valor: fromCents(valorC) });
+  }
 
   const linhas = fracoes.map((f) => {
     const quotaC = dividaC.get(f.id) || 0;
@@ -232,7 +196,7 @@ router.get('/quotas', async (req, res) => {
       saldo: fromCents(saldoC),
       absSaldo: fromCents(Math.abs(saldoC)),
       emDivida: saldoC < 0,
-      porEmitirMeses: porEmitirAno.get(f.id) || 0,
+      porEmitirInfo: porEmitirAno.get(f.id) || null,
     };
   });
 
@@ -278,42 +242,60 @@ router.get('/quotas', async (req, res) => {
 });
 
 // Valores transitados por fração — geridos na modal do Mapa (POST apenas).
+// Regras: o valor é persistido em fracoes.transitado (única fonte); campos
+// vazios NÃO substituem valores existentes por zero (só um "0" explícito o
+// faz); aceita vírgula ou ponto decimais e mantém 2 casas.
+function parseTransitado(value) {
+  const bruto = String(value ?? '').trim();
+  if (bruto === '') return null; // vazio → sem alteração
+  const limpo = bruto.replace(/\s/g, '');
+  // Aceita "150", "150,50", "150.50", "1.500,00", "-25,50"; rejeita texto/duplos pontos.
+  const valido = /^-?\d{1,3}(\.\d{3})*(,\d{1,2})?$/.test(limpo) || /^-?\d+(\.\d{1,2})?$/.test(limpo);
+  if (!valido) return null;
+  const num = toNumber(limpo); // vírgula/ponto decimais + milhares PT
+  if (!Number.isFinite(num)) return null;
+  return Math.round(num * 100) / 100;
+}
+
 router.post('/quotas/transitados', async (req, res) => {
   const { transitados, importar } = req.body;
   let atualizados = 0;
-  const fracaoPorDesignacao = new Map((await Fracao.findAll()).map((f) => [String(f.designacao).trim().toLowerCase(), f]));
+  try {
+    const fracaoPorDesignacao = new Map((await Fracao.findAll()).map((f) => [String(f.designacao).trim().toLowerCase(), f]));
 
-  // Importação em bloco: uma linha por fração — "Designação;valor" (valor em €).
-  if (importar && String(importar).trim()) {
-    for (const linha of String(importar).split(/\r?\n/)) {
-      const limpa = String(linha).trim();
-      if (!limpa) continue;
-      const [desig, valor] = limpa.split(/[;,]/).map((x) => String(x || '').trim());
-      if (!desig || valor === '') continue;
-      const fracao = fracaoPorDesignacao.get(String(desig).toLowerCase());
-      if (!fracao) continue;
-      const num = parseFloat(String(valor).replace(',', '.'));
-      if (Number.isFinite(num)) {
-        await fracao.update({ transitado: Math.round(num * 100) / 100 });
+    // Importação em bloco: uma linha por fração — "Designação;valor" (valor em €).
+    if (importar && String(importar).trim()) {
+      for (const linha of String(importar).split(/\r?\n/)) {
+        const limpa = String(linha).trim();
+        if (!limpa) continue;
+        const [desig, valor] = limpa.split(/[;,]/).map((x) => String(x || '').trim());
+        if (!desig) continue;
+        const fracao = fracaoPorDesignacao.get(String(desig).toLowerCase());
+        if (!fracao) continue;
+        const num = parseTransitado(valor);
+        if (num === null) continue;
+        await fracao.update({ transitado: num });
         atualizados++;
       }
     }
-  }
 
-  if (transitados && typeof transitados === 'object') {
-    for (const [id, valor] of Object.entries(transitados)) {
-      const fracao = await Fracao.findByPk(id);
-      if (!fracao) continue;
-      const num = parseFloat(String(valor || '0').replace(',', '.'));
-      if (Number.isFinite(num)) {
-        await fracao.update({ transitado: Math.round(num * 100) / 100 });
+    if (transitados && typeof transitados === 'object') {
+      for (const [id, valor] of Object.entries(transitados)) {
+        const fracao = await Fracao.findByPk(id);
+        if (!fracao) continue;
+        const num = parseTransitado(valor);
+        if (num === null) continue; // vazio/inválido → não toca no valor guardado
+        await fracao.update({ transitado: num });
         atualizados++;
       }
     }
-  }
 
-  await audit({ userId: req.user.id, acao: 'definir_transitados', entidade: 'Fracao', detalhes: { atualizados } }).catch(() => {});
-  req.flash('success_msg', `Valores transitados guardados (${atualizados} fração(ões)).`);
+    await audit({ userId: req.user.id, acao: 'definir_transitados', entidade: 'Fracao', detalhes: { atualizados } }).catch(() => {});
+    req.flash('success_msg', `Valores transitados guardados (${atualizados} fração(ões)).`);
+  } catch (err) {
+    console.error('[transitados]', err);
+    req.flash('error_msg', 'Erro ao guardar os valores transitados.');
+  }
   res.redirect(`/admin/quotas${req.query.ano ? `?ano=${req.query.ano}` : ''}`);
 });
 
@@ -370,7 +352,7 @@ router.get('/quotas/comprovativos', async (req, res) => {
 
 // Anexar / substituir comprovativo de um pagamento.
 router.post('/pagamentos/:id/comprovativo', (req, res) => {
-  uploadComprovativo(req, res, async (err) => {
+  comprovativos.uploadComprovativo(req, res, async (err) => {
     try {
       const pagamento = await Pagamento.findByPk(req.params.id);
       if (!pagamento) {
@@ -386,8 +368,7 @@ router.post('/pagamentos/:id/comprovativo', (req, res) => {
         return res.redirect('/admin/quotas/comprovativos');
       }
       // Substituição: apaga o ficheiro anterior.
-      const antigo = caminhoComprovativo(pagamento);
-      if (antigo && fs.existsSync(antigo)) fs.unlinkSync(antigo);
+      comprovativos.apagarComprovativo(pagamento.comprovativo_ficheiro);
       await pagamento.update({
         comprovativo_ficheiro: req.file.filename,
         comprovativo_nome: req.file.originalname,
@@ -440,16 +421,16 @@ router.get('/pagamentos/:id/comprovativo', async (req, res) => {
     req.flash('error_msg', 'Sem comprovativo associado.');
     return res.redirect('/admin/quotas/comprovativos');
   }
-  const caminho = caminhoComprovativo(pagamento);
-  if (!fs.existsSync(caminho)) {
+  if (!comprovativos.existeComprovativo(pagamento)) {
     req.flash('error_msg', 'Ficheiro do comprovativo não encontrado.');
     return res.redirect('/admin/quotas/comprovativos');
   }
+  const caminho = comprovativos.caminhoComprovativo(pagamento);
   const descarregar = req.query.download === '1';
   res.setHeader('Content-Type', pagamento.comprovativo_mime || 'application/octet-stream');
   res.setHeader(
     'Content-Disposition',
-    `${descarregar ? 'attachment' : 'inline'}; filename="${nomeSeguro(pagamento.comprovativo_nome || 'comprovativo.pdf')}"`
+    `${descarregar ? 'attachment' : 'inline'}; filename="${comprovativos.nomeSeguro(pagamento.comprovativo_nome || 'comprovativo.pdf')}"`
   );
   return res.sendFile(caminho);
 });
@@ -507,32 +488,36 @@ router.get('/quotas/recibos', async (req, res) => {
     porEnviar: emitidos.filter((l) => !l.enviado_at).length,
   };
 
-  // "Por emitir": frações com valores pagos ainda sem recibo.
+  // "Por emitir": frações com valor pago ainda não coberto (valor real + meses).
   const detalhe = await recibosHelper.detalhePorEmitir();
+  const detalhePorFracao = new Map(detalhe.map((d) => [d.fracaoId, d.meses]));
   const mapaFracao = new Map((await Fracao.findAll()).map((f) => [f.id, f]));
-  const enriquecerMes = (m) => {
-    const valorC = toCents(m.valor) || 1;
-    const pagoC = toCents(m.pago);
-    const fcrC = toCents(m.valor_fcr);
-    return {
-      quotaId: m.quotaId,
-      mes: m.mes,
-      ano: m.ano,
-      rotulo: `${MESES_CURTO[m.mes - 1]} ${m.ano}`,
-      valorDisp: m.porEmitir,
-      fcrDisp: fromCents(Math.round((fcrC * pagoC) / valorC)),
-    };
-  };
+
+  // Cada mês com quota: quota/pago/já-em-recibo/disponível (€) + pode.
+  const enriquecerMes = (m) => ({
+    quotaId: m.quotaId,
+    mes: m.mes,
+    ano: m.ano,
+    rotulo: `${MESES_CURTO[m.mes - 1]} ${m.ano}`,
+    quota: m.valor,
+    pago: m.pago,
+    coberto: m.coberto,
+    disponivel: m.disponivel,
+    fcr: m.valor_fcr,
+    pode: m.pode,
+  });
+
   const porEmitir = (await recibosHelper.porEmitirPorFracao())
     .map((l) => {
       const f = mapaFracao.get(l.fracaoId);
-      const meses = ((detalhe.find((d) => d.fracaoId === l.fracaoId) || { meses: [] }).meses) || [];
+      const meses = (detalhePorFracao.get(l.fracaoId) || []).map(enriquecerMes);
       return {
         ...l,
+        mesesN: l.meses,
         designacao: f ? f.designacao : '—',
         andar: f ? f.andar : null,
         porta: f ? f.porta : null,
-        meses: meses.map(enriquecerMes),
+        meses,
       };
     })
     .sort((a, b) => String(a.designacao).localeCompare(String(b.designacao), 'pt'));
@@ -796,3 +781,5 @@ router.get('/pagamentos/enviar-recibos', (req, res) => res.redirect('/admin/quot
 router.get('/quotas/grelha', (req, res) => res.redirect(`/admin/quotas${req.query.ano ? `?ano=${req.query.ano}` : ''}`));
 
 module.exports = router;
+// Exposição para testes (parser de valores transitados).
+module.exports.parseTransitado = parseTransitado;

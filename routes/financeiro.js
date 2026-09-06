@@ -26,6 +26,7 @@ const { resumoCondominio, resumoFracao, estadoEfetivo } = require('../helpers/sa
 const { getCondominio } = require('../helpers/condominio');
 const { proximoNumero } = require('../helpers/numeracao');
 const { registarPagamento, anularPagamento } = require('../helpers/pagamentos');
+const { uploadComprovativo, apagarComprovativo } = require('../helpers/comprovativos');
 const { sincronizarMovimentoDespesa } = require('../helpers/movimentos');
 const { gerarAvisoQuotaPDF, gerarReciboPDF } = require('../helpers/pdf');
 const { compor: comporEmail, nomeFicheiro: nomeFicheiroEmail } = require('../helpers/email-templates');
@@ -865,8 +866,22 @@ router.get('/pagamentos/nova', async (req, res) => {
   res.render('admin/pagamentos/form', { titulo: 'Registar pagamento', fracoes, metodos, contas });
 });
 
-router.post('/pagamentos', async (req, res) => {
+// Registo de pagamento — aceita multipart/form-data com um comprovativo
+// opcional (campo "comprovativo"). Se o upload falhar, o pagamento NÃO é
+// criado (o middleware de upload corre antes do handler).
+router.post('/pagamentos', (req, res, next) => {
+  uploadComprovativo(req, res, (err) => {
+    if (err) {
+      req.flash('error_msg', err.message || 'Erro ao carregar o comprovativo.');
+      return res.redirect('/admin/pagamentos/nova');
+    }
+    next();
+  });
+}, async (req, res) => {
   const { fracao_id, valor, data_pagamento, metodo_pagamento_id, conta_bancaria_id, referencia, observacoes } = req.body;
+  const comprovativo = req.file
+    ? { ficheiro: req.file.filename, nome: req.file.originalname, mime: req.file.mimetype }
+    : null;
   try {
     const resultado = await registarPagamento({
       fracaoId: fracao_id,
@@ -877,8 +892,15 @@ router.post('/pagamentos', async (req, res) => {
       referencia,
       observacoes,
       userId: req.user.id,
+      comprovativo,
     });
-    await audit({ userId: req.user.id, acao: 'registar_pagamento', entidade: 'Pagamento', entidadeId: resultado.pagamento.id });
+    await audit({
+      userId: req.user.id,
+      acao: 'registar_pagamento',
+      entidade: 'Pagamento',
+      entidadeId: resultado.pagamento.id,
+      detalhes: { comComprovativo: Boolean(comprovativo) },
+    });
 
     // Envio automático do recibo (fila de email) — respeita a preferência
     // "Recibos → email" configurada em Emails → Notificações.
@@ -928,7 +950,9 @@ router.post('/pagamentos', async (req, res) => {
     req.flash('success_msg', resultado.excedente > 0 ? `${msg} Ficou ${resultado.excedente.toFixed(2)} € por aplicar (crédito).` : msg);
   } catch (err) {
     console.error(err);
-    req.flash('error_msg', 'Erro ao registar o pagamento.');
+    if (comprovativo) apagarComprovativo(comprovativo.ficheiro);
+    req.flash('error_msg', err.message ? `Erro ao registar o pagamento: ${err.message}` : 'Erro ao registar o pagamento.');
+    return res.redirect('/admin/pagamentos/nova');
   }
   res.redirect('/admin/pagamentos');
 });

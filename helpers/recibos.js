@@ -2,13 +2,17 @@
 // Recibos formais do módulo Quotas (RCP-ANO-NNNN).
 //
 // Um recibo cobre meses (quotas) já pagos de uma fração. Cada mês só pode
-// estar coberto por recibos válidos (estado='emitido'); anular um recibo
-// devolve os meses ao estado "por emitir" sem eliminar o histórico.
+// ser emitido até ao valor ainda não coberto (pago − recibos válidos); anular
+// um recibo devolve o valor dos meses ao estado "por emitir" sem eliminar o
+// histórico. Pagamentos parciais de um mês são suportados.
 //
 // Regras garantidas aqui:
-//  · nunca emitir acima do valor efetivamente pago (por mês e no total);
-//  · um mês já coberto por recibo válido não volta a ser emitível;
-//  · emissão idempotente por mês (substituição nunca duplica cobertura);
+//  · nunca emitir acima do valor efetivamente pago e ainda não coberto
+//    (por mês e no total — um recibo "tudo junto" distribui pelos meses);
+//  · um mês sem valor disponível (pago já totalmente coberto) não é emitível;
+//  · a soma dos valores aplicados aos meses (ReciboQuota) é sempre igual ao
+//    valor do recibo;
+//  · emissão idempotente por mês (nunca duplica cobertura);
 //  · anulação apenas marca o recibo (auditoria/histórico preservados).
 // ─────────────────────────────────────────────────────────────────────
 const sequelize = require('../config/database');
@@ -176,8 +180,14 @@ async function cobertoPorQuota(quotaIds) {
   return coberturaPorQuota(quotaIds);
 }
 
-// Varredura única das quotas pagas mas ainda não cobertas (por emitir).
-async function varreduraPorEmitir({ fracaoId, ano } = {}) {
+// Quotas de uma (ou todas as) fração(ões) com saldo de emissão:
+//  · pago      — valor confirmado aplicado (PagamentoQuota → Pagamento confirmado);
+//  · coberto   — valor já coberto por recibos VÁLIDOS (anulados não contam);
+//  · disponível— pago − coberto (nunca negativo);
+//  · pode      — disponível > 0 (pode ser emitido; parciais suportados).
+// Devolve sempre TODAS as quotas (meses sem pagamento incluídos) para a
+// interface mostrar a situação completa; a seleção só é permitida quando pode.
+async function quotasComSaldo({ fracaoId, ano } = {}) {
   const where = { estado: { [Op.ne]: 'anulada' } };
   if (fracaoId) where.fracao_id = fracaoId;
   if (ano) where.ano = ano;
@@ -186,13 +196,11 @@ async function varreduraPorEmitir({ fracaoId, ano } = {}) {
   const ids = quotas.map((q) => q.id);
   const [pagoMap, cobertoMap] = await Promise.all([pagoPorQuota(ids), cobertoPorQuota(ids)]);
 
-  const resultado = [];
-  for (const q of quotas) {
+  return quotas.map((q) => {
     const pagoC = pagoMap.get(q.id) || 0;
     const cobertoC = cobertoMap.get(q.id) || 0;
-    // Um mês já coberto por qualquer recibo válido não volta a ser emitível.
-    if (pagoC <= 0 || cobertoC > EPS) continue;
-    resultado.push({
+    const disponivelC = Math.max(0, pagoC - cobertoC);
+    return {
       fracaoId: q.fracao_id,
       quotaId: q.id,
       ano: q.ano,
@@ -202,65 +210,59 @@ async function varreduraPorEmitir({ fracaoId, ano } = {}) {
       valor_fcr: fromCents(toCents(q.valor_fcr)),
       pago: fromCents(pagoC),
       coberto: fromCents(cobertoC),
-      porEmitir: fromCents(pagoC),
-    });
-  }
-  return resultado;
+      disponivel: fromCents(disponivelC),
+      pode: disponivelC > EPS,
+    };
+  });
 }
 
-// Meses pagos mas ainda não totalmente cobertos por recibo (por emitir).
-// Devolve [{ quotaId, ano, mes, valor, valor_base, valor_fcr, pago, coberto, porEmitir, periodo }].
+// Meses com valor disponível (para emissão) de uma fração.
 async function mesesPorEmitir(fracaoId, { ano } = {}) {
-  const linhas = await varreduraPorEmitir({ fracaoId, ano });
-  return linhas.map((l) => ({ ...l, periodo: new Date(l.ano, l.mes - 1, 1) }));
+  const linhas = await quotasComSaldo({ fracaoId, ano });
+  return linhas.filter((l) => l.pode);
 }
 
 // Resumo "por emitir" por fração (tabela Fração | Pago | Enviado | Por emitir).
-//  · Pago: total confirmado pago pela fração;
-//  · Enviado: parcela já coberta por recibos válidos e enviados;
-//  · Por emitir: parcela paga ainda sem recibo (recibos válidos não contam).
+//  · Pago / Enviado: totais confirmados (e parcela já enviada em recibos);
+//  · Por emitir: soma do valor disponível (pago − coberto por recibos válidos);
+//  · meses: número de meses com valor disponível.
 async function porEmitirPorFracao({ ano } = {}) {
-  const where = { estado: { [Op.ne]: 'anulada' } };
-  if (ano) where.ano = ano;
-  const quotas = await Quota.findAll({ where, attributes: ['id', 'fracao_id'] });
-  if (!quotas.length) return [];
-  const ids = quotas.map((q) => q.id);
-  const [pagoMap, cobertoMap, enviadoMap] = await Promise.all([
-    pagoPorQuota(ids),
-    cobertoPorQuota(ids),
-    coberturaPorQuota(ids, { apenasEnviados: true }),
-  ]);
+  const linhas = await quotasComSaldo({ ano });
+  if (!linhas.length) return [];
+  const ids = [...new Set(linhas.map((l) => l.quotaId))];
+  const enviadoMap = await coberturaPorQuota(ids, { apenasEnviados: true });
 
   const porFracao = new Map();
-  for (const q of quotas) {
-    const pagoC = pagoMap.get(q.id) || 0;
-    const cobertoC = cobertoMap.get(q.id) || 0;
-    const enviadoC = enviadoMap.get(q.id) || 0;
-    const agg = porFracao.get(q.fracao_id) || { fracaoId: q.fracao_id, pagoC: 0, cobertoC: 0, enviadoC: 0, porEmitirC: 0 };
-    agg.pagoC += pagoC;
-    agg.cobertoC += cobertoC;
-    agg.enviadoC += enviadoC;
-    agg.porEmitirC += pagoC - cobertoC;
-    porFracao.set(q.fracao_id, agg);
+  for (const l of linhas) {
+    const agg = porFracao.get(l.fracaoId) || { fracaoId: l.fracaoId, pagoC: 0, cobertoC: 0, enviadoC: 0, disponivelC: 0, meses: 0 };
+    agg.pagoC += toCents(l.pago);
+    agg.cobertoC += toCents(l.coberto);
+    agg.enviadoC += enviadoMap.get(l.quotaId) || 0;
+    agg.disponivelC += toCents(l.disponivel);
+    if (l.pode) agg.meses += 1;
+    porFracao.set(l.fracaoId, agg);
   }
   return [...porFracao.values()]
-    .filter((a) => a.porEmitirC > EPS)
+    .filter((a) => a.disponivelC > EPS)
     .map((a) => ({
       fracaoId: a.fracaoId,
       pago: fromCents(a.pagoC),
       coberto: fromCents(a.cobertoC),
       enviado: fromCents(a.enviadoC),
-      porEmitir: fromCents(a.porEmitirC),
+      porEmitir: fromCents(a.disponivelC),
+      meses: a.meses,
     }));
 }
 
-// Por emitir com detalhe por fração (meses disponíveis para a modal).
+// Detalhe por fração: TODOS os meses (com quota) com pago/coberto/disponível —
+// para a modal mostrar a situação completa (meses sem disponível visíveis e
+// não selecionáveis).
 async function detalhePorEmitir({ ano } = {}) {
-  const linhas = await varreduraPorEmitir({ ano });
+  const linhas = await quotasComSaldo({ ano });
   const mapa = new Map();
   for (const l of linhas) {
     if (!mapa.has(l.fracaoId)) mapa.set(l.fracaoId, []);
-    mapa.get(l.fracaoId).push({ ...l, periodo: new Date(l.ano, l.mes - 1, 1) });
+    mapa.get(l.fracaoId).push(l);
   }
   return [...mapa.entries()].map(([fracaoId, meses]) => ({ fracaoId, meses }));
 }
@@ -303,6 +305,7 @@ async function emitirRecibos({ fracaoId, meses, modo = 'mes', valorGlobal, tipo 
     const disponiveis = quotas.map((q) => {
       const pagoC = pagoMap.get(q.id) || 0;
       const cobertoC = cobertoMap.get(q.id) || 0;
+      const disponivelC = Math.max(0, pagoC - cobertoC);
       return {
         quotaId: q.id,
         ano: q.ano,
@@ -312,15 +315,14 @@ async function emitirRecibos({ fracaoId, meses, modo = 'mes', valorGlobal, tipo 
         valor_fcr: fromCents(toCents(q.valor_fcr)),
         pagoC,
         cobertoC,
-        limiteC: pagoC,
+        limiteC: disponivelC,
       };
     });
 
-    if (disponiveis.some((m) => m.cobertoC > EPS)) {
-      throw new Error('Um ou mais meses selecionados já estão cobertos por um recibo. Atualize a página e tente novamente.');
-    }
+    // Segurança: um mês só pode ser emitido até ao valor disponível (pago − já
+    // coberto por recibos válidos); parciais são suportados.
     if (disponiveis.some((m) => m.limiteC <= EPS)) {
-      throw new Error('Um dos meses selecionados não tem valor pago disponível.');
+      throw new Error('Um ou mais meses selecionados já estão sem valor disponível (cobertos por recibo ou sem pagamento). Atualize a página e tente novamente.');
     }
 
     let alocacoes;
@@ -328,7 +330,7 @@ async function emitirRecibos({ fracaoId, meses, modo = 'mes', valorGlobal, tipo 
       const valorC = toCents(valorGlobal);
       const totalLimiteC = disponiveis.reduce((s, m) => s + m.limiteC, 0);
       if (valorC <= 0) throw new Error('Indique o valor a emitir.');
-      if (valorC > totalLimiteC + EPS) throw new Error('O recibo não pode ser emitido acima do valor pago.');
+      if (valorC > totalLimiteC + EPS) throw new Error('O recibo não pode ser emitido acima do valor pago disponível.');
       alocacoes = alocarMeses({ modo: 'unico', meses: disponiveis, valorGlobalC: valorC });
       if (!alocacoes.length) throw new Error('Valor a emitir insuficiente para qualquer mês.');
     } else {

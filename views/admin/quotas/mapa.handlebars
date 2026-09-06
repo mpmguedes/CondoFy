@@ -108,8 +108,8 @@
             {{else}}{{#if (gt saldo 0)}}<span class="text-nowrap">{{eur saldo}}</span>{{else}}<span class="text-muted text-nowrap">0,00 €</span>{{/if}}{{/if}}
           </td>
           <td class="text-center qmap-emitir">
-            {{#if porEmitirMeses}}
-            <a href="/admin/quotas/recibos?emitir={{id}}" class="badge text-bg-primary text-decoration-none qmap-emitir-badge" title="{{porEmitirMeses}} mês/meses pago(s) sem recibo">{{porEmitirMeses}} recibo(s)</a>
+            {{#if porEmitirInfo}}
+            <a href="/admin/quotas/recibos?emitir={{id}}" class="badge text-bg-primary text-decoration-none qmap-emitir-badge" title="{{porEmitirInfo.meses}} mês/meses disponíveis">{{porEmitirInfo.meses}} · {{eur porEmitirInfo.valor}}</a>
             {{else}}<span class="text-muted">—</span>{{/if}}
           </td>
         </tr>

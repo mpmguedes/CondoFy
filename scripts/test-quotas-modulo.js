@@ -91,7 +91,7 @@ function testVistaMapa() {
       saldo: -125.4,
       absSaldo: 125.4,
       emDivida: true,
-      porEmitirMeses: 1,
+      porEmitirInfo: { meses: 1, valor: 75 },
     },
     {
       id: 2,
@@ -105,7 +105,7 @@ function testVistaMapa() {
       saldo: 0,
       absSaldo: 0,
       emDivida: false,
-      porEmitirMeses: 0,
+      porEmitirInfo: null,
     },
   ];
   const html = tpl({
@@ -131,6 +131,7 @@ function testVistaMapa() {
   assert.ok(html.includes('125,40'), 'transitado visível');
   assert.ok(html.includes('text-danger'), 'dívida a vermelho');
   assert.ok(html.includes('/admin/quotas/recibos?emitir=1'), 'por emitir liga para a emissão de recibo');
+  assert.ok(html.includes('1 · 75,00 €'), 'coluna por emitir mostra valor real + meses');
   assert.ok(html.includes('modalTransitados'), 'modal de transitados presente');
   assert.ok(!html.includes('RCP-'), 'mapa não lista recibos');
 }
@@ -183,16 +184,21 @@ function testVistaComprovativos() {
 
 function testVistaRecibos() {
   const tpl = handlebars.compile(ler('admin/quotas/recibos.handlebars'));
+  const mesJan = { quotaId: 10, mes: 1, ano: 2026, rotulo: 'Jan 2026', quota: 50, pago: 50, coberto: 0, disponivel: 50, fcr: 0, pode: true };
+  const mesFev = { quotaId: 11, mes: 2, ano: 2026, rotulo: 'Fev 2026', quota: 50, pago: 50, coberto: 0, disponivel: 50, fcr: 0, pode: true };
+  const mesMar = { quotaId: 12, mes: 3, ano: 2026, rotulo: 'Mar 2026', quota: 50, pago: 20, coberto: 0, disponivel: 20, fcr: 0, pode: true };
+  const mesAbr = { quotaId: 13, mes: 4, ano: 2026, rotulo: 'Abr 2026', quota: 50, pago: 0, coberto: 0, disponivel: 0, fcr: 0, pode: false };
   const porEmitir = [
     {
       fracaoId: 1,
+      mesesN: 3,
       designacao: 'Fração A',
       andar: '3.º',
       porta: null,
-      pago: 75,
+      pago: 120,
       enviado: 0,
-      porEmitir: 75,
-      meses: [{ quotaId: 10, mes: 1, ano: 2026, rotulo: 'Jan 2026', valorDisp: 75, fcrDisp: 0 }],
+      porEmitir: 120,
+      meses: [mesJan, mesFev, mesMar, mesAbr],
     },
   ];
   const porEmitirJson = JSON.stringify([{ fracaoId: 1, meses: porEmitir[0].meses }]);
@@ -226,7 +232,11 @@ function testVistaRecibos() {
   assert.ok(html.includes('RCP-2026-0006'), 'código único visível');
   assert.ok(html.includes('Por enviar'), 'estado de envio visível');
   assert.ok(html.includes('modalEmitir') && html.includes('modalAnular'), 'modais presentes');
-  assert.ok(html.includes('Vai criar'), 'contagem de recibos na modal');
+  assert.ok(html.includes('Valor pago disponível') && html.includes('Valor máximo a emitir'), 'modal mostra valores disponíveis');
+  assert.ok(html.includes('Já em recibo') && html.includes('Disponível'), 'tabela de meses com colunas de disponibilidade');
+  assert.ok(html.includes('120,00 €'), 'por emitir mostra valor real');
+  assert.ok(html.includes('3 mês/meses disponíveis'), 'número de meses visível');
+  assert.ok(html.includes('modalEmitir') && html.includes('Emitir recibo'), 'modal abre pelo botão');
   assert.ok(html.includes('/admin/quotas/recibos/5/pdf'), 'ver PDF');
 }
 
@@ -282,7 +292,30 @@ function testVistaDetalhePagamento() {
   assert.ok(sem.includes('Anexar comprovativo'), 'botão anexar disponível');
 }
 
-// ── 3. PDF do recibo (mesmo motor usado pelas vistas/ações do módulo) ──
+// ── 3. Valores transitados — parser (persistência com regras de vazio) ──
+function testTransitadosParser() {
+  const { parseTransitado } = require('../routes/quotas-modulo');
+  assert.strictEqual(parseTransitado('150,00'), 150, 'vírgula decimal');
+  assert.strictEqual(parseTransitado('150.50'), 150.5, 'ponto decimal');
+  assert.strictEqual(parseTransitado('1.500,00'), 1500, 'milhares PT');
+  assert.strictEqual(parseTransitado('0'), 0, 'zero explícito guardado');
+  assert.strictEqual(parseTransitado('0,00'), 0, 'zero com vírgula guardado');
+  assert.strictEqual(parseTransitado('-25,50'), -25.5, 'negativo aceite');
+  assert.strictEqual(parseTransitado(''), null, 'vazio → não altera');
+  assert.strictEqual(parseTransitado('  '), null, 'espaços → não altera');
+  assert.strictEqual(parseTransitado('abc'), null, 'inválido → não altera');
+}
+
+function testVistaFormPagamento() {
+  const tpl = handlebars.compile(ler('admin/pagamentos/form.handlebars'));
+  const html = tpl({ titulo: 'Registar pagamento', fracoes: [], metodos: [], contas: [] });
+  assert.ok(html.includes('enctype="multipart/form-data"'), 'form multipart para upload');
+  assert.ok(html.includes('Comprovativo de pagamento'), 'secção de comprovativo no registo');
+  assert.ok(html.includes('Selecionar ficheiro') === false || html.includes('name="comprovativo"'), 'campo comprovativo presente');
+  assert.ok(html.includes('/admin/quotas/comprovativos'), 'volta para o módulo Quotas');
+}
+
+// ── 4. PDF do recibo (mesmo motor usado pelas vistas/ações do módulo) ──
 async function testPdfRecibo() {
   const { gerarReciboPDF } = require('../helpers/pdf');
   const cond = { designacao: 'Condomínio Teste', morada: 'Rua X', codigo_postal: '1000-000', localidade: 'Lisboa', nif: '500000000', logotipo: null, identidade_visual: 'designacao' };
@@ -314,10 +347,12 @@ async function testModosDistribuicao() {
 
 async function main() {
   testRegras();
+  testTransitadosParser();
   testVistaMapa();
   testVistaComprovativos();
   testVistaRecibos();
   testVistaDetalhePagamento();
+  testVistaFormPagamento();
   await testPdfRecibo();
   await testModosDistribuicao();
   console.log('✓ Testes do módulo Quotas (mapa/comprovativos/recibos) passaram (sem base de dados).');

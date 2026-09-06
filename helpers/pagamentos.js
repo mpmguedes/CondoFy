@@ -30,6 +30,8 @@ async function recalcularEstadoQuota(quotaId, transaction) {
 
 // Regista um pagamento e distribui-o pelas quotas em aberto (FIFO).
 // Cria o movimento bancário de entrada quando há conta bancária.
+// comprovativo (opcional): { ficheiro, nome, mime } — ficheiro já gravado em
+// storage/comprovativos pelo upload; fica associado com estado 'pendente'.
 // Devolve { pagamento, excedente } (excedente = valor não aplicado, crédito).
 async function registarPagamento({
   fracaoId,
@@ -40,6 +42,7 @@ async function registarPagamento({
   referencia,
   observacoes,
   userId,
+  comprovativo,
 }) {
   const t = await sequelize.transaction();
   try {
@@ -57,6 +60,16 @@ async function registarPagamento({
         referencia,
         observacoes,
         estado: 'confirmado',
+        ...(comprovativo
+          ? {
+              comprovativo_ficheiro: comprovativo.ficheiro,
+              comprovativo_nome: comprovativo.nome,
+              comprovativo_mime: comprovativo.mime,
+              comprovativo_estado: 'pendente',
+              comprovativo_motivo: null,
+              comprovativo_data: new Date(),
+            }
+          : {}),
       },
       { transaction: t }
     );
