@@ -230,6 +230,58 @@ function testVistaRecibos() {
   assert.ok(html.includes('/admin/quotas/recibos/5/pdf'), 'ver PDF');
 }
 
+function testVistaDetalhePagamento() {
+  const tpl = handlebars.compile(ler('admin/pagamentos/detalhe.handlebars'));
+  const html = tpl({
+    titulo: 'Pagamento 2026/0001',
+    driveLigado: false,
+    pagamento: {
+      id: 7,
+      numero_documento: '2026/0001',
+      estado: 'confirmado',
+      valor: 75,
+      data_pagamento: '2026-01-10',
+      referencia: 'REF-1',
+      metodo_pagamento: { nome: 'Transferência' },
+      fracao: { designacao: 'Fração A' },
+      comprovativo_ficheiro: 'x_comp.pdf',
+      comprovativo_nome: 'comprovativo.pdf',
+      comprovativo_estado: 'rejeitado',
+      comprovativo_motivo: 'Ficheiro ilegível',
+      comprovativo_data: '2026-01-12',
+      quotas: [{ numero_documento: '2026/0012', mes: 1, ano: 2026, PagamentoQuota: { valor_aplicado: 75 } }],
+    },
+  });
+  assert.ok(html.includes('Comprovativo de recebimento'), 'secção de comprovativo presente');
+  assert.ok(html.includes('Rejeitado'), 'estado rejeitado visível');
+  assert.ok(html.includes('Ficheiro ilegível'), 'motivo de rejeição visível');
+  assert.ok(html.includes('comprovativo.pdf'), 'nome do ficheiro visível');
+  assert.ok(html.includes('/admin/pagamentos/7/comprovativo'), 'visualizar comprovativo');
+  assert.ok(html.includes('/admin/pagamentos/7/comprovativo?download=1'), 'descarregar comprovativo');
+  assert.ok(html.includes('modalPgAnexar') && html.includes('modalPgRejeitar'), 'modais de anexo/rejeição presentes');
+  assert.ok(html.includes('/admin/quotas/comprovativos'), 'volta para o módulo Quotas (não para Pagamentos antigo)');
+
+  const sem = tpl({
+    titulo: 'Pagamento 2026/0002',
+    driveLigado: false,
+    pagamento: {
+      id: 8,
+      numero_documento: '2026/0002',
+      estado: 'confirmado',
+      valor: 150,
+      data_pagamento: '2026-02-01',
+      fracao: { designacao: 'Fração B' },
+      comprovativo_ficheiro: null,
+      comprovativo_nome: null,
+      comprovativo_estado: null,
+      comprovativo_motivo: null,
+      quotas: [],
+    },
+  });
+  assert.ok(sem.includes('Sem comprovativo associado'), 'sem comprovativo indica estado vazio');
+  assert.ok(sem.includes('Anexar comprovativo'), 'botão anexar disponível');
+}
+
 // ── 3. PDF do recibo (mesmo motor usado pelas vistas/ações do módulo) ──
 async function testPdfRecibo() {
   const { gerarReciboPDF } = require('../helpers/pdf');
@@ -249,12 +301,25 @@ async function testPdfRecibo() {
   assert.strictEqual(buffer.slice(0, 5).toString(), '%PDF-', 'recibo gerado como PDF');
 }
 
+// ── 4. Modos de distribuição: apenas os quatro aceites ──
+async function testModosDistribuicao() {
+  const { emitirRecibos } = require('../helpers/recibos');
+  // A validação do modo ocorre antes de abrir a transação (não toca na BD).
+  await assert.rejects(
+    () => emitirRecibos({ fracaoId: 1, meses: [], modo: 'desconhecido' }),
+    /Modo de distribuição inválido/,
+    'modos desconhecidos são rejeitados explicitamente'
+  );
+}
+
 async function main() {
   testRegras();
   testVistaMapa();
   testVistaComprovativos();
   testVistaRecibos();
+  testVistaDetalhePagamento();
   await testPdfRecibo();
+  await testModosDistribuicao();
   console.log('✓ Testes do módulo Quotas (mapa/comprovativos/recibos) passaram (sem base de dados).');
 }
 

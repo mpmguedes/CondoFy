@@ -270,11 +270,17 @@ async function detalhePorEmitir({ ano } = {}) {
 // Emite recibos para uma fração sobre os meses indicados.
 // Parâmetros:
 //  · meses: [{ quotaId, ano, mes, valor, valor_base, valor_fcr, limite (valor pago disponível) }]
-//  · modo: 'mes' (um recibo por mês) | 'unico' (um recibo com tudo)
+//  · modo: 'plano' | 'mes' | 'selecionar' (um recibo por cada mês selecionado)
+//          ou 'unico' (um único recibo com os meses selecionados)
 //  · valorGlobal: valor do recibo único (≤ soma dos limites)
 //  · tipo: 'ordinario' | 'extraordinario'
 // Devolve os recibos criados (já com as coberturas).
 async function emitirRecibos({ fracaoId, meses, modo = 'mes', valorGlobal, tipo = 'ordinario', userId, ano }) {
+  const MODOS_VALIDOS = ['plano', 'unico', 'mes', 'selecionar'];
+  if (!MODOS_VALIDOS.includes(modo)) {
+    throw new Error('Modo de distribuição inválido.');
+  }
+  const reciboUnico = modo === 'unico';
   const t = await sequelize.transaction();
   try {
     // Validações dentro da transação: os meses continuam disponíveis?
@@ -311,14 +317,14 @@ async function emitirRecibos({ fracaoId, meses, modo = 'mes', valorGlobal, tipo 
     });
 
     if (disponiveis.some((m) => m.cobertoC > EPS)) {
-      throw new Error('Um dos meses selecionados já está coberto por um recibo válido.');
+      throw new Error('Um ou mais meses selecionados já estão cobertos por um recibo. Atualize a página e tente novamente.');
     }
     if (disponiveis.some((m) => m.limiteC <= EPS)) {
       throw new Error('Um dos meses selecionados não tem valor pago disponível.');
     }
 
     let alocacoes;
-    if (modo === 'unico') {
+    if (reciboUnico) {
       const valorC = toCents(valorGlobal);
       const totalLimiteC = disponiveis.reduce((s, m) => s + m.limiteC, 0);
       if (valorC <= 0) throw new Error('Indique o valor a emitir.');
@@ -333,7 +339,7 @@ async function emitirRecibos({ fracaoId, meses, modo = 'mes', valorGlobal, tipo 
     const criados = [];
     const hoje = new Date().toISOString().slice(0, 10);
 
-    if (modo === 'unico') {
+    if (reciboUnico) {
       const { codigo, numero } = await proximoReciboNumero({ ano: anoNum, transaction: t });
       const totalC = alocacoes.reduce((s, a) => s + a.valorC, 0);
       const recibo = await Recibo.create(

@@ -1,19 +1,22 @@
 <div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
-  <h1>Recibo {{pagamento.numero_documento}}</h1>
   <div>
-    <a href="/admin/pagamentos/{{pagamento.id}}/recibo" target="_blank" class="btn btn-primary"><i class="bi bi-file-earmark-pdf me-1"></i>Recibo PDF</a>
+    <h1>Pagamento {{pagamento.numero_documento}}</h1>
+    <p class="subtitle">{{#if (eq pagamento.estado 'confirmado')}}Recebimento confirmado{{else}}Pagamento anulado{{/if}}</p>
+  </div>
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <a href="/admin/pagamentos/{{pagamento.id}}/recibo" target="_blank" class="btn btn-sm btn-primary"><i class="bi bi-file-earmark-pdf me-1"></i>Recibo PDF</a>
     {{#if driveLigado}}
     <form action="/admin/pagamentos/{{pagamento.id}}/recibo/drive" method="POST" class="d-inline">
-      <button class="btn btn-outline-secondary"><i class="bi bi-cloud-arrow-up me-1"></i>Guardar no Drive</button>
+      <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-cloud-arrow-up me-1"></i>Guardar no Drive</button>
     </form>
     {{/if}}
-    <a href="/admin/pagamentos" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
+    <a href="/admin/quotas/comprovativos" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1" style="font-size:1rem">arrow_back</span>Comprovativos</a>
   </div>
 </div>
 
 <div class="row g-4">
   <div class="col-12 col-lg-5">
-    <div class="card">
+    <div class="card mb-4">
       <div class="card-body">
         <dl class="row mb-0">
           <dt class="col-6">Fração</dt><dd class="col-6">{{pagamento.fracao.designacao}}</dd>
@@ -21,7 +24,56 @@
           <dt class="col-6">Data</dt><dd class="col-6">{{formatDate pagamento.data_pagamento}}</dd>
           <dt class="col-6">Método</dt><dd class="col-6">{{#if pagamento.metodo_pagamento}}{{pagamento.metodo_pagamento.nome}}{{else}}—{{/if}}</dd>
           <dt class="col-6">Referência</dt><dd class="col-6">{{#if pagamento.referencia}}{{pagamento.referencia}}{{else}}—{{/if}}</dd>
+          <dt class="col-6">Estado</dt><dd class="col-6">{{#if (eq pagamento.estado 'confirmado')}}<span class="badge text-bg-success">Confirmado</span>{{else}}<span class="badge text-bg-secondary">Anulado</span>{{/if}}</dd>
         </dl>
+      </div>
+    </div>
+
+    {{!-- Comprovativo de recebimento --}}
+    <div class="card mb-4">
+      <div class="card-header bg-white"><i class="bi bi-paperclip me-1"></i>Comprovativo de recebimento</div>
+      <div class="card-body">
+        {{#if pagamento.comprovativo_ficheiro}}
+        <dl class="row mb-3">
+          <dt class="col-6">Estado</dt>
+          <dd class="col-6">
+            {{#if (eq pagamento.comprovativo_estado 'validado')}}<span class="badge text-bg-success">Validado</span>
+            {{else if (eq pagamento.comprovativo_estado 'rejeitado')}}<span class="badge text-bg-danger">Rejeitado</span>
+            {{else}}<span class="badge text-bg-warning">Pendente de validação</span>{{/if}}
+          </dd>
+          <dt class="col-6">Ficheiro</dt>
+          <dd class="col-6 text-break">{{pagamento.comprovativo_nome}}</dd>
+          <dt class="col-6">Anexado em</dt>
+          <dd class="col-6">{{#if pagamento.comprovativo_data}}{{formatDate pagamento.comprovativo_data}}{{else}}—{{/if}}</dd>
+        </dl>
+        {{#if (eq pagamento.comprovativo_estado 'rejeitado')}}
+        {{#if pagamento.comprovativo_motivo}}
+        <div class="alert alert-danger py-2 px-3 small mb-3">Motivo da rejeição: {{pagamento.comprovativo_motivo}}</div>
+        {{/if}}
+        {{/if}}
+        {{#if (eq pagamento.estado 'confirmado')}}
+        <div class="d-flex flex-wrap gap-1 align-items-center">
+          <a href="/admin/pagamentos/{{pagamento.id}}/comprovativo" target="_blank" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>Visualizar</a>
+          <a href="/admin/pagamentos/{{pagamento.id}}/comprovativo?download=1" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download me-1"></i>Descarregar</a>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalPgAnexar" data-id="{{pagamento.id}}" data-fracao="{{pagamento.fracao.designacao}}" data-substituir="1"><i class="bi bi-arrow-repeat me-1"></i>Substituir</button>
+          {{#if (eq pagamento.comprovativo_estado 'pendente')}}
+          <form action="/admin/pagamentos/{{pagamento.id}}/comprovativo/validar" method="POST" class="d-inline">
+            <button class="btn btn-sm btn-outline-success"><i class="bi bi-check-lg me-1"></i>Validar</button>
+          </form>
+          <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalPgRejeitar" data-id="{{pagamento.id}}" data-nome="{{pagamento.comprovativo_nome}}"><i class="bi bi-x-lg me-1"></i>Rejeitar</button>
+          {{/if}}
+        </div>
+        {{else}}
+        <p class="text-muted small mb-0">Pagamento anulado — sem ações sobre o comprovativo.</p>
+        {{/if}}
+        {{else}}
+        <p class="text-muted mb-3">Sem comprovativo associado.</p>
+        {{#if (eq pagamento.estado 'confirmado')}}
+        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalPgAnexar" data-id="{{pagamento.id}}" data-fracao="{{pagamento.fracao.designacao}}"><i class="bi bi-paperclip me-1"></i>Anexar comprovativo</button>
+        {{else}}
+        <p class="text-muted small mb-0">Pagamento anulado — sem ações sobre o comprovativo.</p>
+        {{/if}}
+        {{/if}}
       </div>
     </div>
   </div>
@@ -50,3 +102,89 @@
     </div>
   </div>
 </div>
+
+{{!-- Modal anexar/substituir comprovativo --}}
+<div class="modal fade" id="modalPgAnexar" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="formPgAnexar" method="POST" enctype="multipart/form-data">
+        <div class="modal-header">
+          <h5 class="modal-title" id="pgAnexarTitulo">Anexar comprovativo</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-3" id="pgAnexarTexto">Associe o comprovativo do recebimento (transferência, depósito, etc.) ao pagamento.</p>
+          <div class="mb-2">
+            <label class="form-label">Ficheiro (PDF, JPG, PNG, WEBP, GIF — máx. 12 MB)</label>
+            <input type="file" class="form-control" name="comprovativo" id="pgAnexarFicheiro" required />
+          </div>
+          <p class="form-text mb-0">Ao anexar, o comprovativo fica <strong>pendente de validação</strong> e pode ser substituído em qualquer altura.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Carregar comprovativo</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{{!-- Modal rejeitar comprovativo --}}
+<div class="modal fade" id="modalPgRejeitar" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="formPgRejeitar" method="POST">
+        <div class="modal-header">
+          <h5 class="modal-title">Rejeitar comprovativo</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-3">O comprovativo <strong id="pgRejeitarNome"></strong> será marcado como rejeitado e pode ser substituído.</p>
+          <label class="form-label">Motivo (opcional)</label>
+          <textarea class="form-control" name="motivo" rows="3" placeholder="Ex.: ficheiro ilegível, valor não confere..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-danger">Rejeitar comprovativo</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var modalAnexar = document.getElementById('modalPgAnexar');
+  var formAnexar = document.getElementById('formPgAnexar');
+  var tituloAnexar = document.getElementById('pgAnexarTitulo');
+  var textoAnexar = document.getElementById('pgAnexarTexto');
+  var ficheiroAnexar = document.getElementById('pgAnexarFicheiro');
+  if (modalAnexar) {
+    modalAnexar.addEventListener('show.bs.modal', function (e) {
+      var btn = e.relatedTarget;
+      if (!btn) return;
+      var id = btn.dataset.id;
+      var fracao = btn.dataset.fracao || '';
+      var substituir = btn.dataset.substituir === '1' || btn.title.indexOf('Substituir') === 0;
+      formAnexar.action = '/admin/pagamentos/' + id + '/comprovativo';
+      tituloAnexar.textContent = substituir ? 'Substituir comprovativo' : 'Anexar comprovativo';
+      textoAnexar.innerHTML = substituir
+        ? 'Substitua o comprovativo do pagamento da <strong>' + fracao + '</strong> (o ficheiro anterior é removido).'
+        : 'Associe o comprovativo do recebimento da <strong>' + fracao + '</strong> ao pagamento.';
+      if (ficheiroAnexar) ficheiroAnexar.value = '';
+    });
+  }
+  var modalRejeitar = document.getElementById('modalPgRejeitar');
+  var formRejeitar = document.getElementById('formPgRejeitar');
+  var nomeRejeitar = document.getElementById('pgRejeitarNome');
+  if (modalRejeitar) {
+    modalRejeitar.addEventListener('show.bs.modal', function (e) {
+      var btn = e.relatedTarget;
+      if (!btn) return;
+      formRejeitar.action = '/admin/pagamentos/' + btn.dataset.id + '/comprovativo/rejeitar';
+      nomeRejeitar.textContent = btn.dataset.nome || 'o ficheiro';
+    });
+  }
+})();
+</script>

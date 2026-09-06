@@ -554,7 +554,9 @@ router.get('/quotas/recibos', async (req, res) => {
 router.post('/quotas/recibos/emitir', async (req, res) => {
   try {
     const fracaoId = parseInt(req.body.fracao_id, 10);
-    const modo = req.body.modo === 'unico' ? 'unico' : 'mes';
+    const modosValidos = ['plano', 'unico', 'mes', 'selecionar'];
+    const modo = String(req.body.modo || 'plano');
+    if (!modosValidos.includes(modo)) throw new Error('Modo de distribuição inválido.');
     const quotaIds = toArray(req.body.meses).map(Number).filter(Boolean);
     if (!fracaoId) throw new Error('Fração em falta.');
     if (!quotaIds.length) throw new Error('Selecione pelo menos um mês.');

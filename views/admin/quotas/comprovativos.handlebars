@@ -72,10 +72,10 @@
                 <form action="/admin/pagamentos/{{id}}/comprovativo/validar" method="POST" class="d-inline">
                   <button class="btn btn-sm btn-outline-success px-1" title="Validar comprovativo"><span class="material-symbols-outlined" style="font-size:1rem">check</span></button>
                 </form>
-                <button class="btn btn-sm btn-outline-danger px-1 btn-rejeitar" data-id="{{id}}" data-nome="{{comprovativo_nome}}" title="Rejeitar comprovativo"><span class="material-symbols-outlined" style="font-size:1rem">close</span></button>
+                <button type="button" class="btn btn-sm btn-outline-danger px-1 btn-rejeitar" data-bs-toggle="modal" data-bs-target="#modalRejeitar" data-id="{{id}}" data-nome="{{comprovativo_nome}}" title="Rejeitar comprovativo"><span class="material-symbols-outlined" style="font-size:1rem">close</span></button>
                 {{/if}}
               {{/if}}
-              <button class="btn btn-sm btn-outline-primary px-1 btn-anexar" data-id="{{id}}" data-fracao="{{fracao}}" title="{{#if comprovativo_ficheiro}}Substituir comprovativo{{else}}Anexar comprovativo{{/if}}">
+              <button type="button" class="btn btn-sm btn-outline-primary px-1 btn-anexar" data-bs-toggle="modal" data-bs-target="#modalAnexar" data-id="{{id}}" data-fracao="{{fracao}}" title="{{#if comprovativo_ficheiro}}Substituir comprovativo{{else}}Anexar comprovativo{{/if}}">
                 <span class="material-symbols-outlined" style="font-size:1rem">{{#if comprovativo_ficheiro}}sync{{else}}attach_file{{/if}}</span>
               </button>
               <a href="/admin/pagamentos/{{id}}/recibo" target="_blank" class="btn btn-sm btn-outline-primary px-1" title="Recibo PDF"><span class="material-symbols-outlined" style="font-size:1rem">picture_as_pdf</span></a>

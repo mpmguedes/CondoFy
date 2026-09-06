@@ -51,7 +51,7 @@
           <td class="text-end text-nowrap">{{eur enviado}}</td>
           <td class="text-end fw-semibold text-nowrap text-primary">{{eur porEmitir}}</td>
           <td class="text-center">
-            <button type="button" class="btn btn-sm btn-outline-primary btn-emitir" data-fracao="{{fracaoId}}" data-designacao="{{designacao}}">
+            <button type="button" class="btn btn-sm btn-outline-primary btn-emitir" data-bs-toggle="modal" data-bs-target="#modalEmitir" data-fracao="{{fracaoId}}" data-designacao="{{designacao}}">
               <span class="material-symbols-outlined me-1" style="font-size:1rem">receipt_long</span>Emitir recibo
             </button>
           </td>
@@ -114,7 +114,7 @@
                 <button class="btn btn-sm btn-outline-success px-1" title="Enviar recibo por email"><span class="material-symbols-outlined" style="font-size:1rem">mail</span></button>
               </form>
               {{/unless}}
-              <button type="button" class="btn btn-sm btn-outline-danger px-1 btn-anular" data-id="{{id}}" data-codigo="{{codigo}}" title="Anular recibo"><span class="material-symbols-outlined" style="font-size:1rem">block</span></button>
+              <button type="button" class="btn btn-sm btn-outline-danger px-1 btn-anular" data-bs-toggle="modal" data-bs-target="#modalAnular" data-id="{{id}}" data-codigo="{{codigo}}" title="Anular recibo"><span class="material-symbols-outlined" style="font-size:1rem">block</span></button>
             {{/if}}
           </td>
         </tr>
@@ -277,12 +277,15 @@
     var modo = selectModo.value;
     var sel = selecionados().length;
     if (modo === 'unico') {
+      var total = totalSelecionado();
       campoValor.disabled = false;
-      campoValor.value = (totalSelecionado() / 100).toFixed(2).replace('.', ',');
+      campoValor.value = (total / 100).toFixed(2).replace('.', ',');
+      campoValor.setAttribute('max', (total / 100).toFixed(2));
       contagem.textContent = sel > 0 ? 'Vai criar 1 recibo.' : 'Selecione pelo menos um mês.';
     } else {
       campoValor.disabled = true;
       campoValor.value = '0,00';
+      campoValor.removeAttribute('max');
       contagem.textContent = sel > 0 ? 'Vai criar ' + sel + ' recibo(s).' : 'Selecione pelo menos um mês.';
     }
   }
@@ -291,7 +294,16 @@
     var meses = porFracao[String(fracaoId)] || [];
     mesesAtuais = [];
     lista.innerHTML = '';
-    fracaoTexto.innerHTML = 'Frações: <strong>' + designacao + '</strong>';
+    fracaoTexto.innerHTML = 'Fração: <strong>' + designacao + '</strong>';
+    if (!meses.length) {
+      var trVazio = document.createElement('tr');
+      var tdVazio = document.createElement('td');
+      tdVazio.colSpan = 4;
+      tdVazio.className = 'text-center text-muted py-3';
+      tdVazio.textContent = 'Sem meses disponíveis para emissão.';
+      trVazio.appendChild(tdVazio);
+      lista.appendChild(trVazio);
+    }
     meses.forEach(function (m, i) {
       var tr = document.createElement('tr');
       var tdCheck = document.createElement('td');
@@ -356,19 +368,21 @@
     });
   }
 
-  // Auto-abrir quando chega com ?emitir=<fracao>
+  // Auto-abrir quando chega com ?emitir=<fracao> (aguarda o Bootstrap carregar).
   var auto = {{#if abrirEmitirFracaoId}}{{abrirEmitirFracaoId}}{{else}}null{{/if}};
-  if (auto && window.bootstrap && porFracao[String(auto)]) {
-    var alvo = document.querySelector('.btn-emitir[data-fracao="' + auto + '"]');
-    if (alvo) {
-      var modalObj = bootstrap.Modal.getOrCreateInstance(modalEmitir);
-      // popula manualmente e abre
-      var designacao = alvo.dataset.designacao || '';
-      modalObj.show();
-      modalEmitir.addEventListener('shown.bs.modal', function () {
-        abrirModal(String(auto), designacao);
-      }, { once: true });
-    }
+  if (auto && porFracao[String(auto)]) {
+    var tentarAbrirAuto = function (tentativas) {
+      if (window.bootstrap) {
+        var alvo = document.querySelector('.btn-emitir[data-fracao="' + auto + '"]');
+        if (!alvo) return;
+        var designacao = alvo.dataset.designacao || '';
+        abrirModal(String(auto), designacao); // popula antes de abrir (sem flash)
+        bootstrap.Modal.getOrCreateInstance(modalEmitir).show();
+      } else if (tentativas < 20) {
+        setTimeout(function () { tentarAbrirAuto(tentativas + 1); }, 50);
+      }
+    };
+    tentarAbrirAuto(0);
   }
 
   // Modal anular
