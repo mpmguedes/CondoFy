@@ -241,6 +241,18 @@ function testVistaRecibos() {
   assert.ok(html.includes('modalEmitir') && html.includes('Emitir recibo'), 'modal abre pelo botão');
   assert.ok(html.includes('/admin/quotas/recibos/5/pdf'), 'ver PDF');
 
+  // A fração correta segue explicitamente no formulário (name="fracao_id") e o
+  // JavaScript preenche o hidden a partir do contexto aberto na modal.
+  assert.ok(html.includes('name="fracao_id"') && html.includes('id="emitirFracaoId"'), 'hidden fracao_id presente no form');
+  assert.ok(html.includes('campoFracaoId.value = String(fracaoId)'), 'fracaoId é escrito no hidden ao abrir');
+  assert.ok(html.includes('input.name = \'meses\''), 'meses submetidos como quotaIds dinâmicos');
+
+  // Os cartões de mês recebem os dados completos (quotaId/fracaoId/ano/mes/
+  // disponivel/pode) — o nome das propriedades confirma o atributo data-* real.
+  ['dataset.quotaId', 'dataset.fracaoId', 'dataset.ano', 'dataset.mes', 'dataset.disponivel', 'dataset.pode'].forEach(function (campo) {
+    assert.ok(html.includes(campo), 'cartão de mês recebe ' + campo);
+  });
+
   // O payload JSON do modal tem de chegar INESCAPED (triple-stash) e com dados:
   // era {{json ...}} → Handlebars escapava para &quot; e o JSON.parse falhava,
   // deixando a modal sem meses (valores a 0).

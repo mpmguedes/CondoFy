@@ -191,23 +191,8 @@
           </div>
 
           <label class="form-label small mb-1">Meses disponíveis</label>
-          <div class="table-responsive border rounded">
-            <table class="table table-sm align-middle mb-0">
-              <thead class="table-light">
-                <tr>
-                  <th style="width:38px"></th>
-                  <th>Mês</th>
-                  <th class="text-end">Quota</th>
-                  <th class="text-end">Pago</th>
-                  <th class="text-end">Já em recibo</th>
-                  <th class="text-end">Disponível</th>
-                  <th class="text-end">FCR</th>
-                </tr>
-              </thead>
-              <tbody id="emitirMeses"></tbody>
-            </table>
-          </div>
-          <div class="form-text mt-1">Os meses sem valor disponível ficam visíveis mas não são selecionáveis.</div>
+          <div id="emitirMeses" class="row g-2"></div>
+          <div class="form-text mt-1">Clique num mês para selecionar ou desmarcar. Meses sem valor disponível aparecem desativados. Detalhes (quota/pago/já em recibo) disponíveis no tooltip de cada mês.</div>
 
           <div class="alert alert-light border small mt-3 mb-0" id="emitirContagem">Selecione os meses a emitir.</div>
           <p class="text-danger small mt-2 mb-0 d-none" id="emitirErro"></p>
@@ -309,8 +294,11 @@
     return Number.isFinite(n) ? Math.round(n * 100) : NaN;
   }
 
+  var campoFracaoId = document.getElementById('emitirFracaoId');
+  var atualFracaoId = null;
+
   function selecionados() {
-    return mesesAtuais.filter(function (m) { return m.cbx && m.cbx.checked && m.pode; });
+    return mesesAtuais.filter(function (m) { return m.pode && m.ativo; });
   }
 
   function maxSelecionadoC() {
@@ -341,51 +329,85 @@
     mostrarErro(null);
   }
 
+  function atualizarCartao(m) {
+    if (!m.btn) return;
+    m.btn.classList.toggle('selected', m.pode && m.ativo);
+    m.btn.setAttribute('aria-pressed', m.pode && m.ativo ? 'true' : 'false');
+    var valor = m.btn.querySelector('.mes-btn-valor');
+    if (valor) valor.textContent = m.pode ? eur(m.disponivel) : '0,00 €';
+  }
+
+  function criarCartao(m) {
+    var col = document.createElement('div');
+    col.className = 'col-6 col-md-4 col-lg-3';
+
+    var botao = document.createElement('button');
+    botao.type = 'button';
+    botao.className = 'mes-btn btn btn-sm w-100 text-start p-2';
+    // Identificação completa — a fração correta é sempre a do contexto aberto.
+    botao.dataset.quotaId = String(m.quotaId);
+    botao.dataset.fracaoId = atualFracaoId == null ? '' : String(atualFracaoId);
+    botao.dataset.ano = String(m.ano);
+    botao.dataset.mes = String(m.mes);
+    botao.dataset.disponivel = (m.disponivel || 0).toFixed(2);
+    botao.dataset.pode = m.pode ? '1' : '0';
+    botao.setAttribute('aria-pressed', m.pode && m.ativo ? 'true' : 'false');
+    botao.title = m.rotulo
+      + ' · Quota ' + eur(m.quota)
+      + ' · Pago ' + eur(m.pago)
+      + ' · Já em recibo ' + eur(m.coberto)
+      + ' · Disponível ' + eur(m.disponivel);
+
+    var mesLinha = document.createElement('div');
+    mesLinha.className = 'mes-btn-mes';
+    mesLinha.textContent = m.rotulo;
+
+    var valorLinha = document.createElement('div');
+    valorLinha.className = 'mes-btn-valor';
+    valorLinha.textContent = m.pode ? eur(m.disponivel) : '0,00 €';
+
+    botao.appendChild(mesLinha);
+    botao.appendChild(valorLinha);
+
+    m.ativo = m.pode; // por defeito: todos os disponíveis selecionados
+    m.btn = botao;
+    if (!m.pode) {
+      botao.disabled = true;
+      botao.classList.add('sem-valor');
+    }
+    botao.addEventListener('click', function () {
+      if (!m.pode) return;
+      m.ativo = !m.ativo;
+      atualizarCartao(m);
+      atualizar();
+    });
+
+    col.appendChild(botao);
+    return col;
+  }
+
   function abrirModal(fracaoId, designacao) {
     var meses = porFracao[String(fracaoId)] || [];
+    atualFracaoId = fracaoId;
     mesesAtuais = [];
     lista.innerHTML = '';
     fracaoTexto.innerHTML = 'Fração: <strong>' + designacao + '</strong>';
+    // A fração correta segue EXPLICITAMENTE no formulário da emissão.
+    campoFracaoId.value = String(fracaoId);
+    lista.dataset.fracaoId = String(fracaoId);
+
     var totalC = 0;
     if (!meses.length) {
-      var trVazio = document.createElement('tr');
-      var tdVazio = document.createElement('td');
-      tdVazio.colSpan = 7;
-      tdVazio.className = 'text-center text-muted py-3';
-      tdVazio.textContent = 'Sem quotas disponíveis para esta fração.';
-      trVazio.appendChild(tdVazio);
-      lista.appendChild(trVazio);
+      var colVazio = document.createElement('div');
+      colVazio.className = 'col-12';
+      colVazio.innerHTML = '<p class="text-muted small text-center py-2 mb-0">Sem quotas disponíveis para esta fração.</p>';
+      lista.appendChild(colVazio);
     }
     meses.forEach(function (m) {
-      var tr = document.createElement('tr');
-      var tdCheck = document.createElement('td');
-      var cbx = document.createElement('input');
-      cbx.type = 'checkbox';
-      cbx.className = 'form-check-input emitir-mes';
-      if (m.pode) {
-        cbx.checked = true;
-        totalC += m.dispC;
-      } else {
-        cbx.disabled = true;
-      }
-      tdCheck.appendChild(cbx);
-      var adicionarCel = function (texto, classe) {
-        var td = document.createElement('td');
-        td.className = (classe || 'text-end small text-nowrap');
-        td.textContent = texto;
-        tr.appendChild(td);
-      };
-      tr.appendChild(tdCheck);
-      adicionarCel(m.rotulo, 'small text-nowrap');
-      adicionarCel(eur(m.quota));
-      adicionarCel(eur(m.pago), 'text-end small text-muted text-nowrap');
-      adicionarCel(eur(m.coberto), 'text-end small text-muted text-nowrap');
-      adicionarCel(eur(m.disponivel), 'text-end small fw-semibold text-nowrap');
-      adicionarCel(eur(m.fcr), 'text-end small text-muted text-nowrap');
-      cbx.addEventListener('change', atualizar);
-      m.cbx = cbx;
+      if (m.pode) totalC += m.dispC;
+      m.cbx = null;
       mesesAtuais.push(m);
-      lista.appendChild(tr);
+      lista.appendChild(criarCartao(m));
     });
     disponivelTotal.textContent = eurC(totalC);
     selectModo.value = 'plano';
@@ -394,6 +416,11 @@
 
   formEmitir.addEventListener('submit', function (e) {
     var sel = selecionados();
+    if (!campoFracaoId.value || !atualFracaoId) {
+      mostrarErro('Fração em falta. Reabra a emissão e tente novamente.');
+      e.preventDefault();
+      return;
+    }
     if (!sel.length) {
       mostrarErro('Selecione pelo menos um mês disponível.');
       e.preventDefault();
@@ -435,7 +462,12 @@
   if (selectModo) {
     selectModo.addEventListener('change', function () {
       if (selectModo.value === 'plano') {
-        mesesAtuais.forEach(function (m) { if (m.pode && m.cbx) m.cbx.checked = true; });
+        mesesAtuais.forEach(function (m) {
+          if (m.pode) {
+            m.ativo = true;
+            atualizarCartao(m);
+          }
+        });
       }
       atualizar();
     });

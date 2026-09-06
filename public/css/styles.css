@@ -918,3 +918,34 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
 .q-semquota { color: var(--c-text-muted); background: rgba(95, 99, 104, 0.12); }
 
 .modal-transitados-lista { max-height: 45vh; }
+
+/* Recibos — selecao compacta dos meses (grelha de botoes) */
+.mes-btn {
+  display: block;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+.mes-btn:hover:not(:disabled) { border-color: var(--c-primary); }
+.mes-btn.selected {
+  border-color: var(--c-primary);
+  background: var(--c-primary-light);
+  box-shadow: 0 0 0 1px var(--c-primary);
+}
+.mes-btn.selected .mes-btn-valor { color: var(--c-primary-dark); font-weight: 700; }
+.mes-btn:disabled, .mes-btn.sem-valor { opacity: 0.55; cursor: not-allowed; background: var(--c-surface-2); }
+.mes-btn-mes {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--c-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mes-btn.selected .mes-btn-mes { color: var(--c-primary-dark); }
+.mes-btn-valor { font-size: 0.9rem; font-weight: 600; color: var(--c-text); white-space: nowrap; }
