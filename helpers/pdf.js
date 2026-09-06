@@ -206,9 +206,11 @@ class Layout {
     }
   }
 
-  caixa(titulo, corpo, cor = T.COR_PRIMARIA, fundo = T.COR_FUNDO_CAIXA) {
+  caixa(titulo, corpo, cor = T.COR_PRIMARIA, fundo = T.COR_FUNDO_CAIXA, opts = {}) {
     // Espaçamento entre blocos (secções visualmente independentes).
     const gapBloco = 10;
+    const tituloFontSize = opts.tituloFontSize || T.TITULO_CAIXA_SIZE;
+    const tituloBloco = tituloFontSize + 6;
     if (!this.medindo) this.y += gapBloco;
     const yInicio = this.y;
     const prevCx = this.cx;
@@ -224,7 +226,7 @@ class Layout {
     this.medindo = false;
     this.y = yInicio;
 
-    const alturaTotal = T.PADDING + 16 + alturaCorpo + T.PADDING;
+    const alturaTotal = T.PADDING + tituloBloco + alturaCorpo + T.PADDING;
     this.garantirEspaco(alturaTotal);
 
     // Fundo suave arredondado SEM border/linhas delimitadoras.
@@ -232,10 +234,10 @@ class Layout {
     this.y += T.PADDING;
     this.doc
       .font(T.FONTE_BOLD)
-      .fontSize(T.TITULO_CAIXA_SIZE)
+      .fontSize(tituloFontSize)
       .fillColor(cor)
       .text(titulo, T.MARGEM + T.PADDING, this.y, { width: T.LARGURA_CONTEUDO - 2 * T.PADDING });
-    this.y += 16;
+    this.y += tituloBloco;
 
     corpo(this);
 
@@ -428,15 +430,32 @@ async function gerarReciboPDF(condominio, d) {
     );
   }
 
-  // ── Bloco 3 — Valor recebido ────────────────────────────────────────
+  // ── Bloco 3 — VALOR DO RECIBO (elemento de maior destaque) ─────────
   L.caixa(
-    'Valor recebido',
+    'VALOR DO RECIBO',
     (C) => {
-      C.linha('Valor do recibo', formatEUR(d.valor), { cor: T.COR_VERDE });
-      C.linha('Saldo após pagamento', formatEUR(d.saldoAposPagamento), { cor: T.COR_VERDE });
+      const avancarValor = 34;
+      const avancarSaldo = 14;
+      if (!C.medindo) {
+        C.doc
+          .font(T.FONTE_BOLD)
+          .fontSize(30)
+          .fillColor('#14532d')
+          .text(formatEUR(d.valor), C.cx, C.y, { width: C.cw, align: 'right', lineGap: 0 });
+      }
+      C.y += avancarValor;
+      if (!C.medindo) {
+        C.doc
+          .font(T.FONTE)
+          .fontSize(T.TEXTO_SIZE_SMALL)
+          .fillColor(T.COR_VERDE)
+          .text(`Saldo após pagamento: ${formatEUR(d.saldoAposPagamento)}`, C.cx, C.y, { width: C.cw, align: 'right' });
+      }
+      C.y += avancarSaldo;
     },
     T.COR_VERDE,
-    T.COR_FUNDO_VERDE
+    T.COR_FUNDO_VERDE,
+    { tituloFontSize: 20 }
   );
 
   // Recibos anulados mantêm todo o conteúdo histórico, mas ficam marcados de
