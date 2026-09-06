@@ -222,7 +222,39 @@
   </div>
 </div>
 
-<div class="section-title">Análise {{anoAtual}}</div>
+<div class="section-title">Top devedores</div>
+<div class="row g-3">
+  <div class="col-12 col-lg-6">
+    <div class="card">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">Frações com quotas em atraso</span>
+        <a href="/admin/quotas" class="small">Ver todos →</a>
+      </div>
+      {{#if topDevedores}}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead class="table-light">
+            <tr><th>Fração</th><th>Meses em dívida</th><th class="text-end">Total</th></tr>
+          </thead>
+          <tbody>
+            {{#each topDevedores}}
+            <tr>
+              <td class="fw-semibold">{{fracao}}</td>
+              <td class="small text-muted">{{meses}}</td>
+              <td class="text-end fw-bold text-danger">{{eur total}}</td>
+            </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+      {{else}}
+      <div class="card-body text-muted small"><i class="bi bi-check-circle me-1 text-success"></i>Não existem quotas em atraso.</div>
+      {{/if}}
+    </div>
+  </div>
+</div>
+
+<div class="section-title">Evolução {{anoAtual}}</div>
 <div class="row g-3">
   <div class="col-12 col-lg-7">
     <div class="card h-100">

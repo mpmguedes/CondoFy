@@ -104,6 +104,24 @@ router.get('/', async (req, res) => {
 
   const categoriasTop = Object.entries(porCategoria).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
+  // TOP DEVEDORES (Painel): agrupado por fração, quotas não pagas.
+  const fracoesTodas = await Fracao.findAll({ attributes: ['id', 'designacao'] });
+  const nomeFracao = new Map(fracoesTodas.map((f) => [f.id, f.designacao]));
+  const mapaDivida = new Map();
+  for (const q of quotas) {
+    if (q.estado === 'anulada') continue;
+    const st = estadoEfetivo(q);
+    if (st === 'paga' || st === 'anulada') continue;
+    const e = mapaDivida.get(q.fracao_id) || { fracao: nomeFracao.get(q.fracao_id) || `#${q.fracao_id}`, meses: new Set(), totalC: 0 };
+    e.meses.add(`${q.ano}-${String(q.mes).padStart(2, '0')}`);
+    e.totalC += toCents(q.valor);
+    mapaDivida.set(q.fracao_id, e);
+  }
+  const topDevedores = [...mapaDivida.values()]
+    .map((e) => ({ fracao: e.fracao, meses: e.meses.size, totalC: e.totalC, total: fromCents(e.totalC) }))
+    .sort((a, b) => b.totalC - a.totalC)
+    .slice(0, 5);
+
   res.render('admin/dashboard', {
     titulo: 'Painel de administração',
     nFracoes,
@@ -118,6 +136,7 @@ router.get('/', async (req, res) => {
     nEmailsEnviados,
     nFornecedores,
     nPagFornecedorPendentes,
+    topDevedores,
     anoAtual,
     financeiroMes,
     emAtraso,
