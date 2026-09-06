@@ -680,6 +680,7 @@ router.get('/quotas/recibos/:id/pdf', async (req, res) => {
       referencia: recibo.codigo,
       valor: recibo.valor,
       saldoAposPagamento: resumo ? resumo.emDivida : 0,
+      anulado: recibo.estado === 'anulado', // PDF histórico marcado como ANULADO
       quotas: quotas.map((q) => ({
         numero: q.numero_documento || '',
         periodo: `${recibosHelper.periodoLabel([{ ano: q.ano, mes: q.mes }])}`,

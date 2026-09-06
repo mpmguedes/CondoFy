@@ -5,6 +5,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const handlebars = require('handlebars');
 const helpers = require('../helpers/handlebars-helpers');
 
@@ -436,6 +437,147 @@ function testFIFOPagamentos() {
   assert.strictEqual(rr.alocacoes.length, 2, 'aplica por ordem recebida (ano/mês)');
 }
 
+// ── 6. PDFs numa única página + estado anulado ─────────────────────
+function paginasPdf(buffer) {
+  const s = buffer.toString('latin1');
+  return (s.match(/\/Type\s*\/Page(?!s)/g) || []).length;
+}
+
+// Extrai o texto dos streams (os caracteres vêm como hex no content stream).
+function textosPdf(buffer) {
+  const s = buffer.toString('latin1');
+  let texto = '';
+  const re = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+  let m;
+  while ((m = re.exec(s))) {
+    let txt = '';
+    try {
+      txt = zlib.inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1');
+    } catch (e) {
+      continue;
+    }
+    const hexes = txt.match(/<([0-9A-Fa-f]+)>/g) || [];
+    for (const h of hexes) {
+      try {
+        texto += Buffer.from(h.slice(1, -1), 'hex').toString('latin1');
+      } catch (e) {
+        // ignora fragmentos não decodificáveis
+      }
+    }
+  }
+  return texto;
+}
+
+async function testPdfUmaPagina() {
+  const { gerarReciboPDF, gerarAvisoQuotaPDF } = require('../helpers/pdf');
+  const cond = { designacao: 'Condomínio Jardim das Flores', morada: 'Rua Doutor António José de Almeida, 1234', codigo_postal: '1000-000', localidade: 'Lisboa', nif: '500000000', logotipo: null, identidade_visual: 'designacao' };
+  const curto = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const meses = curto.map((c, i) => ({ numero: '2026/' + String(100 + i + 1), periodo: c + ' 2026', valorAplicado: 61.23 }));
+  const base = {
+    numero: 'RCP-2026-0006',
+    data: new Date('2026-02-01T00:00:00'),
+    dataPagamento: new Date('2026-02-01T00:00:00'),
+    condominoNome: 'João Maria da Silva Santos',
+    fracaoDesignacao: 'Fração A',
+    metodoPagamento: 'Transferência bancária',
+    referencia: 'RCP-2026-0006',
+    valor: 734.76,
+    saldoAposPagamento: 0,
+    quotas: meses,
+  };
+  const recibo = await gerarReciboPDF(cond, base);
+  assert.strictEqual(recibo.slice(0, 5).toString(), '%PDF-', 'recibo normal gerado');
+  assert.strictEqual(paginasPdf(recibo), 1, 'recibo normal ocupa uma única página A4');
+  assert.ok(!textosPdf(recibo).includes('ANULADO'), 'recibo normal não tem marca de anulado');
+
+  const anulado = await gerarReciboPDF(cond, { ...base, anulado: true });
+  assert.strictEqual(paginasPdf(anulado), 1, 'recibo anulado também ocupa uma única página');
+  assert.ok(textosPdf(anulado).includes('ANULADO'), 'PDF do recibo anulado mostra ANULADO');
+
+  const aviso = await gerarAvisoQuotaPDF(cond, {
+    numero: '2026/0012',
+    periodo: 'Janeiro 2026',
+    dataEmissao: new Date('2026-01-05T00:00:00'),
+    dataVencimento: new Date('2026-01-08T00:00:00'),
+    valor: 61.23,
+    destinatarioNome: 'João Maria da Silva Santos',
+    fracaoDesignacao: 'Fração A',
+    fracaoMorada: 'Rua das Flores, 1.º Esq.',
+    saldoAnterior: 0,
+    ultimoPagamento: true,
+    ultimoPagamentoValor: 50,
+    ultimoPagamentoData: new Date('2025-12-10T00:00:00'),
+    emDivida: 11.23,
+    totalAPagar: 61.23,
+    iban: 'PT50 0002 0123 1234 5678 9015 4',
+    outrosMeiosPagamento: 'MB WAY: 999 999 999 · Referência multibanco',
+    referencia: 'A000000001',
+    instrucoesPagamento: 'Obrigado pelo cumprimento.',
+  });
+  assert.strictEqual(paginasPdf(aviso), 1, 'aviso de quota ocupa uma única página A4');
+}
+
+// ── 7. Cobertura por recibos: apenas estado 'emitido' conta ─────────
+async function testCoberturaPorEstado() {
+  const models = require('../models');
+  const { cobertoPorQuota } = require('../helpers/recibos');
+  const linhas = [
+    { quota_id: 1, valor: '50.00', recibo: { estado: 'emitido' } },
+    { quota_id: 1, valor: '60.00', recibo: { estado: 'anulado' } },
+  ];
+  const orig = models.ReciboQuota.findAll;
+  models.ReciboQuota.findAll = async (opts) => {
+    const include = opts && opts.include && opts.include[0];
+    assert.ok(include && include.model && include.model.name === 'Recibo', 'query une com Recibo');
+    assert.strictEqual(include.where.estado, 'emitido', 'cobertura só consulta recibos emitidos');
+    return linhas.filter((l) => l.recibo.estado === include.where.estado);
+  };
+  try {
+    const mapa = await cobertoPorQuota([1]);
+    assert.strictEqual(mapa.get(1), 5000, 'recibo emitido conta como cobertura (50 €)');
+    assert.strictEqual(mapa.size, 1, 'recibo anulado NÃO conta como cobertura');
+  } finally {
+    models.ReciboQuota.findAll = orig;
+  }
+}
+
+// ── 8. Anulação de recibo: estado, histórico e devolução à disponibilidade ──
+async function testAnularRecibo() {
+  const models = require('../models');
+  const sequelize = require('../config/database');
+  const { anularRecibo } = require('../helpers/recibos');
+
+  const origT = sequelize.transaction;
+  const origFind = models.Recibo.findByPk;
+  let commits = 0;
+  sequelize.transaction = async () => ({ commit: async () => { commits += 1; }, rollback: async () => {}, LOCK: { UPDATE: 'UPDATE' } });
+  const recibo = {
+    id: 9,
+    estado: 'emitido',
+    update: async (campos) => {
+      Object.assign(recibo, campos);
+      ultimosCampos = campos;
+    },
+  };
+  let ultimosCampos = null;
+  models.Recibo.findByPk = async () => recibo;
+  try {
+    const ok = await anularRecibo(9, { motivo: 'Emitido por engano' });
+    assert.strictEqual(ok, true, 'recibo emitido é anulado');
+    assert.strictEqual(recibo.estado, 'anulado', 'estado persistido como anulado');
+    assert.strictEqual(ultimosCampos.estado, 'anulado');
+    assert.strictEqual(ultimosCampos.motivo_anulacao, 'Emitido por engano', 'motivo guardado no histórico');
+    assert.deepStrictEqual(Object.keys(ultimosCampos).sort(), ['estado', 'motivo_anulacao'], 'só o recibo é alterado (pagamentos intactos)');
+    assert.strictEqual(commits, 1, 'transação concluída');
+
+    const repetido = await anularRecibo(9, { motivo: '' });
+    assert.strictEqual(repetido, false, 'recibo já anulado não é anulado de novo');
+  } finally {
+    sequelize.transaction = origT;
+    models.Recibo.findByPk = origFind;
+  }
+}
+
 async function main() {
   testRegras();
   testTransitadosParser();
@@ -447,6 +589,9 @@ async function main() {
   testVistaFormPagamento();
   await testPdfRecibo();
   await testModosDistribuicao();
+  await testPdfUmaPagina();
+  await testCoberturaPorEstado();
+  await testAnularRecibo();
   console.log('✓ Testes do módulo Quotas (mapa/comprovativos/recibos) passaram (sem base de dados).');
 }
 

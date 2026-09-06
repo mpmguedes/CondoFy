@@ -37,10 +37,18 @@ function caminhoLogotipo(condominio) {
   return fs.existsSync(caminho) ? caminho : null;
 }
 
+// Margens do documento: superior/laterais 50 e fundo 36 — reserva explícita do
+// rodapé (a 782-792pt) sem nunca ultrapassar a área útil da página A4, o que
+// evita que o PDFKit crie páginas extra por overflow do próprio rodapé.
+const MARGEM_INFERIOR = 36;
+
 function criarDocumento() {
   return new PDFDocument({
     size: 'A4',
-    margin: T.MARGEM,
+    // PDFKit espera um número em "margin" ou um objeto em "margins"; o fundo
+    // (36) reserva explicitamente o espaço do rodapé (782–792pt) sem nunca
+    // ultrapassar a área útil — impede páginas extra por overflow do rodapé.
+    margins: { top: T.MARGEM, right: T.MARGEM, bottom: MARGEM_INFERIOR, left: T.MARGEM },
     bufferPages: true,
     info: { Title: 'GesCondu', Author: 'GesCondu' },
   });
@@ -316,6 +324,21 @@ async function gerarAvisoQuotaPDF(condominio, d) {
   return toBuffer(doc);
 }
 
+// ── Marca de recibo anulado (faixa diagonal discreta, não destrói o original) ──
+function marcarAnulado(doc) {
+  doc.save();
+  doc.opacity(0.16);
+  doc.font(T.FONTE_BOLD).fontSize(72).fillColor('#b91c1c');
+  const cx = T.LARGURA_PAGINA / 2;
+  const cy = 425;
+  doc.translate(cx, cy);
+  doc.rotate(38);
+  doc.text('ANULADO', -180, -50, { width: 360, align: 'center' });
+  doc.rotate(-38);
+  doc.translate(-cx, -cy);
+  doc.restore();
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // RECIBO
 // ═══════════════════════════════════════════════════════════════════
@@ -368,6 +391,10 @@ async function gerarReciboPDF(condominio, d) {
     .fillColor('#166534')
     .text(`Saldo após pagamento: ${formatEUR(d.saldoAposPagamento)}`, T.MARGEM + T.PADDING, yTotal + 40);
   L.espaco(76);
+
+  // Recibos anulados mantêm todo o conteúdo histórico, mas ficam marcados de
+  // forma inequívoca (faixa "ANULADO") sem poderem ser confundidos com válidos.
+  if (d.anulado) marcarAnulado(doc);
 
   finalizarPaginacao(doc, condominio);
   return toBuffer(doc);
