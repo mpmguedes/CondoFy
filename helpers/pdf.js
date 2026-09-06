@@ -117,11 +117,12 @@ class Layout {
     const rightW = T.LARGURA_PAGINA - T.MARGEM - rightX; // 245
     const leftW = Math.max(110, rightX - xTexto - 16);
 
-    // Nome grande: quebra controlada (nunca invade a coluna direita); reduz-se
-    // o corpo apenas se necessário para caber em ~2 linhas.
+    // Nome do condomínio SEMPRE numa única linha: usa a maior fonte (≤15) que
+    // caiba na largura da coluna esquerda; nomes excecionais reduzem de forma
+    // proporcional e controlada (nunca quebram nem invadem a coluna direita).
     let nomeSize = 15;
     this.doc.font(T.FONTE_BOLD);
-    while (nomeSize > 11 && this.doc.heightOfString(designacao, { width: leftW, fontSize: nomeSize }) > nomeSize * 2.8) {
+    while (nomeSize > 8 && this.doc.widthOfString(designacao, { fontSize: nomeSize }) > leftW) {
       nomeSize -= 1;
     }
 
@@ -300,19 +301,20 @@ class Layout {
 // ── Rodapé + paginação ─────────────────────────────────────────────
 function finalizarPaginacao(doc, condominio) {
   const range = doc.bufferedPageRange();
-  const nome = (condominio && String(condominio.designacao || '').trim()) || '';
+  const nomeReal = (condominio && String(condominio.designacao || '').trim()) || '';
+  // Sem duplicar "Condomínio" quando o nome já começa por essa palavra.
+  const começaComCondominio = /^condom[ií]nio\b/i.test(nomeReal);
+  const nomeRodape = começaComCondominio || !nomeReal ? nomeReal : `Condomínio ${nomeReal}`;
   const largura = T.LARGURA_CONTEUDO;
   for (let i = range.start; i < range.start + range.count; i++) {
     doc.switchToPage(i);
-    // Rodapé discreto — 3 linhas centradas; nome real (sem prefixos artificiais).
-    if (nome) {
-      doc.font(T.FONTE).fontSize(9).fillColor('#555555').text(nome, T.MARGEM, 780, { width: largura, align: 'center' });
-      doc.font(T.FONTE).fontSize(7.5).fillColor('#777777').text('Documento gerado por', T.MARGEM, 787, { width: largura, align: 'center' });
-      doc.font(T.FONTE).fontSize(7).fillColor('#888888').text('GesCondu - Gestão de Condomínios', T.MARGEM, 792.5, { width: largura, align: 'center' });
+    // Linha 1 — condomínio à esquerda, página à direita.
+    if (nomeRodape) {
+      doc.font(T.FONTE).fontSize(8).fillColor('#555555').text(nomeRodape, T.MARGEM, 783, { width: 380, align: 'left', lineBreak: false });
     }
-    if (range.count > 1) {
-      doc.font(T.FONTE).fontSize(7).fillColor('#888888').text(`Página ${i + 1} de ${range.count}`, 450, 780, { width: 95, align: 'right' });
-    }
+    doc.font(T.FONTE).fontSize(8).fillColor('#555555').text(`Página ${i + 1} de ${range.count}`, 450, 783, { width: 95, align: 'right', lineBreak: false });
+    // Linha 2 — discreta e alinhada à esquerda, por baixo do condomínio.
+    doc.font(T.FONTE).fontSize(7).fillColor('#777777').text('Documento processado por GesCondu - Gestão de Condomínios', T.MARGEM, 791, { width: largura, align: 'left' });
   }
 }
 
@@ -531,7 +533,7 @@ async function gerarReciboPDF(condominio, d) {
           .font(T.FONTE)
           .fontSize(T.TEXTO_SIZE_SMALL)
           .fillColor(T.COR_VERDE)
-          .text(`Saldo devedor vencido em ${d.data ? formatDate(d.data) : '—'}`, C.cx, saldoY, { width: C.cw, align: 'right' });
+          .text(`Saldo devedor vencido em ${d.data ? formatDate(d.data) : '—'}: ${formatEUR(d.saldoAposPagamento)}`, C.cx, saldoY, { width: C.cw, align: 'right' });
       }
       C.y = saldoY + 14;
     },
