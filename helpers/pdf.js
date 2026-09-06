@@ -92,57 +92,87 @@ class Layout {
       }
     }
 
-    this.doc
-      .font(T.FONTE_BOLD)
-      .fontSize(15)
-      .fillColor(T.COR_TEXTO)
-      .text(this.condominio.designacao || 'Condomínio', xTexto, 42, { width: 250, lineBreak: false });
-
+    const designacao = this.condominio.designacao || 'Condomínio';
     const morada = [
       this.condominio.morada,
       [this.condominio.codigo_postal, this.condominio.localidade].filter(Boolean).join(' '),
     ]
       .filter(Boolean)
       .join(', ');
+    const nifTexto = this.condominio.nif ? `NIF: ${this.condominio.nif}` : '';
 
-    this.doc
-      .font(T.FONTE)
-      .fontSize(T.TEXTO_SIZE_SMALL)
-      .fillColor(T.COR_MUTED)
-      .text(morada, xTexto, 62, { width: 250 });
-    if (this.condominio.nif) {
-      this.doc.text(`NIF: ${this.condominio.nif}`, xTexto, 74, { width: 250 });
+    // ── Modo simples (documentos sem coluna direita) ──────────────────
+    if (!this.cabecalhoDireita || !this.cabecalhoDireita.length) {
+      this.doc.font(T.FONTE_BOLD).fontSize(15).fillColor(T.COR_TEXTO).text(designacao, xTexto, 42, { width: 250, lineBreak: false });
+      if (morada) this.doc.font(T.FONTE).fontSize(T.TEXTO_SIZE_SMALL).fillColor(T.COR_MUTED).text(morada, xTexto, 62, { width: 250 });
+      if (nifTexto) this.doc.font(T.FONTE).fontSize(T.TEXTO_SIZE_SMALL).fillColor(T.COR_MUTED).text(nifTexto, xTexto, 74, { width: 250 });
+      this.doc.font(T.FONTE_BOLD).fontSize(T.TITULO_DOC_SIZE).fillColor(T.COR_TEXTO).text(this.titulo, 300, 45, { width: 245, align: 'right' });
+      this.doc.moveTo(T.MARGEM, 96).lineTo(T.MARGEM + T.LARGURA_CONTEUDO, 96).lineWidth(1.2).strokeColor(T.COR_PRIMARIA).stroke();
+      this.y = 108;
+      return;
     }
 
-    if (this.cabecalhoDireita && this.cabecalhoDireita.length) {
-      // Coluna direita com 3 linhas (recibo/aviso): alinhada à direita, com a
-      // mesma hierarquia tipográfica da coluna esquerda (1.ª linha em destaque).
-      const xDir = 300;
-      const wDir = 245;
-      const posY = [45, 63, 75];
-      this.cabecalhoDireita.forEach((linha, i) => {
+    // ── Cabeçalho em duas colunas robustas (recibo/aviso com coluna direita) ──
+    const rightX = 300;
+    const rightW = T.LARGURA_PAGINA - T.MARGEM - rightX; // 245
+    const leftW = Math.max(110, rightX - xTexto - 16);
+
+    // Nome grande: quebra controlada (nunca invade a coluna direita); reduz-se
+    // o corpo apenas se necessário para caber em ~2 linhas.
+    let nomeSize = 15;
+    this.doc.font(T.FONTE_BOLD);
+    while (nomeSize > 11 && this.doc.heightOfString(designacao, { width: leftW, fontSize: nomeSize }) > nomeSize * 2.8) {
+      nomeSize -= 1;
+    }
+
+    const alturaDe = (texto, tamanho, bold, width) => {
+      const f = bold ? T.FONTE_BOLD : T.FONTE;
+      return this.doc.font(f).heightOfString(String(texto ?? ''), { width, fontSize: tamanho }) + 3;
+    };
+
+    const esq = [{ texto: designacao, tamanho: nomeSize, bold: true, cor: T.COR_TEXTO }];
+    if (morada) esq.push({ texto: morada, tamanho: T.TEXTO_SIZE_SMALL, bold: false, cor: T.COR_MUTED });
+    if (nifTexto) esq.push({ texto: nifTexto, tamanho: T.TEXTO_SIZE_SMALL, bold: false, cor: T.COR_MUTED });
+
+    const dir = this.cabecalhoDireita.map((l) => ({
+      texto: l.texto,
+      tamanho: l.tamanho || (l.negrito ? 13 : T.TEXTO_SIZE_SMALL),
+      bold: l.negrito === true,
+      cor: l.cor || T.COR_MUTED,
+    }));
+
+    const leftTotal = esq.reduce((s, l) => s + alturaDe(l.texto, l.tamanho, l.bold, leftW), 0);
+    const rightTotal = dir.reduce((s, l) => s + alturaDe(l.texto, l.tamanho, l.bold, rightW), 0);
+    const startTop = 34;
+    const centro = Math.max(leftTotal, rightTotal);
+
+    // Desenha colunas; a mais pequena fica centrada verticalmente na mais alta.
+    let yEsq = startTop;
+    for (const l of esq) {
+      if (!this.medindo) {
         this.doc
-          .font(linha.negrito ? T.FONTE_BOLD : T.FONTE)
-          .fontSize(linha.tamanho || T.TEXTO_SIZE_SMALL)
-          .fillColor(linha.cor || T.COR_MUTED)
-          .text(String(linha.texto ?? ''), xDir, posY[i] || 45, { width: wDir, align: 'right', lineBreak: false });
-      });
-    } else {
-      this.doc
-        .font(T.FONTE_BOLD)
-        .fontSize(T.TITULO_DOC_SIZE)
-        .fillColor(T.COR_TEXTO)
-        .text(this.titulo, 300, 45, { width: 245, align: 'right' });
+          .font(l.bold ? T.FONTE_BOLD : T.FONTE)
+          .fontSize(l.tamanho)
+          .fillColor(l.cor)
+          .text(l.texto, xTexto, yEsq, { width: leftW, lineGap: 1 });
+      }
+      yEsq += alturaDe(l.texto, l.tamanho, l.bold, leftW);
+    }
+    let yDir = startTop + Math.max(0, (leftTotal - rightTotal) / 2);
+    for (const l of dir) {
+      if (!this.medindo) {
+        this.doc
+          .font(l.bold ? T.FONTE_BOLD : T.FONTE)
+          .fontSize(l.tamanho)
+          .fillColor(l.cor)
+          .text(l.texto, rightX, yDir, { width: rightW, align: 'right', lineBreak: false, lineGap: 1 });
+      }
+      yDir += alturaDe(l.texto, l.tamanho, l.bold, rightW);
     }
 
-    this.doc
-      .moveTo(T.MARGEM, 96)
-      .lineTo(T.MARGEM + T.LARGURA_CONTEUDO, 96)
-      .lineWidth(1.2)
-      .strokeColor(T.COR_PRIMARIA)
-      .stroke();
-
-    this.y = 108;
+    const ruleY = startTop + centro + 6;
+    this.doc.moveTo(T.MARGEM, ruleY).lineTo(T.MARGEM + T.LARGURA_CONTEUDO, ruleY).lineWidth(1.2).strokeColor(T.COR_PRIMARIA).stroke();
+    this.y = ruleY + 9;
   }
 
   garantirEspaco(altura) {
@@ -225,7 +255,7 @@ class Layout {
 
   caixa(titulo, corpo, cor = T.COR_PRIMARIA, fundo = T.COR_FUNDO_CAIXA, opts = {}) {
     // Espaçamento entre blocos (secções visualmente independentes).
-    const gapBloco = 10;
+    const gapBloco = 7;
     const hideTitle = opts.hideTitle === true;
     const tituloFontSize = opts.tituloFontSize || T.TITULO_CAIXA_SIZE;
     const tituloBloco = hideTitle ? 0 : tituloFontSize + 6;
@@ -270,24 +300,19 @@ class Layout {
 // ── Rodapé + paginação ─────────────────────────────────────────────
 function finalizarPaginacao(doc, condominio) {
   const range = doc.bufferedPageRange();
+  const nome = (condominio && String(condominio.designacao || '').trim()) || '';
+  const largura = T.LARGURA_CONTEUDO;
   for (let i = range.start; i < range.start + range.count; i++) {
     doc.switchToPage(i);
-    doc
-      .moveTo(T.MARGEM, 782)
-      .lineTo(T.MARGEM + T.LARGURA_CONTEUDO, 782)
-      .lineWidth(0.5)
-      .strokeColor('#cccccc')
-      .stroke();
-    doc
-      .font(T.FONTE)
-      .fontSize(8)
-      .fillColor('#888888')
-      .text(`Condomínio ${condominio.designacao || ''} · Documento gerado por GesCondu`, T.MARGEM, 790, { width: 400, align: 'left' });
-    doc
-      .font(T.FONTE)
-      .fontSize(8)
-      .fillColor('#888888')
-      .text(`Página ${i + 1} de ${range.count}`, 450, 790, { width: 95, align: 'right' });
+    // Rodapé discreto — 3 linhas centradas; nome real (sem prefixos artificiais).
+    if (nome) {
+      doc.font(T.FONTE).fontSize(9).fillColor('#555555').text(nome, T.MARGEM, 780, { width: largura, align: 'center' });
+      doc.font(T.FONTE).fontSize(7.5).fillColor('#777777').text('Documento gerado por', T.MARGEM, 787, { width: largura, align: 'center' });
+      doc.font(T.FONTE).fontSize(7).fillColor('#888888').text('GesCondu - Gestão de Condomínios', T.MARGEM, 792.5, { width: largura, align: 'center' });
+    }
+    if (range.count > 1) {
+      doc.font(T.FONTE).fontSize(7).fillColor('#888888').text(`Página ${i + 1} de ${range.count}`, 450, 780, { width: 95, align: 'right' });
+    }
   }
 }
 
@@ -371,7 +396,7 @@ function marcarAnulado(doc) {
 async function gerarReciboPDF(condominio, d) {
   const doc = criarDocumento();
   const L = new Layout(doc, condominio, 'RECIBO', [
-    { texto: d.numero ? `Recibo n.º ${d.numero}` : 'Recibo', tamanho: 15, negrito: true, cor: T.COR_TEXTO },
+    { texto: d.numero ? `Recibo n.º ${d.numero}` : 'Recibo', tamanho: 13, negrito: true, cor: T.COR_TEXTO },
     { texto: `Código de verificação: ${d.codigoVerificacao || '—'}`, tamanho: T.TEXTO_SIZE_SMALL, negrito: false, cor: T.COR_MUTED },
     { texto: `Emitido em ${d.data ? formatDateExtenso(d.data) : '—'}`, tamanho: T.TEXTO_SIZE_SMALL, negrito: false, cor: T.COR_MUTED },
   ]);
@@ -506,7 +531,7 @@ async function gerarReciboPDF(condominio, d) {
           .font(T.FONTE)
           .fontSize(T.TEXTO_SIZE_SMALL)
           .fillColor(T.COR_VERDE)
-          .text(`Saldo após pagamento: ${formatEUR(d.saldoAposPagamento)}`, C.cx, saldoY, { width: C.cw, align: 'right' });
+          .text(`Saldo devedor vencido em ${d.data ? formatDate(d.data) : '—'}`, C.cx, saldoY, { width: C.cw, align: 'right' });
       }
       C.y = saldoY + 14;
     },

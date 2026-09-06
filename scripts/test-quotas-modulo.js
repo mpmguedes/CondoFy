@@ -500,6 +500,21 @@ async function testPdfUmaPagina() {
   assert.ok(texto.includes('Fração A'), 'fração visível');
   assert.ok(texto.includes('125'), 'permilagem visível');
   assert.ok(texto.includes('TRF123456') && texto.includes('MB WAY') && texto.includes('XYZ789'), 'métodos/referências dos pagamentos visíveis');
+  assert.ok(texto.includes('GesCondu - Gestão de Condomínios'), 'rodapé com assinatura GesCondu');
+  assert.ok(!texto.includes('Condomínio Condomínio'), 'rodapé/cabeçalho sem duplicar a palavra Condomínio');
+
+  // Nomes longos: colunas do cabeçalho nunca se sobrepõem e fica numa página.
+  const condLongo = { ...cond, designacao: 'CONDOMÍNIO JARDINS DA SERRA E DAS OLIVEIRAS' };
+  const reciboLongo = await gerarReciboPDF(condLongo, base);
+  assert.strictEqual(paginasPdf(reciboLongo), 1, 'recibo com nome longo numa única página');
+  assert.ok(textosPdf(reciboLongo).includes('JARDINS DA SERRA'), 'nome longo presente sem cortes');
+  assert.ok(textosPdf(reciboLongo).includes('RCP-2026-0009'), 'coluna direita intacta com nome longo');
+
+  // Valores elevados mantêm título+valor na mesma linha e a página única.
+  for (const valor of [1250, 12500.5]) {
+    const alto = await gerarReciboPDF(cond, { ...base, valor });
+    assert.strictEqual(paginasPdf(alto), 1, `recibo de ${valor} € numa única página`);
+  }
 
   const anulado = await gerarReciboPDF(cond, { ...base, anulado: true });
   assert.strictEqual(paginasPdf(anulado), 1, 'recibo anulado também ocupa uma única página');
