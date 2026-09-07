@@ -18,16 +18,21 @@ function rangeMes(ano, mes) {
 
 // Resumo financeiro de um mês: quotas previstas (incl. FCR), parcelas extra
 // previstas e recebidas (pagamentos confirmados no mês).
-async function resumoFinanceiroMes(ano, mes) {
+// condominioId (opcional, multi-condomínio): restringe ao condomínio ativo.
+async function resumoFinanceiroMes(ano, mes, condominioId) {
   const [ini, fim] = rangeMes(ano, mes);
+  const onde = condominioId ? { condominio_id: condominioId } : {};
 
   const [quotasMes, extraMes, recebidas] = await Promise.all([
-    Quota.findAll({ where: { ano, mes, estado: { [Op.ne]: 'anulada' } } }),
+    Quota.findAll({ where: { ano, mes, estado: { [Op.ne]: 'anulada' }, ...onde } }),
     ExtraQuotaParcela.findAll({
       where: { data_vencimento: { [Op.gte]: ini, [Op.lte]: fim }, estado: { [Op.ne]: 'anulada' } },
+      include: condominioId
+        ? [{ model: require('../models').ExtraQuota, as: 'extra_quota', attributes: [], where: { condominio_id: condominioId }, required: true }]
+        : [],
     }),
     Pagamento.sum('valor', {
-      where: { estado: 'confirmado', data_pagamento: { [Op.gte]: ini, [Op.lte]: fim } },
+      where: { estado: 'confirmado', data_pagamento: { [Op.gte]: ini, [Op.lte]: fim }, ...onde },
     }),
   ]);
 
@@ -43,9 +48,10 @@ async function resumoFinanceiroMes(ano, mes) {
 
 // Total e contagem de quotas vencidas (em atraso), considerando apenas o que
 // ainda está por pagar.
-async function resumoEmAtraso() {
+async function resumoEmAtraso(condominioId) {
+  const onde = condominioId ? { condominio_id: condominioId } : {};
   const quotas = await Quota.findAll({
-    where: { estado: { [Op.in]: ['pendente', 'parcialmente_paga', 'vencida'] } },
+    where: { estado: { [Op.in]: ['pendente', 'parcialmente_paga', 'vencida'] }, ...onde },
   });
 
   const ids = quotas.map((q) => q.id);
@@ -81,8 +87,10 @@ async function resumoEmAtraso() {
 
 // Orçamento cujo ano de início corresponde ao ano indicado (ou null), com os
 // totais previstos: despesas (rubricas), receitas (plano emitido/planeado) e saldo.
-async function orcamentoDoAno(ano) {
+async function orcamentoDoAno(ano, condominioId) {
+  const onde = condominioId ? { condominio_id: condominioId } : {};
   const orcamentos = await Orcamento.findAll({
+    where: onde,
     include: [{ model: OrcamentoRubrica, as: 'rubricas' }],
     order: [['data_inicio', 'ASC']],
   });

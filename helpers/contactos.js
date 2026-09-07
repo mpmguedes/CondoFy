@@ -151,13 +151,19 @@ async function contactosParaForm(pessoa) {
 // emails/telefones: [{ id?, valor, etiqueta?, principal }] — um principal por tipo;
 // se nenhum estiver marcado, o primeiro torna-se principal (substituição
 // idempotente ao guardar a ficha).
-async function sincronizarContactosPessoa(pessoa, emails = [], telefones = []) {
+async function sincronizarContactosPessoa(pessoa, emails = [], telefones = [], condominioId = null) {
   await ContactoPessoa.destroy({ where: { pessoa_id: pessoa.id } });
+
+  // Multi-condomínio: o contacto herda o condomínio da pessoa (carregada da BD)
+  // ou do contexto ativo da rota; fluxos legados sem valor ficam com null e o
+  // backfill da migração trata de os preencher.
+  const cid = condominioId || (pessoa && pessoa.condominio_id) || null;
 
   const montar = (tipo, lista) => {
     const temPrincipal = lista.some((c) => c.principal);
     return lista
       .map((c, i) => ({
+        condominio_id: cid,
         pessoa_id: pessoa.id,
         tipo,
         valor: String(c.valor || '').trim(),

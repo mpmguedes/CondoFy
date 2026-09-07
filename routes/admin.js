@@ -6,6 +6,7 @@ const {
   Pessoa,
   FracaoPessoa,
   User,
+  UserCondominio,
   Categoria,
   MetodoPagamento,
   ContaBancaria,
@@ -21,6 +22,7 @@ const {
   EmailFila,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
+const tenant = require('../helpers/tenant');
 const { toCents, fromCents } = require('../helpers/money');
 const { audit } = require('../helpers/audit');
 const { getCondominio } = require('../helpers/condominio');
@@ -34,6 +36,19 @@ const { sincronizarContactosPessoa, parseContactosForm, validarContactos, contac
 const router = express.Router();
 
 router.use(eAdmin);
+// Isolamento: condomínio ativo (sessão validada) em todas as operações.
+router.use(tenant.comCondominioAtivo);
+
+// Escopo e carregadores restritos ao condomínio ativo (bloqueiam IDOR).
+function onde(req, extra = {}) {
+  return { condominio_id: req.condominioId, ...extra };
+}
+function carregarFracao(req) {
+  return Fracao.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
+}
+function carregarPessoa(req) {
+  return Pessoa.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
+}
 
 function parseDecimal(value, fallback = null) {
   if (value === null || value === undefined || value === '') return fallback;
@@ -50,19 +65,19 @@ function toArray(value) {
 router.get('/', async (req, res) => {
   const [nFracoes, nPessoas, nUsers, condominio, resumo, quotas, ultimoBackup, filaPendentes, filaErros] =
     await Promise.all([
-      Fracao.count(),
-      Pessoa.count(),
-      User.count(),
-      getCondominio(),
-      resumoCondominio(),
-      Quota.findAll({ where: { estado: { [Op.ne]: 'anulada' } } }),
+      Fracao.count({ where: onde(req) }),
+      Pessoa.count({ where: onde(req) }),
+      UserCondominio.count({ where: { condominio_id: req.condominioId } }),
+      getCondominio({ id: req.condominioId }),
+      resumoCondominio(req.condominioId),
+      Quota.findAll({ where: onde(req, { estado: { [Op.ne]: 'anulada' } }) }),
       BackupLog.findOne({ order: [['id', 'DESC']] }),
       EmailFila.count({ where: { estado: 'pendente' } }),
       EmailFila.count({ where: { estado: 'erro' } }),
     ]);
 
   const [nDriveDocs, nEmailsEnviados, nFornecedores, nPagFornecedorPendentes] = await Promise.all([
-    Documento.count({ where: { drive_status: 'guardado' } }),
+    Documento.count({ where: onde(req, { drive_status: 'guardado' }) }),
     EmailFila.count({ where: { estado: 'enviado' } }),
     Fornecedor.count({ where: { ativo: true } }),
     PagamentoFornecedor.count({ where: { estado: 'pendente' } }),
@@ -76,16 +91,16 @@ router.get('/', async (req, res) => {
   const anoAtual = new Date().getFullYear();
   const mesAtual = new Date().getMonth() + 1;
   const [pagamentos, despesas, financeiroMes, emAtraso, orcamentoAno] = await Promise.all([
-    Pagamento.findAll({ attributes: ['valor', 'data_pagamento'], where: { estado: 'confirmado' }, raw: true }),
+    Pagamento.findAll({ attributes: ['valor', 'data_pagamento'], where: onde(req, { estado: 'confirmado' }), raw: true }),
     Despesa.findAll({
       attributes: ['valor', 'data'],
-      where: { estado: { [Op.ne]: 'anulada' } },
+      where: onde(req, { estado: { [Op.ne]: 'anulada' } }),
       include: [{ model: Categoria, as: 'categoria', attributes: ['nome'] }],
       raw: true,
     }),
-    resumoFinanceiroMes(anoAtual, mesAtual),
-    resumoEmAtraso(),
-    orcamentoDoAno(anoAtual),
+    resumoFinanceiroMes(anoAtual, mesAtual, req.condominioId),
+    resumoEmAtraso(req.condominioId),
+    orcamentoDoAno(anoAtual, req.condominioId),
   ]);
 
   const receitasMes = Array(12).fill(0);
@@ -106,7 +121,7 @@ router.get('/', async (req, res) => {
   const categoriasTop = Object.entries(porCategoria).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
   // TOP DEVEDORES (Painel): agrupado por fração, quotas não pagas.
-  const fracoesTodas = await Fracao.findAll({ attributes: ['id', 'designacao'] });
+  const fracoesTodas = await Fracao.findAll({ attributes: ['id', 'designacao'], where: onde(req) });
   const nomeFracao = new Map(fracoesTodas.map((f) => [f.id, f.designacao]));
   const mapaDivida = new Map();
   for (const q of quotas) {
@@ -166,6 +181,7 @@ router.get('/', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 router.get('/fracoes', async (req, res) => {
   const fracoes = await Fracao.findAll({
+    where: onde(req),
     include: [{ model: Pessoa, as: 'pessoas', through: { attributes: ['vinculo'] } }],
     order: [['designacao', 'ASC']],
   });
@@ -180,6 +196,7 @@ router.post('/fracoes', async (req, res) => {
   try {
     const { designacao, permilagem, andar, porta, observacoes, estado } = req.body;
     const fracao = await Fracao.create({
+      condominio_id: req.condominioId,
       designacao,
       permilagem: parseDecimal(permilagem),
       andar,
@@ -198,19 +215,20 @@ router.post('/fracoes', async (req, res) => {
 });
 
 router.get('/fracoes/:id/editar', async (req, res) => {
-  const fracao = await Fracao.findByPk(req.params.id, {
+  const fracao = await Fracao.findOne({
+    where: { id: req.params.id, condominio_id: req.condominioId },
     include: [{ model: Pessoa, as: 'pessoas', through: { attributes: ['id', 'vinculo', 'data_inicio', 'data_fim'] } }],
   });
   if (!fracao) {
     req.flash('error_msg', 'Fração não encontrada.');
     return res.redirect('/admin/fracoes');
   }
-  const pessoas = await Pessoa.findAll({ where: { ativo: true }, order: [['nome', 'ASC']] });
+  const pessoas = await Pessoa.findAll({ where: onde(req, { ativo: true }), order: [['nome', 'ASC']] });
   res.render('admin/fracoes/form', { titulo: 'Editar fração', fracao, pessoas });
 });
 
 router.post('/fracoes/:id', async (req, res) => {
-  const fracao = await Fracao.findByPk(req.params.id);
+  const fracao = await carregarFracao(req);
   if (!fracao) {
     req.flash('error_msg', 'Fração não encontrada.');
     return res.redirect('/admin/fracoes');
@@ -231,7 +249,7 @@ router.post('/fracoes/:id', async (req, res) => {
 
 router.post('/fracoes/:id/eliminar', async (req, res) => {
   try {
-    const fracao = await Fracao.findByPk(req.params.id);
+    const fracao = await carregarFracao(req);
     if (fracao) {
       await fracao.destroy();
       await audit({ userId: req.user.id, acao: 'eliminar_fração', entidade: 'Fracao', entidadeId: req.params.id });
@@ -244,17 +262,22 @@ router.post('/fracoes/:id/eliminar', async (req, res) => {
   res.redirect('/admin/fracoes');
 });
 
-// Vínculos fração ↔ pessoa
+// Vínculos fração ↔ pessoa (ambos do condomínio ativo)
 router.post('/fracoes/:id/pessoas', async (req, res) => {
-  const fracao = await Fracao.findByPk(req.params.id);
+  const fracao = await carregarFracao(req);
   if (!fracao) return res.redirect('/admin/fracoes');
   const { pessoa_id, vinculo, data_inicio, data_fim } = req.body;
   try {
+    const pessoa = await Pessoa.findOne({ where: { id: pessoa_id, condominio_id: req.condominioId } });
+    if (!pessoa) {
+      req.flash('error_msg', 'Pessoa não encontrada neste condomínio.');
+      return res.redirect(`/admin/fracoes/${fracao.id}/editar`);
+    }
     await FracaoPessoa.findOrCreate({
-      where: { fracao_id: fracao.id, pessoa_id, vinculo: vinculo || 'proprietario' },
+      where: { fracao_id: fracao.id, pessoa_id: pessoa.id, vinculo: vinculo || 'proprietario' },
       defaults: {
         fracao_id: fracao.id,
-        pessoa_id,
+        pessoa_id: pessoa.id,
         vinculo: vinculo || 'proprietario',
         data_inicio: data_inicio || null,
         data_fim: data_fim || null,
@@ -270,15 +293,18 @@ router.post('/fracoes/:id/pessoas', async (req, res) => {
 });
 
 router.post('/fracoes/:id/pessoas/:vinculoId/eliminar', async (req, res) => {
-  await FracaoPessoa.destroy({ where: { id: req.params.vinculoId, fracao_id: req.params.id } });
+  const fracao = await carregarFracao(req);
+  if (!fracao) return res.redirect('/admin/fracoes');
+  await FracaoPessoa.destroy({ where: { id: req.params.vinculoId, fracao_id: fracao.id } });
   await audit({ userId: req.user.id, acao: 'desvincular_pessoa_fração', entidade: 'FracaoPessoa' });
   req.flash('success_msg', 'Associação removida.');
-  res.redirect(`/admin/fracoes/${req.params.id}/editar`);
+  res.redirect(`/admin/fracoes/${fracao.id}/editar`);
 });
 
 // Detalhe da fração (tabs)
 router.get('/fracoes/:id', async (req, res) => {
-  const fracao = await Fracao.findByPk(req.params.id, {
+  const fracao = await Fracao.findOne({
+    where: { id: req.params.id, condominio_id: req.condominioId },
     include: [{ model: Pessoa, as: 'pessoas', through: { attributes: ['id', 'vinculo', 'data_inicio', 'data_fim'] } }],
   });
   if (!fracao) {
@@ -293,10 +319,10 @@ router.get('/fracoes/:id', async (req, res) => {
       include: [{ model: MetodoPagamento, as: 'metodo_pagamento' }],
       order: [['data_pagamento', 'DESC'], ['id', 'DESC']],
     }),
-    Documento.findAll({ where: { entidade_tipo: 'Fracao', entidade_id: fracao.id }, order: [['data', 'DESC']] }),
+    Documento.findAll({ where: { entidade_tipo: 'Fracao', entidade_id: fracao.id, condominio_id: req.condominioId }, order: [['data', 'DESC']] }),
     AvisoDestinatario.findAll({
       where: { fracao_id: fracao.id },
-      include: [{ model: Aviso, as: 'aviso' }],
+      include: [{ model: Aviso, as: 'aviso', where: { condominio_id: req.condominioId }, required: true }],
       order: [['id', 'DESC']],
     }),
     resumoFracao(fracao.id),
@@ -320,6 +346,7 @@ router.get('/fracoes/:id', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 router.get('/condominos', async (req, res) => {
   const pessoas = await Pessoa.findAll({
+    where: onde(req),
     include: [{ model: Fracao, as: 'fracoes', through: { attributes: ['vinculo'] } }],
     order: [['nome', 'ASC']],
   });
@@ -335,7 +362,7 @@ function contactosIniciaisForm() {
 }
 
 router.get('/condominos/nova', async (req, res) => {
-  const fracoes = await Fracao.findAll({ order: [['designacao', 'ASC']] });
+  const fracoes = await Fracao.findAll({ where: onde(req), order: [['designacao', 'ASC']] });
   res.render('admin/condominos/form', {
     titulo: 'Novo condómino',
     edicao: false,
@@ -345,6 +372,11 @@ router.get('/condominos/nova', async (req, res) => {
   });
 });
 
+// Frações do condomínio ativo para validar os ids enviados pelo browser.
+async function fracoesDoAtivo(req) {
+  return Fracao.findAll({ where: onde(req), attributes: ['id'] });
+}
+
 router.post('/condominos', async (req, res) => {
   const { nome, nif, tipo, observacoes } = req.body;
   const vinculo = req.body.vinculo || 'proprietario';
@@ -353,7 +385,7 @@ router.post('/condominos', async (req, res) => {
   const fracoesSelecionadas = toArray(req.body.fracoes).map(Number);
 
   if (erro) {
-    const fracoes = await Fracao.findAll({ order: [['designacao', 'ASC']] });
+    const fracoes = await Fracao.findAll({ where: onde(req), order: [['designacao', 'ASC']] });
     const selecionadas = new Set(fracoesSelecionadas);
     res.locals.error_msg = [erro];
     return res.render('admin/condominos/form', {
@@ -366,6 +398,7 @@ router.post('/condominos', async (req, res) => {
   }
 
   const pessoa = await Pessoa.create({
+    condominio_id: req.condominioId,
     nome,
     nif,
     tipo: tipo || 'proprietario',
@@ -374,10 +407,12 @@ router.post('/condominos', async (req, res) => {
     telefone: null,
   });
   // Guarda os contactos (email/telefone legados ficam sincronizados com o principal).
-  await sincronizarContactosPessoa(pessoa, emails, telefones);
+  await sincronizarContactosPessoa(pessoa, emails, telefones, req.condominioId);
 
+  // Liga apenas frações do condomínio ativo (ignora ids de outros condomínios).
+  const validas = new Set((await fracoesDoAtivo(req)).map((f) => f.id));
   for (const fid of fracoesSelecionadas) {
-    await FracaoPessoa.create({ fracao_id: fid, pessoa_id: pessoa.id, vinculo });
+    if (validas.has(fid)) await FracaoPessoa.create({ fracao_id: fid, pessoa_id: pessoa.id, vinculo });
   }
 
   await audit({ userId: req.user.id, acao: 'criar_condómino', entidade: 'Pessoa', entidadeId: pessoa.id, detalhes: { fracoes: fracoesSelecionadas.length } });
@@ -386,14 +421,15 @@ router.post('/condominos', async (req, res) => {
 });
 
 router.get('/condominos/:id/editar', async (req, res) => {
-  const pessoa = await Pessoa.findByPk(req.params.id, {
+  const pessoa = await Pessoa.findOne({
+    where: { id: req.params.id, condominio_id: req.condominioId },
     include: [{ model: Fracao, as: 'fracoes', through: { attributes: ['id', 'vinculo'] } }],
   });
   if (!pessoa) {
     req.flash('error_msg', 'Condómino não encontrado.');
     return res.redirect('/admin/condominos');
   }
-  const fracoes = await Fracao.findAll({ order: [['designacao', 'ASC']] });
+  const fracoes = await Fracao.findAll({ where: onde(req), order: [['designacao', 'ASC']] });
   const associadasIds = new Set(pessoa.fracoes.map((f) => f.id));
   // Mostra os contactos existentes; na ausência de registos de um tipo usa o
   // valor legado pessoa.email/telefone (nunca desaparecem da ficha).
@@ -408,7 +444,7 @@ router.get('/condominos/:id/editar', async (req, res) => {
 });
 
 router.post('/condominos/:id', async (req, res) => {
-  const pessoa = await Pessoa.findByPk(req.params.id);
+  const pessoa = await carregarPessoa(req);
   if (!pessoa) return res.redirect('/admin/condominos');
   const { nome, nif, tipo, observacoes } = req.body;
   const ativo = req.body.ativo === 'on' || req.body.ativo === '1' || req.body.ativo === true;
@@ -422,7 +458,7 @@ router.post('/condominos/:id', async (req, res) => {
     const atuais = await FracaoPessoa.findAll({ where: { pessoa_id: pessoa.id } });
     const atuaisIds = new Set(atuais.map((a) => a.fracao_id));
     const selecionadas = new Set(fracoesSelecionadas);
-    const fracoes = await Fracao.findAll({ order: [['designacao', 'ASC']] });
+    const fracoes = await Fracao.findAll({ where: onde(req), order: [['designacao', 'ASC']] });
     res.locals.error_msg = [erro];
     return res.render('admin/condominos/form', {
       titulo: 'Editar condómino',
@@ -452,17 +488,19 @@ router.post('/condominos/:id', async (req, res) => {
   });
   // Substituição idempotente: a ficha submete sempre a lista completa, por isso
   // os contactos são reconstruídos sem duplicar em gravações repetidas.
-  await sincronizarContactosPessoa(pessoa, emails, telefones);
+  await sincronizarContactosPessoa(pessoa, emails, telefones, req.condominioId);
 
-  // Sincronizar frações: remove as desmarcadas, adiciona as novas com o vínculo escolhido.
-  const selecionadasIds = new Set(fracoesSelecionadas);
+  // Sincronizar frações: remove as desmarcadas, adiciona as novas com o vínculo
+  // escolhido — apenas frações do condomínio ativo.
+  const validas = new Set((await fracoesDoAtivo(req)).map((f) => f.id));
+  const selecionadasIds = new Set(fracoesSelecionadas.filter((fid) => validas.has(fid)));
   const atuais = await FracaoPessoa.findAll({ where: { pessoa_id: pessoa.id } });
   const atuaisIds = new Set(atuais.map((a) => a.fracao_id));
 
   for (const a of atuais) {
     if (!selecionadasIds.has(a.fracao_id)) await a.destroy();
   }
-  for (const fid of fracoesSelecionadas) {
+  for (const fid of selecionadasIds) {
     if (!atuaisIds.has(fid)) await FracaoPessoa.create({ fracao_id: fid, pessoa_id: pessoa.id, vinculo });
   }
 
@@ -472,7 +510,7 @@ router.post('/condominos/:id', async (req, res) => {
 });
 
 router.post('/condominos/:id/eliminar', async (req, res) => {
-  const pessoa = await Pessoa.findByPk(req.params.id);
+  const pessoa = await carregarPessoa(req);
   if (pessoa) {
     await pessoa.destroy();
     await audit({ userId: req.user.id, acao: 'eliminar_condómino', entidade: 'Pessoa', entidadeId: req.params.id });
@@ -483,14 +521,45 @@ router.post('/condominos/:id/eliminar', async (req, res) => {
 
 // ═══════════════════════════════════════════════════════════════════
 // UTILIZADORES (CONTAS)
+// Contas criadas aqui pertencem ao condomínio ativo (associação
+// utilizador_condominios). O papel legado mantém-se para a interface:
+// 'admin' ↔ papel de condomínio admin; restantes ↔ 'leitura'.
 // ═══════════════════════════════════════════════════════════════════
+function papelDaAssociacao(role) {
+  return role === 'admin' ? 'admin' : 'leitura';
+}
+function roleLegadoDoPapel(papel) {
+  return papel === 'admin' ? 'admin' : 'condomino';
+}
+
+async function assocDeUtilizador(req, userId) {
+  return UserCondominio.findOne({ where: { utilizador_id: userId, condominio_id: req.condominioId } });
+}
+
 router.get('/utilizadores', async (req, res) => {
-  const users = await User.findAll({ include: [{ model: Pessoa, as: 'pessoa' }], order: [['nome', 'ASC']] });
+  const assocs = await UserCondominio.findAll({
+    where: { condominio_id: req.condominioId },
+    include: [
+      { model: User, as: 'utilizador', include: [{ model: Pessoa, as: 'pessoa' }] },
+    ],
+    order: [[{ model: User, as: 'utilizador' }, 'nome', 'ASC']],
+  });
+  const users = assocs
+    .map((a) => {
+      const u = a.utilizador;
+      if (!u) return null;
+      const json = u.toJSON();
+      json.papel = a.role;
+      json.estadoAssoc = a.estado;
+      json.role = roleLegadoDoPapel(a.role);
+      return json;
+    })
+    .filter(Boolean);
   res.render('admin/utilizadores/listar', { titulo: 'Utilizadores', users });
 });
 
 router.get('/utilizadores/nova', async (req, res) => {
-  const pessoas = await Pessoa.findAll({ where: { ativo: true }, order: [['nome', 'ASC']] });
+  const pessoas = await Pessoa.findAll({ where: onde(req, { ativo: true }), order: [['nome', 'ASC']] });
   res.render('admin/utilizadores/form', { titulo: 'Novo utilizador', user: null, pessoas });
 });
 
@@ -511,7 +580,14 @@ router.post('/utilizadores', async (req, res) => {
       pessoa_id: pessoa_id || null,
       ativo: ativo === 'on' || ativo === '1' || ativo === true,
     });
-    await audit({ userId: req.user.id, acao: 'criar_utilizador', entidade: 'User', entidadeId: user.id });
+    // Associa ao condomínio ativo (só assim a conta entra na área certa).
+    await UserCondominio.create({
+      utilizador_id: user.id,
+      condominio_id: req.condominioId,
+      role: papelDaAssociacao(role),
+      estado: 'ativo',
+    });
+    await audit({ userId: req.user.id, acao: 'criar_utilizador', entidade: 'User', entidadeId: user.id, detalhes: { condominio_id: req.condominioId, papel: papelDaAssociacao(role) } });
     req.flash('success_msg', 'Utilizador criado.');
     res.redirect('/admin/utilizadores');
   } catch (err) {
@@ -522,16 +598,23 @@ router.post('/utilizadores', async (req, res) => {
 });
 
 router.get('/utilizadores/:id/editar', async (req, res) => {
-  const user = await User.findByPk(req.params.id, { include: [{ model: Pessoa, as: 'pessoa' }] });
-  if (!user) {
-    req.flash('error_msg', 'Utilizador não encontrado.');
+  const assoc = await assocDeUtilizador(req, req.params.id);
+  if (!assoc) {
+    req.flash('error_msg', 'Utilizador não encontrado neste condomínio.');
     return res.redirect('/admin/utilizadores');
   }
-  const pessoas = await Pessoa.findAll({ where: { ativo: true }, order: [['nome', 'ASC']] });
-  res.render('admin/utilizadores/form', { titulo: 'Editar utilizador', user, pessoas });
+  const user = await User.findByPk(req.params.id, { include: [{ model: Pessoa, as: 'pessoa' }] });
+  if (!user) return res.redirect('/admin/utilizadores');
+  const pessoas = await Pessoa.findAll({ where: onde(req, { ativo: true }), order: [['nome', 'ASC']] });
+  const userVista = user.toJSON();
+  userVista.papel = assoc.role;
+  userVista.role = roleLegadoDoPapel(assoc.role);
+  res.render('admin/utilizadores/form', { titulo: 'Editar utilizador', user: userVista, pessoas });
 });
 
 router.post('/utilizadores/:id', async (req, res) => {
+  const assoc = await assocDeUtilizador(req, req.params.id);
+  if (!assoc) return res.redirect('/admin/utilizadores');
   const user = await User.findByPk(req.params.id);
   if (!user) return res.redirect('/admin/utilizadores');
   const { nome, email, password, role, pessoa_id, ativo } = req.body;
@@ -546,20 +629,28 @@ router.post('/utilizadores/:id', async (req, res) => {
     data.password_hash = await bcrypt.hash(password, 10);
   }
   await user.update(data);
-  await audit({ userId: req.user.id, acao: 'editar_utilizador', entidade: 'User', entidadeId: user.id });
+  await assoc.update({ role: papelDaAssociacao(role), estado: 'ativo' });
+  await audit({ userId: req.user.id, acao: 'editar_utilizador', entidade: 'User', entidadeId: user.id, detalhes: { papel: papelDaAssociacao(role) } });
   req.flash('success_msg', 'Utilizador atualizado.');
   res.redirect('/admin/utilizadores');
 });
 
 router.post('/utilizadores/:id/eliminar', async (req, res) => {
-  const user = await User.findByPk(req.params.id);
-  if (user && user.id !== req.user.id) {
-    await user.destroy();
-    await audit({ userId: req.user.id, acao: 'eliminar_utilizador', entidade: 'User', entidadeId: req.params.id });
-    req.flash('success_msg', 'Utilizador eliminado.');
-  } else {
+  const userId = parseInt(req.params.id, 10);
+  const assoc = await assocDeUtilizador(req, userId);
+  if (!assoc || userId === req.user.id) {
     req.flash('error_msg', 'Não pode eliminar a sua própria conta.');
+    return res.redirect('/admin/utilizadores');
   }
+  await assoc.destroy();
+  // Elimina a conta apenas se já não pertence a nenhum outro condomínio.
+  const restantes = await UserCondominio.count({ where: { utilizador_id: userId } });
+  if (restantes === 0) {
+    const user = await User.findByPk(userId);
+    if (user) await user.destroy();
+  }
+  await audit({ userId: req.user.id, acao: 'eliminar_utilizador', entidade: 'User', entidadeId: userId, detalhes: { condominio_id: req.condominioId } });
+  req.flash('success_msg', 'Utilizador removido deste condomínio.');
   res.redirect('/admin/utilizadores');
 });
 
