@@ -5,7 +5,9 @@ const { Documento, Pessoa, Categoria, DocumentoCategoria } = require('../models'
 const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
-const drive = require('../helpers/drive');
+// StorageProvider: os documentos falam com a fachada helpers/storage
+// (provedor atual: google_drive), não diretamente com o drive.
+const drive = require('../helpers/storage');
 const documentActions = require('../helpers/document-actions');
 const { enfileirarEmail: enfileirarEmailFila } = require('../helpers/email-fila');
 const { compor: comporEmail, nomeFicheiro: nomeFicheiroEmail } = require('../helpers/email-templates');
