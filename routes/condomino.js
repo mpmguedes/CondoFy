@@ -421,7 +421,8 @@ router.get('/orcamento', async (req, res) => {
   const ano = parseInt(req.query.ano, 10) || anoAtual;
 
   const orcamento = await Orcamento.findOne({
-    where: { condominio_id: req.condominioId, ano },
+    // Orçamentos anulados não são apresentados ao condomínio como correntes.
+    where: { condominio_id: req.condominioId, ano, estado: { [Op.ne]: 'anulado' } },
     include: [{ model: OrcamentoRubrica, as: 'rubricas', include: [{ model: Categoria, as: 'categoria' }] }],
     order: [['data_inicio', 'DESC']],
   });

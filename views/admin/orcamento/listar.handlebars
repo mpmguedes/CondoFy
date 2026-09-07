@@ -38,13 +38,16 @@
           <td class="text-end fw-semibold {{#if (gt saldo 0)}}text-success{{else if (lt saldo 0)}}text-danger{{/if}}">{{eur saldo}}</td>
           <td>
             {{#if (eq estado 'rascunho')}}<span class="badge text-bg-secondary">Rascunho</span>
+            {{else if (eq estado 'aprovado')}}<span class="badge text-bg-success">Aprovado</span>
+            {{else if (eq estado 'em_execucao')}}<span class="badge text-bg-info">Em execução</span>
             {{else if (eq estado 'encerrado')}}<span class="badge text-bg-dark">Fechado</span>
-            {{else if (eq estado 'anulado')}}<span class="badge text-bg-danger">Anulado</span>
-            {{else}}<span class="badge text-bg-success">Ativo</span>{{/if}}
+            {{else if (eq estado 'anulado')}}<span class="badge text-bg-danger">Anulado</span>{{/if}}
           </td>
           <td class="text-end">
             <a href="/admin/orcamento/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
+            {{#if (eq estado 'rascunho')}}
             <a href="/admin/orcamento/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
+            {{/if}}
           </td>
         </tr>
         {{/each}}

@@ -21,6 +21,7 @@ const { distribuirValorAnual } = require('../helpers/distribuicao');
 const { calcularPlano } = require('../helpers/plano');
 const { proximoNumero } = require('../helpers/numeracao');
 const { getQuotaConfig } = require('../helpers/quotas-config');
+const orcamentoEstado = require('../helpers/orcamento-estado');
 
 const router = express.Router();
 // Isolamento: condomínio ativo (sessão validada) em todas as operações.
@@ -202,10 +203,14 @@ router.get('/orcamento/:id', async (req, res) => {
   });
 });
 
-// ── Editar ─────────────────────────────────────────────────────────
+// ── Editar (apenas rascunho) ───────────────────────────────────────
 router.get('/orcamento/:id/editar', async (req, res) => {
   const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
+  if (!orcamentoEstado.podeEditar(orcamento.estado)) {
+    req.flash('error_msg', 'Apenas orçamentos em rascunho podem ser editados.');
+    return res.redirect(`/admin/orcamento/${orcamento.id}`);
+  }
   const fracoes = await Fracao.findAll({ where: { estado: 'ativo', condominio_id: req.condominioId }, order: [['designacao', 'ASC']] });
   const quotaConfig = await getQuotaConfig();
   res.render('admin/orcamento/form', {
@@ -221,6 +226,10 @@ router.get('/orcamento/:id/editar', async (req, res) => {
 router.post('/orcamento/:id', async (req, res) => {
   const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
+  if (!orcamentoEstado.podeEditar(orcamento.estado)) {
+    req.flash('error_msg', 'Apenas orçamentos em rascunho podem ser editados.');
+    return res.redirect(`/admin/orcamento/${orcamento.id}`);
+  }
 
   const metodoCalculo = req.body.metodo_calculo === 'modo_b' ? 'modo_b' : 'modo_a';
   const receitaPrevista = metodoCalculo === 'modo_b' ? toNumber(req.body.receita_quotas_prevista) : null;
@@ -257,7 +266,7 @@ router.post('/orcamento/:id', async (req, res) => {
 router.post('/orcamento/:id/rubricas', async (req, res) => {
   const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
-  if (orcamento.estado !== 'rascunho') {
+  if (!orcamentoEstado.podeEditar(orcamento.estado)) {
     req.flash('error_msg', 'Orçamento aprovado não pode ser alterado normalmente. Use "alteração extraordinária".');
     return res.redirect(`/admin/orcamento/${orcamento.id}`);
   }
@@ -279,7 +288,7 @@ router.post('/orcamento/:id/rubricas/:rid/eliminar', async (req, res) => {
   const orcamento = await carregarOrcamento(req);
   const rubrica = await OrcamentoRubrica.findByPk(req.params.rid);
   if (orcamento && rubrica && rubrica.orcamento_id === orcamento.id) {
-    if (orcamento.estado !== 'rascunho') {
+    if (!orcamentoEstado.podeEditar(orcamento.estado)) {
       req.flash('error_msg', 'Orçamento aprovado não pode ser alterado normalmente.');
       return res.redirect(`/admin/orcamento/${orcamento.id}`);
     }
@@ -294,6 +303,12 @@ router.post('/orcamento/:id/rubricas/:rid/alterar', async (req, res) => {
   const orcamento = await carregarOrcamento(req);
   const rubrica = await OrcamentoRubrica.findByPk(req.params.rid);
   if (!orcamento || !rubrica || rubrica.orcamento_id !== orcamento.id) return res.redirect('/admin/orcamento');
+  // Rascunho altera normalmente; aprovado/em execução/fechado alteram com
+  // justificação; um orçamento ANULADO nunca é alterado.
+  if (!orcamentoEstado.podeEditar(orcamento.estado) && !orcamentoEstado.podeAlteracaoExtraordinaria(orcamento.estado)) {
+    req.flash('error_msg', 'Orçamento anulado não pode ser alterado.');
+    return res.redirect(`/admin/orcamento/${orcamento.id}`);
+  }
   const novoValor = toNumber(req.body.valor_novo);
   const justificacao = (req.body.justificacao || '').trim();
   if (orcamento.estado !== 'rascunho' && !justificacao) {
@@ -329,6 +344,10 @@ router.post('/orcamento/:id/aprovar', async (req, res) => {
     include: [{ model: OrcamentoRubrica, as: 'rubricas' }],
   });
   if (!orcamento) return res.redirect('/admin/orcamento');
+  if (!orcamentoEstado.podeAprovar(orcamento.estado)) {
+    req.flash('error_msg', 'Apenas orçamentos em rascunho podem ser aprovados.');
+    return res.redirect(`/admin/orcamento/${orcamento.id}`);
+  }
   if (!periodoUmAno(orcamento.data_inicio, orcamento.data_fim)) {
     req.flash('error_msg', 'O período não corresponde a 1 ano.');
     return res.redirect(`/admin/orcamento/${orcamento.id}`);
@@ -350,14 +369,81 @@ router.post('/orcamento/:id/aprovar', async (req, res) => {
   res.redirect(`/admin/orcamento/${orcamento.id}`);
 });
 
-// Fecha o orçamento (encerrado).
+// Fecha o orçamento (encerrado) — apenas aprovado/em execução.
 router.post('/orcamento/:id/fechar', async (req, res) => {
   const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
+  if (!orcamentoEstado.podeFechar(orcamento.estado)) {
+    req.flash('error_msg', 'Apenas orçamentos aprovados ou em execução podem ser fechados.');
+    return res.redirect(`/admin/orcamento/${orcamento.id}`);
+  }
   await orcamento.update({ estado: 'encerrado' });
   await audit({ userId: req.user.id, acao: 'fechar_orçamento', entidade: 'Orcamento', entidadeId: orcamento.id });
   req.flash('success_msg', 'Orçamento fechado.');
   res.redirect(`/admin/orcamento/${orcamento.id}`);
+});
+
+// ANULAÇÃO — ação distinta de eliminar: preserva o histórico (registo +
+// alteração registada) e marca claramente o orçamento como anulado. Só é
+// possível num orçamento aprovado que ainda NÃO entrou em execução.
+router.post('/orcamento/:id/anular', async (req, res) => {
+  const orcamento = await carregarOrcamento(req);
+  if (!orcamento) return res.redirect('/admin/orcamento');
+  if (!orcamentoEstado.podeAnular(orcamento.estado)) {
+    req.flash('error_msg', 'Apenas orçamentos aprovados (ainda sem execução) podem ser anulados.');
+    return res.redirect(`/admin/orcamento/${orcamento.id}`);
+  }
+  const id = orcamento.id;
+  await orcamento.update({ estado: 'anulado' });
+  await OrcamentoAlteracao.create({
+    orcamento_id: id,
+    utilizador_id: req.user.id,
+    tipo_alteracao: 'anulacao',
+    entidade_alterada: 'Orcamento',
+    entidade_id: id,
+    justificacao: String(req.body.justificacao || '').trim() || null,
+  });
+  await audit({ userId: req.user.id, acao: 'anular_orçamento', entidade: 'Orcamento', entidadeId: id });
+  req.flash('success_msg', 'Orçamento anulado. Fica no histórico, sem poder ser editado ou executado.');
+  res.redirect(`/admin/orcamento/${id}`);
+});
+
+// ELIMINAÇÃO — apenas rascunhos (sem relevância financeira/histórica).
+// Remove os registos associados (rubricas, distribuições, plano, histórico).
+// Orçamentos aprovados/em execução/fechados/anulados nunca são eliminados.
+router.post('/orcamento/:id/eliminar', async (req, res) => {
+  const orcamento = await carregarOrcamento(req);
+  if (!orcamento) return res.redirect('/admin/orcamento');
+  if (!orcamentoEstado.podeEliminar(orcamento.estado)) {
+    req.flash('error_msg', 'Apenas orçamentos em rascunho podem ser eliminados.');
+    return res.redirect(`/admin/orcamento/${orcamento.id}`);
+  }
+  const id = orcamento.id;
+  // Segurança: um rascunho não deve ter quotas emitidas; se tiver (fluxo
+  // antigo), recusar a eliminação — quotas têm ON DELETE SET NULL e nunca
+  // podem perder a referência por uma eliminação.
+  const quotasAssociadas = await Quota.count({ where: { orcamento_id: id } });
+  if (quotasAssociadas > 0) {
+    req.flash('error_msg', 'Este rascunho já tem quotas associadas — não pode ser eliminado.');
+    return res.redirect(`/admin/orcamento/${id}`);
+  }
+  const t = await sequelize.transaction();
+  try {
+    await OrcamentoAlteracao.destroy({ where: { orcamento_id: id }, transaction: t });
+    await OrcamentoDistribuicao.destroy({ where: { orcamento_id: id }, transaction: t });
+    await OrcamentoRubrica.destroy({ where: { orcamento_id: id }, transaction: t });
+    await PlanoQuota.destroy({ where: { orcamento_id: id }, transaction: t });
+    await orcamento.destroy({ transaction: t });
+    await t.commit();
+    await audit({ userId: req.user.id, acao: 'eliminar_orçamento', entidade: 'Orcamento', entidadeId: id });
+    req.flash('success_msg', 'Orçamento (rascunho) eliminado.');
+    return res.redirect('/admin/orcamento');
+  } catch (err) {
+    await t.rollback();
+    console.error('[orcamento-eliminar]', err.message);
+    req.flash('error_msg', `Não foi possível eliminar o orçamento: ${err.message}`);
+    return res.redirect(`/admin/orcamento/${id}`);
+  }
 });
 
 // ── Distribuição ───────────────────────────────────────────────────
@@ -402,6 +488,10 @@ router.get('/orcamento/:id/distribuicao', async (req, res) => {
 router.post('/orcamento/:id/distribuicao', async (req, res) => {
   const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
+  if (!orcamentoEstado.naoAnulado(orcamento.estado)) {
+    req.flash('error_msg', 'Orçamento anulado não pode ser alterado.');
+    return res.redirect(`/admin/orcamento/${orcamento.id}`);
+  }
   const t = await sequelize.transaction();
   try {
     const valores = req.body.dist || {};
@@ -478,6 +568,10 @@ router.get('/orcamento/:id/plano', async (req, res) => {
 router.post('/orcamento/:id/plano', async (req, res) => {
   const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
+  if (!orcamentoEstado.naoAnulado(orcamento.estado)) {
+    req.flash('error_msg', 'Orçamento anulado não pode ser alterado.');
+    return res.redirect(`/admin/orcamento/${orcamento.id}`);
+  }
   const rubricas = await OrcamentoRubrica.findAll({ where: { orcamento_id: orcamento.id, ativo: true } });
   const fracoes = await Fracao.findAll({ where: { estado: 'ativo', condominio_id: req.condominioId } });
   let distribuicoes = await OrcamentoDistribuicao.findAll({ where: { orcamento_id: orcamento.id } });
@@ -539,6 +633,10 @@ router.post('/orcamento/:id/plano', async (req, res) => {
 router.get('/orcamento/:id/emitir', async (req, res) => {
   const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
+  if (!orcamentoEstado.naoAnulado(orcamento.estado)) {
+    req.flash('error_msg', 'Orçamento anulado não pode emitir quotas.');
+    return res.redirect(`/admin/orcamento/${orcamento.id}`);
+  }
   const plano = await PlanoQuota.findAll({
     where: { orcamento_id: orcamento.id, estado: 'planeada' },
     include: [{ model: Fracao, as: 'fracao' }],
@@ -569,6 +667,10 @@ router.get('/orcamento/:id/emitir', async (req, res) => {
 router.post('/orcamento/:id/emitir', async (req, res) => {
   const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
+  if (!orcamentoEstado.naoAnulado(orcamento.estado)) {
+    req.flash('error_msg', 'Orçamento anulado não pode emitir quotas.');
+    return res.redirect(`/admin/orcamento/${orcamento.id}`);
+  }
   let ano = parseInt(req.body.ano, 10);
   let mes = parseInt(req.body.mes, 10);
   if (req.body.periodo) {

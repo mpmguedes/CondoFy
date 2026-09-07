@@ -87,8 +87,11 @@ async function resumoEmAtraso(condominioId) {
 
 // Orçamento cujo ano de início corresponde ao ano indicado (ou null), com os
 // totais previstos: despesas (rubricas), receitas (plano emitido/planeado) e saldo.
+// Orçamentos ANULADOS nunca são apresentados como o orçamento corrente do ano.
 async function orcamentoDoAno(ano, condominioId) {
-  const onde = condominioId ? { condominio_id: condominioId } : {};
+  const onde = condominioId
+    ? { condominio_id: condominioId, estado: { [Op.ne]: 'anulado' } }
+    : { estado: { [Op.ne]: 'anulado' } };
   const orcamentos = await Orcamento.findAll({
     where: onde,
     include: [{ model: OrcamentoRubrica, as: 'rubricas' }],

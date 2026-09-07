@@ -4,9 +4,10 @@
     <p class="text-muted mb-0">
       {{formatDate orcamento.data_inicio}} — {{formatDate orcamento.data_fim}}
       {{#if (eq orcamento.estado 'rascunho')}}<span class="badge text-bg-secondary ms-2">Rascunho</span>
+      {{else if (eq orcamento.estado 'aprovado')}}<span class="badge text-bg-success ms-2">Aprovado</span>
+      {{else if (eq orcamento.estado 'em_execucao')}}<span class="badge text-bg-info ms-2">Em execução</span>
       {{else if (eq orcamento.estado 'encerrado')}}<span class="badge text-bg-dark ms-2">Fechado</span>
-      {{else if (eq orcamento.estado 'anulado')}}<span class="badge text-bg-danger ms-2">Anulado</span>
-      {{else}}<span class="badge text-bg-success ms-2">Ativo</span>{{/if}}
+      {{else if (eq orcamento.estado 'anulado')}}<span class="badge text-bg-danger ms-2">Anulado</span>{{/if}}
     </p>
   </div>
   <a href="/admin/orcamento" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
@@ -35,16 +36,29 @@
     <form action="/admin/orcamento/{{orcamento.id}}/aprovar" method="POST">
       <button class="btn btn-success"><i class="bi bi-check-lg me-1"></i>Aprovar orçamento</button>
     </form>
+    <form action="/admin/orcamento/{{orcamento.id}}/eliminar" method="POST" onsubmit="return confirm('Eliminar este rascunho? Esta ação não pode ser revertida.');">
+      <button class="btn btn-outline-danger"><i class="bi bi-trash me-1"></i>Eliminar rascunho</button>
+    </form>
+    {{/if}}
+    {{#if (eq orcamento.estado 'aprovado')}}
+    <form action="/admin/orcamento/{{orcamento.id}}/anular" method="POST" onsubmit="return confirm('Anular este orçamento aprovado? Fica no histórico, sem poder ser editado nem emitido.');">
+      <button class="btn btn-outline-danger"><i class="bi bi-x-circle me-1"></i>Anular orçamento</button>
+    </form>
     {{/if}}
     {{#if (or (eq orcamento.estado 'aprovado') (eq orcamento.estado 'em_execucao'))}}
     <form action="/admin/orcamento/{{orcamento.id}}/fechar" method="POST" onsubmit="return confirm('Fechar este orçamento?');">
       <button class="btn btn-outline-dark"><i class="bi bi-lock me-1"></i>Fechar orçamento</button>
     </form>
     {{/if}}
+    {{#unless (eq orcamento.estado 'anulado')}}
     <a href="/admin/orcamento/{{orcamento.id}}/distribuicao" class="btn btn-outline-primary"><i class="bi bi-diagram-3 me-1"></i>Distribuição</a>
     <a href="/admin/orcamento/{{orcamento.id}}/plano" class="btn btn-outline-primary"><i class="bi bi-calendar3 me-1"></i>Plano de quotas</a>
     <a href="/admin/orcamento/{{orcamento.id}}/emitir" class="btn btn-outline-primary"><i class="bi bi-send me-1"></i>Emitir quotas</a>
+    {{/unless}}
     <a href="/admin/orcamento/{{orcamento.id}}/historico" class="btn btn-outline-secondary"><i class="bi bi-clock-history me-1"></i>Histórico</a>
+    {{#if (eq orcamento.estado 'anulado')}}
+    <span class="align-self-center small text-danger fw-semibold"><i class="bi bi-info-circle me-1"></i>Orçamento anulado — apenas consulta e histórico.</span>
+    {{/if}}
   </div>
 </div>
 
@@ -71,7 +85,9 @@
           <td>{{metodo_distribuicao}}</td>
           <td>{{periodicidade}}</td>
           <td class="text-end text-nowrap">
+            {{#unless (eq ../orcamento.estado 'anulado')}}
             <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#edit{{id}}"><i class="bi bi-pencil"></i></button>
+            {{/unless}}
             {{#if (eq ../orcamento.estado 'rascunho')}}
             <form action="/admin/orcamento/{{../orcamento.id}}/rubricas/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Remover esta rubrica?');">
               <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
