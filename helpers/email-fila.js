@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { Op } = require('sequelize');
-const { EmailFila, Documento, Aviso, Recibo } = require('../models');
+const { EmailFila, Documento, Aviso, Quota, Pagamento, Recibo, Despesa, ExtraQuota, Assembleia } = require('../models');
 const { sendMail } = require('./mailer');
 
 const MAX_TENTATIVAS = 3;
@@ -106,29 +106,52 @@ async function enfileirarEmail({
   });
 }
 
-// Deriva o condomínio de um item da fila através das relações SEGURAS já
-// registadas (documento/aviso/recibo) — nunca por nome/assunto/email. Sem
-// relação → null (o remetente cai para smtp_from_name/'GesCondu'; o contexto
-// por coluna própria na fila fica como evolução P2).
-async function condominioDoItem(item) {
-  const raw = item && item.toJSON ? item.toJSON() : item || {};
-  try {
-    if (raw.documento_id) {
-      const d = await Documento.findByPk(raw.documento_id, { attributes: ['condominio_id'] });
-      if (d && d.condominio_id) return Number(d.condominio_id);
-    }
-    if (raw.aviso_id) {
-      const a = await Aviso.findByPk(raw.aviso_id, { attributes: ['condominio_id'] });
-      if (a && a.condominio_id) return Number(a.condominio_id);
-    }
-    if (raw.entidade_tipo === 'Recibo' && raw.entidade_id) {
-      const r = await Recibo.findByPk(raw.entidade_id, { attributes: ['condominio_id'] });
-      if (r && r.condominio_id) return Number(r.condominio_id);
-    }
-  } catch (err) {
-    // contexto é opcional — nunca bloqueia o envio
+// Modelos de negócio com condominio_id, usados para derivar o condomínio de um
+// item da fila através das relações SEGURAS registadas (nunca por nome/assunto/
+// email). PagamentoFornecedor fica de fora: é operação global do operador (sem
+// condominio_id) — o comprovativo associado (documento_id) resolve o condomínio.
+const MODELOS_ENTIDADE = {
+  Documento,
+  Aviso,
+  Quota,
+  Pagamento,
+  Recibo,
+  Despesa,
+  ExtraQuota,
+  Assembleia,
+};
+
+function modeloPorEntidade(entidadeTipo) {
+  return MODELOS_ENTIDADE[entidadeTipo] ? entidadeTipo : null;
+}
+
+// Que relação SEGURA de um item aponta para o condomínio? (função pura).
+// Prioridade: documento_id → aviso_id → entidade_tipo/entidade_id.
+// Devolve { modelo, id } ou null quando o item não tem contexto de condomínio.
+function contextoDoItem({ documento_id, aviso_id, entidade_tipo, entidade_id } = {}) {
+  if (documento_id) return { modelo: 'Documento', id: documento_id };
+  if (aviso_id) return { modelo: 'Aviso', id: aviso_id };
+  if (entidade_tipo && entidade_id && modeloPorEntidade(entidade_tipo)) {
+    return { modelo: entidade_tipo, id: entidade_id };
   }
   return null;
+}
+
+// Resolve o condominio_id de um item da fila (lê a entidade na BD e devolve o
+// condominio_id dela). null → o remetente cai para smtp_from_name/'GesCondu'.
+async function condominioDoItem(item) {
+  const raw = item && item.toJSON ? item.toJSON() : item || {};
+  const alvo = contextoDoItem(raw);
+  if (!alvo) return null;
+  try {
+    const Modelo = MODELOS_ENTIDADE[alvo.modelo];
+    if (!Modelo) return null;
+    const entidade = await Modelo.findByPk(alvo.id, { attributes: ['condominio_id'] });
+    return entidade && entidade.condominio_id ? Number(entidade.condominio_id) : null;
+  } catch (err) {
+    // contexto é opcional — nunca bloqueia o envio
+    return null;
+  }
 }
 
 async function enviarItem(item) {
@@ -242,5 +265,7 @@ module.exports = {
   reenviarEmail,
   cancelarEmail,
   contarFila,
+  contextoDoItem,
+  modeloPorEntidade,
   MAX_TENTATIVAS,
 };

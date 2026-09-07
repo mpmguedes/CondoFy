@@ -104,11 +104,15 @@ async function enviarLembretesAutomaticos() {
     ].join('\n');
 
     for (const d of dest) {
+      // Ligação segura à quota (condominio_id) para que o processamento da
+      // fila derive o condomínio do remetente — nunca por nome/assunto.
       await enfileirarEmail({
         destinatario_email: d.email,
         destinatario_nome: d.nome,
         assunto,
         corpo,
+        entidade_tipo: 'Quota',
+        entidade_id: q.id,
       });
       enviados++;
     }

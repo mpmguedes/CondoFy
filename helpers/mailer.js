@@ -112,25 +112,40 @@ function construirTransporte(cfg) {
   });
 }
 
-// Nome visível do remetente (display name), contextualizado pelo condomínio.
-// Prioridade do remetente (definida em sendMail):
-//   displayName (explicito por chamada) → smtp_from_name (explicito global)
-//   → contexto do condomínio (administração/designação) → "GesCondu".
-// Nunca usa "o primeiro condomínio da BD" como contexto (multi-condomínio).
-// `condominioId` presente → nome da administração ou designação desse
-// condomínio; ausente → '' (deixa o fallback global decidir).
+// Nome contextual do condomínio para o remetente (função pura, testável).
+// "O nome do condomínio" é a designação; a administração é apenas recurso
+// quando não existe designação (nunca o inverso — o From sem override global
+// deve mostrar o condomínio a que o email diz respeito).
+function nomeDoCondominioParaRemetente(cond) {
+  const designacao = String((cond && cond.designacao) || '').trim();
+  if (designacao) return designacao;
+  const admin = String((cond && cond.administracao_nome) || '').trim();
+  if (admin) return admin;
+  return '';
+}
+
+// Resolução do nome visível do remetente (função pura, testável).
+// Prioridade EXATA:
+//   1. displayName explicitamente fornecido no envio;
+//   2. smtp_from_name configurado globalmente (override explícito da empresa);
+//   3. contexto do condomínio (quando o envio está associado a um condomínio);
+//   4. "GesCondu" apenas como último fallback (sem contexto, sem override).
+function resolverNomeRemetente({ displayName, fromName, contexto } = {}) {
+  const partes = [displayName, fromName, contexto].map((v) => String(v == null ? '' : v).trim());
+  const nome = partes.find((v) => v !== '') || 'GesCondu';
+  return nome;
+}
+
+// Nome visível do remetente (display name) contextualizado pelo condomínio.
+// `condominioId` presente → designação (nome) desse condomínio; ausente → ''
+// (deixa o fallback global decidir). Nunca usa "o primeiro condomínio da BD".
 async function obterNomeRemetente({ condominioId } = {}) {
   const cid = condominioId ? Number(condominioId) : null;
   if (!cid) return '';
   try {
     const { getCondominio } = require('./condominio');
     const c = await getCondominio({ id: cid });
-    if (!c) return '';
-    const admin = String(c.administracao_nome || '').trim();
-    if (admin) return admin;
-    const designacao = String(c.designacao || '').trim();
-    if (designacao) return designacao;
-    return '';
+    return nomeDoCondominioParaRemetente(c);
   } catch (err) {
     return '';
   }
@@ -143,10 +158,11 @@ async function sendMail({ to, subject, text, html, attachments = [], displayName
     return { enviado: false, motivo: 'SMTP não configurado' };
   }
   const transport = construirTransporte(cfg);
-  // displayName (explicito) → smtp_from_name (explicito global) → contexto do
-  // condomínio (quando conhecido) → "GesCondu" (fallback de plataforma).
+  // displayName → smtp_from_name (override global explícito) → contexto do
+  // condomínio (quando conhecido) → "GesCondu". O contexto vem SEMPRE de
+  // condominioId — nunca de "primeiro condomínio" da BD nem de nomes.
   const contexto = condominioId ? await obterNomeRemetente({ condominioId }) : '';
-  const nomeRemetente = String(displayName || cfg.fromName || contexto || 'GesCondu').trim();
+  const nomeRemetente = resolverNomeRemetente({ displayName, fromName: cfg.fromName, contexto });
   const info = await transport.sendMail({
     from: `"${nomeRemetente.replace(/"/g, '')}" <${cfg.from || 'noreply@localhost'}>`,
     to,
@@ -177,9 +193,11 @@ async function testarLigacao() {
 
 // Envio de teste IMEDIATO (não passa pela fila).
 // Devolve sempre { ok, erro?/messageId? }; nunca lança.
-async function enviarEmailTeste({ para, assunto, mensagem, html }) {
+// `condominioId` opcional: quando o teste é feito dentro de um condomínio
+// ativo, o nome do remetente respeita a mesma prioridade dos envios reais.
+async function enviarEmailTeste({ para, assunto, mensagem, html, condominioId }) {
   try {
-    const res = await sendMail({ to: para, subject: assunto, text: mensagem, html });
+    const res = await sendMail({ to: para, subject: assunto, text: mensagem, html, condominioId });
     if (res.enviado) return { ok: true, messageId: res.messageId };
     return { ok: false, erro: res.motivo };
   } catch (err) {
@@ -254,6 +272,8 @@ module.exports = {
   obterEstadoSmtp,
   guardarConfigSmtp,
   obterNomeRemetente,
+  nomeDoCondominioParaRemetente,
+  resolverNomeRemetente,
   comporConfigSmtp,
   limparCache,
   inicializar,

@@ -147,6 +147,9 @@ router.post('/emails/teste', async (req, res) => {
     para,
     assunto: req.body.assunto || 'Teste SMTP — GesCondu',
     mensagem: req.body.mensagem || 'Este é um email de teste do GesCondu.',
+    // Teste feito dentro do condomínio ativo: o nome do remetente segue a
+    // mesma prioridade dos envios reais (override global ou nome do condomínio).
+    condominioId: req.condominioId,
   });
   await audit({
     userId: req.user.id,

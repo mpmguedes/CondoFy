@@ -2,7 +2,8 @@
 // Utilização: node scripts/test-comunicacoes.js
 const assert = require('assert');
 const { normalizarDestinatarios } = require('../helpers/document-actions');
-const { mensagemErroAmigavel, comporConfigSmtp } = require('../helpers/mailer');
+const { mensagemErroAmigavel, comporConfigSmtp, resolverNomeRemetente, nomeDoCondominioParaRemetente } = require('../helpers/mailer');
+const { contextoDoItem } = require('../helpers/email-fila');
 
 async function main() {
   // 1. Normalização de destinatários (string, array, objetos)
@@ -106,9 +107,80 @@ async function main() {
   assert.strictEqual(cfg4.host, 'smtp.gmail.com', 'fallback .env host');
   assert.strictEqual(cfg4.pass, 'app-password-do-env', 'fallback .env pass');
 
+  // Sem smtp_from_name em lado nenhum → fromName vazio (não inventa defaults),
+  // para que a resolução caia no contexto do condomínio / 'GesCondu'.
+  const cfgSemNome = comporConfigSmtp({ smtp_host: 'smtp.gmail.com' }, { host: 'smtp.gmail.com', port: '587', from: 'a@b.pt', fromName: '' });
+  assert.strictEqual(cfgSemNome.fromName, '', 'sem smtp_from_name (BD e env) → fromName vazio');
+  // smtp_from_name vazio na BD + valor no env → usa o env (fallback por campo).
+  const cfgEnvNome = comporConfigSmtp({ smtp_host: 'smtp.gmail.com', smtp_from_name: '' }, { host: 'smtp.gmail.com', from: 'a@b.pt', fromName: 'Administração (env)' });
+  assert.strictEqual(cfgEnvNome.fromName, 'Administração (env)', 'BD vazio + env preenchido → env');
+
   // A password nunca é incluída em saídas de estado/devoluções
   const estadoMailer = { configurado: Boolean(cfg1.host), servidor: cfg1.host, temPassword: Boolean(cfg1.pass) };
   assert.ok(!JSON.stringify(estadoMailer).includes(cfg1.pass), 'password não exposta no estado');
+
+  // 5. Nome do remetente — prioridade EXATA:
+  //    displayName → smtp_from_name (override global) → contexto do condomínio → "GesCondu"
+  // 5.1 + 5.2: smtp_from_name explícito domina qualquer condomínio (A ou B).
+  assert.strictEqual(
+    resolverNomeRemetente({ fromName: 'Administração XYZ', contexto: 'Condomínio A' }),
+    'Administração XYZ',
+    'smtp_from_name + Condomínio A → Administração XYZ'
+  );
+  assert.strictEqual(
+    resolverNomeRemetente({ fromName: 'Administração XYZ', contexto: 'Condomínio B' }),
+    'Administração XYZ',
+    'smtp_from_name + Condomínio B → Administração XYZ (override global)'
+  );
+  // 5.3 + 5.4: smtp_from_name vazio → nome do condomínio do contexto.
+  assert.strictEqual(
+    resolverNomeRemetente({ fromName: '', contexto: 'Condomínio A' }),
+    'Condomínio A',
+    'sem smtp_from_name + Condomínio A → nome do Condomínio A'
+  );
+  assert.strictEqual(
+    resolverNomeRemetente({ fromName: '', contexto: 'Condomínio B' }),
+    'Condomínio B',
+    'sem smtp_from_name + Condomínio B → nome do Condomínio B'
+  );
+  // displayName explícito (por chamada) tem prioridade sobre tudo.
+  assert.strictEqual(
+    resolverNomeRemetente({ displayName: 'Explícito', fromName: 'Administração XYZ', contexto: 'Condomínio A' }),
+    'Explícito',
+    'displayName explícito domina smtp_from_name e contexto'
+  );
+  // 5.5: sem smtp_from_name e sem contexto → GesCondu (fallback global).
+  assert.strictEqual(resolverNomeRemetente({ fromName: '', contexto: '' }), 'GesCondu', 'sem override e sem contexto → GesCondu');
+  assert.strictEqual(resolverNomeRemetente({}), 'GesCondu', 'sem argumentos → GesCondu');
+  assert.strictEqual(resolverNomeRemetente({ fromName: ' ', contexto: '  ' }), 'GesCondu', 'espaços tratados como vazio');
+
+  // Contexto do condomínio: o nome é a DESIGNAÇÃO (nunca a administração).
+  assert.strictEqual(
+    nomeDoCondominioParaRemetente({ designacao: 'Condomínio Jardim das Flores', administracao_nome: 'Gestão ABC' }),
+    'Condomínio Jardim das Flores',
+    'contexto usa a designação (nome do condomínio)'
+  );
+  assert.strictEqual(
+    nomeDoCondominioParaRemetente({ designacao: '  ', administracao_nome: 'Gestão ABC' }),
+    'Gestão ABC',
+    'sem designação → administração como recurso'
+  );
+  assert.strictEqual(nomeDoCondominioParaRemetente(null), '', 'sem condomínio → vazio');
+
+  // 6. Fila de emails — o contexto do condomínio não se perde no processamento
+  //    posterior: o item guarda relações seguras que resolvem o condomínio.
+  assert.deepStrictEqual(contextoDoItem({ documento_id: 7 }), { modelo: 'Documento', id: 7 }, 'documento_id → Documento');
+  assert.deepStrictEqual(contextoDoItem({ aviso_id: 3 }), { modelo: 'Aviso', id: 3 }, 'aviso_id → Aviso');
+  assert.deepStrictEqual(contextoDoItem({ entidade_tipo: 'Recibo', entidade_id: 11 }), { modelo: 'Recibo', id: 11 }, 'entidade Recibo');
+  assert.deepStrictEqual(contextoDoItem({ entidade_tipo: 'Quota', entidade_id: 5 }), { modelo: 'Quota', id: 5 }, 'entidade Quota (envio de quotas)');
+  assert.deepStrictEqual(contextoDoItem({ entidade_tipo: 'Pagamento', entidade_id: 9 }), { modelo: 'Pagamento', id: 9 }, 'entidade Pagamento');
+  assert.deepStrictEqual(contextoDoItem({ entidade_tipo: 'Documento', entidade_id: 12 }), { modelo: 'Documento', id: 12 }, 'entidade Documento');
+  assert.deepStrictEqual(
+    contextoDoItem({ entidade_tipo: 'PagamentoFornecedor', entidade_id: 2 }),
+    null,
+    'PagamentoFornecedor (global, sem condominio) → sem contexto direto'
+  );
+  assert.strictEqual(contextoDoItem({}), null, 'sem relação segura → null (fallback global)');
 
   console.log('✓ Testes de comunicações passaram (sem rede).');
 }
