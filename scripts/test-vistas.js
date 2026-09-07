@@ -269,4 +269,13 @@ html = layout({ body: 'ok', user: { nome: 'Bruno', role: 'condomino' }, isAdmin:
 assert.ok(html.includes('href="/condominios"'), 'nav condómino: atalho Os meus condomínios na barra inferior');
 assert.ok(html.includes('href="/condomino"'), 'nav condómino: atalho A minha área na barra inferior');
 
+// 14. Sidebar — reorganização (Recibos/Comprovativos/Quotas Extra em Quotas; Assembleias)
+html = layout({ body: 'ok', user: { nome: 'Ana', role: 'admin' }, isAdmin: true, condominio: contexto.condominio, currentPath: '/admin/quotas/recibos' });
+assert.ok(html.includes('href="/admin/quotas/recibos"'), 'nav: Recibos subitem em Quotas');
+assert.ok(html.includes('href="/admin/quotas/comprovativos"'), 'nav: Comprovativos subitem em Quotas');
+assert.ok(html.includes('href="/admin/quotas-extra"'), 'nav: Quotas Extra subitem em Quotas');
+assert.ok(html.includes('sidebar-item-sub'), 'nav: itens com indentação sub');
+assert.ok(html.includes('sidebar-group-title">Assembleias'), 'nav: grupo Assembleias presente');
+assert.ok(html.includes('sidebar-group-title">Documentos'), 'nav: grupo Documentos separado');
+
 console.log('✓ Todas as vistas da convocatória renderizam corretamente.');

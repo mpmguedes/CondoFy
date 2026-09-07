@@ -58,7 +58,15 @@
             <span class="material-symbols-outlined">receipt_long</span>
             <span class="sidebar-item-text">Quotas</span>
           </a>
-          <a class="sidebar-item {{isActive currentPath '/admin/quotas-extra'}}" href="/admin/quotas-extra" title="Quotas Extraordinárias">
+          <a class="sidebar-item sidebar-item-sub {{isActive currentPath '/admin/quotas/recibos'}}" href="/admin/quotas/recibos" title="Recibos">
+            <span class="material-symbols-outlined">confirmation_number</span>
+            <span class="sidebar-item-text">Recibos</span>
+          </a>
+          <a class="sidebar-item sidebar-item-sub {{isActive currentPath '/admin/quotas/comprovativos'}}" href="/admin/quotas/comprovativos" title="Comprovativos">
+            <span class="material-symbols-outlined">contract</span>
+            <span class="sidebar-item-text">Comprovativos</span>
+          </a>
+          <a class="sidebar-item sidebar-item-sub {{isActive currentPath '/admin/quotas-extra'}}" href="/admin/quotas-extra" title="Quotas Extraordinárias">
             <span class="material-symbols-outlined">savings</span>
             <span class="sidebar-item-text">Quotas Extra</span>
           </a>
@@ -77,11 +85,15 @@
         </div>
 
         <div class="sidebar-group">
-          <div class="sidebar-group-title">Condomínio</div>
+          <div class="sidebar-group-title">Documentos</div>
           <a class="sidebar-item {{isActive currentPath '/admin/documentos'}}" href="/admin/documentos" title="Documentos">
             <span class="material-symbols-outlined">folder</span>
             <span class="sidebar-item-text">Documentos</span>
           </a>
+        </div>
+
+        <div class="sidebar-group">
+          <div class="sidebar-group-title">Assembleias</div>
           <a class="sidebar-item {{isActive currentPath '/admin/convocatorias'}}" href="/admin/convocatorias/nova" title="Nova Convocatória">
             <span class="material-symbols-outlined">description</span>
             <span class="sidebar-item-text">Convocatórias</span>
