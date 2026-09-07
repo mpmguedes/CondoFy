@@ -17,6 +17,8 @@ module.exports = (sequelize) => {
       iban_principal: { type: DataTypes.STRING(40), allowNull: true },
       outros_meios_pagamento: { type: DataTypes.TEXT, allowNull: true },
       dados_bancarios_adicionais: { type: DataTypes.TEXT, allowNull: true },
+      // Pastas personalizadas da biblioteca de documentos (JSON [{key,nome}]).
+      documento_pastas: { type: DataTypes.TEXT, allowNull: true },
       logotipo: { type: DataTypes.STRING(255), allowNull: true },
       cabecalho_imagem: { type: DataTypes.STRING(255), allowNull: true },
       identidade_visual: {

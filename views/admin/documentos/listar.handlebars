@@ -18,6 +18,19 @@
       <a href="/admin/documentos?pasta={{@key}}" class="btn btn-sm {{#if (eq ../pasta @key)}}btn-primary{{else}}btn-outline-secondary{{/if}}">{{this}}</a>
       {{/each}}
     </div>
+    <hr class="my-2" />
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      <form action="/admin/documentos/pastas" method="POST" class="d-flex gap-2 align-items-center">
+        <input type="text" class="form-control form-control-sm" name="nome" maxlength="40" required placeholder="Nova pasta…" style="max-width:220px" />
+        <button class="btn btn-sm btn-outline-primary" title="Criar pasta personalizada">+ Pasta</button>
+      </form>
+      {{#if pastaCustom}}
+      <form action="/admin/documentos/pastas/{{pastaCustom}}/eliminar" method="POST" onsubmit="return confirm('Eliminar esta pasta personalizada? Só é possível se estiver vazia.');">
+        <button class="btn btn-sm btn-outline-danger">Eliminar esta pasta</button>
+      </form>
+      {{/if}}
+    </div>
+    <div class="small text-muted mt-1">A pasta «Outros» é obrigatória e não pode ser removida.</div>
   </div>
 </div>
 

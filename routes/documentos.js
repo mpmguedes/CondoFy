@@ -9,7 +9,8 @@ const drive = require('../helpers/drive');
 const documentActions = require('../helpers/document-actions');
 const { enfileirarEmail: enfileirarEmailFila } = require('../helpers/email-fila');
 const { compor: comporEmail, nomeFicheiro: nomeFicheiroEmail } = require('../helpers/email-templates');
-const { getCondominio } = require('../helpers/condominio');
+const { getCondominio, clearCondominioCache } = require('../helpers/condominio');
+const { PASTAS_BASE: PASTAS, mapaPastas, pastasPersonalizadas, novaKey } = require('../helpers/documento-pastas');
 
 const router = express.Router();
 // Isolamento: todas as operações usam o condomínio ativo (sessão validada).
@@ -26,20 +27,6 @@ const upload = multer({
   limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
 });
 
-// Estrutura de pastas da biblioteca do condomínio.
-const PASTAS = {
-  atas: 'Atas',
-  convocatorias: 'Convocatórias',
-  contratos: 'Contratos',
-  regulamentos: 'Regulamentos',
-  recibos: 'Recibos de Pagamento',
-  assembleias: 'Assembleias',
-  apolices: 'Seguros — Apólices',
-  comprovativos: 'Seguros — Comprovativos',
-  faturas: 'Faturas',
-  outros: 'Outros',
-};
-
 // Tipos permitidos por pasta (para limitar o upload).
 const TIPOS_POR_PASTA = {
   atas: ['ata', 'outro'],
@@ -55,23 +42,81 @@ const TIPOS_POR_PASTA = {
 };
 
 router.get('/documentos', async (req, res) => {
+  const cond = await getCondominio({ id: req.condominioId });
+  const mapa = mapaPastas(cond);
   const pasta = req.query.pasta || null;
   const where = { condominio_id: req.condominioId };
-  if (pasta && PASTAS[pasta]) where.pasta = pasta;
+  if (pasta && mapa[pasta]) where.pasta = pasta;
   const documentos = await Documento.findAll({ where, order: [['data', 'DESC'], ['id', 'DESC']] });
   res.render('admin/documentos/listar', {
     titulo: 'Documentos',
     documentos,
     pasta,
-    pastas: PASTAS,
+    pastas: mapa,
+    pastaCustom: pasta && pasta.startsWith('c-') ? pasta : null,
     driveLigado: drive.isConfigured(),
   });
 });
 
-router.get('/documentos/nova', (req, res) => {
+// ── Pastas personalizadas (biblioteca) ──────────────────────────────
+router.post('/documentos/pastas', async (req, res) => {
+  const cond = await getCondominio({ id: req.condominioId });
+  if (!cond) {
+    req.flash('error_msg', 'Condomínio não encontrado.');
+    return res.redirect('/admin/documentos');
+  }
+  const nome = String(req.body.nome || '').trim();
+  if (!nome || nome.length > 40) {
+    req.flash('error_msg', 'Indique um nome para a pasta (máx. 40 caracteres).');
+    return res.redirect('/admin/documentos');
+  }
+  const lista = pastasPersonalizadas(cond);
+  const mapa = mapaPastas(cond);
+  const duplicada = Object.values(mapa).some((n) => String(n).toLowerCase() === nome.toLowerCase());
+  if (duplicada) {
+    req.flash('error_msg', 'Já existe uma pasta com esse nome.');
+    return res.redirect('/admin/documentos');
+  }
+  const usadas = new Set(Object.keys(mapa));
+  const key = novaKey(nome, usadas);
+  lista.push({ key, nome });
+  await cond.update({ documento_pastas: JSON.stringify(lista) });
+  clearCondominioCache();
+  await audit({ userId: req.user.id, acao: 'criar_pasta_documentos', entidade: 'Condominio', entidadeId: cond.id, detalhes: { key, nome } }).catch(() => {});
+  req.flash('success_msg', `Pasta "${nome}" criada.`);
+  res.redirect(`/admin/documentos?pasta=${encodeURIComponent(key)}`);
+});
+
+router.post('/documentos/pastas/:key/eliminar', async (req, res) => {
+  const cond = await getCondominio({ id: req.condominioId });
+  if (!cond) {
+    req.flash('error_msg', 'Condomínio não encontrado.');
+    return res.redirect('/admin/documentos');
+  }
+  const key = req.params.key;
+  const lista = pastasPersonalizadas(cond);
+  const alvo = lista.find((p) => p.key === key);
+  if (!alvo) {
+    req.flash('error_msg', 'Pasta personalizada não encontrada.');
+    return res.redirect('/admin/documentos');
+  }
+  const nDocs = await Documento.count({ where: { condominio_id: req.condominioId, pasta: key } });
+  if (nDocs > 0) {
+    req.flash('error_msg', `A pasta "${alvo.nome}" tem ${nDocs} documento(s). Mova-os primeiro (a pasta "Outros" é obrigatória).`);
+    return res.redirect(`/admin/documentos?pasta=${encodeURIComponent(key)}`);
+  }
+  await cond.update({ documento_pastas: JSON.stringify(lista.filter((p) => p.key !== key)) });
+  clearCondominioCache();
+  await audit({ userId: req.user.id, acao: 'eliminar_pasta_documentos', entidade: 'Condominio', entidadeId: cond.id, detalhes: { key, nome: alvo.nome } }).catch(() => {});
+  req.flash('success_msg', `Pasta "${alvo.nome}" removida.`);
+  res.redirect('/admin/documentos');
+});
+
+router.get('/documentos/nova', async (req, res) => {
+  const cond = await getCondominio({ id: req.condominioId });
   res.render('admin/documentos/form', {
     titulo: 'Novo documento',
-    pastas: PASTAS,
+    pastas: mapaPastas(cond),
     driveLigado: drive.isConfigured(),
   });
 });
@@ -79,7 +124,9 @@ router.get('/documentos/nova', (req, res) => {
 router.post('/documentos', upload.single('ficheiro'), async (req, res) => {
   try {
     const { nome, tipo, data, url, pasta } = req.body;
-    const pastaEscolhida = PASTAS[pasta] ? pasta : 'outros';
+    const cond = await getCondominio({ id: req.condominioId });
+    const mapa = mapaPastas(cond);
+    const pastaEscolhida = pasta && mapa[pasta] ? pasta : 'outros';
     const ano = data ? new Date(data).getFullYear() : new Date().getFullYear();
 
     let driveFileId = null;
