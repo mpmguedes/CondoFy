@@ -24,6 +24,8 @@
         <span class="sidebar-brand-text">GesCondu</span>
       </div>
 
+      {{> _condominio-seletor}}
+
       <nav class="sidebar-nav" aria-label="Navegação principal">
         {{#if isAdmin}}
         <div class="sidebar-group">
@@ -141,6 +143,15 @@
             <span class="sidebar-item-text">Auditoria</span>
           </a>
         </div>
+        {{#if (eq user.role_global 'super_admin')}}
+        <div class="sidebar-group sidebar-group-super">
+          <div class="sidebar-group-title">Administração global</div>
+          <a class="sidebar-item {{isActive currentPath '/admin/global'}}" href="/admin/global" title="Painel global">
+            <span class="material-symbols-outlined">public</span>
+            <span class="sidebar-item-text">Global</span>
+          </a>
+        </div>
+        {{/if}}
         {{else}}
         <div class="sidebar-group">
           <div class="sidebar-group-title">Área pessoal</div>

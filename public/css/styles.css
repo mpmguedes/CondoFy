@@ -964,3 +964,4 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
 .cond-seletor-caret { font-size: 18px; color: var(--c-text-muted); }
 .cond-seletor-menu { width: 100%; }
 .cond-seletor-item { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; }
+.sidebar-group-super { margin-top: 6px; padding-top: 10px; border-top: 1px solid rgba(127,127,127,.25); }

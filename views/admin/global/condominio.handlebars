@@ -1,0 +1,84 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>{{condominio.designacao}}</h1>
+    <p class="subtitle">{{#if (eq condominio.estado 'ativo')}}Ativo{{else}}Desativado{{/if}} · {{nFracoes}} fração/frações</p>
+  </div>
+  <div class="d-flex gap-2">
+    <form action="/admin/global/condominios/{{condominio.id}}/entrar" method="POST">
+      <button class="btn btn-sm btn-primary"><span class="material-symbols-outlined me-1" style="font-size:1rem">login</span>Entrar (suporte)</button>
+    </form>
+    <a href="/admin/global/condominios" class="btn btn-sm btn-outline-secondary"><span class="material-symbols-outlined me-1" style="font-size:1rem">arrow_back</span>Condomínios</a>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-6">
+    <div class="card mb-4">
+      <div class="card-header bg-white">Associar utilizador</div>
+      <div class="card-body">
+        <form action="/admin/global/condominios/{{condominio.id}}/associacoes" method="POST" class="row g-2 align-items-end">
+          <div class="col-12 col-md-5"><label class="form-label">Email do utilizador</label><input type="email" class="form-control" name="email" required placeholder="Ex: geral@empresa.pt" /></div>
+          <div class="col-12 col-md-4"><label class="form-label">Papel</label>
+            <select class="form-select" name="role"><option value="admin">Admin</option><option value="gestor">Gestor</option><option value="leitura">Leitura</option></select>
+          </div>
+          <div class="col-12 col-md-3 d-grid"><button class="btn btn-primary">Associar</button></div>
+        </form>
+        <p class="form-text mb-0 mt-2">O utilizador tem de existir (criado pelo administrador).</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header bg-white">Membros</div>
+      <ul class="list-group list-group-flush">
+        {{#each associacoes}}
+        <li class="list-group-item d-flex flex-wrap align-items-center gap-2">
+          <div class="me-auto">
+            <span class="fw-semibold">{{utilizador.nome}}</span>
+            <span class="small text-muted ms-2">{{utilizador.email}}</span>
+          </div>
+          <form action="/admin/global/associacoes/{{id}}/estado" method="POST" class="d-flex gap-1 align-items-center">
+            <select class="form-select form-select-sm" name="role">
+              <option value="admin" {{#if (eq role 'admin')}}selected{{/if}}>Admin</option>
+              <option value="gestor" {{#if (eq role 'gestor')}}selected{{/if}}>Gestor</option>
+              <option value="leitura" {{#if (eq role 'leitura')}}selected{{/if}}>Leitura</option>
+            </select>
+            <select class="form-select form-select-sm" name="estado">
+              <option value="ativo" {{#if (eq estado 'ativo')}}selected{{/if}}>Ativo</option>
+              <option value="inativo" {{#if (eq estado 'inativo')}}selected{{/if}}>Inativo</option>
+            </select>
+            <button class="btn btn-sm btn-outline-secondary">Guardar</button>
+          </form>
+          <form action="/admin/global/associacoes/{{id}}/eliminar" method="POST" onsubmit="return confirm('Remover esta associação?');">
+            <button class="btn btn-sm btn-outline-danger">Remover</button>
+          </form>
+        </li>
+        {{else}}
+        <li class="list-group-item text-muted small">Sem membros associados.</li>
+        {{/each}}
+      </ul>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-6">
+    <div class="card border-danger-subtle">
+      <div class="card-header bg-danger-subtle text-danger">Zona destrutiva</div>
+      <div class="card-body">
+        <p class="small text-muted">Ciclo recomendado: <strong>Ativo → Desativado → Eliminação permanente</strong>. A eliminação remove os dados do condomínio e não pode ser anulada.</p>
+        {{#unless (eq condominio.estado 'inativo')}}
+        <form action="/admin/global/condominios/{{condominio.id}}/estado" method="POST">
+          <button class="btn btn-outline-danger">Desativar condomínio</button>
+        </form>
+        {{else}}
+        <form action="/admin/global/condominios/{{condominio.id}}/estado" method="POST" class="mb-3">
+          <button class="btn btn-outline-success">Reativar condomínio</button>
+        </form>
+        <form action="/admin/global/condominios/{{condominio.id}}/eliminar" method="POST">
+          <label class="form-label">Para eliminar permanentemente escreva <strong>ELIMINAR</strong>:</label>
+          <input type="text" class="form-control mb-2" name="confirmo" required placeholder="ELIMINAR" autocomplete="off" />
+          <button class="btn btn-danger">Eliminar permanentemente</button>
+        </form>
+        {{/unless}}
+      </div>
+    </div>
+  </div>
+</div>

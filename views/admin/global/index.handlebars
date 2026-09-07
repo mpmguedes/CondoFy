@@ -1,0 +1,44 @@
+<div class="page-heading">
+  <h1>Administração global</h1>
+  <p class="subtitle">Visão geral da plataforma (Super Admin)</p>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-6 col-lg-3"><div class="card mini-stat h-100"><div class="card-body">
+    <div class="mini-stat-label">Condomínios</div><div class="mini-stat-value">{{resumo.condominios}}</div>
+    <div class="mini-stat-sub">{{resumo.ativos}} ativos · {{resumo.inativos}} desativados</div>
+  </div></div></div>
+  <div class="col-6 col-lg-3"><div class="card mini-stat h-100"><div class="card-body">
+    <div class="mini-stat-label">Utilizadores</div><div class="mini-stat-value">{{resumo.utilizadores}}</div>
+    <div class="mini-stat-sub">{{resumo.superAdmins}} Super Admin global</div>
+  </div></div></div>
+  <div class="col-6 col-lg-3"><div class="card mini-stat h-100"><div class="card-body">
+    <div class="mini-stat-label">Registos de auditoria</div><div class="mini-stat-value">{{resumo.auditoria}}</div>
+    <div class="mini-stat-sub">eventos registados</div>
+  </div></div></div>
+  <div class="col-6 col-lg-3"><div class="card mini-stat h-100"><div class="card-body">
+    <div class="mini-stat-label">Acesso</div><div class="mini-stat-value text-success">Super Admin</div>
+    <div class="mini-stat-sub">suporte e administração global</div>
+  </div></div></div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-4">
+    <a href="/admin/global/condominios" class="card link-card text-decoration-none h-100"><div class="card-body">
+      <div class="h6 mb-1">Condomínios</div>
+      <div class="text-muted small">Consultar, criar, desativar, reativar e eliminar condomínios; gerir associações e entrar para suporte.</div>
+    </div></a>
+  </div>
+  <div class="col-md-4">
+    <a href="/admin/global/utilizadores" class="card link-card text-decoration-none h-100"><div class="card-body">
+      <div class="h6 mb-1">Utilizadores</div>
+      <div class="text-muted small">Gerir utilizadores e papéis globais (Super Admin).</div>
+    </div></a>
+  </div>
+  <div class="col-md-4">
+    <a href="/admin/global/auditoria" class="card link-card text-decoration-none h-100"><div class="card-body">
+      <div class="h6 mb-1">Auditoria</div>
+      <div class="text-muted small">Consulta global dos eventos de segurança e administração.</div>
+    </div></a>
+  </div>
+</div>

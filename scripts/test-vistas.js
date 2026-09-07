@@ -205,4 +205,55 @@ html = docsEmail({
 assert.ok(html.includes('joao@exemplo.pt'), 'email doc: destinatários');
 assert.ok(html.includes('Abrir no Google Drive'), 'email doc: link do documento');
 
+// 11. Administração global (Super Admin) — vistas + navegação
+const globalIndex = handlebars.compile(ler('admin/global/index.handlebars'));
+html = globalIndex({ titulo: 'Administração global', resumo: { condominios: 3, ativos: 2, inativos: 1, utilizadores: 9, superAdmins: 1, auditoria: 42 } });
+assert.ok(html.includes('Administração global'), 'global: título do painel');
+assert.ok(html.includes('/admin/global/condominios'), 'global: link condomínios');
+assert.ok(html.includes('/admin/global/utilizadores'), 'global: link utilizadores');
+assert.ok(html.includes('/admin/global/auditoria'), 'global: link auditoria');
+
+const globalCondominios = handlebars.compile(ler('admin/global/condominios.handlebars'));
+html = globalCondominios({ titulo: 'Condomínios · Global', lista: [{ id: 1, designacao: 'Condomínio Jardim', morada: 'Rua A', estado: 'ativo', fracoes: 4, membros: 2 }, { id: 2, designacao: 'Condomínio Mar', morada: null, estado: 'inativo', fracoes: 0, membros: 0 }] });
+assert.ok(html.includes('Condomínio Jardim'), 'global cond: nome na lista');
+assert.ok(html.includes('Desativado'), 'global cond: badge desativado');
+assert.ok(html.includes('name="designacao"'), 'global cond: formulário de criação');
+
+const globalDetalhe = handlebars.compile(ler('admin/global/condominio.handlebars'));
+html = globalDetalhe({
+  titulo: 'Condomínio Jardim',
+  condominio: { id: 1, designacao: 'Condomínio Jardim', estado: 'ativo' },
+  nFracoes: 4,
+  associacoes: [{ id: 9, role: 'admin', estado: 'ativo', utilizador: { nome: 'Ana', email: 'ana@exemplo.pt' } }, { id: 10, role: 'leitura', estado: 'inativo', utilizador: { nome: 'Bruno', email: 'bruno@exemplo.pt' } }],
+});
+assert.ok(html.includes('ana@exemplo.pt'), 'global detalhe: membro visível');
+assert.ok(!html.includes('name="confirmo"'), 'global detalhe: sem zona eliminar quando ativo');
+assert.ok(html.includes('/associacoes/9/estado'), 'global detalhe: alterar papel/estado de associação');
+html = globalDetalhe({ titulo: 'Condomínio Mar', condominio: { id: 2, designacao: 'Condomínio Mar', estado: 'inativo' }, nFracoes: 0, associacoes: [] });
+assert.ok(html.includes('name="confirmo"'), 'global detalhe: eliminar exige confirmação quando inativo');
+assert.ok(html.includes('Reativar condomínio'), 'global detalhe: botão reativar quando inativo');
+
+const globalUtilizadores = handlebars.compile(ler('admin/global/utilizadores.handlebars'));
+html = globalUtilizadores({ titulo: 'Utilizadores · Global', utilizadores: [{ id: 1, nome: 'Ana', email: 'ana@exemplo.pt', ativo: true, email_confirmado: true, role_global: 'super_admin', associacoes: 3 }, { id: 2, nome: 'Bruno', email: 'bruno@exemplo.pt', ativo: true, email_confirmado: false, role_global: null, associacoes: 1 }] });
+assert.ok(html.includes('Super Admin'), 'global users: badge super admin');
+assert.ok(html.includes('Email por confirmar'), 'global users: badge email por confirmar');
+assert.ok(html.includes('/admin/global/utilizadores/1/global'), 'global users: ação papel global');
+
+const globalAuditoria = handlebars.compile(ler('admin/global/auditoria.handlebars'));
+html = globalAuditoria({
+  titulo: 'Auditoria · Global',
+  registos: [{ id: 1, acao: 'condominio_criado', entidade: 'Condominio', entidade_id: 3, data_hora: new Date('2026-02-01T10:00:00'), detalhes: null, user: { nome: 'Ana', email: 'ana@exemplo.pt' } }],
+  acoes: ['condominio_criado', 'entrar_condominio'],
+  filtros: { acao: '', entidade: '' },
+});
+assert.ok(html.includes('condominio_criado'), 'global auditoria: ação listada');
+assert.ok(html.includes('ana@exemplo.pt'), 'global auditoria: utilizador do registo');
+assert.ok(html.includes('name="acao"'), 'global auditoria: filtro por ação');
+
+// 12. Sidebar — ligação à administração global só para Super Admin
+html = layout({ body: 'ok', user: { nome: 'Ana', role: 'condomino', role_global: 'super_admin' }, isAdmin: true, condominio: contexto.condominio, currentPath: '/admin/global' });
+assert.ok(html.includes('href="/admin/global"'), 'sidebar: link Global visível para super_admin');
+html = layout({ body: 'ok', user: { nome: 'Bruno', role: 'admin' }, isAdmin: true, condominio: contexto.condominio, currentPath: '/admin/quotas' });
+assert.ok(!html.includes('Administração global'), 'sidebar: grupo Global oculto sem super_admin');
+
 console.log('✓ Todas as vistas da convocatória renderizam corretamente.');

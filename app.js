@@ -67,7 +67,7 @@ app.use(async (req, res, next) => {
   res.locals.error_msg = req.flash('error_msg');
   res.locals.error = req.flash('error');
   res.locals.user = req.user || null;
-  res.locals.isAdmin = !!(req.user && req.user.role === 'admin');
+  res.locals.isAdmin = !!(req.user && (req.user.role === 'admin' || req.user.role_global === 'super_admin'));
   res.locals.meusCondominios = [];
   res.locals.condominioAtivo = null;
   let condominio = await getCondominio();
@@ -77,7 +77,16 @@ app.use(async (req, res, next) => {
       const meus = await tenant.listarCondominios(req.user.id);
       res.locals.meusCondominios = meus;
       const ativoId = tenant.ativo(req);
-      const escolhido = meus.find((c) => c.id === ativoId) || meus[0] || null;
+      let escolhido = meus.find((c) => c.id === ativoId) || meus[0] || null;
+      // Super Admin em modo suporte: o condomínio ativo pode não ter associação
+      // (entrou via "Entrar (suporte)") — mostra-o mesmo assim no seletor.
+      if (!escolhido && tenant.eSuperAdmin(req.user) && ativoId) {
+        const suporte = await tenant.Condominio.findOne({ where: { id: ativoId, estado: 'ativo' } });
+        if (suporte) {
+          escolhido = { id: suporte.id, designacao: suporte.designacao, morada: suporte.morada, localidade: suporte.localidade, role: 'admin' };
+          res.locals.meusCondominios = [escolhido, ...meus];
+        }
+      }
       res.locals.condominioAtivo = escolhido;
       if (escolhido) {
         req.session.condominio_ativo_id = escolhido.id;
@@ -113,6 +122,7 @@ app.use((req, res, next) => {
 app.use('/', require('./routes'));
 app.use('/', require('./routes/condominios'));
 app.use('/', require('./routes/auth'));
+app.use('/admin', require('./routes/global-admin'));
 app.use('/admin', require('./routes/admin'));
 const rotasQuotasModulo = require('./routes/quotas-modulo');
 app.use('/admin', rotasQuotasModulo);

@@ -1,0 +1,60 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Condomínios</h1>
+    <p class="subtitle">Administração global</p>
+  </div>
+  <a href="/admin/global" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1" style="font-size:1rem">arrow_back</span>Global</a>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h2 class="h6 mb-3">Criar condomínio</h2>
+    <form action="/admin/global/condominios" method="POST" class="row g-2 align-items-end">
+      <div class="col-12 col-md-3"><label class="form-label">Nome *</label><input type="text" class="form-control" name="designacao" required placeholder="Ex: Condomínio Jardim das Flores" /></div>
+      <div class="col-12 col-md-4"><label class="form-label">Morada</label><input type="text" class="form-control" name="morada" placeholder="Ex: Rua das Flores, 25, 2.º Esq." /></div>
+      <div class="col-6 col-md-2"><label class="form-label">Código postal</label><input type="text" class="form-control" name="codigo_postal" placeholder="Ex: 1000-000" /></div>
+      <div class="col-6 col-md-2"><label class="form-label">Localidade</label><input type="text" class="form-control" name="localidade" placeholder="Ex: Lisboa" /></div>
+      <div class="col-12 col-md-1 d-grid"><button class="btn btn-primary" type="submit"><span class="material-symbols-outlined">add</span></button></div>
+    </form>
+  </div>
+</div>
+
+{{#if lista}}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr><th>Condomínio</th><th class="text-end">Frações</th><th class="text-end">Membros</th><th>Estado</th><th class="text-end">Ações</th></tr>
+      </thead>
+      <tbody>
+        {{#each lista}}
+        <tr>
+          <td>
+            <div class="fw-semibold">{{designacao}}</div>
+            <div class="small text-muted">{{#if morada}}{{morada}}{{else}}—{{/if}}</div>
+          </td>
+          <td class="text-end">{{fracoes}}</td>
+          <td class="text-end">{{membros}}</td>
+          <td>{{#if (eq estado 'ativo')}}<span class="badge text-bg-success">Ativo</span>{{else}}<span class="badge text-bg-secondary">Desativado</span>{{/if}}</td>
+          <td class="text-end text-nowrap">
+            <a href="/admin/global/condominios/{{id}}" class="btn btn-sm btn-outline-secondary" title="Gerir"><span class="material-symbols-outlined" style="font-size:1rem">manage_accounts</span></a>
+            <form action="/admin/global/condominios/{{id}}/entrar" method="POST" class="d-inline">
+              <button class="btn btn-sm btn-outline-primary" title="Entrar (suporte)"><span class="material-symbols-outlined" style="font-size:1rem">login</span></button>
+            </form>
+            <form action="/admin/global/condominios/{{id}}/estado" method="POST" class="d-inline">
+              {{#if (eq estado 'ativo')}}
+              <button class="btn btn-sm btn-outline-danger" title="Desativar"><span class="material-symbols-outlined" style="font-size:1rem">pause_circle</span></button>
+              {{else}}
+              <button class="btn btn-sm btn-outline-success" title="Reativar"><span class="material-symbols-outlined" style="font-size:1rem">play_circle</span></button>
+              {{/if}}
+            </form>
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{else}}
+<p class="text-muted">Sem condomínios.</p>
+{{/if}}

@@ -1,0 +1,48 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Utilizadores</h1>
+    <p class="subtitle">Administração global</p>
+  </div>
+  <a href="/admin/global" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1" style="font-size:1rem">arrow_back</span>Global</a>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr><th>Nome</th><th>Email</th><th class="text-end">Condomínios</th><th>Estado</th><th>Global</th><th class="text-end">Ações</th></tr>
+      </thead>
+      <tbody>
+        {{#each utilizadores}}
+        <tr>
+          <td class="fw-semibold">{{nome}}</td>
+          <td class="small">{{email}}</td>
+          <td class="text-end">{{associacoes}}</td>
+          <td>
+            {{#unless ativo}}<span class="badge text-bg-secondary">Inativo</span>
+            {{else}}{{#if email_confirmado}}<span class="badge text-bg-success">Confirmado</span>{{else}}<span class="badge text-bg-warning">Email por confirmar</span>{{/if}}
+            {{/unless}}
+            {{#if convite_estado}}<span class="badge text-bg-light border">{{convite_estado}}</span>{{/if}}
+          </td>
+          <td>{{#if (eq role_global 'super_admin')}}<span class="badge text-bg-danger">Super Admin</span>{{else}}—{{/if}}</td>
+          <td class="text-end">
+            {{#if (eq role_global 'super_admin')}}
+            <form action="/admin/global/utilizadores/{{id}}/global" method="POST" class="d-inline">
+              <input type="hidden" name="role" value="" />
+              <button class="btn btn-sm btn-outline-danger" title="Remover Super Admin global">Remover SA</button>
+            </form>
+            {{else}}
+            <form action="/admin/global/utilizadores/{{id}}/global" method="POST" class="d-inline">
+              <input type="hidden" name="role" value="super_admin" />
+              <button class="btn btn-sm btn-outline-primary" title="Promover a Super Admin global">Promover a SA</button>
+            </form>
+            {{/if}}
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="6" class="text-center text-muted py-4">Sem utilizadores.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
