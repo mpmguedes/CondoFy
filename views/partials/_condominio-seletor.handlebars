@@ -1,0 +1,23 @@
+{{!-- Seletor do condomínio ativo na sidebar (multi-condomínio) --}}
+{{#if @root.condominioAtivo}}
+<div class="cond-seletor">
+  <button type="button" class="cond-seletor-btn" data-bs-toggle="dropdown" data-bs-auto-close="true" aria-expanded="false">
+    <span class="material-symbols-outlined cond-seletor-icone">apartment</span>
+    <span class="cond-seletor-nome">{{@root.condominioAtivo.designacao}}</span>
+    <span class="material-symbols-outlined cond-seletor-caret">arrow_drop_down</span>
+  </button>
+  <ul class="dropdown-menu cond-seletor-menu">
+    {{#each @root.meusCondominios}}
+      {{#unless (eq id @root.condominioAtivo.id)}}
+      <li>
+        <form action="/condominios/{{id}}/entrar" method="POST" class="m-0">
+          <button type="submit" class="dropdown-item cond-seletor-item"><span class="material-symbols-outlined" style="font-size:1.05rem">apartment</span>{{designacao}}</button>
+        </form>
+      </li>
+      {{/unless}}
+    {{/each}}
+    <li><hr class="dropdown-divider" /></li>
+    <li><a class="dropdown-item cond-seletor-item" href="/condominios"><span class="material-symbols-outlined" style="font-size:1.05rem">apps</span>Os meus condomínios</a></li>
+  </ul>
+</div>
+{{/if}}

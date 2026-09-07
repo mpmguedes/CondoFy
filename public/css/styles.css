@@ -949,3 +949,18 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
 }
 .mes-btn.selected .mes-btn-mes { color: var(--c-primary-dark); }
 .mes-btn-valor { font-size: 0.9rem; font-weight: 600; color: var(--c-text); white-space: nowrap; }
+
+/* Seletor de condomínio na sidebar (multi-condomínio) */
+.cond-seletor { padding: 8px 12px 4px; }
+.cond-seletor-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  border: 1px solid var(--c-border); border-radius: 10px;
+  background: var(--c-surface-2); color: var(--c-text); padding: 6px 10px;
+  text-align: left; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+}
+.cond-seletor-btn:hover { border-color: var(--c-primary); background: var(--c-primary-light); }
+.cond-seletor-icone { color: var(--c-primary); font-size: 18px; }
+.cond-seletor-nome { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cond-seletor-caret { font-size: 18px; color: var(--c-text-muted); }
+.cond-seletor-menu { width: 100%; }
+.cond-seletor-item { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; }

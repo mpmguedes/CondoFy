@@ -11,6 +11,7 @@ const methodOverride = require('method-override');
 const sequelize = require('./config/database');
 const handlebarsHelpers = require('./helpers/handlebars-helpers');
 const { getCondominio } = require('./helpers/condominio');
+const tenant = require('./helpers/tenant');
 const drive = require('./helpers/drive');
 const mailer = require('./helpers/mailer');
 const background = require('./helpers/background-jobs');
@@ -67,7 +68,27 @@ app.use(async (req, res, next) => {
   res.locals.error = req.flash('error');
   res.locals.user = req.user || null;
   res.locals.isAdmin = !!(req.user && req.user.role === 'admin');
-  const condominio = await getCondominio();
+  res.locals.meusCondominios = [];
+  res.locals.condominioAtivo = null;
+  let condominio = await getCondominio();
+  if (req.user) {
+    // Multi-condomínio: condomínios do utilizador + ativo (por sessão).
+    try {
+      const meus = await tenant.listarCondominios(req.user.id);
+      res.locals.meusCondominios = meus;
+      const ativoId = tenant.ativo(req);
+      const escolhido = meus.find((c) => c.id === ativoId) || meus[0] || null;
+      res.locals.condominioAtivo = escolhido;
+      if (escolhido) {
+        req.session.condominio_ativo_id = escolhido.id;
+        if (!condominio || condominio.id !== escolhido.id) {
+          condominio = await getCondominio({ id: escolhido.id });
+        }
+      }
+    } catch (err) {
+      console.error('[multi-condominio]', err.message);
+    }
+  }
   res.locals.condominio = condominio ? condominio.toJSON() : null;
   res.locals.appName = 'GesCondu';
   res.locals.currentYear = new Date().getFullYear();
@@ -90,6 +111,7 @@ app.use((req, res, next) => {
 
 // ── Rotas ──────────────────────────────────────────────────────────
 app.use('/', require('./routes'));
+app.use('/', require('./routes/condominios'));
 app.use('/', require('./routes/auth'));
 app.use('/admin', require('./routes/admin'));
 const rotasQuotasModulo = require('./routes/quotas-modulo');

@@ -20,6 +20,7 @@ const parciais = {
   '_empty-state': ler('partials/_empty-state.handlebars'),
   '_convocatoria-documento': ler('partials/_convocatoria-documento.handlebars'),
   '_convocatoria-editor': ler('partials/_convocatoria-editor.handlebars'),
+  '_condominio-seletor': ler('partials/_condominio-seletor.handlebars'),
 };
 Object.keys(parciais).forEach((k) => handlebars.registerPartial(k, parciais[k]));
 

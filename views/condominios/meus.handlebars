@@ -1,0 +1,61 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Os meus condomínios</h1>
+    <p class="subtitle">Selecione o condomínio onde pretende trabalhar</p>
+  </div>
+</div>
+
+{{#if lista}}
+<div class="row g-4">
+  {{#each lista}}
+  <div class="col-12 col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body d-flex flex-column">
+        <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+          <span class="material-symbols-outlined me-2" style="font-size:1.6rem;color:#1a73e8">apartment</span>
+          <span class="badge text-bg-light border ms-auto">{{role}}</span>
+        </div>
+        <h2 class="h6 mb-1">{{designacao}}</h2>
+        {{#if morada}}<p class="text-muted small mb-1">{{morada}}</p>{{/if}}
+        {{#if localidade}}<p class="text-muted small mb-2">{{localidade}}</p>{{/if}}
+        <div class="text-muted small mb-3">{{fracoes}} fração/frações</div>
+        <form action="/condominios/{{id}}/entrar" method="POST" class="mt-auto">
+          <button class="btn btn-primary w-100"><span class="material-symbols-outlined me-1" style="font-size:1.1rem">login</span>Entrar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {{/each}}
+</div>
+{{else}}
+<div class="alert alert-light border small">Ainda não está associado a nenhum condomínio.</div>
+{{/if}}
+
+{{#if podeCriar}}
+<div class="card mt-4">
+  <div class="card-body">
+    <h2 class="h6 mb-3"><span class="material-symbols-outlined me-1" style="font-size:1.1rem;color:#1a73e8">add_business</span>Criar novo condomínio</h2>
+    <form action="/condominios" method="POST" class="row g-3 align-items-end">
+      <div class="col-12 col-md-4">
+        <label class="form-label">Nome do condomínio *</label>
+        <input type="text" class="form-control" name="designacao" required placeholder="Ex: Condomínio Jardim das Flores" />
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label">Morada</label>
+        <input type="text" class="form-control" name="morada" placeholder="Ex: Rua das Flores, 25, 2.º Esq." />
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label">Código postal</label>
+        <input type="text" class="form-control" name="codigo_postal" placeholder="Ex: 1000-000" />
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label">Localidade</label>
+        <input type="text" class="form-control" name="localidade" placeholder="Ex: Lisboa" />
+      </div>
+      <div class="col-12">
+        <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1" style="font-size:1.1rem">add</span>Criar condomínio</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{/if}}
