@@ -19,6 +19,7 @@ const {
   EmailFila,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
+const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const { toCents, fromCents, toNumber } = require('../helpers/money');
 const { MESES, monthName } = require('../helpers/dates');
@@ -43,6 +44,19 @@ const drive = require('../helpers/drive');
 const router = express.Router();
 
 router.use(eAdmin);
+// Isolamento: condomínio ativo (sessão validada) nas operações deste módulo.
+router.use(tenant.comCondominioAtivo);
+
+// Carregadores restritos ao condomínio ativo (bloqueiam IDOR).
+function carregarConta(req) {
+  return ContaBancaria.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
+}
+function carregarDespesa(req) {
+  return Despesa.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
+}
+function ondeCondominio(req, extra = {}) {
+  return { condominio_id: req.condominioId, ...extra };
+}
 
 function parseDecimal(value, fallback = 0) {
   if (value === null || value === undefined || value === '') return fallback;
@@ -54,8 +68,8 @@ function parseDecimal(value, fallback = 0) {
 // CONTAS BANCÁRIAS
 // ═══════════════════════════════════════════════════════════════════
 router.get('/contas', async (req, res) => {
-  const contas = await ContaBancaria.findAll({ order: [['nome', 'ASC']] });
-  const resumo = await resumoCondominio();
+  const contas = await ContaBancaria.findAll({ where: ondeCondominio(req), order: [['nome', 'ASC']] });
+  const resumo = await resumoCondominio(req.condominioId);
   const saldoPorId = {};
   resumo.contas.forEach((c) => (saldoPorId[c.id] = c.saldo));
   const linhas = contas.map((c) => ({ ...c.toJSON(), saldo: saldoPorId[c.id] }));
@@ -69,6 +83,7 @@ router.get('/contas/nova', (req, res) => {
 router.post('/contas', async (req, res) => {
   const { nome, banco, iban, tipo, saldo_inicial } = req.body;
   const conta = await ContaBancaria.create({
+    condominio_id: req.condominioId,
     nome,
     banco,
     iban,
@@ -81,13 +96,13 @@ router.post('/contas', async (req, res) => {
 });
 
 router.get('/contas/:id/editar', async (req, res) => {
-  const conta = await ContaBancaria.findByPk(req.params.id);
+  const conta = await carregarConta(req);
   if (!conta) return res.redirect('/admin/contas');
   res.render('admin/contas/form', { titulo: 'Editar conta bancária', conta });
 });
 
 router.post('/contas/:id', async (req, res) => {
-  const conta = await ContaBancaria.findByPk(req.params.id);
+  const conta = await carregarConta(req);
   if (!conta) return res.redirect('/admin/contas');
   const { nome, banco, iban, tipo, saldo_inicial, ativa } = req.body;
   await conta.update({
@@ -104,7 +119,7 @@ router.post('/contas/:id', async (req, res) => {
 });
 
 router.post('/contas/:id/eliminar', async (req, res) => {
-  const conta = await ContaBancaria.findByPk(req.params.id);
+  const conta = await carregarConta(req);
   if (conta) {
     await conta.destroy();
     await audit({ userId: req.user.id, acao: 'eliminar_conta_bancária', entidade: 'ContaBancaria', entidadeId: req.params.id });
@@ -150,6 +165,7 @@ router.post('/categorias/:id/eliminar', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 router.get('/despesas', async (req, res) => {
   const despesas = await Despesa.findAll({
+    where: ondeCondominio(req),
     include: [
       { model: Categoria, as: 'categoria' },
       { model: ContaBancaria, as: 'conta_bancaria' },
@@ -163,7 +179,7 @@ router.get('/despesas', async (req, res) => {
 router.get('/despesas/nova', async (req, res) => {
   const [categorias, contas, metodos, fornecedores] = await Promise.all([
     Categoria.findAll({ where: { tipo: 'despesa', ativa: true }, order: [['nome', 'ASC']] }),
-    ContaBancaria.findAll({ where: { ativa: true }, order: [['nome', 'ASC']] }),
+    ContaBancaria.findAll({ where: ondeCondominio(req, { ativa: true }), order: [['nome', 'ASC']] }),
     MetodoPagamento.findAll({ where: { ativo: true }, order: [['nome', 'ASC']] }),
     Fornecedor.findAll({ where: { ativo: true }, order: [['nome', 'ASC']] }),
   ]);
@@ -175,6 +191,13 @@ router.post('/despesas', async (req, res) => {
   const dataObj = data ? new Date(data) : new Date();
   const numero = await proximoNumero('despesa', { ano: dataObj.getFullYear() });
 
+  // Conta bancária da despesa tem de pertencer ao condomínio ativo (IDOR).
+  let contaId = parseInt(conta_bancaria_id, 10) || null;
+  if (contaId) {
+    const conta = await ContaBancaria.findOne({ where: { id: contaId, condominio_id: req.condominioId } });
+    contaId = conta ? conta.id : null;
+  }
+
   // Fornecedor: estruturado (id) com texto legado sincronizado para compatibilidade.
   let fornecedor_id = parseInt(req.body.fornecedor_id, 10) || null;
   let fornecedorTexto = (fornecedor || '').trim();
@@ -185,6 +208,7 @@ router.post('/despesas', async (req, res) => {
   }
 
   const despesa = await Despesa.create({
+    condominio_id: req.condominioId,
     numero_documento: numero,
     descricao,
     categoria_id: categoria_id || null,
@@ -194,7 +218,7 @@ router.post('/despesas', async (req, res) => {
     competencia_mes: dataObj.getMonth() + 1,
     fornecedor: fornecedorTexto || null,
     fornecedor_id,
-    conta_bancaria_id: conta_bancaria_id || null,
+    conta_bancaria_id: contaId,
     metodo_pagamento_id: metodo_pagamento_id || null,
     observacoes,
     estado: estado || 'registada',
@@ -206,11 +230,11 @@ router.post('/despesas', async (req, res) => {
 });
 
 router.get('/despesas/:id/editar', async (req, res) => {
-  const despesa = await Despesa.findByPk(req.params.id);
+  const despesa = await carregarDespesa(req);
   if (!despesa) return res.redirect('/admin/despesas');
   const [categorias, contas, metodos, fornecedores] = await Promise.all([
     Categoria.findAll({ where: { tipo: 'despesa' }, order: [['nome', 'ASC']] }),
-    ContaBancaria.findAll({ order: [['nome', 'ASC']] }),
+    ContaBancaria.findAll({ where: ondeCondominio(req), order: [['nome', 'ASC']] }),
     MetodoPagamento.findAll({ order: [['nome', 'ASC']] }),
     Fornecedor.findAll({ order: [['nome', 'ASC']] }),
   ]);
@@ -218,10 +242,16 @@ router.get('/despesas/:id/editar', async (req, res) => {
 });
 
 router.post('/despesas/:id', async (req, res) => {
-  const despesa = await Despesa.findByPk(req.params.id);
+  const despesa = await carregarDespesa(req);
   if (!despesa) return res.redirect('/admin/despesas');
   const { descricao, categoria_id, valor, data, fornecedor, conta_bancaria_id, metodo_pagamento_id, observacoes, estado } = req.body;
   const dataObj = data ? new Date(data) : new Date();
+
+  let contaId = parseInt(conta_bancaria_id, 10) || null;
+  if (contaId) {
+    const conta = await ContaBancaria.findOne({ where: { id: contaId, condominio_id: req.condominioId } });
+    contaId = conta ? conta.id : null;
+  }
 
   let fornecedor_id = parseInt(req.body.fornecedor_id, 10) || null;
   let fornecedorTexto = (fornecedor || '').trim();
@@ -240,7 +270,7 @@ router.post('/despesas/:id', async (req, res) => {
     competencia_mes: dataObj.getMonth() + 1,
     fornecedor: fornecedorTexto || null,
     fornecedor_id,
-    conta_bancaria_id: conta_bancaria_id || null,
+    conta_bancaria_id: contaId,
     metodo_pagamento_id: metodo_pagamento_id || null,
     observacoes,
     estado: estado || 'registada',
@@ -252,7 +282,7 @@ router.post('/despesas/:id', async (req, res) => {
 });
 
 router.post('/despesas/:id/anular', async (req, res) => {
-  const despesa = await Despesa.findByPk(req.params.id);
+  const despesa = await carregarDespesa(req);
   if (despesa) {
     await despesa.update({ estado: 'anulada' });
     await sincronizarMovimentoDespesa(despesa, req.user.id);
