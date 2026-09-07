@@ -2,29 +2,31 @@ const express = require('express');
 const tenant = require('../helpers/tenant');
 const router = express.Router();
 
-// Página inicial: LOGIN → (escolha/condomínio ativo) → Dashboard.
+// Decisão pura do destino após autenticação (testável offline):
+//  - sem condomínio ESCOLHIDO válido na sessão → voltar sempre a
+//    "Os meus condomínios" (mesmo com apenas um condomínio);
+//  - com condomínio escolhido → dashboard conforme o papel (legado mantido).
+function destinoAposLogin({ meus = [], ativo = null, user = {} } = {}) {
+  const valido = meus.some((c) => c.id === ativo);
+  if (!valido) {
+    return { redirecionar: '/condominios', limparAtivo: Boolean(ativo) };
+  }
+  const global = user.role_global === 'super_admin';
+  return { redirecionar: user.role === 'admin' || global ? '/admin' : '/condomino', limparAtivo: false };
+}
+
+// Página inicial: LOGIN → "Os meus condomínios" → escolha → dashboard.
 router.get('/', async (req, res) => {
   if (!req.isAuthenticated()) {
     return res.redirect('/login');
   }
   try {
     const meus = await tenant.listarCondominios(req.user.id);
-    let ativo = tenant.ativo(req);
-    if (!meus.some((c) => c.id === ativo)) {
-      ativo = null;
+    const decisao = destinoAposLogin({ meus, ativo: tenant.ativo(req), user: req.user });
+    if (decisao.limparAtivo) {
       delete req.session.condominio_ativo_id;
     }
-    if (!ativo && meus.length) {
-      ativo = meus[0].id;
-      req.session.condominio_ativo_id = ativo;
-    }
-    if (!ativo) {
-      // Sem condomínio ativo: escolher/criar (Super Admin ou primeiro).
-      return res.redirect('/condominios');
-    }
-    // Entra na área conforme o papel (legado mantido para não quebrar fluxos).
-    const global = req.user.role_global === 'super_admin';
-    return res.redirect(req.user.role === 'admin' || global ? '/admin' : '/condomino');
+    return res.redirect(decisao.redirecionar);
   } catch (err) {
     console.error('[home]', err.message);
     req.flash('error_msg', 'Ocorreu um erro ao preparar a sua área.');
@@ -33,3 +35,4 @@ router.get('/', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.destinoAposLogin = destinoAposLogin;

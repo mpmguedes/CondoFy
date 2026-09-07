@@ -1,0 +1,36 @@
+<div class="auth-wrap">
+  <div class="auth-card card shadow-sm" style="max-width:520px">
+    <div class="card-body p-4 p-md-5">
+      <div class="text-center mb-4">
+        <img src="/img/logo_gescondu.png" alt="GesCondu" class="login-logo mx-auto d-block mb-3" />
+        <h1 class="h4 mb-1">Ativar aplicação autenticadora</h1>
+        <p class="text-muted mb-0">1.º Escaneie o QR Code com a aplicação (Google/Microsoft Authenticator) e 2.º introduza o código gerado.</p>
+      </div>
+
+      <div class="text-center mb-3">
+        <div id="totp-qrcode" class="d-inline-block p-2 border rounded bg-white"></div>
+      </div>
+      <input type="hidden" id="totp-uri" value="{{uri}}" />
+
+      <form action="/conta/2fa/totp/confirmar" method="POST">
+        <div class="mb-3">
+          <label for="codigo" class="form-label">Código da aplicação (6 dígitos)</label>
+          <input type="text" class="form-control text-center" id="codigo" name="codigo" inputmode="numeric" maxlength="6" required autofocus autocomplete="one-time-code" />
+        </div>
+        <button type="submit" class="btn btn-primary w-100">Ativar e gerar códigos de recuperação</button>
+      </form>
+
+      <p class="small text-muted mt-3 mb-0">Se não conseguir escanear, introduza manualmente a chave indicada pela aplicação.</p>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+  (function () {
+    var uriEl = document.getElementById('totp-uri');
+    if (window.QRCode && uriEl && uriEl.value) {
+      new QRCode(document.getElementById('totp-qrcode'), { text: uriEl.value, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
+    }
+  })();
+</script>

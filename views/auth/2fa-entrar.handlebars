@@ -4,12 +4,18 @@
       <div class="text-center mb-4">
         <img src="/img/logo_gescondu.png" alt="GesCondu" class="login-logo mx-auto d-block mb-3" />
         <h1 class="h4 mb-1">Verificação em duas etapas</h1>
-        <p class="text-muted mb-0">Introduza o código enviado para o seu email (válido 10 minutos) ou um código de recuperação.</p>
+        <p class="text-muted mb-0">
+          {{#if metodoTotp}}
+          Introduza o código de 6 dígitos da sua <strong>aplicação autenticadora</strong> (ou um código de recuperação).
+          {{else}}
+          Introduza o código enviado para o seu email (válido 10 minutos) ou um código de recuperação.
+          {{/if}}
+        </p>
       </div>
 
       <form action="/2fa/entrar" method="POST">
         <div class="mb-3">
-          <label for="codigo" class="form-label">Código</label>
+          <label for="codigo" class="form-label">{{#if metodoTotp}}Código da aplicação{{else}}Código{{/if}}</label>
           <input type="text" class="form-control" id="codigo" name="codigo" inputmode="numeric" maxlength="12" required autofocus autocomplete="one-time-code" />
         </div>
         <div class="form-check form-switch mb-3">

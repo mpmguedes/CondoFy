@@ -40,6 +40,34 @@ function testarRecovery() {
   assert.strictEqual(doisFatores.consumirRecovery(hashArmazenado, '00000-00000'), null, 'código errado rejeitado');
 }
 
+function testarTOTP() {
+  const segredo = doisFatores.gerarSegredoTOTP();
+  assert.strictEqual(segredo.length, 32, 'segredo TOTP com 32 caracteres');
+  assert.ok(/^[A-Z2-7]+$/.test(segredo), 'segredo em Base32');
+
+  // Base32: conversão invertível.
+  const origem = Buffer.from('aplicacao-autenticadora');
+  const enc = doisFatores.bytesParaBase32(origem);
+  const dec = doisFatores.base32ParaBytes(enc);
+  assert.strictEqual(dec.toString('utf8'), 'aplicacao-autenticadora', 'roundtrip Base32');
+
+  // URI otpauth com segredo e emissor.
+  const uri = doisFatores.otpauthURI({ segredo, email: 'ana@exemplo.pt', emissor: 'GesCondu' });
+  assert.ok(uri.startsWith('otpauth://totp/'), 'URI otpauth');
+  assert.ok(uri.includes(`secret=${segredo}`), 'URI contém o segredo');
+  assert.ok(uri.includes('issuer=GesCondu'), 'URI com issuer');
+
+  // Verificação: código atual aceite; código errado rejeitado.
+  const agora = Date.now();
+  const codigo = doisFatores.totpParaContador(segredo, Math.floor(agora / 1000 / 30));
+  assert.ok(doisFatores.verificarTOTP(segredo, codigo, { agora }), 'código TOTP atual aceite');
+  assert.ok(!doisFatores.verificarTOTP(segredo, '000000', { agora }), 'código errado rejeitado');
+  // Tolerância ±1 período (código do contador anterior continua válido).
+  const anterior = doisFatores.totpParaContador(segredo, Math.floor(agora / 1000 / 30) - 1);
+  assert.ok(doisFatores.verificarTOTP(segredo, anterior, { agora }), 'janela -1 aceite');
+}
+
 testarCodigoEmail();
 testarRecovery();
+testarTOTP();
 console.log('✓ Testes de 2FA passaram (sem base de dados).');

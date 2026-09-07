@@ -1,0 +1,12 @@
+{{!-- Tabs superiores do módulo Assembleias — recebe "ativo": assembleias | convocatorias | votacoes --}}
+<nav class="assembleias-tabs" aria-label="Secções do módulo Assembleias">
+  <a class="assembleias-tab {{#if (eq ativo 'assembleias')}}active{{/if}}" href="/admin/assembleias">
+    <span class="material-symbols-outlined">forum</span>Assembleias
+  </a>
+  <a class="assembleias-tab {{#if (eq ativo 'convocatorias')}}active{{/if}}" href="/admin/convocatorias/nova">
+    <span class="material-symbols-outlined">description</span>Convocatórias
+  </a>
+  <a class="assembleias-tab {{#if (eq ativo 'votacoes')}}active{{/if}}" href="/admin/votacoes">
+    <span class="material-symbols-outlined">how_to_vote</span>Votações
+  </a>
+</nav>

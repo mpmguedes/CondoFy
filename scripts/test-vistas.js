@@ -22,6 +22,8 @@ const parciais = {
   '_convocatoria-editor': ler('partials/_convocatoria-editor.handlebars'),
   '_condominio-seletor': ler('partials/_condominio-seletor.handlebars'),
   '_bottom-bar': ler('partials/_bottom-bar.handlebars'),
+  '_quotas-tabs': ler('partials/_quotas-tabs.handlebars'),
+  '_assembleias-tabs': ler('partials/_assembleias-tabs.handlebars'),
 };
 Object.keys(parciais).forEach((k) => handlebars.registerPartial(k, parciais[k]));
 
@@ -75,6 +77,7 @@ const contexto = {
 // 1. Modo edição
 let html = nova(contexto);
 assert.ok(html.includes('Nova Convocatória'), 'título presente');
+assert.ok(html.includes('assembleias-tabs'), 'tab Convocatórias dentro do módulo Assembleias');
 assert.ok(html.includes('name="edificio_nome"'), 'campo edifício');
 assert.ok(html.includes('name="pontos[]"'), 'inputs de pontos');
 assert.ok(html.includes('name="_acao" value="preview"'), 'botão pré-visualizar');
@@ -103,7 +106,8 @@ assert.ok(html.includes('value="19:47"'), 'hora preservada no editor');
 
 // 5. Layout principal integra o item de navegação
 html = layout({ body: 'ok', user: contexto.user, isAdmin: true, condominio: contexto.condominio, currentPath: '/admin/convocatorias/nova' });
-assert.ok(html.includes('/admin/convocatorias/nova'), 'link de navegação Convocatórias');
+assert.ok(!html.includes('title="Nova Convocatória"'), 'sidebar: Convocatórias já não é entrada independente (tab em Assembleias)');
+assert.ok(html.includes('href="/admin/assembleias"'), 'sidebar: Assembleias presente');
 
 // 6. Página de Configuração — estados do Google Drive
 const config = handlebars.compile(ler('admin/configuracao/index.handlebars'));
@@ -269,12 +273,10 @@ html = layout({ body: 'ok', user: { nome: 'Bruno', role: 'condomino' }, isAdmin:
 assert.ok(html.includes('href="/condominios"'), 'nav condómino: atalho Os meus condomínios na barra inferior');
 assert.ok(html.includes('href="/condomino"'), 'nav condómino: atalho A minha área na barra inferior');
 
-// 14. Sidebar — reorganização (Recibos/Comprovativos/Quotas Extra em Quotas; Assembleias)
+// 14. Sidebar — reorganização: apenas "Quotas" (Extra/Recibos/Comprovativos são tabs)
 html = layout({ body: 'ok', user: { nome: 'Ana', role: 'admin' }, isAdmin: true, condominio: contexto.condominio, currentPath: '/admin/quotas/recibos' });
-assert.ok(html.includes('href="/admin/quotas/recibos"'), 'nav: Recibos subitem em Quotas');
-assert.ok(html.includes('href="/admin/quotas/comprovativos"'), 'nav: Comprovativos subitem em Quotas');
-assert.ok(html.includes('href="/admin/quotas-extra"'), 'nav: Quotas Extra subitem em Quotas');
-assert.ok(html.includes('sidebar-item-sub'), 'nav: itens com indentação sub');
+assert.ok(!html.includes('sidebar-item-sub'), 'nav: sem subitens Quotas Extra/Recibos/Comprovativos na sidebar');
+assert.ok(!/title="Quotas Extraordinárias"/.test(html), 'nav: Quotas Extra não é entrada da sidebar');
 assert.ok(html.includes('sidebar-group-title">Assembleias'), 'nav: grupo Assembleias presente');
 assert.ok(html.includes('sidebar-group-title">Documentos'), 'nav: grupo Documentos separado');
 
@@ -303,5 +305,24 @@ assert.ok(html.includes('href="/admin/fornecedores"'), 'gestor: mantém Forneced
 html = layout({ ...ctxGestor, condominioAtivo: { role: 'admin' } });
 assert.ok(html.includes('href="/admin/emails"'), 'admin: link Emails presente');
 assert.ok(html.includes('sidebar-group-title">Sistema'), 'admin: grupo Sistema presente');
+
+// 17. Documentos — biblioteca visual e listagem interna por categoria/pasta
+const docBiblio = handlebars.compile(ler('admin/documentos/biblioteca.handlebars'));
+html = docBiblio({
+  categorias: [
+    { chave: 'outros', titulo: 'Outros', icone: 'folder', descricao: 'Diversos', pastas: ['outros'], contagem: 0, href: '/admin/documentos?pastas=outros' },
+    { chave: 'recibos', titulo: 'Recibos de Pagamento', icone: 'receipt_long', descricao: 'Recibos', pastas: ['recibos'], contagem: 7, href: '/admin/documentos?pastas=recibos' },
+  ],
+  personalizadas: [{ chave: 'c-obras', titulo: 'Obras', icone: 'create_new_folder', descricao: 'Pasta personalizada', pastas: ['c-obras'], contagem: 0, href: '/admin/documentos?pastas=c-obras' }],
+  total: 7,
+});
+assert.ok(html.includes('doc-card'), 'biblioteca: cartões presentes');
+assert.ok(html.includes('href="/admin/documentos?pastas=outros"'), 'biblioteca: Outros clicável');
+assert.ok(html.includes('Sem documentos'), 'biblioteca: pasta vazia mostra "Sem documentos"');
+assert.ok(html.includes('7 documentos'), 'biblioteca: contagem visível');
+const docLista = handlebars.compile(ler('admin/documentos/listar.handlebars'));
+html = docLista({ documentos: [], pasta: null, pastasMulti: ['recibos'], rotulo: 'Recibos de Pagamento', nDocumentos: 0, pastas: { recibos: 'Recibos de Pagamento', outros: 'Outros' }, pastaCustom: null, driveLigado: true });
+assert.ok(html.includes('Voltar à biblioteca'), 'listagem: botão voltar à biblioteca');
+assert.ok(html.includes('Biblioteca'), 'listagem: breadcrumb da biblioteca');
 
 console.log('✓ Todas as vistas da convocatória renderizam corretamente.');

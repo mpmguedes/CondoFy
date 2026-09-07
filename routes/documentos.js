@@ -43,21 +43,78 @@ const TIPOS_POR_PASTA = {
   outros: ['outro', 'ata', 'convocatoria', 'fatura', 'contrato', 'relatorio', 'orcamento'],
 };
 
+// Categorias pré-definidas da BIBLIOTECA visual (cada uma agrega pastas).
+const CATEGORIAS_BIBLIOTECA = [
+  { chave: 'biblioteca', titulo: 'Biblioteca de Condomínio', icone: 'menu_book', descricao: 'Atas, contratos, regulamentos, convocatórias e faturas', pastas: ['atas', 'contratos', 'regulamentos', 'convocatorias', 'faturas'] },
+  { chave: 'recibos', titulo: 'Recibos de Pagamento', icone: 'receipt_long', descricao: 'Recibos arquivados por fração e ano', pastas: ['recibos'] },
+  { chave: 'assembleias', titulo: 'Assembleias', icone: 'forum', descricao: 'Convocatórias, atas e anexos das assembleias', pastas: ['assembleias'] },
+  { chave: 'seguros', titulo: 'Seguros', icone: 'shield', descricao: 'Apólices e comprovativos de seguros', pastas: ['apolices', 'comprovativos'] },
+  // "Outros" é obrigatória e nunca pode ser eliminada.
+  { chave: 'outros', titulo: 'Outros', icone: 'folder', descricao: 'Documentos diversos sem outra classificação', pastas: ['outros'] },
+];
+
 router.get('/documentos', async (req, res) => {
   const cond = await getCondominio({ id: req.condominioId });
   const mapa = mapaPastas(cond);
-  const pasta = req.query.pasta || null;
+  const pasta = typeof req.query.pasta === 'string' ? req.query.pasta : null;
+  const pastasMulti = typeof req.query.pastas === 'string' ? req.query.pastas.split(',').map((s) => s.trim()).filter((s) => mapa[s]) : null;
+
+  const emBiblioteca = !pasta && !pastasMulti;
   const where = { condominio_id: req.condominioId };
   if (pasta && mapa[pasta]) where.pasta = pasta;
+  if (pastasMulti && pastasMulti.length) where.pasta = { [Op.in]: pastasMulti };
+
+  // Contagens por pasta (para os cartões e para o cabeçalho da lista).
+  const chaves = Object.keys(mapa);
+  const contagensRaw = await Promise.all(
+    chaves.map(async (key) => [key, await Documento.count({ where: { condominio_id: req.condominioId, pasta: key } })])
+  );
+  const contagem = new Map(contagensRaw);
+
+  if (emBiblioteca) {
+    // Cartões das 5 categorias + pastas personalizadas.
+    const categorias = CATEGORIAS_BIBLIOTECA.map((c) => ({
+      ...c,
+      contagem: c.pastas.reduce((s, k) => s + (contagem.get(k) || 0), 0),
+      href: `/admin/documentos?pastas=${encodeURIComponent(c.pastas.join(','))}`,
+    }));
+    const personalizadas = pastasPersonalizadas(cond).map((p) => ({
+      chave: p.key,
+      titulo: p.nome,
+      icone: 'create_new_folder',
+      descricao: 'Pasta personalizada da biblioteca',
+      pastas: [p.key],
+      contagem: contagem.get(p.key) || 0,
+      href: `/admin/documentos?pastas=${encodeURIComponent(p.key)}`,
+    }));
+    return res.render('admin/documentos/biblioteca', {
+      titulo: 'Documentos',
+      categorias,
+      personalizadas,
+      total: [...contagem.values()].reduce((s, n) => s + n, 0),
+      driveLigado: drive.isConfigured(),
+    });
+  }
+
+  // Listagem interna de uma pasta/categoria (tabela existente).
+  const rotulo = pastasMulti
+    ? (CATEGORIAS_BIBLIOTECA.find((c) => c.pastas.length === pastasMulti.length && c.pastas.every((k) => pastasMulti.includes(k)))
+      || { titulo: pastasMulti.map((k) => mapa[k]).filter(Boolean).join(' + ') }).titulo
+    : pasta
+      ? mapa[pasta]
+      : null;
   const documentos = await Documento.findAll({
     where,
     include: [{ model: Categoria, as: 'categorias', through: { attributes: [] }, required: false }],
     order: [['data', 'DESC'], ['id', 'DESC']],
   });
   res.render('admin/documentos/listar', {
-    titulo: 'Documentos',
+    titulo: rotulo ? `Documentos · ${rotulo}` : 'Documentos',
     documentos,
     pasta,
+    pastasMulti: pastasMulti || null,
+    rotulo,
+    nDocumentos: documentos.length,
     pastas: mapa,
     pastaCustom: pasta && pasta.startsWith('c-') ? pasta : null,
     driveLigado: drive.isConfigured(),

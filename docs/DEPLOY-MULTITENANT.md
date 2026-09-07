@@ -30,6 +30,7 @@ Ordem e propósito:
 | `…057-two-factor-email` | 2FA por email: `two_fa_ativo/metodo/codigo_hash/codigo_expira/tentativas/recovery_hash` em `users`. |
 | `…058-documento-pastas-custom` | `condominios.documento_pastas` (JSON das pastas personalizadas da biblioteca). |
 | `…059-documento-categorias` | Enum `categorias.tipo` + `documento` e tabela `documento_categorias` (M2M Documento↔Categoria). |
+| `…060-two-factor-totp` | 2FA — opção Aplicação autenticadora (TOTP RFC 6238): coluna `users.two_fa_totp_secret` (Base32) e enum `two_fa_metodo` com `'totp'`. |
 
 Reverter (só se necessário, sempre com backup):
 ```bash
@@ -61,8 +62,9 @@ npm run db:migrate:undo   # uma migração de cada vez, da 059 para a 056
    - verificar que **não aparece** no primeiro condomínio (e vice-versa).
 6. **Convite** ("Novo utilizador" com "Enviar convite por email") → o destinatário abre
    `/aceitar-convite/<token>`, define palavra-passe e entra (confirmação de email).
-7. **2FA** em "Conta → Segurança": ativar com código recebido por email, ver códigos de
-   recuperação uma única vez e fazer logout+login para testar o 2.º fator.
+7. **2FA** em "Conta → Segurança": ativar com código recebido por email **ou** com aplicação
+   autenticadora (TOTP, com QR Code), ver códigos de recuperação uma única vez e fazer
+   logout+login para testar o 2.º fator.
 8. **Documentos**: criar pastas personalizadas (a pasta "Outros" é obrigatória) e
    associar categorias tipo "Documento" a um upload.
 

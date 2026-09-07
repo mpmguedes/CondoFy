@@ -83,7 +83,12 @@ app.use(async (req, res, next) => {
       const meus = await tenant.listarCondominios(req.user.id);
       res.locals.meusCondominios = meus;
       const ativoId = tenant.ativo(req);
-      let escolhido = meus.find((c) => c.id === ativoId) || meus[0] || null;
+      // Só o condomínio ESCOLHIDO explicitamente (sessão) é o ativo — nunca se
+      // escolhe automaticamente o primeiro/último usado.
+      let escolhido = meus.find((c) => c.id === ativoId) || null;
+      if (!escolhido && ativoId && !tenant.eSuperAdmin(req.user)) {
+        delete req.session.condominio_ativo_id; // sessão com ativo que já não é válido
+      }
       // Super Admin em modo suporte: o condomínio ativo pode não ter associação
       // (entrou via "Entrar (suporte)") — mostra-o mesmo assim no seletor.
       if (!escolhido && tenant.eSuperAdmin(req.user) && ativoId) {
@@ -91,6 +96,8 @@ app.use(async (req, res, next) => {
         if (suporte) {
           escolhido = { id: suporte.id, designacao: suporte.designacao, morada: suporte.morada, localidade: suporte.localidade, role: 'admin' };
           res.locals.meusCondominios = [escolhido, ...meus];
+        } else {
+          delete req.session.condominio_ativo_id;
         }
       }
       res.locals.condominioAtivo = escolhido;

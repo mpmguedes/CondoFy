@@ -58,18 +58,6 @@
             <span class="material-symbols-outlined">receipt_long</span>
             <span class="sidebar-item-text">Quotas</span>
           </a>
-          <a class="sidebar-item sidebar-item-sub {{isActive currentPath '/admin/quotas/recibos'}}" href="/admin/quotas/recibos" title="Recibos">
-            <span class="material-symbols-outlined">confirmation_number</span>
-            <span class="sidebar-item-text">Recibos</span>
-          </a>
-          <a class="sidebar-item sidebar-item-sub {{isActive currentPath '/admin/quotas/comprovativos'}}" href="/admin/quotas/comprovativos" title="Comprovativos">
-            <span class="material-symbols-outlined">contract</span>
-            <span class="sidebar-item-text">Comprovativos</span>
-          </a>
-          <a class="sidebar-item sidebar-item-sub {{isActive currentPath '/admin/quotas-extra'}}" href="/admin/quotas-extra" title="Quotas Extraordinárias">
-            <span class="material-symbols-outlined">savings</span>
-            <span class="sidebar-item-text">Quotas Extra</span>
-          </a>
           <a class="sidebar-item {{isActive currentPath '/admin/despesas'}}" href="/admin/despesas" title="Despesas">
             <span class="material-symbols-outlined">credit_card</span>
             <span class="sidebar-item-text">Despesas</span>
@@ -94,19 +82,11 @@
 
         <div class="sidebar-group">
           <div class="sidebar-group-title">Assembleias</div>
-          <a class="sidebar-item {{isActive currentPath '/admin/convocatorias'}}" href="/admin/convocatorias/nova" title="Nova Convocatória">
-            <span class="material-symbols-outlined">description</span>
-            <span class="sidebar-item-text">Convocatórias</span>
-          </a>
           <a class="sidebar-item {{isActive currentPath '/admin/assembleias'}}" href="/admin/assembleias" title="Assembleias">
             <span class="material-symbols-outlined">forum</span>
             <span class="sidebar-item-text">Assembleias</span>
           </a>
           {{#if (ne condominioAtivo.role 'gestor')}}
-          <a class="sidebar-item {{isActive currentPath '/admin/votacoes'}}" href="/admin/votacoes" title="Votações">
-            <span class="material-symbols-outlined">how_to_vote</span>
-            <span class="sidebar-item-text">Votações</span>
-          </a>
           <a class="sidebar-item {{isActive currentPath '/admin/calendario'}}" href="/admin/calendario" title="Calendário">
             <span class="material-symbols-outlined">calendar_month</span>
             <span class="sidebar-item-text">Calendário</span>
@@ -188,8 +168,12 @@
           <span class="material-symbols-outlined">menu</span>
         </button>
         <div class="condominio-pill">
+          {{#if condominioAtivo}}
           <span class="material-symbols-outlined">apartment</span>
-          <span class="condominio-pill-text">{{condominio.designacao}}</span>
+          <span class="condominio-pill-text">{{condominioAtivo.designacao}}</span>
+          {{else}}
+          <span class="condominio-pill-text text-muted">Sem condomínio selecionado</span>
+          {{/if}}
         </div>
         <div class="app-header-spacer"></div>
         <button class="icon-btn" type="button" title="Notificações">

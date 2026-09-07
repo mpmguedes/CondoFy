@@ -35,7 +35,13 @@ router.get('/condominios', eAutenticado, async (req, res) => {
       })
     : [];
   const nFracoes = new Map(contagens.map((r) => [r.condominio_id, Number(r.total)]));
-  const lista = meus.map((c) => ({ ...c, fracoes: nFracoes.get(c.id) || 0 }));
+  const ROTULOS_PAPEL = { admin: 'Administrador', gestor: 'Gestor', leitura: 'Leitura' };
+  const lista = meus.map((c) => ({
+    ...c,
+    fracoes: nFracoes.get(c.id) || 0,
+    papelLabel: ROTULOS_PAPEL[c.role] || c.role,
+    local: [c.morada, c.localidade].filter(Boolean).join(' · ') || null,
+  }));
 
   res.render('condominios/meus', {
     titulo: 'Os meus condomínios',

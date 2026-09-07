@@ -36,9 +36,10 @@ module.exports = (sequelize) => {
       google_id: { type: DataTypes.STRING(191), allowNull: true },
       pessoa_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       ativo: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
-      // 2FA por código de email (com códigos de recuperação).
+      // 2FA por código de email OU aplicação autenticadora (TOTP).
       two_fa_ativo: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
-      two_fa_metodo: { type: DataTypes.ENUM('email'), allowNull: false, defaultValue: 'email' },
+      two_fa_metodo: { type: DataTypes.ENUM('email', 'totp'), allowNull: false, defaultValue: 'email' },
+      two_fa_totp_secret: { type: DataTypes.STRING(64), allowNull: true },
       two_fa_email_codigo_hash: { type: DataTypes.STRING(64), allowNull: true },
       two_fa_email_codigo_expira: { type: DataTypes.DATE, allowNull: true },
       two_fa_email_tentativas: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },

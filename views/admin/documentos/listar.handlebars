@@ -1,9 +1,22 @@
 <div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
+    {{#if rotulo}}
+    <nav class="small mb-1" aria-label="breadcrumb">
+      <a href="/admin/documentos" class="text-decoration-none">Biblioteca</a>
+      <span class="text-muted mx-1">/</span>
+      <span class="text-muted">{{rotulo}}</span>
+    </nav>
+    <h1>{{rotulo}}</h1>
+    <p class="subtitle mb-0">Documentos nesta categoria/pasta{{#if nDocumentos}} ({{nDocumentos}}){{/if}}</p>
+    {{else}}
     <h1>Documentos</h1>
     <p class="subtitle">Biblioteca documental do condomínio</p>
+    {{/if}}
   </div>
-  <a href="/admin/documentos/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">upload</span>Novo documento</a>
+  <div class="d-flex gap-2">
+    {{#if rotulo}}<a href="/admin/documentos" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar à biblioteca</a>{{/if}}
+    <a href="/admin/documentos/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">upload</span>Novo documento</a>
+  </div>
 </div>
 
 {{#unless driveLigado}}
@@ -13,7 +26,7 @@
 <div class="card mb-3">
   <div class="card-body">
     <div class="d-flex flex-wrap gap-2">
-      <a href="/admin/documentos" class="btn btn-sm {{#unless pasta}}btn-primary{{else}}btn-outline-secondary{{/unless}}">Todas</a>
+      <a href="/admin/documentos" class="btn btn-sm {{#unless pasta}}{{#unless pastasMulti}}btn-primary{{else}}btn-outline-secondary{{/unless}}{{else}}btn-outline-secondary{{/unless}}">Biblioteca</a>
       {{#each pastas}}
       <a href="/admin/documentos?pasta={{@key}}" class="btn btn-sm {{#if (eq ../pasta @key)}}btn-primary{{else}}btn-outline-secondary{{/if}}">{{this}}</a>
       {{/each}}
@@ -91,5 +104,9 @@
   </div>
 </div>
 {{else}}
+{{#if rotulo}}
+{{> _empty-state icon="folder" titulo="Sem documentos" descricao="Esta categoria/pasta ainda não tem documentos." link="/admin/documentos/nova" linkTexto="Novo documento"}}
+{{else}}
 {{> _empty-state icon="folder" titulo="Esta pasta está vazia" descricao="Carregue documentos (atas, faturas, contratos…) para o repositório." link="/admin/documentos/nova" linkTexto="Novo documento"}}
+{{/if}}
 {{/if}}

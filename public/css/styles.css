@@ -1005,3 +1005,52 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
 .sidebar-item-sub { padding-left: calc(14px + 1.1rem) !important; }
 .sidebar-item-sub .material-symbols-outlined { font-size: 1.05rem; }
 .sidebar-item-sub .sidebar-item-text { font-size: 0.8rem; }
+
+/* ── Cartões "Os meus condomínios" ── */
+.condominio-card { transition: box-shadow .15s ease, transform .15s ease; }
+.condominio-card:hover { box-shadow: 0 .4rem 1rem rgba(0,0,0,.10); transform: translateY(-2px); }
+.condominio-card-link { text-decoration: none; color: inherit; height: 100%; }
+.condominio-card-link:hover { cursor: pointer; }
+.condominio-card-icone { font-size: 1.8rem; color: #1a73e8; }
+.condominio-card-papel { background: rgba(26,115,232,.10); color: #1a73e8; border: 1px solid rgba(26,115,232,.22); font-weight: 600; }
+.condominio-card-arrow { font-size: 1.05rem; transition: transform .15s ease; }
+.condominio-card:hover .condominio-card-arrow { transform: translateX(3px); }
+
+/* ── Tabs do módulo Assembleias (mesma linguagem das tabs de Quotas) ── */
+.assembleias-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 0 var(--sp-4);
+  border-bottom: 1px solid var(--c-border);
+  flex-wrap: wrap;
+}
+.assembleias-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  margin-bottom: -1px;
+  border: 1px solid transparent;
+  border-bottom: 2px solid transparent;
+  color: var(--c-text-muted);
+  font-size: 0.86rem;
+  font-weight: 500;
+  text-decoration: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.assembleias-tab .material-symbols-outlined { font-size: 1.05rem; }
+.assembleias-tab:hover { color: var(--c-text); background: var(--c-surface-2); }
+.assembleias-tab.active {
+  color: var(--c-primary);
+  border-color: var(--c-border) var(--c-border) transparent var(--c-border);
+  border-bottom-color: var(--c-primary);
+  background: var(--c-surface);
+}
+
+/* ── Cartões da biblioteca de Documentos ── */
+.doc-card { transition: box-shadow .15s ease, transform .15s ease; border: 1px solid var(--c-border, rgba(0,0,0,.1)); }
+.doc-card:hover { box-shadow: 0 .4rem 1rem rgba(0,0,0,.10); transform: translateY(-2px); }
+.doc-card-icone { font-size: 2rem; color: #1a73e8; }
+.doc-card-seta { font-size: 1.1rem; color: var(--c-text-muted); transition: transform .15s ease; }
+.doc-card:hover .doc-card-seta { transform: translateX(3px); }

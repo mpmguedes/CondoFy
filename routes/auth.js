@@ -81,8 +81,13 @@ router.post(
       }
       // 2FA ativo → segundo fator antes de iniciar sessão.
       if (user.two_fa_ativo) {
-        const envio = await enviarCodigo2fa(user, req).catch((e) => ({ ok: false, erro: e.message }));
         req.session.pendente2faLogin = user.id;
+        if (user.two_fa_metodo === 'totp') {
+          // Aplicação autenticadora: código pedido na página seguinte.
+          await audit({ userId: user.id, acao: '2fa_pedido', entidade: 'User', entidadeId: user.id, detalhes: { metodo: 'totp' } }).catch(() => {});
+          return res.redirect('/2fa/entrar');
+        }
+        const envio = await enviarCodigo2fa(user, req).catch((e) => ({ ok: false, erro: e.message }));
         await audit({ userId: user.id, acao: '2fa_codigo_enviado', entidade: 'User', entidadeId: user.id, detalhes: { fase: 'login' } }).catch(() => {});
         if (!envio.ok) {
           req.flash('error_msg', 'Palavra-passe correta. Não foi possível enviar o código por email (verifique o SMTP) — tente novamente mais tarde.');
@@ -93,6 +98,8 @@ router.post(
       }
       req.login(user, (e) => {
         if (e) return next(e);
+        // Login completo → obrigar a escolha explícita do condomínio.
+        delete req.session.condominio_ativo_id;
         return res.redirect('/');
       });
     })(req, res, next);
@@ -100,9 +107,13 @@ router.post(
 );
 
 // ── 2FA — segundo fator do login ────────────────────────────────────
-router.get('/2fa/entrar', (req, res) => {
+router.get('/2fa/entrar', async (req, res) => {
   if (!req.session.pendente2faLogin) return res.redirect('/login');
-  res.render('auth/2fa-entrar', { titulo: 'Verificação em duas etapas' });
+  const user = await User.findByPk(req.session.pendente2faLogin).catch(() => null);
+  res.render('auth/2fa-entrar', {
+    titulo: 'Verificação em duas etapas',
+    metodoTotp: Boolean(user && user.two_fa_metodo === 'totp'),
+  });
 });
 
 router.post('/2fa/entrar', limite2fa, async (req, res, next) => {
@@ -130,6 +141,12 @@ router.post('/2fa/entrar', limite2fa, async (req, res, next) => {
       valido = true;
       await user.update({ two_fa_recovery_hash: restante, two_fa_email_codigo_hash: null, two_fa_email_codigo_expira: null, two_fa_email_tentativas: 0 });
     }
+  } else if (user.two_fa_metodo === 'totp') {
+    // Código da aplicação autenticadora (TOTP, janela ±1 período).
+    if (doisFatores.verificarTOTP(user.two_fa_totp_secret, codigo)) {
+      valido = true;
+      await user.update({ two_fa_email_tentativas: 0 });
+    }
   } else {
     const hash = doisFatores.hashCodigo(codigo);
     const okCodigo = user.two_fa_email_codigo_hash && hash === user.two_fa_email_codigo_hash;
@@ -153,6 +170,8 @@ router.post('/2fa/entrar', limite2fa, async (req, res, next) => {
   await audit({ userId: user.id, acao: '2fa_verificado', entidade: 'User', entidadeId: user.id, detalhes: { viaRecovery: ehRecovery } }).catch(() => {});
   req.login(user, (e) => {
     if (e) return next(e);
+    // Login completo (2FA verificado) → obrigar a escolha explícita do condomínio.
+    delete req.session.condominio_ativo_id;
     req.flash('success_msg', 'Sessão iniciada com verificação em duas etapas.');
     return res.redirect('/');
   });
@@ -205,11 +224,12 @@ router.post('/conta/2fa/ativar/codigo', eAutenticado, limite2fa, async (req, res
     req.flash('error_msg', 'Código inválido ou expirado.');
     return res.redirect('/conta/2fa/ativar/codigo');
   }
-  // Ativa 2FA e gera códigos de recuperação (mostrados uma única vez).
+  // Ativa 2FA (email) e gera códigos de recuperação (mostrados uma única vez).
   const recovery = doisFatores.gerarRecoveryCodes(10);
   await user.update({
     two_fa_ativo: true,
     two_fa_metodo: 'email',
+    two_fa_totp_secret: null,
     two_fa_email_codigo_hash: null,
     two_fa_email_codigo_expira: null,
     two_fa_email_tentativas: 0,
@@ -217,7 +237,56 @@ router.post('/conta/2fa/ativar/codigo', eAutenticado, limite2fa, async (req, res
   });
   delete req.session.pendente2faAtivar;
   req.session.codigosRecuperacao = recovery;
-  await audit({ userId: user.id, acao: 'ativar_2fa', entidade: 'User', entidadeId: user.id }).catch(() => {});
+  await audit({ userId: user.id, acao: 'ativar_2fa', entidade: 'User', entidadeId: user.id, detalhes: { metodo: 'email' } }).catch(() => {});
+  return res.redirect('/conta/2fa/codigos');
+});
+
+// ── 2FA TOTP (Aplicação autenticadora) ──────────────────────────────
+// Passo 1 — gera segredo e mostra QR Code para importar.
+router.post('/conta/2fa/totp/iniciar', eAutenticado, async (req, res) => {
+  const user = await User.findByPk(req.user.id);
+  if (!user) return res.redirect('/login');
+  if (user.two_fa_ativo) {
+    req.flash('error_msg', 'A verificação em duas etapas já está ativa.');
+    return res.redirect('/conta/seguranca');
+  }
+  const segredo = doisFatores.gerarSegredoTOTP();
+  req.session.totpAtivacao = { userId: user.id, segredo };
+  await audit({ userId: user.id, acao: '2fa_totp_iniciado', entidade: 'User', entidadeId: user.id }).catch(() => {});
+  return res.redirect('/conta/2fa/totp/confirmar');
+});
+
+router.get('/conta/2fa/totp/confirmar', eAutenticado, (req, res) => {
+  const ativ = req.session.totpAtivacao;
+  if (!ativ || ativ.userId !== req.user.id) return res.redirect('/conta/seguranca');
+  const uri = doisFatores.otpauthURI({ segredo: ativ.segredo, email: req.user.email });
+  res.render('auth/2fa-totp', { titulo: 'Ativar aplicação autenticadora', uri });
+});
+
+// Passo 2 — valida um código da aplicação e ativa o TOTP + recovery codes.
+router.post('/conta/2fa/totp/confirmar', eAutenticado, limite2fa, async (req, res) => {
+  const ativ = req.session.totpAtivacao;
+  if (!ativ || ativ.userId !== req.user.id) return res.redirect('/conta/seguranca');
+  const user = await User.findByPk(req.user.id);
+  if (!user) return res.redirect('/login');
+  const codigo = String(req.body.codigo || '').trim();
+  if (!doisFatores.verificarTOTP(ativ.segredo, codigo)) {
+    req.flash('error_msg', 'Código da aplicação autenticadora inválido. Tente novamente.');
+    return res.redirect('/conta/2fa/totp/confirmar');
+  }
+  const recovery = doisFatores.gerarRecoveryCodes(10);
+  await user.update({
+    two_fa_ativo: true,
+    two_fa_metodo: 'totp',
+    two_fa_totp_secret: ativ.segredo,
+    two_fa_email_codigo_hash: null,
+    two_fa_email_codigo_expira: null,
+    two_fa_email_tentativas: 0,
+    two_fa_recovery_hash: doisFatores.hashRecovery(recovery),
+  });
+  delete req.session.totpAtivacao;
+  req.session.codigosRecuperacao = recovery;
+  await audit({ userId: user.id, acao: 'ativar_2fa', entidade: 'User', entidadeId: user.id, detalhes: { metodo: 'totp' } }).catch(() => {});
   return res.redirect('/conta/2fa/codigos');
 });
 
@@ -245,6 +314,8 @@ router.post('/conta/2fa/desativar', eAutenticado, async (req, res) => {
   if (!user) return res.redirect('/login');
   await user.update({
     two_fa_ativo: false,
+    two_fa_metodo: 'email',
+    two_fa_totp_secret: null,
     two_fa_email_codigo_hash: null,
     two_fa_email_codigo_expira: null,
     two_fa_email_tentativas: 0,
