@@ -23,6 +23,7 @@ const {
   PagamentoQuota,
   Recibo,
   ReciboQuota,
+  Documento,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
@@ -39,6 +40,8 @@ const { enfileirarEmail } = require('../helpers/email-fila');
 const comprovativos = require('../helpers/comprovativos');
 const recibosHelper = require('../helpers/recibos');
 const tenant = require('../helpers/tenant');
+const storage = require('../helpers/storage');
+const { mapaPastas, resolverPastaDocumento } = require('../helpers/documento-pastas');
 
 const router = express.Router();
 router.use(tenant.comCondominioAtivo); // condomínio ativo (sessão) validado
@@ -627,6 +630,16 @@ router.post('/quotas/recibos/emitir', async (req, res) => {
       detalhes: { codigos: criados.map((r) => r.codigo), modo },
     }).catch(() => {});
 
+    // Regista/atualiza o Documento do recibo na biblioteca (pasta "recibos")
+    // — best-effort: erros nunca impedem a emissão.
+    for (const recibo of criados) {
+      try {
+        await garantirDocumentoRecibo(recibo.id, { condominioId: req.condominioId, userId: req.user.id });
+      } catch (errDoc) {
+        console.error('[emitir-recibo-doc]', errDoc.message);
+      }
+    }
+
     // Envio imediato por email (opcional) — usa os contactos do condómino.
     const enviarEmail = req.body.enviar_email === 'on' || req.body.enviar_email === '1';
     let enviados = 0;
@@ -726,6 +739,78 @@ async function pdfDeRecibo(recibo, condRow) {
       valorAplicado: q.ReciboQuota ? q.ReciboQuota.valor : q.valor,
     })),
   });
+}
+
+// Regista/atualiza o Documento do recibo na biblioteca (pasta "recibos").
+// Idempotente: se já existir (por entidade Recibo ou pelo código) atualiza,
+// nunca duplica. Só cria quando o armazenamento (Drive) está configurado.
+async function garantirDocumentoRecibo(reciboId, { condominioId, userId }) {
+  const recibo = await Recibo.findOne({
+    where: { id: reciboId, condominio_id: condominioId },
+    include: [
+      { model: Fracao, as: 'fracao' },
+      { model: Quota, as: 'quotas', through: { attributes: ['valor', 'valor_base', 'valor_fcr'] } },
+    ],
+  });
+  if (!recibo) return null;
+
+  const cond = await getCondominio({ id: condominioId });
+  const condRow = cond && cond.toJSON ? cond.toJSON() : cond || {};
+
+  // Classificação central (mesma regra em todo o lado): recibo → recibos.
+  const decisao = resolverPastaDocumento({
+    tipo: 'recibo',
+    pastaEscolhida: null,
+    pastasValidas: Object.keys(mapaPastas(cond)),
+  });
+
+  // Duplicação: procura pelo vínculo entidade Recibo OU pelo código.
+  const existente =
+    (await Documento.findOne({
+      where: { condominio_id: condominioId, entidade_tipo: 'Recibo', entidade_id: recibo.id },
+    })) ||
+    (await Documento.findOne({
+      where: { condominio_id: condominioId, tipo: 'recibo', numero_documento: recibo.codigo },
+    }));
+  if (existente) {
+    const atualizar = { tipo: 'recibo', pasta: decisao.pasta, condominio_id: condominioId };
+    if (!existente.entidade_tipo) atualizar.entidade_tipo = 'Recibo';
+    if (!existente.entidade_id) atualizar.entidade_id = recibo.id;
+    await existente.update(atualizar);
+    return { doc: existente, criado: false };
+  }
+
+  // Sem armazenamento configurado não criamos um documento "vazio".
+  if (!storage.isConfigured()) return null;
+
+  const buffer = await pdfDeRecibo(recibo, condRow);
+  const ano = recibo.data_emissao ? new Date(recibo.data_emissao).getFullYear() : new Date().getFullYear();
+  const pastaDrive = await storage.pastaParaDocumento('recibo', ano);
+  const up = await storage.uploadArquivo({
+    nome: `Recibo ${recibo.codigo}.pdf`,
+    mimeType: 'application/pdf',
+    buffer,
+    parentFolderId: pastaDrive,
+  });
+  const doc = await Documento.create({
+    condominio_id: condominioId,
+    tipo: 'recibo',
+    numero_documento: recibo.codigo,
+    nome: `Recibo ${recibo.codigo}`,
+    pasta: decisao.pasta,
+    drive_file_id: up.driveFileId,
+    drive_folder_id: pastaDrive,
+    mime_type: 'application/pdf',
+    tamanho: up.tamanho,
+    data: recibo.data_emissao || new Date(),
+    url: up.url,
+    drive_status: 'guardado',
+    drive_uploaded_at: new Date(),
+    entidade_tipo: 'Recibo',
+    entidade_id: recibo.id,
+    created_by: userId || null,
+  });
+  return { doc, criado: true };
 }
 
 // Ver PDF do recibo.

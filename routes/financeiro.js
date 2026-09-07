@@ -25,6 +25,7 @@ const { toCents, fromCents, toNumber } = require('../helpers/money');
 const { MESES, monthName } = require('../helpers/dates');
 const { resumoCondominio, resumoFracao, estadoEfetivo } = require('../helpers/saldos');
 const { getCondominio } = require('../helpers/condominio');
+const { PASTAS_BASE, resolverPastaDocumento } = require('../helpers/documento-pastas');
 const { proximoNumero } = require('../helpers/numeracao');
 const { registarPagamento, anularPagamento } = require('../helpers/pagamentos');
 const { uploadComprovativo, apagarComprovativo } = require('../helpers/comprovativos');
@@ -1232,7 +1233,8 @@ async function guardarPdfFinanceiroDrive({ tipo, numeroDocumento, nome, buffer, 
     tipo,
     numero_documento: numeroDocumento || null,
     nome,
-    pasta: tipo === 'recibo' ? 'recibos' : 'quotas',
+    // Classificação central (recibo → recibos; aviso_quota → outros; etc.)
+    pasta: resolverPastaDocumento({ tipo, pastaEscolhida: null, pastasValidas: Object.keys(PASTAS_BASE) }).pasta,
     drive_file_id: up.driveFileId,
     drive_folder_id: pastaId,
     mime_type: 'application/pdf',
