@@ -13,6 +13,7 @@ const {
   User,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
+const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const { toCents, fromCents, toNumber } = require('../helpers/money');
 const { monthName } = require('../helpers/dates');
@@ -23,6 +24,13 @@ const { getQuotaConfig } = require('../helpers/quotas-config');
 
 const router = express.Router();
 router.use(eAdmin);
+// Isolamento: condomínio ativo (sessão validada) em todas as operações.
+router.use(tenant.comCondominioAtivo);
+
+// Orçamento do condomínio ATIVO (null quando não pertence — bloqueia IDOR).
+function carregarOrcamento(req, incluir = []) {
+  return Orcamento.findOne({ where: { id: req.params.id, condominio_id: req.condominioId }, include: incluir });
+}
 
 function totalRubricasC(rubricas) {
   return rubricas.filter((r) => r.ativo).reduce((s, r) => s + toCents(r.valor_anual), 0);
@@ -52,6 +60,7 @@ function dataParaAnoCivil(ano) {
 // ── Lista ──────────────────────────────────────────────────────────
 router.get('/orcamento', async (req, res) => {
   const orcamentos = await Orcamento.findAll({
+    where: { condominio_id: req.condominioId },
     include: [{ model: OrcamentoRubrica, as: 'rubricas' }],
     order: [['ano', 'DESC'], ['data_inicio', 'DESC']],
   });
@@ -89,7 +98,7 @@ router.get('/orcamento', async (req, res) => {
 
 // ── Criar ──────────────────────────────────────────────────────────
 router.get('/orcamento/nova', async (req, res) => {
-  const fracoes = await Fracao.findAll({ where: { estado: 'ativo' }, order: [['designacao', 'ASC']] });
+  const fracoes = await Fracao.findAll({ where: { estado: 'ativo', condominio_id: req.condominioId }, order: [['designacao', 'ASC']] });
   const quotaConfig = await getQuotaConfig();
   const anoAtual = new Date().getFullYear();
   res.render('admin/orcamento/form', {
@@ -137,6 +146,7 @@ router.post('/orcamento', async (req, res) => {
   const designacao = req.body.designacao || `Orçamento ${ano}`;
 
   const orcamento = await Orcamento.create({
+    condominio_id: req.condominioId,
     designacao,
     ano,
     saldo_transitado: saldoTransitado,
@@ -154,7 +164,7 @@ router.post('/orcamento', async (req, res) => {
 
 // ── Detalhe ────────────────────────────────────────────────────────
 router.get('/orcamento/:id', async (req, res) => {
-  const orcamento = await Orcamento.findByPk(req.params.id, {
+  const orcamento = await carregarOrcamento(req, {
     include: [
       { model: OrcamentoRubrica, as: 'rubricas', include: [{ model: Categoria, as: 'categoria' }] },
     ],
@@ -182,9 +192,9 @@ router.get('/orcamento/:id', async (req, res) => {
 
 // ── Editar ─────────────────────────────────────────────────────────
 router.get('/orcamento/:id/editar', async (req, res) => {
-  const orcamento = await Orcamento.findByPk(req.params.id);
+  const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
-  const fracoes = await Fracao.findAll({ where: { estado: 'ativo' }, order: [['designacao', 'ASC']] });
+  const fracoes = await Fracao.findAll({ where: { estado: 'ativo', condominio_id: req.condominioId }, order: [['designacao', 'ASC']] });
   const quotaConfig = await getQuotaConfig();
   res.render('admin/orcamento/form', {
     titulo: 'Editar orçamento',
@@ -197,7 +207,7 @@ router.get('/orcamento/:id/editar', async (req, res) => {
 });
 
 router.post('/orcamento/:id', async (req, res) => {
-  const orcamento = await Orcamento.findByPk(req.params.id);
+  const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
 
   const metodoCalculo = req.body.metodo_calculo === 'modo_b' ? 'modo_b' : 'modo_a';
@@ -233,7 +243,7 @@ router.post('/orcamento/:id', async (req, res) => {
 
 // ── Rubricas ───────────────────────────────────────────────────────
 router.post('/orcamento/:id/rubricas', async (req, res) => {
-  const orcamento = await Orcamento.findByPk(req.params.id);
+  const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
   if (orcamento.estado !== 'rascunho') {
     req.flash('error_msg', 'Orçamento aprovado não pode ser alterado normalmente. Use "alteração extraordinária".');
@@ -254,9 +264,9 @@ router.post('/orcamento/:id/rubricas', async (req, res) => {
 });
 
 router.post('/orcamento/:id/rubricas/:rid/eliminar', async (req, res) => {
-  const orcamento = await Orcamento.findByPk(req.params.id);
+  const orcamento = await carregarOrcamento(req);
   const rubrica = await OrcamentoRubrica.findByPk(req.params.rid);
-  if (orcamento && rubrica) {
+  if (orcamento && rubrica && rubrica.orcamento_id === orcamento.id) {
     if (orcamento.estado !== 'rascunho') {
       req.flash('error_msg', 'Orçamento aprovado não pode ser alterado normalmente.');
       return res.redirect(`/admin/orcamento/${orcamento.id}`);
@@ -269,9 +279,9 @@ router.post('/orcamento/:id/rubricas/:rid/eliminar', async (req, res) => {
 
 // Alteração extraordinária de uma rubrica (com justificação obrigatória quando aprovado).
 router.post('/orcamento/:id/rubricas/:rid/alterar', async (req, res) => {
-  const orcamento = await Orcamento.findByPk(req.params.id);
+  const orcamento = await carregarOrcamento(req);
   const rubrica = await OrcamentoRubrica.findByPk(req.params.rid);
-  if (!orcamento || !rubrica) return res.redirect('/admin/orcamento');
+  if (!orcamento || !rubrica || rubrica.orcamento_id !== orcamento.id) return res.redirect('/admin/orcamento');
   const novoValor = toNumber(req.body.valor_novo);
   const justificacao = (req.body.justificacao || '').trim();
   if (orcamento.estado !== 'rascunho' && !justificacao) {
@@ -303,7 +313,7 @@ router.post('/orcamento/:id/rubricas/:rid/alterar', async (req, res) => {
 
 // ── Aprovação / estado ─────────────────────────────────────────────
 router.post('/orcamento/:id/aprovar', async (req, res) => {
-  const orcamento = await Orcamento.findByPk(req.params.id, {
+  const orcamento = await carregarOrcamento(req, {
     include: [{ model: OrcamentoRubrica, as: 'rubricas' }],
   });
   if (!orcamento) return res.redirect('/admin/orcamento');
@@ -330,7 +340,7 @@ router.post('/orcamento/:id/aprovar', async (req, res) => {
 
 // Fecha o orçamento (encerrado).
 router.post('/orcamento/:id/fechar', async (req, res) => {
-  const orcamento = await Orcamento.findByPk(req.params.id);
+  const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
   await orcamento.update({ estado: 'encerrado' });
   await audit({ userId: req.user.id, acao: 'fechar_orçamento', entidade: 'Orcamento', entidadeId: orcamento.id });
@@ -340,12 +350,12 @@ router.post('/orcamento/:id/fechar', async (req, res) => {
 
 // ── Distribuição ───────────────────────────────────────────────────
 router.get('/orcamento/:id/distribuicao', async (req, res) => {
-  const orcamento = await Orcamento.findByPk(req.params.id, {
+  const orcamento = await carregarOrcamento(req, {
     include: [{ model: OrcamentoRubrica, as: 'rubricas' }],
   });
   if (!orcamento) return res.redirect('/admin/orcamento');
 
-  const fracoes = await Fracao.findAll({ where: { estado: 'ativo' }, order: [['designacao', 'ASC']] });
+  const fracoes = await Fracao.findAll({ where: { estado: 'ativo', condominio_id: req.condominioId }, order: [['designacao', 'ASC']] });
   const rubricas = orcamento.rubricas.filter((r) => r.ativo);
   const distribuicoes = await OrcamentoDistribuicao.findAll({ where: { orcamento_id: orcamento.id } });
   const distMap = {};
@@ -378,7 +388,7 @@ router.get('/orcamento/:id/distribuicao', async (req, res) => {
 });
 
 router.post('/orcamento/:id/distribuicao', async (req, res) => {
-  const orcamento = await Orcamento.findByPk(req.params.id);
+  const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
   const t = await sequelize.transaction();
   try {
@@ -408,7 +418,7 @@ router.post('/orcamento/:id/distribuicao', async (req, res) => {
 
 // ── Plano de quotas ────────────────────────────────────────────────
 router.get('/orcamento/:id/plano', async (req, res) => {
-  const orcamento = await Orcamento.findByPk(req.params.id);
+  const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
 
   const plano = await PlanoQuota.findAll({
@@ -454,10 +464,10 @@ router.get('/orcamento/:id/plano', async (req, res) => {
 });
 
 router.post('/orcamento/:id/plano', async (req, res) => {
-  const orcamento = await Orcamento.findByPk(req.params.id);
+  const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
   const rubricas = await OrcamentoRubrica.findAll({ where: { orcamento_id: orcamento.id, ativo: true } });
-  const fracoes = await Fracao.findAll({ where: { estado: 'ativo' } });
+  const fracoes = await Fracao.findAll({ where: { estado: 'ativo', condominio_id: req.condominioId } });
   let distribuicoes = await OrcamentoDistribuicao.findAll({ where: { orcamento_id: orcamento.id } });
 
   // Distribuição automática para rubricas ainda sem distribuição (permilagem/igual).
@@ -515,7 +525,7 @@ router.post('/orcamento/:id/plano', async (req, res) => {
 
 // ── Emissão (Fase 4) ───────────────────────────────────────────────
 router.get('/orcamento/:id/emitir', async (req, res) => {
-  const orcamento = await Orcamento.findByPk(req.params.id);
+  const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
   const plano = await PlanoQuota.findAll({
     where: { orcamento_id: orcamento.id, estado: 'planeada' },
@@ -545,7 +555,7 @@ router.get('/orcamento/:id/emitir', async (req, res) => {
 });
 
 router.post('/orcamento/:id/emitir', async (req, res) => {
-  const orcamento = await Orcamento.findByPk(req.params.id);
+  const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
   let ano = parseInt(req.body.ano, 10);
   let mes = parseInt(req.body.mes, 10);
@@ -577,6 +587,7 @@ router.post('/orcamento/:id/emitir', async (req, res) => {
       const numero = await proximoNumero('aviso_quota', { ano, transaction: t });
       await Quota.create(
         {
+          condominio_id: orcamento.condominio_id,
           numero_documento: numero,
           fracao_id: p.fracao_id,
           orcamento_id: orcamento.id,
@@ -609,7 +620,7 @@ router.post('/orcamento/:id/emitir', async (req, res) => {
 
 // ── Histórico ──────────────────────────────────────────────────────
 router.get('/orcamento/:id/historico', async (req, res) => {
-  const orcamento = await Orcamento.findByPk(req.params.id);
+  const orcamento = await carregarOrcamento(req);
   if (!orcamento) return res.redirect('/admin/orcamento');
   const alteracoes = await OrcamentoAlteracao.findAll({
     where: { orcamento_id: orcamento.id },
