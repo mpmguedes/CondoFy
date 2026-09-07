@@ -5,8 +5,29 @@ const crypto = require('crypto');
 const { User } = require('../models');
 const { sendMail } = require('../helpers/mailer');
 const { audit } = require('../helpers/audit');
+const { createLimiter } = require('../helpers/seguranca');
 
 const router = express.Router();
+
+// Rate limiting (autenticação) — proteção simples contra força bruta.
+const limiteLogin = createLimiter({
+  rotulo: 'login',
+  max: 10,
+  janelaMs: 10 * 60 * 1000,
+  msg: 'Demasiadas tentativas de início de sessão. Aguarde 10 minutos.',
+});
+const limiteRecuperar = createLimiter({
+  rotulo: 'recuperar',
+  max: 5,
+  janelaMs: 15 * 60 * 1000,
+  msg: 'Demasiados pedidos de recuperação. Aguarde 15 minutos.',
+});
+const limiteRedefinir = createLimiter({
+  rotulo: 'redefinir',
+  max: 10,
+  janelaMs: 60 * 60 * 1000,
+  msg: 'Demasiadas tentativas de redefinição. Aguarde 1 hora.',
+});
 
 // ── Login ──────────────────────────────────────────────────────────
 router.get('/login', (req, res) => {
@@ -18,6 +39,7 @@ router.get('/login', (req, res) => {
 
 router.post(
   '/login',
+  limiteLogin,
   passport.authenticate('local', {
     successRedirect: '/',
     failureRedirect: '/login',
@@ -26,8 +48,13 @@ router.post(
 );
 
 router.get('/logout', (req, res, next) => {
+  const userId = req.user ? req.user.id : null;
+  const email = req.user ? req.user.email : null;
   req.logout((err) => {
     if (err) return next(err);
+    if (userId) {
+      audit({ userId, acao: 'terminar_sessao', entidade: 'User', entidadeId: userId, detalhes: { email } }).catch(() => {});
+    }
     req.flash('success_msg', 'Sessão terminada com sucesso.');
     res.redirect('/login');
   });
@@ -38,7 +65,7 @@ router.get('/recuperar', (req, res) => {
   res.render('auth/recuperar');
 });
 
-router.post('/recuperar', async (req, res) => {
+router.post('/recuperar', limiteRecuperar, async (req, res) => {
   const { email } = req.body;
   try {
     const user = await User.findOne({ where: { email } });
@@ -80,7 +107,7 @@ router.get('/redefinir/:token', async (req, res) => {
   res.render('auth/redefinir', { token: req.params.token });
 });
 
-router.post('/redefinir/:token', async (req, res) => {
+router.post('/redefinir/:token', limiteRedefinir, async (req, res) => {
   const { password, password2 } = req.body;
   if (!password || password.length < 8) {
     req.flash('error_msg', 'A palavra-passe deve ter pelo menos 8 caracteres.');
