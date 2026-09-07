@@ -41,6 +41,8 @@ module.exports = (sequelize) => {
       drive_uploaded_at: { type: DataTypes.DATE, allowNull: true },
       drive_folder_id: { type: DataTypes.STRING(191), allowNull: true },
       created_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+      // Visível na área do Condómino (documentos disponibilizados ao condomínio).
+      disponivel_condominos: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     },
     { tableName: 'documentos', underscored: true }
   );

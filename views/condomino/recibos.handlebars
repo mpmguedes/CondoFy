@@ -1,0 +1,35 @@
+<div class="page-heading">
+  <h1>Os meus recibos</h1>
+  <p class="subtitle">Recibos emitidos para a sua fração</p>
+</div>
+
+{{#unless pessoa}}
+<div class="alert alert-warning">A sua conta ainda não está associada a um condómino neste condomínio.</div>
+{{else}}
+{{#if linhas}}
+<div class="card"><div class="table-responsive">
+  <table class="table table-hover align-middle mb-0">
+    <thead class="table-light">
+      <tr><th>Número</th><th>Data</th><th>Fração</th><th>Período(s)</th><th>Valor</th><th>Estado</th><th class="text-end">Ações</th></tr>
+    </thead>
+    <tbody>
+      {{#each linhas}}
+      <tr>
+        <td class="fw-semibold">{{codigo}}</td>
+        <td class="text-nowrap">{{formatDate data_emissao}}</td>
+        <td>{{fracaoDesignacao}}</td>
+        <td class="small">{{periodos}}</td>
+        <td>{{eur valor}}</td>
+        <td>{{#if (eq estado 'anulado')}}<span class="badge text-bg-secondary">Anulado</span>{{else}}<span class="badge text-bg-success">Emitido</span>{{/if}}</td>
+        <td class="text-end text-nowrap">
+          <a href="/condomino/recibos/{{id}}/pdf" target="_blank" class="btn btn-sm btn-outline-primary" title="Ver recibo (PDF)"><span class="material-symbols-outlined">picture_as_pdf</span></a>
+        </td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+</div></div>
+{{else}}
+<div class="alert alert-light border small">Sem recibos para a sua fração.</div>
+{{/if}}
+{{/unless}}

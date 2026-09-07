@@ -271,6 +271,8 @@ router.post('/assembleias/:id/anexos', upload.single('ficheiro'), async (req, re
       numero_documento: null,
       nome: req.file.originalname,
       pasta: 'assembleias',
+      // Anexo de assembleia disponibilizado aos condóminos.
+      disponivel_condominos: true,
       drive_file_id: up.driveFileId,
       mime_type: req.file.mimetype,
       tamanho: up.tamanho,
@@ -402,6 +404,8 @@ router.post('/assembleias/:id/convocatoria/drive', async (req, res) => {
     const doc = await Documento.create({
       condominio_id: req.condominioId,
       tipo: 'convocatoria',
+      // Documento de assembleia disponibilizado aos condóminos.
+      disponivel_condominos: true,
       numero_documento: null,
       nome: `Convocatória ${assembleia.numero || assembleia.id}`,
       pasta: 'assembleias',
@@ -456,6 +460,8 @@ router.post('/assembleias/:id/ata/drive', async (req, res) => {
     const doc = await Documento.create({
       condominio_id: req.condominioId,
       tipo: 'ata',
+      // Documento de assembleia disponibilizado aos condóminos.
+      disponivel_condominos: true,
       numero_documento: null,
       nome: `Ata ${assembleia.numero || assembleia.id}`,
       pasta: 'assembleias',

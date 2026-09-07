@@ -1,0 +1,69 @@
+<div class="page-heading">
+  <h1>As minhas quotas</h1>
+  <p class="subtitle">Consulta das quotas da sua fração — não pode ser alterada aqui</p>
+</div>
+
+{{#unless pessoa}}
+<div class="alert alert-warning">A sua conta ainda não está associada a um condómino neste condomínio.</div>
+{{else}}
+<form method="GET" class="card mb-3"><div class="card-body row g-2 align-items-end">
+  <div class="col-6 col-md-3"><label class="form-label">Ano</label>
+    <select class="form-select" name="ano"><option value="">Todos</option>{{#each anos}}<option value="{{this}}" {{#if (eq ../filtros.ano this)}}selected{{/if}}>{{this}}</option>{{/each}}</select>
+  </div>
+  <div class="col-6 col-md-3"><label class="form-label">Estado</label>
+    <select class="form-select" name="estado">
+      <option value="">Todos</option>
+      <option value="pendente" {{#if (eq filtros.estado 'pendente')}}selected{{/if}}>Pendente</option>
+      <option value="vencida" {{#if (eq filtros.estado 'vencida')}}selected{{/if}}>Vencida</option>
+      <option value="paga" {{#if (eq filtros.estado 'paga')}}selected{{/if}}>Paga</option>
+    </select>
+  </div>
+  <div class="col-12 col-md-2 d-grid"><button class="btn btn-primary">Filtrar</button></div>
+</div></form>
+
+<div class="card"><div class="table-responsive">
+  <table class="table table-hover align-middle mb-0">
+    <thead class="table-light">
+      <tr><th>Fração</th><th>Período</th><th>Valor</th><th>Vencimento</th><th>Estado</th><th>Pago</th><th>Data de pagamento</th><th>Referência</th></tr>
+    </thead>
+    <tbody>
+      {{#each linhas}}
+      <tr>
+        <td>{{fracaoDesignacao}}</td>
+        <td>{{mesNome}} {{ano}}</td>
+        <td>{{eur valor}}</td>
+        <td class="text-nowrap">{{formatDate data_vencimento}}</td>
+        <td>
+          {{#if (eq estadoEfetivo 'paga')}}<span class="badge text-bg-success">Paga</span>
+          {{else if (eq estadoEfetivo 'vencida')}}<span class="badge text-bg-danger">Vencida</span>
+          {{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}
+        </td>
+        <td>{{#if pago}}{{eur pago}}{{else}}—{{/if}}</td>
+        <td class="text-nowrap">{{#if dataPagamento}}{{formatDate dataPagamento}}{{else}}—{{/if}}</td>
+        <td class="small">{{#if referencia}}{{referencia}}{{else}}—{{/if}}</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="8" class="text-center text-muted py-4">Sem quotas com estes filtros.</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+</div></div>
+
+{{#if extras}}
+<h2 class="h5 mt-4 mb-2">Quotas extraordinárias</h2>
+<div class="card"><div class="table-responsive">
+  <table class="table table-sm align-middle mb-0">
+    <thead class="table-light"><tr><th>Designação</th><th>Fração</th><th>Parcela</th><th>Valor</th><th>Vencimento</th><th>Estado</th></tr></thead>
+    <tbody>
+      {{#each extras}}
+      <tr>
+        <td>{{designacao}}</td><td>{{fracaoDesignacao}}</td><td>{{parcela_numero}}</td>
+        <td>{{eur valor}}</td><td class="text-nowrap">{{formatDate vencimento}}</td>
+        <td>{{#if (eq estado 'paga')}}<span class="badge text-bg-success">Paga</span>{{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}</td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+</div></div>
+{{/if}}
+{{/unless}}

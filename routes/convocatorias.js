@@ -194,6 +194,8 @@ router.post('/convocatorias', async (req, res) => {
         await Documento.create({
           condominio_id: req.condominioId,
           tipo: 'convocatoria',
+          // Convocatórias destinadas aos condóminos.
+          disponivel_condominos: true,
           nome: `${doc.textos.titulo}${valores.reuniao_numero ? ` — ${valores.reuniao_numero}` : ''}`,
           pasta: 'convocatorias',
           drive_file_id: up.driveFileId,

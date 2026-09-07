@@ -325,4 +325,22 @@ html = docLista({ documentos: [], pasta: null, pastasMulti: ['recibos'], rotulo:
 assert.ok(html.includes('Voltar à biblioteca'), 'listagem: botão voltar à biblioteca');
 assert.ok(html.includes('Biblioteca'), 'listagem: breadcrumb da biblioteca');
 
+// 18. Área do Condómino — páginas de consulta (Fase 1)
+const baseCond = { pessoa: {}, linhas: [], extras: [], anos: [], filtros: { ano: '', estado: '' }, avisos: [], assembleiasProximas: [], documentosRecentes: [], resumo: { saldoContas: 0, fundoReserva: 0, receitas: 0, despesas: 0, contas: [] }, orcamento: { ano: 2026, orcamentado: 0, executado: 0, percentagem: 0 }, pastas: {}, documentos: null, agrupados: [] };
+const comp = (f) => handlebars.compile(ler(f));
+html = comp('condomino/dashboard.handlebars')({ ...baseCond, user: { nome: 'Ana' }, condominio: { designacao: 'X' } });
+assert.ok(html.includes('A minha situação') || html.includes('Situação do condomínio'), 'condómino dashboard renderiza');
+html = comp('condomino/quotas.handlebars')(baseCond);
+assert.ok(html.includes('As minhas quotas'), 'condómino quotas');
+html = comp('condomino/pagamentos.handlebars')(baseCond);
+assert.ok(html.includes('Os meus pagamentos'), 'condómino pagamentos');
+html = comp('condomino/recibos.handlebars')(baseCond);
+assert.ok(html.includes('Os meus recibos'), 'condómino recibos');
+html = comp('condomino/documentos.handlebars')(baseCond);
+assert.ok(html.includes('Documentos do condomínio'), 'condómino documentos públicos');
+// Sidebar do condómino (sem admin)
+html = layout({ body: 'ok', user: { nome: 'Ana', role: 'condomino' }, isAdmin: false, condominio: contexto.condominio, currentPath: '/condomino/quotas' });
+assert.ok(html.includes('href="/condomino/quotas"'), 'sidebar condómino: Quotas');
+assert.ok(html.includes('href="/condomino/recibos"'), 'sidebar condómino: Recibos');
+
 console.log('✓ Todas as vistas da convocatória renderizam corretamente.');

@@ -152,10 +152,56 @@
         {{/if}}
         {{else}}
         <div class="sidebar-group">
-          <div class="sidebar-group-title">Área pessoal</div>
-          <a class="sidebar-item {{isActive currentPath '/condomino'}}" href="/condomino" title="A minha área">
+          <div class="sidebar-group-title">Início</div>
+          <a class="sidebar-item {{#if (eq currentPath '/condomino')}}active{{/if}}" href="/condomino" title="Dashboard">
             <span class="material-symbols-outlined">home</span>
             <span class="sidebar-item-text">A minha área</span>
+          </a>
+        </div>
+        <div class="sidebar-group">
+          <div class="sidebar-group-title">A minha fração</div>
+          <a class="sidebar-item {{isActive currentPath '/condomino/quotas'}}" href="/condomino/quotas" title="As minhas quotas">
+            <span class="material-symbols-outlined">receipt_long</span>
+            <span class="sidebar-item-text">Quotas</span>
+          </a>
+          <a class="sidebar-item {{isActive currentPath '/condomino/pagamentos'}}" href="/condomino/pagamentos" title="Os meus pagamentos">
+            <span class="material-symbols-outlined">payments</span>
+            <span class="sidebar-item-text">Pagamentos</span>
+          </a>
+          <a class="sidebar-item {{isActive currentPath '/condomino/recibos'}}" href="/condomino/recibos" title="Os meus recibos">
+            <span class="material-symbols-outlined">receipt</span>
+            <span class="sidebar-item-text">Recibos</span>
+          </a>
+        </div>
+        <div class="sidebar-group">
+          <div class="sidebar-group-title">Condomínio</div>
+          <a class="sidebar-item {{isActive currentPath '/condomino/documentos'}}" href="/condomino/documentos" title="Documentos do condomínio">
+            <span class="material-symbols-outlined">folder</span>
+            <span class="sidebar-item-text">Documentos</span>
+          </a>
+          <a class="sidebar-item {{isActive currentPath '/condomino/assembleias'}}" href="/condomino/assembleias" title="Assembleias">
+            <span class="material-symbols-outlined">forum</span>
+            <span class="sidebar-item-text">Assembleias</span>
+          </a>
+          <a class="sidebar-item {{isActive currentPath '/condomino/avisos'}}" href="/condomino/avisos" title="Avisos">
+            <span class="material-symbols-outlined">campaign</span>
+            <span class="sidebar-item-text">Avisos</span>
+          </a>
+          <a class="sidebar-item {{isActive currentPath '/condomino/calendario'}}" href="/condomino/calendario" title="Calendário">
+            <span class="material-symbols-outlined">calendar_month</span>
+            <span class="sidebar-item-text">Calendário</span>
+          </a>
+          <a class="sidebar-item {{isActive currentPath '/condomino/orcamento'}}" href="/condomino/orcamento" title="Orçamento">
+            <span class="material-symbols-outlined">account_balance_wallet</span>
+            <span class="sidebar-item-text">Orçamento</span>
+          </a>
+          <a class="sidebar-item {{isActive currentPath '/condomino/situacao'}}" href="/condomino/situacao" title="Situação financeira">
+            <span class="material-symbols-outlined">monitoring</span>
+            <span class="sidebar-item-text">Situação financeira</span>
+          </a>
+          <a class="sidebar-item {{isActive currentPath '/condominios'}}" href="/condominios" title="Os meus condomínios">
+            <span class="material-symbols-outlined">apps</span>
+            <span class="sidebar-item-text">Condomínios</span>
           </a>
         </div>
         {{/if}}

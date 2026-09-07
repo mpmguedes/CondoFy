@@ -1,0 +1,41 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Orçamento {{ano}}</h1>
+    <p class="subtitle">Acompanhamento da execução orçamental do condomínio</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/condomino/orcamento?ano={{inc anoAtual}}" class="btn btn-sm btn-outline-secondary">Ano atual</a>
+  </div>
+</div>
+
+{{#if orcamento}}
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Total previsto</div><div class="stat-value">{{eur totais.orcamentado}}</div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Total realizado</div><div class="stat-value">{{eur totais.executado}}</div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Saldo</div><div class="stat-value {{#if (lt totais.saldo 0)}}text-danger{{else}}text-success{{/if}}">{{eur totais.saldo}}</div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Execução</div><div class="stat-value">{{totais.percentagem}}%</div></div></div></div>
+</div>
+
+<div class="card"><div class="table-responsive">
+  <table class="table table-hover align-middle mb-0">
+    <thead class="table-light"><tr><th>Categoria</th><th class="text-end">Orçamentado</th><th class="text-end">Realizado</th><th style="width:180px">Execução</th></tr></thead>
+    <tbody>
+      {{#each linhas}}
+      <tr>
+        <td>{{nome}}</td>
+        <td class="text-end">{{eur orcamentado}}</td>
+        <td class="text-end">{{eur executado}}</td>
+        <td>
+          <div class="progress" style="height:8px"><div class="progress-bar {{#if (gt percentagem 100)}}bg-danger{{else}}bg-primary{{/if}}" style="width:{{percentagem}}%"></div></div>
+          <span class="small text-muted">{{percentagem}}%</span>
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="4" class="text-center text-muted py-4">Sem rubricas no orçamento deste ano.</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+</div></div>
+{{else}}
+<div class="alert alert-light border small">Não existe orçamento publicado para o ano {{ano}}.</div>
+{{/if}}

@@ -1,0 +1,26 @@
+<div class="page-heading">
+  <h1>Assembleias</h1>
+  <p class="subtitle">Consulta de assembleias do condomínio</p>
+</div>
+
+{{#if assembleias}}
+<div class="card"><div class="table-responsive">
+  <table class="table table-hover align-middle mb-0">
+    <thead class="table-light"><tr><th>Número</th><th>Data</th><th>Hora</th><th>Local</th><th>Estado</th><th class="text-end">Ações</th></tr></thead>
+    <tbody>
+      {{#each assembleias}}
+      <tr>
+        <td class="fw-semibold">{{#if numero}}{{numero}}{{else}}—{{/if}}</td>
+        <td class="text-nowrap">{{formatDate data}}</td>
+        <td>{{#if hora}}{{hora}}{{else}}—{{/if}}</td>
+        <td class="small">{{#if local}}{{local}}{{else}}—{{/if}}</td>
+        <td><span class="badge text-bg-light border">{{estado}}</span></td>
+        <td class="text-end"><a href="/condomino/assembleias/{{id}}" class="btn btn-sm btn-outline-primary">Ver</a></td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+</div></div>
+{{else}}
+<div class="alert alert-light border small">Sem assembleias registadas.</div>
+{{/if}}

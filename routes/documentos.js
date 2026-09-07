@@ -233,6 +233,10 @@ router.post('/documentos', upload.single('ficheiro'), async (req, res) => {
       tipo: tipo || 'outro',
       nome: nome || (req.file ? req.file.originalname : 'Documento'),
       pasta: pastaEscolhida,
+      // "Disponível aos condóminos": default NÃO para manuais; convocatórias e
+      // atas (documentos que o sistema sabe serem destinados aos condóminos)
+      // ficam automaticamente disponíveis.
+      disponivel_condominos: (req.body.disponivel_condominos === 'on' || req.body.disponivel_condominos === '1') || ['convocatoria', 'ata'].includes(tipo || ''),
       drive_file_id: driveFileId,
       drive_folder_id: drivePastaId,
       mime_type: mimeType,
@@ -273,6 +277,21 @@ router.post('/documentos/:id/eliminar', async (req, res) => {
   }
   req.flash('success_msg', 'Documento eliminado.');
   res.redirect('/admin/documentos');
+});
+
+// Visibilidade na área do Condómino ("Disponível aos condóminos").
+router.post('/documentos/:id/disponivel', async (req, res) => {
+  const documento = await Documento.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
+  if (documento) {
+    await documento.update({ disponivel_condominos: !documento.disponivel_condominos });
+    await audit({
+      userId: req.user.id,
+      acao: documento.disponivel_condominos ? 'disponibilizar_documento_condominos' : 'ocultar_documento_condominos',
+      entidade: 'Documento',
+      entidadeId: documento.id,
+    }).catch(() => {});
+  }
+  res.redirect(req.get('Referer') || '/admin/documentos');
 });
 
 // ── Ações sobre documentos ──────────────────────────────────────────

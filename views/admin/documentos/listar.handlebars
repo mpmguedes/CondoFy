@@ -59,6 +59,7 @@
           <th>Tipo</th>
           <th>Data</th>
           <th>Drive</th>
+          <th>Condóminos</th>
           <th class="text-end">Ações</th>
         </tr>
       </thead>
@@ -89,6 +90,15 @@
             {{else if (eq drive_status 'erro')}}<span class="badge text-bg-danger" title="{{drive_erro}}">Erro Drive</span>
             {{else if (eq drive_status 'pendente')}}<span class="badge text-bg-warning">A guardar</span>
             {{else}}<span class="badge text-bg-secondary">Não guardado</span>{{/if}}
+          </td>
+          <td class="text-nowrap">
+            {{#if disponivel_condominos}}<span class="badge text-bg-success">Sim</span>
+            {{else}}<span class="badge text-bg-secondary">Não</span>{{/if}}
+            <form action="/admin/documentos/{{id}}/disponivel" method="POST" class="d-inline">
+              <button class="btn btn-sm btn-outline-secondary px-1" title="{{#if disponivel_condominos}}Ocultar dos condóminos{{else}}Disponibilizar aos condóminos{{/if}}">
+                {{#if disponivel_condominos}}Ocultar{{else}}Disponibilizar{{/if}}
+              </button>
+            </form>
           </td>
           <td class="text-end text-nowrap">
             {{#if url}}<a href="{{url}}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" title="Ver/Descarregar"><span class="material-symbols-outlined">download</span></a>{{/if}}

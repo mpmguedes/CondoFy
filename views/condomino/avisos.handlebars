@@ -1,0 +1,22 @@
+<div class="page-heading">
+  <h1>Avisos e comunicações</h1>
+  <p class="subtitle">Informação publicada pela administração</p>
+</div>
+
+{{#if avisos}}
+<div class="row g-3">
+  {{#each avisos}}
+  <div class="col-12 col-lg-6">
+    <div class="card h-100"><div class="card-body">
+      <div class="d-flex justify-content-between align-items-start gap-2">
+        <h2 class="h6 mb-1">{{assunto}}</h2>
+        {{#if data_programada}}<span class="badge text-bg-light border text-nowrap">{{formatDate data_programada}}</span>{{/if}}
+      </div>
+      {{#if mensagem}}<p class="text-muted small mb-0">{{mensagem}}</p>{{/if}}
+    </div></div>
+  </div>
+  {{/each}}
+</div>
+{{else}}
+<div class="alert alert-light border small">Sem avisos publicados.</div>
+{{/if}}

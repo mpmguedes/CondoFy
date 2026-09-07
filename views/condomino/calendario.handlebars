@@ -1,0 +1,21 @@
+<div class="page-heading">
+  <h1>Calendário</h1>
+  <p class="subtitle">Datas e acontecimentos do condomínio</p>
+</div>
+
+{{#if eventos}}
+<div class="card"><ul class="list-group list-group-flush">
+  {{#each eventos}}
+  <li class="list-group-item d-flex flex-wrap gap-2 align-items-center">
+    <span class="badge text-bg-light border text-nowrap">{{formatDate data}}</span>
+    <span>
+      {{#if (eq tipo 'assembleia')}}<span class="material-symbols-outlined me-1" style="font-size:1rem">forum</span>{{else}}<span class="material-symbols-outlined me-1" style="font-size:1rem">campaign</span>{{/if}}
+      {{#if link}}<a href="{{link}}">{{titulo}}</a>{{else}}{{titulo}}{{/if}}
+    </span>
+    {{#if detalhe}}<span class="text-muted small ms-auto">{{detalhe}}</span>{{/if}}
+  </li>
+  {{/each}}
+</ul></div>
+{{else}}
+<div class="alert alert-light border small">Sem acontecimentos agendados.</div>
+{{/if}}

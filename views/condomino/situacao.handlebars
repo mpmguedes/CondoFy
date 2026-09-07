@@ -1,0 +1,25 @@
+<div class="page-heading">
+  <h1>Situação financeira</h1>
+  <p class="subtitle">Transparência financeira agregada do condomínio ({{ano}})</p>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-icon"><i class="bi bi-cash-stack"></i></div><div class="stat-value">{{eur resumo.saldoContas}}</div><div class="stat-label">Saldo das contas</div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-icon text-success"><i class="bi bi-arrow-down-circle"></i></div><div class="stat-value">{{eur receitasAno}}</div><div class="stat-label">Receitas ({{ano}})</div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-icon text-danger"><i class="bi bi-arrow-up-circle"></i></div><div class="stat-value">{{eur despesasAno}}</div><div class="stat-label">Despesas ({{ano}})</div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Saldo do ano</div><div class="stat-value {{#if (lt saldoAno 0)}}text-danger{{else}}text-success{{/if}}">{{eur saldoAno}}</div></div></div></div>
+</div>
+
+<h2 class="h6 mb-2">Quotas e dívidas ({{ano}})</h2>
+<div class="card mb-3"><div class="table-responsive">
+  <table class="table table-hover mb-0">
+    <tbody>
+      <tr><td>Quotas lançadas</td><td class="text-end fw-semibold">{{eur totalQuotas}}</td></tr>
+      <tr><td>Quotas cobradas</td><td class="text-end">{{eur pagoQuotas}}</td></tr>
+      <tr><td>Total em dívida (agregado)</td><td class="text-end fw-semibold {{#if (gt divida 0)}}text-danger{{/if}}">{{eur divida}}</td></tr>
+      <tr><td>Percentagem de cobrança</td><td class="text-end">{{cobrancaPct}}%</td></tr>
+      <tr><td>Frações em atraso (apenas contagem)</td><td class="text-end">{{nFracoesEmAtraso}} de {{nFracoes}}</td></tr>
+    </tbody>
+  </table>
+</div></div>
+<p class="text-muted small">Informação agregada — não são exibidos nomes, contactos nem dados individuais de outros condóminos.</p>

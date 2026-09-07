@@ -1,0 +1,57 @@
+<div class="page-heading">
+  <h1>Documentos do condomínio</h1>
+  <p class="subtitle">Documentos disponibilizados pela administração aos condóminos</p>
+</div>
+
+{{#if pasta}}
+<div class="card mb-3"><div class="card-body d-flex flex-wrap gap-2">
+  <a href="/condomino/documentos" class="btn btn-sm btn-outline-secondary">Todos</a>
+  <span class="badge text-bg-primary align-self-center">{{lookup pastas pasta}}</span>
+</div></div>
+{{else}}
+<div class="card mb-3"><div class="card-body d-flex flex-wrap gap-2">
+  {{#each pastas}}<a href="/condomino/documentos?pasta={{@key}}" class="btn btn-sm btn-outline-secondary">{{this}}</a>{{/each}}
+</div></div>
+{{/if}}
+
+{{#if pasta}}
+  {{#if documentos}}
+  <div class="card"><div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light"><tr><th>Nome</th><th>Data</th><th class="text-end">Ações</th></tr></thead>
+      <tbody>
+        {{#each documentos}}
+        <tr>
+          <td class="fw-semibold">{{nome}}</td>
+          <td class="text-nowrap">{{formatDate data}}</td>
+          <td class="text-end">{{#if url}}<a href="{{url}}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">Ver/Descarregar</a>{{/if}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div></div>
+  {{else}}
+  <div class="alert alert-light border small">Sem documentos nesta categoria.</div>
+  {{/if}}
+{{else}}
+  {{#if agrupados}}
+    {{#each agrupados}}
+    <h2 class="h6 mt-3 mb-2">{{rotulo}}</h2>
+    <div class="card"><div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <tbody>
+          {{#each itens}}
+          <tr>
+            <td class="fw-semibold">{{nome}}</td>
+            <td class="text-nowrap">{{formatDate data}}</td>
+            <td class="text-end">{{#if url}}<a href="{{url}}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">Ver</a>{{/if}}</td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div></div>
+    {{/each}}
+  {{else}}
+  <div class="alert alert-light border small">Ainda não existem documentos disponibilizados aos condóminos.</div>
+  {{/if}}
+{{/if}}

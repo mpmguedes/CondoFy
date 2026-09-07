@@ -144,6 +144,15 @@ function testarRoutersIsolados() {
     if (COM_PAPEL[nome]) {
       assert.ok(src.includes(`comPapel('${COM_PAPEL[nome]}')`), `${nome}: gate de papel ${COM_PAPEL[nome]}`);
     }
+    // Área do Condómino: toda a consulta filtra pelo condomínio ativo e pela
+    // fração própria (IDs do browser nunca são suficientes) e o PDF de recibo
+    // devolve 404 quando não pertence à fração autenticada.
+    if (nome === 'condomino.js') {
+      assert.ok(src.includes('condominio_id: req.condominioId'), 'condomino: consultas filtram por condominio_id');
+      assert.ok(src.includes('fracao_id: { [Op.in]:'), 'condomino: frações restritas às do utilizador');
+      assert.ok(src.includes('status(404)'), 'condomino: acesso indevido devolve 404');
+      assert.ok(!src.includes('findByPk(req.params.id'), 'condomino: sem findByPk direto do browser');
+    }
   }
 }
 
