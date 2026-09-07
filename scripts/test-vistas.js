@@ -278,4 +278,11 @@ assert.ok(html.includes('sidebar-item-sub'), 'nav: itens com indentação sub');
 assert.ok(html.includes('sidebar-group-title">Assembleias'), 'nav: grupo Assembleias presente');
 assert.ok(html.includes('sidebar-group-title">Documentos'), 'nav: grupo Documentos separado');
 
+// 15. Placeholder inteligente com sugestão contextual
+const placeholder = handlebars.compile(ler('admin/placeholder.handlebars'));
+html = placeholder({ modulo: 'Votações', icono: 'how_to_vote', sugestao: 'As votações são preparadas nas Assembleias.', linkTexto: 'Ir para Assembleias', link: '/admin/assembleias' });
+assert.ok(html.includes('Em desenvolvimento'), 'placeholder: título de desenvolvimento');
+assert.ok(html.includes('/admin/assembleias'), 'placeholder: sugestão com link contextual');
+assert.ok(html.includes('Entretanto, pode:'), 'placeholder: caixa de sugestão presente');
+
 console.log('✓ Todas as vistas da convocatória renderizam corretamente.');
