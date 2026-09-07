@@ -197,7 +197,7 @@ router.post('/documentos/:id/email', async (req, res) => {
   }
   const comAnexo = Boolean(anexoBuffer);
 
-  const cond = await getCondominio();
+  const cond = await getCondominio({ id: req.condominioId });
   const condNome = (cond && String(cond.designacao || '').trim()) || '';
   const adminNome = (cond && String(cond.administracao_nome || '').trim()) || '';
   const tipoDoc = ['convocatoria', 'recibo'].includes(documento.tipo) ? documento.tipo : 'documento';

@@ -772,7 +772,7 @@ router.post('/quotas/enviar', async (req, res) => {
 
   const alvos = ctx.linhas.filter((l) => (modoPendentes ? l.temEmail && l.estado !== 'enviado' : pedidoIds.has(l.id)));
   const baseUrl = `${req.protocol}://${req.get('host')}`;
-  const condEm = await getCondominio();
+  const condEm = await getCondominio({ id: req.condominioId });
   const condNome = (condEm && String(condEm.designacao || '').trim()) || '';
   const adminNome = (condEm && String(condEm.administracao_nome || '').trim()) || '';
   const r = await enfileirarLoteEmails({
@@ -1014,7 +1014,7 @@ router.post('/pagamentos/enviar-recibos', async (req, res) => {
   const modoPendentes = req.body.modo === 'pendentes';
   const alvos = ctx.linhas.filter((l) => (modoPendentes ? l.temEmail && l.estado !== 'enviado' : pedidoIds.has(l.id)));
   const baseUrl = `${req.protocol}://${req.get('host')}`;
-  const condEm = await getCondominio();
+  const condEm = await getCondominio({ id: req.condominioId });
   const condNome = (condEm && String(condEm.designacao || '').trim()) || '';
   const adminNome = (condEm && String(condEm.administracao_nome || '').trim()) || '';
   const r = await enfileirarLoteEmails({
@@ -1092,7 +1092,7 @@ async function nomeProprietarioPrincipal(fracaoId) {
 async function construirAvisoQuota(quotaId) {
   const quota = await Quota.findByPk(quotaId, { include: [{ model: Fracao, as: 'fracao' }] });
   if (!quota) throw new Error('Quota não encontrada.');
-  const condominio = await getCondominio();
+  const condominio = await getCondominio({ id: req.condominioId });
   const resumo = await resumoFracao(quota.fracao_id);
   const destinatarioNome = await nomeProprietarioPrincipal(quota.fracao_id);
 
@@ -1140,7 +1140,7 @@ async function construirRecibo(pagamentoId) {
     ],
   });
   if (!pagamento) throw new Error('Pagamento não encontrado.');
-  const condominio = await getCondominio();
+  const condominio = await getCondominio({ id: req.condominioId });
   const resumo = await resumoFracao(pagamento.fracao_id);
   const condominoNome = await nomeProprietarioPrincipal(pagamento.fracao_id);
 
@@ -1311,7 +1311,7 @@ async function processarPosGeracaoQuotas({ ano, mes, guardarDrive, enviarEmail, 
 
   // 2) Colocar emails na fila (nunca envia diretamente; o scheduler trata)
   if (enviarEmail) {
-    const cond = await getCondominio();
+    const cond = await getCondominio({ id: req.condominioId });
     const condNome = (cond && String(cond.designacao || '').trim()) || '';
     const adminNome = (cond && String(cond.administracao_nome || '').trim()) || '';
     const cctx = await contextoEnvioQuotas({ ano, mes });
