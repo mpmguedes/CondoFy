@@ -292,7 +292,10 @@ router.post('/quotas/transitados', async (req, res) => {
   const { transitados, importar } = req.body;
   let atualizados = 0;
   try {
-    const fracaoPorDesignacao = new Map((await Fracao.findAll()).map((f) => [String(f.designacao).trim().toLowerCase(), f]));
+    // Apenas frações do condomínio ativo (nunca de outro condomínio).
+    const fracaoPorDesignacao = new Map(
+      (await Fracao.findAll({ where: { condominio_id: req.condominioId } })).map((f) => [String(f.designacao).trim().toLowerCase(), f])
+    );
 
     // Importação em bloco: uma linha por fração — "Designação;valor" (valor em €).
     if (importar && String(importar).trim()) {
@@ -312,7 +315,9 @@ router.post('/quotas/transitados', async (req, res) => {
 
     if (transitados && typeof transitados === 'object') {
       for (const [id, valor] of Object.entries(transitados)) {
-        const fracao = await Fracao.findByPk(id);
+        const numId = parseInt(id, 10);
+        if (!Number.isFinite(numId)) continue;
+        const fracao = await Fracao.findOne({ where: { id: numId, condominio_id: req.condominioId } });
         if (!fracao) continue;
         const num = parseTransitado(valor);
         if (num === null) continue; // vazio/inválido → não toca no valor guardado
