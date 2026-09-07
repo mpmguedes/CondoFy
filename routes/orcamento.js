@@ -28,8 +28,20 @@ router.use(tenant.comCondominioAtivo);
 router.use(tenant.comPapel('gestor'));
 
 // Orçamento do condomínio ATIVO (null quando não pertence — bloqueia IDOR).
+// `incluir` aceita um array de includes ({model, as}) — usado pela maioria das
+// rotas — ou o objeto de opções { include: [...] } usado nas rotas de
+// detalhe/aprovar/distribuição; normaliza para o array. O filtro do condomínio
+// ativo é SEMPRE aplicado (nunca removido/contornado).
 function carregarOrcamento(req, incluir = []) {
-  return Orcamento.findOne({ where: { id: req.params.id, condominio_id: req.condominioId }, include: incluir });
+  const includes = Array.isArray(incluir)
+    ? incluir
+    : incluir && Array.isArray(incluir.include)
+      ? incluir.include
+      : [];
+  return Orcamento.findOne({
+    where: { id: req.params.id, condominio_id: req.condominioId },
+    include: includes,
+  });
 }
 
 function totalRubricasC(rubricas) {
