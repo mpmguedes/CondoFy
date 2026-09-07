@@ -20,25 +20,36 @@ na aplicação.
 
 ### Estrutura de pastas
 
-A aplicação cria (uma única vez, reutilizando se já existirem):
+Desde a migração `20260101000063` a árvore física é **por condomínio** (a infraestrutura
+é partilhada, mas cada condomínio tem a sua própria árvore):
 
 ```
-GesCondu/
-├── <ano>/
-│   ├── Assembleias/   (atas, convocatórias, anexos)
-│   ├── Quotas/
-│   ├── Recibos/
-│   ├── Despesas/
-│   ├── Contratos/
-│   └── Outros/
-└── Backups/
+GesCondu/                                   ← raiz da empresa (configurável)
+├── Backups/                                ← global (infraestrutura)
+├── <Condomínio A>/                         ← nome amigável (designação)
+│   └── 2026/
+│       ├── Assembleias/   (atas, convocatórias, anexos)
+│       ├── Quotas/
+│       ├── Recibos/
+│       ├── Despesas/
+│       ├── Contratos/
+│       ├── Outros/
+│       └── Fornecedores/<nome>/<Comprovativos>/
+└── <Condomínio B>/…
 ```
 
-A pasta raiz é configurável na aplicação (Configuração → Google Drive →
-“Alterar pasta”). A pasta antiga `CondoFy` continua a ser uma opção válida e é
-reutilizada se existir — nunca são criadas pastas duplicadas.
-As pastas são encontradas pelo nome — nunca são criadas duplicadas quando se
-volta a ligar a conta.
+A pasta do condomínio é criada no primeiro upload e o seu **folder id fica guardado na
+base de dados** (`condominios.drive_folder_id`) — a resolução é sempre por
+`condominio_id`, nunca por nomes de ficheiro/pastas/ano. A pasta raiz é configurável na
+aplicação (Configuração → Google Drive → “Alterar pasta”); a antiga `CondoFy` continua
+válida e é reutilizada se existir — nunca são criadas pastas duplicadas.
+
+> **Ficheiros antigos**: os documentos guardados antes da migração 063 continuam onde
+> estão (`<raiz>/<ano>/…`), apontados pelos `Documento.drive_file_id` — **não são movidos
+> automaticamente**. Apenas os novos ficheiros passam a usar a árvore do condomínio.
+>
+> **Fornecedores**: o catálogo é partilhado do operador (sem `condominio_id`), mas os
+> comprovativos são documentos do condomínio e ficam na árvore desse condomínio.
 
 ## 1. Configuração no Google Cloud Console
 

@@ -550,6 +550,9 @@ async function enviarConviteAoUtilizador(user, req) {
       subject: 'Convite de acesso — GesCondu',
       text: `Olá ${user.nome},\n\nFoi criada uma conta para si no GesCondu.\nPara definir a sua palavra-passe e confirmar o email, abra o link (válido por ${convites.diasValidade()} dias):\n\n${link}\n\nSe não esperava este convite, ignore este email.`,
       html: `<p>Olá ${user.nome},</p><p>Foi criada uma conta para si no <strong>GesCondu</strong>.</p><p>Para definir a sua palavra-passe e confirmar o email, clique em:</p><p><a href="${link}">${link}</a></p><p>Este link é válido por ${convites.diasValidade()} dias.</p><p>Se não esperava este convite, ignore este email.</p>`,
+      // O convite é criado no condomínio ativo — remetente contextualizado
+      // (nunca o "primeiro condomínio" da BD).
+      condominioId: req.condominioId,
     });
     return { ok: true };
   } catch (err) {

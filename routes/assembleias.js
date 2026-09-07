@@ -75,8 +75,10 @@ async function proximoNumeroAssembleia(ano, condominioId) {
   return `${ano}/${n + 1}`;
 }
 
-async function enviarParaDrive(tipo, ano, nome, buffer, mimeType) {
-  const pastaId = await drive.pastaParaDocumento(tipo, ano);
+// Upload para a pasta do condomínio ATIVO (o condominioId é obrigatório —
+// a pasta física no Drive é sempre do condomínio).
+async function enviarParaDrive(tipo, ano, condominioId, nome, buffer, mimeType) {
+  const pastaId = await drive.pastaParaDocumento(tipo, ano, condominioId);
   return drive.uploadArquivo({ nome, mimeType, buffer, parentFolderId: pastaId });
 }
 
@@ -352,7 +354,7 @@ router.get('/assembleias/:id/convocatoria', async (req, res) => {
   if (drive.isConfigured() && !assembleia.convocatoria_documento_id) {
     try {
       const ano = assembleia.data ? new Date(assembleia.data).getFullYear() : new Date().getFullYear();
-      const pastaId = await drive.pastaParaDocumento('convocatoria', ano);
+      const pastaId = await drive.pastaParaDocumento('convocatoria', ano, req.condominioId);
       const up = await drive.uploadArquivo({
         nome: `Convocatoria_${assembleia.numero || assembleia.id}.pdf`,
         mimeType: 'application/pdf',
@@ -443,7 +445,7 @@ router.post('/assembleias/:id/convocatoria/drive', async (req, res) => {
       ordemTrabalhos: agenda.length ? agenda : pontos(assembleia.ordem_trabalhos),
     });
     const ano = assembleia.data ? new Date(assembleia.data).getFullYear() : new Date().getFullYear();
-    const up = await enviarParaDrive('convocatoria', ano, `Convocatoria_${assembleia.numero || assembleia.id}.pdf`, buffer, 'application/pdf');
+    const up = await enviarParaDrive('convocatoria', ano, req.condominioId, `Convocatoria_${assembleia.numero || assembleia.id}.pdf`, buffer, 'application/pdf');
     const doc = await Documento.create({
       condominio_id: req.condominioId,
       tipo: 'convocatoria',
@@ -499,7 +501,7 @@ router.post('/assembleias/:id/ata/drive', async (req, res) => {
       ataTexto: assembleia.ata_texto,
     });
     const ano = assembleia.data ? new Date(assembleia.data).getFullYear() : new Date().getFullYear();
-    const up = await enviarParaDrive('ata', ano, `Ata_${assembleia.numero || assembleia.id}.pdf`, buffer, 'application/pdf');
+    const up = await enviarParaDrive('ata', ano, req.condominioId, `Ata_${assembleia.numero || assembleia.id}.pdf`, buffer, 'application/pdf');
     const doc = await Documento.create({
       condominio_id: req.condominioId,
       tipo: 'ata',

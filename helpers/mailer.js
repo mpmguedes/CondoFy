@@ -43,7 +43,9 @@ function configEnv() {
     pass: process.env.SMTP_PASS || '',
     tls: process.env.SMTP_TLS || 'true',
     from: process.env.SMTP_FROM || '',
-    fromName: process.env.SMTP_FROM_NAME || 'Condomínio',
+    // Sem default inventado: sem smtp_from_name explícito, o From display usa
+    // o contexto do condomínio (quando conhecido) ou o fallback global.
+    fromName: process.env.SMTP_FROM_NAME || '',
   };
 }
 
@@ -110,14 +112,19 @@ function construirTransporte(cfg) {
   });
 }
 
-// Nome visível do remetente (display name). Prioridade:
-// 1. nome da administração configurada no condomínio;
-// 2. designação do condomínio;
-// 3. "GesCondu" (fallback — nunca "CondoFy").
-async function obterNomeRemetente() {
+// Nome visível do remetente (display name), contextualizado pelo condomínio.
+// Prioridade do remetente (definida em sendMail):
+//   displayName (explicito por chamada) → smtp_from_name (explicito global)
+//   → contexto do condomínio (administração/designação) → "GesCondu".
+// Nunca usa "o primeiro condomínio da BD" como contexto (multi-condomínio).
+// `condominioId` presente → nome da administração ou designação desse
+// condomínio; ausente → '' (deixa o fallback global decidir).
+async function obterNomeRemetente({ condominioId } = {}) {
+  const cid = condominioId ? Number(condominioId) : null;
+  if (!cid) return '';
   try {
     const { getCondominio } = require('./condominio');
-    const c = await getCondominio();
+    const c = await getCondominio({ id: cid });
     if (!c) return '';
     const admin = String(c.administracao_nome || '').trim();
     if (admin) return admin;
@@ -129,14 +136,17 @@ async function obterNomeRemetente() {
   }
 }
 
-async function sendMail({ to, subject, text, html, attachments = [], displayName }) {
+async function sendMail({ to, subject, text, html, attachments = [], displayName, condominioId }) {
   const cfg = await obterConfigSmtp();
   if (!cfg.host) {
     console.log('[mailer] SMTP não configurado — email NÃO enviado.');
     return { enviado: false, motivo: 'SMTP não configurado' };
   }
   const transport = construirTransporte(cfg);
-  const nomeRemetente = String(displayName || (await obterNomeRemetente()) || cfg.fromName || 'GesCondu').trim();
+  // displayName (explicito) → smtp_from_name (explicito global) → contexto do
+  // condomínio (quando conhecido) → "GesCondu" (fallback de plataforma).
+  const contexto = condominioId ? await obterNomeRemetente({ condominioId }) : '';
+  const nomeRemetente = String(displayName || cfg.fromName || contexto || 'GesCondu').trim();
   const info = await transport.sendMail({
     from: `"${nomeRemetente.replace(/"/g, '')}" <${cfg.from || 'noreply@localhost'}>`,
     to,

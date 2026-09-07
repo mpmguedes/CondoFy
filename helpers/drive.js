@@ -12,6 +12,7 @@
 // ─────────────────────────────────────────────────────────────────────
 const { Readable } = require('stream');
 const { google } = require('googleapis');
+const { Op } = require('sequelize');
 const { getConfig, setConfig } = require('./config');
 
 const CHAVE_TOKENS = 'google_drive_tokens'; // JSON {access_token, refresh_token, expiry_date, conta}
@@ -288,27 +289,40 @@ async function testarLigacao() {
 }
 
 // ── Pastas ──────────────────────────────────────────────────────────
-// Encontra uma pasta pelo nome (e pasta-mãe) ou cria-a — nunca duplica.
-async function encontrarOuCriarPasta(nome, parentId) {
+// Procura uma pasta pelo nome EXATO dentro da pasta-mãe (comparação local,
+// sem interpolar o nome numa query do Drive — nomes com aspas/acentos são
+// seguros) e devolve o id ou null.
+async function encontrarPastaPorNome(nome, parentId) {
   return operacaoDrive(async () => {
-    const drive = getDrive();
-    let q = `mimeType='application/vnd.google-apps.folder' and name='${nome}' and trashed=false`;
+    let q = `mimeType='application/vnd.google-apps.folder' and trashed=false`;
     if (parentId) q += ` and '${parentId}' in parents`;
+    const res = await getDrive().files.list({ q, fields: 'files(id, name)', pageSize: 1000 });
+    const alvo = String(nome || '').toLowerCase();
+    const f = (res.data.files || []).find((x) => String(x.name || '').toLowerCase() === alvo);
+    return f ? f.id : null;
+  });
+}
 
-    const res = await drive.files.list({ q, fields: 'files(id, name)', pageSize: 1 });
-    if (res.data.files.length) {
-      return res.data.files[0].id;
-    }
-    const criada = await drive.files.create({
+// Cria uma pasta nova (pasta-mãe opcional).
+async function criarPasta(nome, parentId) {
+  return operacaoDrive(async () => {
+    const res = await getDrive().files.create({
       requestBody: {
-        name: nome,
+        name: String(nome),
         mimeType: 'application/vnd.google-apps.folder',
         parents: parentId ? [parentId] : [],
       },
       fields: 'id',
     });
-    return criada.data.id;
+    return res.data.id;
   });
+}
+
+// Encontra uma pasta pelo nome (e pasta-mãe) ou cria-a — nunca duplica.
+async function encontrarOuCriarPasta(nome, parentId) {
+  const existente = await encontrarPastaPorNome(nome, parentId);
+  if (existente) return existente;
+  return criarPasta(nome, parentId);
 }
 
 // Fonte única de verdade da pasta raiz no Google Drive.
@@ -326,52 +340,170 @@ async function obterNomeRaiz() {
   return 'GesCondu';
 }
 
-// Estrutura: <raiz>/<ano>/<pastas> e <raiz>/Backups.
-// A pasta raiz configurada é reutilizada se já existir (nunca duplicada);
-// pastas antigas (ex.: "CondoFy") continuam válidas e utilizáveis.
-async function criarEstruturaPastas(ano = new Date().getFullYear()) {
-  const raizId = await encontrarOuCriarPasta(await obterNomeRaiz());
-  const anoId = await encontrarOuCriarPasta(String(ano), raizId);
+// ── Estrutura por condomínio (multi-condomínio) ─────────────────────
+// Layout alvo no Google Drive (raiz = empresa; cada condomínio tem a sua
+// própria árvore física):
+//
+//   <raiz da empresa>/
+//   ├── Backups/                      ← infraestrutura (global)
+//   ├── <Condomínio A>/
+//   │   └── <ano>/{Assembleias,Quotas,Recibos,Despesas,Contratos,Outros,
+//   │                Fornecedores/<nome>/<subpasta>}
+//   └── <Condomínio B>/…
+//
+// O condomínio é SEMPRE resolvido por condominio_id → condominios.drive_folder_id
+// (coluna da migração 063). Nunca por nome de ficheiro, fração, tipo, ano,
+// email ou pasta. Ficheiros antigos (estrutura global <raiz>/<ano>/…) NÃO são
+// movidos: os Documentos continuam a apontar para os drive_file_id existentes.
 
+// Nome amigável da pasta do condomínio na raiz (nunca o id no nome).
+function nomePastaCondominio(cond) {
+  const nome = String((cond && cond.designacao) || '').trim();
+  if (nome) {
+    // Nomes puramente numéricos colidiriam com as pastas de anos antigas
+    // (<raiz>/<ano>); o prefixo mantém a árvore legível e sem ambiguidade.
+    if (/^\d+$/.test(nome)) return `Condomínio ${nome}`;
+    return nome;
+  }
+  return cond && cond.id ? `Condomínio ${cond.id}` : 'Condomínio';
+}
+
+// Rótulo físico da subpasta por tipo de documento (mesmo mapeamento antigo).
+const SUBPASTA_POR_TIPO = {
+  ata: 'Assembleias',
+  convocatoria: 'Assembleias',
+  aviso_quota: 'Quotas',
+  recibo: 'Recibos',
+  fatura: 'Despesas',
+  contrato: 'Contratos',
+  relatorio: 'Outros',
+  orcamento: 'Outros',
+  outro: 'Outros',
+};
+
+function subpastaDoTipo(tipo) {
+  return SUBPASTA_POR_TIPO[tipo] || 'Outros';
+}
+
+// Planners puros do caminho físico (usados pelos resolvedores reais e pelos
+// testes offline — fonte única de verdade para os nomes da hierarquia).
+function caminhoPastaDocumento({ raiz, condominioNome, ano, tipo }) {
+  return [raiz, condominioNome, String(ano || new Date().getFullYear()), subpastaDoTipo(tipo)];
+}
+
+function caminhoPastaFornecedor({ raiz, condominioNome, ano, nome, subpasta = 'Comprovativos' }) {
+  return [raiz, condominioNome, String(ano || new Date().getFullYear()), 'Fornecedores', String(nome || 'Fornecedor'), String(subpasta || 'Outros')];
+}
+
+// Link para abrir uma pasta do Google Drive. A aplicação sabe condominio_id →
+// drive_folder_id e gera o link; o administrador nunca precisa do folderId.
+function linkPastaDrive(folderId) {
+  return folderId ? `https://drive.google.com/drive/folders/${folderId}` : null;
+}
+
+// Persiste drive_folder_id no condomínio e limpa a cache de condomínios
+// (helpers/condominio) para que as leituras seguintes vejam o id novo.
+async function registarPastaCondominio(condominioId, folderId) {
+  const { Condominio } = require('../models');
+  const { clearCondominioCache } = require('./condominio');
+  await Condominio.update({ drive_folder_id: String(folderId) }, { where: { id: condominioId } });
+  clearCondominioCache();
+}
+
+// Resolve (e regista) a pasta raiz do condomínio no Drive:
+//   1. devolve condominios.drive_folder_id quando já está registado;
+//   2. senão procura/cria <raiz>/<nome amigável> e regista o id na BD.
+// Condomínios INATIVOS sem pasta não criam estrutura nova (regra do projeto);
+// pastas já existentes de condomínios inativos nunca são apagadas.
+async function obterPastaCondominioId(condominioId) {
+  const cid = Number(condominioId);
+  if (!cid) {
+    throw new Error('condominioId é obrigatório para determinar a pasta do condomínio no Google Drive.');
+  }
+  const { Condominio } = require('../models');
+  const cond = await Condominio.findByPk(cid);
+  if (!cond) throw new Error('Condomínio não encontrado para determinar a pasta no Google Drive.');
+  if (cond.drive_folder_id) return cond.drive_folder_id;
+  if (cond.estado === 'inativo') {
+    throw new Error(`O condomínio "${nomePastaCondominio(cond)}" está inativo — não são criadas pastas novas no Google Drive.`);
+  }
+  const raizId = await encontrarOuCriarPasta(await obterNomeRaiz());
+  const nome = nomePastaCondominio(cond);
+  const existenteId = await encontrarPastaPorNome(nome, raizId);
+  if (existenteId) {
+    // Adota a pasta existente apenas se nenhum OUTRO condomínio a registou.
+    const outroDono = await Condominio.findOne({
+      where: { drive_folder_id: existenteId, id: { [Op.ne]: cid } },
+      attributes: ['id'],
+    }).catch(() => null);
+    if (!outroDono) {
+      await registarPastaCondominio(cid, existenteId);
+      return existenteId;
+    }
+    // Nome ocupado por outro condomínio: cria pasta própria (o Google permite
+    // pastas com o mesmo nome; o id registado resolve sem ambiguidade).
+    console.warn(`[drive] pasta "${nome}" já registada noutro condomínio — criada pasta própria.`);
+  }
+  const criadaId = await criarPasta(nome, raizId);
+  await registarPastaCondominio(cid, criadaId);
+  return criadaId;
+}
+
+// Estrutura de pastas no Google Drive.
+//  · com condominioId: <raiz>/<Condomínio>/<ano>/{tipos} (multi-condomínio);
+//  · sem condominioId: <raiz>/<ano>/{tipos} + <raiz>/Backups (comportamento
+//    legado — usado pelos backups automáticos, que são infraestrutura global).
+// A pasta Backups é sempre global (<raiz>/Backups).
+async function criarEstruturaPastas(condominioId = null, ano = new Date().getFullYear()) {
+  const raizId = await encontrarOuCriarPasta(await obterNomeRaiz());
   const nomes = ['Assembleias', 'Quotas', 'Recibos', 'Despesas', 'Contratos', 'Outros'];
   const subpastas = {};
+  let condominioFolderId = null;
+  let anoId;
+  if (condominioId) {
+    condominioFolderId = await obterPastaCondominioId(condominioId);
+    anoId = await encontrarOuCriarPasta(String(ano), condominioFolderId);
+  } else {
+    anoId = await encontrarOuCriarPasta(String(ano), raizId);
+  }
   for (const nome of nomes) {
     subpastas[nome] = await encontrarOuCriarPasta(nome, anoId);
   }
   const backupsId = await encontrarOuCriarPasta('Backups', raizId);
-
-  return { raizId, anoId, subpastas, backupsId };
+  return { raizId, condominioFolderId, anoId, subpastas, backupsId };
 }
 
-// Devolve o id da pasta do ano/tipo adequado (cria a estrutura se necessário).
-async function pastaParaDocumento(tipo, ano) {
-  const estrutura = await criarEstruturaPastas(ano || new Date().getFullYear());
-  const mapa = {
-    ata: 'Assembleias',
-    convocatoria: 'Assembleias',
-    aviso_quota: 'Quotas',
-    recibo: 'Recibos',
-    fatura: 'Despesas',
-    contrato: 'Contratos',
-    relatorio: 'Outros',
-    orcamento: 'Outros',
-    outro: 'Outros',
-  };
-  const sub = mapa[tipo] || 'Outros';
-  return estrutura.subpastas[sub];
+// Devolve o id da pasta do condomínio/ano/tipo do documento (cria a estrutura
+// se necessário). O condominioId é OBRIGATÓRIO — nunca se deduz o condomínio
+// pelo tipo/ano/ficheiro; fluxos sem contexto de condomínio não resolvem pasta.
+async function pastaParaDocumento(tipo, ano, condominioId) {
+  const cid = Number(condominioId);
+  if (!cid) {
+    throw new Error('condominioId é obrigatório para determinar a pasta do documento no Google Drive.');
+  }
+  const estrutura = await criarEstruturaPastas(cid, ano || new Date().getFullYear());
+  return estrutura.subpastas[subpastaDoTipo(tipo)];
 }
 
-// Pasta de um fornecedor:
-// <raiz>/<ano>/Fornecedores/<nome>/<subpasta>
+// Pasta de comprovativos de um fornecedor, DENTRO da árvore do condomínio
+// (decisão documentada): o catálogo de fornecedores é partilhado do operador
+// (tabela fornecedores sem condominio_id), mas o Documento/comprovativo é
+// registado por condomínio (documentos.condominio_id) — por isso o ficheiro
+// físico segue o condomínio do documento:
+//   <raiz>/<Condomínio>/<ano>/Fornecedores/<nome>/<subpasta>
 // (nunca cria pastas duplicadas; reutiliza as existentes pelo nome).
-async function pastaParaFornecedor({ nome, ano, subpasta = 'Comprovativos' }) {
+async function pastaParaFornecedor({ condominioId, nome, ano, subpasta = 'Comprovativos' }) {
+  const cid = Number(condominioId);
+  if (!cid) {
+    throw new Error('condominioId é obrigatório para determinar a pasta do fornecedor no Google Drive.');
+  }
+  const condominioFolderId = await obterPastaCondominioId(cid);
   const anoNum = ano || new Date().getFullYear();
-  const raizId = await encontrarOuCriarPasta(await obterNomeRaiz());
-  const anoId = await encontrarOuCriarPasta(String(anoNum), raizId);
+  const anoId = await encontrarOuCriarPasta(String(anoNum), condominioFolderId);
   const fornecedoresId = await encontrarOuCriarPasta('Fornecedores', anoId);
   const fornecedorId = await encontrarOuCriarPasta(String(nome || 'Fornecedor'), fornecedoresId);
   const subId = await encontrarOuCriarPasta(String(subpasta || 'Outros'), fornecedorId);
-  return { raizId, anoId, fornecedoresId, fornecedorId, subpastaId: subId };
+  return { condominioFolderId, anoId, fornecedoresId, fornecedorId, subpastaId: subId };
 }
 
 // Descarrega um ficheiro do Drive para um Buffer (para anexar em email).
@@ -422,4 +554,11 @@ module.exports = {
   descargarArquivo,
   uploadArquivo,
   encontrarOuCriarPasta,
+  // Estrutura por condomínio (multi-condomínio)
+  nomePastaCondominio,
+  subpastaDoTipo,
+  caminhoPastaDocumento,
+  caminhoPastaFornecedor,
+  obterPastaCondominioId,
+  linkPastaDrive,
 };

@@ -189,6 +189,29 @@ router.get('/documentos', async (req, res) => {
   });
 });
 
+// Abrir a pasta do condomínio no Google Drive. O folderId é SEMPRE resolvido
+// no servidor a partir de req.condominioId → condominios.drive_folder_id
+// (nunca aceite do browser). Cria/regista a pasta quando ainda não existe.
+router.get('/documentos/drive/pasta', async (req, res) => {
+  try {
+    if (!drive.isConfigured()) {
+      req.flash('error_msg', 'Google Drive não está ligado (Configuração → Google Drive).');
+      return res.redirect('/admin/documentos');
+    }
+    const folderId = await drive.obterPastaCondominioId(req.condominioId);
+    const link = drive.linkPastaDrive(folderId);
+    if (!link) {
+      req.flash('error_msg', 'Não foi possível gerar o link da pasta do condomínio.');
+      return res.redirect('/admin/documentos');
+    }
+    return res.redirect(link);
+  } catch (err) {
+    console.error('[documentos-drive-pasta]', err.message);
+    req.flash('error_msg', `Não foi possível abrir a pasta do condomínio: ${err.message}`);
+    return res.redirect('/admin/documentos');
+  }
+});
+
 // ── Pastas personalizadas (biblioteca) ──────────────────────────────
 router.post('/documentos/pastas', async (req, res) => {
   const cond = await getCondominio({ id: req.condominioId });
@@ -281,7 +304,7 @@ router.post('/documentos', upload.single('ficheiro'), async (req, res) => {
         req.flash('error_msg', 'Google Drive não está ligado — ligue a conta em Configuração ou indique apenas um URL externo.');
         return res.redirect('/admin/documentos/nova');
       }
-      const pastaId = await drive.pastaParaDocumento(tipo, ano);
+      const pastaId = await drive.pastaParaDocumento(tipo, ano, req.condominioId);
       const up = await drive.uploadArquivo({
         nome: req.file.originalname,
         mimeType: req.file.mimetype,

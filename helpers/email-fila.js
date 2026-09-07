@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { Op } = require('sequelize');
-const { EmailFila } = require('../models');
+const { EmailFila, Documento, Aviso, Recibo } = require('../models');
 const { sendMail } = require('./mailer');
 
 const MAX_TENTATIVAS = 3;
@@ -106,6 +106,31 @@ async function enfileirarEmail({
   });
 }
 
+// Deriva o condomínio de um item da fila através das relações SEGURAS já
+// registadas (documento/aviso/recibo) — nunca por nome/assunto/email. Sem
+// relação → null (o remetente cai para smtp_from_name/'GesCondu'; o contexto
+// por coluna própria na fila fica como evolução P2).
+async function condominioDoItem(item) {
+  const raw = item && item.toJSON ? item.toJSON() : item || {};
+  try {
+    if (raw.documento_id) {
+      const d = await Documento.findByPk(raw.documento_id, { attributes: ['condominio_id'] });
+      if (d && d.condominio_id) return Number(d.condominio_id);
+    }
+    if (raw.aviso_id) {
+      const a = await Aviso.findByPk(raw.aviso_id, { attributes: ['condominio_id'] });
+      if (a && a.condominio_id) return Number(a.condominio_id);
+    }
+    if (raw.entidade_tipo === 'Recibo' && raw.entidade_id) {
+      const r = await Recibo.findByPk(raw.entidade_id, { attributes: ['condominio_id'] });
+      if (r && r.condominio_id) return Number(r.condominio_id);
+    }
+  } catch (err) {
+    // contexto é opcional — nunca bloqueia o envio
+  }
+  return null;
+}
+
 async function enviarItem(item) {
   await item.update({ estado: 'a_enviar' });
 
@@ -121,6 +146,7 @@ async function enviarItem(item) {
     text: item.corpo || '',
     html: item.corpo_html || escaparHtml(item.corpo),
     attachments,
+    condominioId: await condominioDoItem(item),
   });
   if (res.enviado) {
     limparAnexo(item.anexo_caminho); // remove cópia local após envio (mantém registo do nome)

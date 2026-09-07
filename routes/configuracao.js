@@ -212,16 +212,19 @@ router.post('/config/drive/testar', async (req, res) => {
   res.redirect('/admin/config#google-drive');
 });
 
-// Cria a estrutura de pastas no Google Drive.
+// Cria a estrutura de pastas no Google Drive (do condomínio ativo).
 router.post('/config/drive/estrutura', async (req, res) => {
   if (!drive.isConfigured()) {
     req.flash('error_msg', 'Google Drive não está ligado — ligue a conta Google primeiro.');
     return res.redirect('/admin/config#google-drive');
   }
   try {
-    const estrutura = await drive.criarEstruturaPastas();
-    await audit({ userId: req.user.id, acao: 'criar_estrutura_drive', entidade: 'GoogleDrive' });
-    req.flash('success_msg', 'Estrutura de pastas criada/verificada no Google Drive (na pasta de destino configurada).');
+    // Multi-condomínio: a árvore é <raiz>/<Condomínio>/<ano>/{tipos}; a pasta
+    // do condomínio fica registada (condominios.drive_folder_id) para todos os
+    // uploads seguintes (a pasta Backups é global e também é criada aqui).
+    const estrutura = await drive.criarEstruturaPastas(req.condominioId);
+    await audit({ userId: req.user.id, acao: 'criar_estrutura_drive', entidade: 'GoogleDrive', detalhes: { condominioId: req.condominioId } }).catch(() => {});
+    req.flash('success_msg', 'Estrutura de pastas do condomínio criada/verificada no Google Drive (raiz → condomínio → ano → tipos).');
   } catch (err) {
     console.error(err);
     req.flash('error_msg', err.message);

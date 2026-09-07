@@ -18,7 +18,7 @@ function testarProvedor() {
   }
 
   // Interface esperada.
-  for (const fn of ['uploadArquivo', 'pastaParaDocumento', 'descargarArquivo', 'estadoLigacao', 'testarLigacao', 'criarEstruturaPastas']) {
+  for (const fn of ['uploadArquivo', 'pastaParaDocumento', 'pastaParaFornecedor', 'descargarArquivo', 'estadoLigacao', 'testarLigacao', 'criarEstruturaPastas', 'obterPastaCondominioId', 'linkPastaDrive']) {
     assert.strictEqual(typeof storage[fn], 'function', `método ${fn} disponível`);
   }
 }

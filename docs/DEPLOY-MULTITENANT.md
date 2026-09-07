@@ -19,7 +19,7 @@ mysqldump -u <utilizador> -p <base> > condofy_pre_saas_$(date +%Y%m%d_%H%M%S).sq
 
 ```bash
 cd <caminho_do_projeto>
-npm run db:migrate        # executa 056 → 059
+npm run db:migrate        # executa 056 → 063
 ```
 
 Ordem e propósito:
@@ -31,10 +31,13 @@ Ordem e propósito:
 | `…058-documento-pastas-custom` | `condominios.documento_pastas` (JSON das pastas personalizadas da biblioteca). |
 | `…059-documento-categorias` | Enum `categorias.tipo` + `documento` e tabela `documento_categorias` (M2M Documento↔Categoria). |
 | `…060-two-factor-totp` | 2FA — opção Aplicação autenticadora (TOTP RFC 6238): coluna `users.two_fa_totp_secret` (Base32) e enum `two_fa_metodo` com `'totp'`. |
+| `…061-classificar-documentos` | Classificação central dos documentos (tipo → pasta lógica via `resolverPastaDocumento`) e reclassificação dos registos existentes; aditiva. |
+| `…062-documento-disponivel-condominos` | `documentos.disponivel_condominos` (default `0`): visibilidade na área do Condómino; convocatórias/atas/assembleias ficam disponíveis automaticamente. |
+| `…063-add-condominio-drive-folder` | `condominios.drive_folder_id`: pasta raiz do condomínio no Google Drive (árvore `<raiz>/<Condomínio>/<ano>/…`). **Aditiva** — ficheiros antigos não são movidos. |
 
 Reverter (só se necessário, sempre com backup):
 ```bash
-npm run db:migrate:undo   # uma migração de cada vez, da 059 para a 056
+npm run db:migrate:undo   # uma migração de cada vez, da 063 para a 056
 ```
 
 ---
@@ -83,7 +86,48 @@ npm run db:migrate:undo   # uma migração de cada vez, da 059 para a 056
 
 ---
 
-## 6. Validação automática (sem BD)
+## 6. Google Drive por condomínio + SMTP contextual (migração 063)
+
+A infraestrutura continua **partilhada** (uma conta Google Drive, um SMTP, uma BD),
+mas a árvore física do Drive passa a ser **por condomínio**:
+
+```text
+<raiz da empresa>/
+├── Backups/                 ← global (infraestrutura)
+├── <Condomínio A>/          ← nome amigável (designação), nunca o id
+│   └── 2026/{Assembleias,Quotas,Recibos,Despesas,Contratos,Outros,
+│            Fornecedores/<nome>/Comprovativos}
+└── <Condomínio B>/…
+```
+
+Pontos-chave após aplicar a migração e reiniciar (`systemctl restart condofy.service`):
+
+- **Ficheiros antigos NÃO são movidos** (decisão explícita). Os `Documento` continuam a
+  apontar para os `drive_file_id` existentes em `<raiz>/<ano>/…`; a reorganização
+  histórica é uma tarefa futura separada.
+- **Novos ficheiros** (documentos manuais, recibos, avisos/quotas, atas/convocatórias,
+  comprovativos de fornecedores) passam a ir para a árvore do condomínio ativo. A pasta
+  do condomínio é criada no primeiro upload e o id fica registado em
+  `condominios.drive_folder_id` (resolução por `condominio_id`, nunca por nomes).
+- **Botão "Abrir pasta no Drive"** (Documentos → biblioteca): resolve a pasta do
+  condomínio ativo no servidor e abre-a no Google Drive (o utilizador não precisa de saber
+  o `folderId`). O botão "Criar estrutura" da Configuração cria a árvore do condomínio
+  ativo (a pasta `Backups` é sempre global).
+- **Condomínios inativos**: não criam pastas novas; pastas existentes não são apagadas.
+- **Fornecedores (decisão documentada)**: o *catálogo* de fornecedores mantém-se
+  partilhado do operador (tabela `fornecedores` sem `condominio_id`), mas os
+  *comprovativos* são documentos por condomínio (`documentos.condominio_id` = condomínio
+  ativo no upload) e por isso o ficheiro físico fica na árvore do condomínio.
+- **SMTP / remetente**: configuração SMTP continua global. Prioridade do nome visível do
+  remetente: `displayName` explícito → `smtp_from_name` explícito → **contexto do
+  condomínio** (quando conhecido: convites, recibos, avisos, documentos, fornecedores) →
+  `GesCondu`. Nunca usa "o primeiro condomínio da BD". Para a fila de emails sem relação
+  com documento/aviso/recibo, o contexto por coluna própria em `email_fila` fica como
+  evolução P2.
+
+---
+
+## 7. Validação automática (sem BD)
 
 ```bash
 node scripts/check-templates.js
@@ -99,6 +143,7 @@ node scripts/test-comunicacoes.js
 node scripts/test-convocatoria.js
 node scripts/test-background.js
 node scripts/test-documento-pastas.js
+node scripts/test-drive-pastas.js
 node scripts/test-storage.js
 ```
 

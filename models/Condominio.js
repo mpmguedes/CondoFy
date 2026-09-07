@@ -19,6 +19,10 @@ module.exports = (sequelize) => {
       dados_bancarios_adicionais: { type: DataTypes.TEXT, allowNull: true },
       // Pastas personalizadas da biblioteca de documentos (JSON [{key,nome}]).
       documento_pastas: { type: DataTypes.TEXT, allowNull: true },
+      // Pasta raiz do condomínio no Google Drive (id da pasta <raiz>/<Condomínio>).
+      // Guardada na BD para resolver inequivocamente a pasta por condominio_id
+      // (nunca por nome de ficheiro/fração/tipo/ano).
+      drive_folder_id: { type: DataTypes.STRING(191), allowNull: true },
       logotipo: { type: DataTypes.STRING(255), allowNull: true },
       cabecalho_imagem: { type: DataTypes.STRING(255), allowNull: true },
       identidade_visual: {

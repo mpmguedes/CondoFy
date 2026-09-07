@@ -182,7 +182,7 @@ router.post('/convocatorias', async (req, res) => {
     if (guardarDrive) {
       try {
         const ano = valores.data ? Number(valores.data.slice(0, 4)) : new Date().getFullYear();
-        const pastaId = await drive.pastaParaDocumento('convocatoria', ano);
+        const pastaId = await drive.pastaParaDocumento('convocatoria', ano, req.condominioId);
         const up = await drive.uploadArquivo({
           nome: `${nomeFicheiro}.pdf`,
           mimeType: 'application/pdf',

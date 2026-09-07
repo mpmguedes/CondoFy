@@ -1226,7 +1226,7 @@ router.get('/pagamentos/:id/recibo', async (req, res) => {
 // regista-o como Documento (fica disponível na biblioteca para enviar por email).
 async function guardarPdfFinanceiroDrive({ tipo, numeroDocumento, nome, buffer, anoData, userId, condominioId }) {
   if (!drive.isConfigured()) throw new Error('Google Drive não está ligado (Configuração → Google Drive).');
-  const pastaId = await drive.pastaParaDocumento(tipo, anoData);
+  const pastaId = await drive.pastaParaDocumento(tipo, anoData, condominioId);
   const up = await drive.uploadArquivo({ nome, mimeType: 'application/pdf', buffer, parentFolderId: pastaId });
   const doc = await Documento.create({
     condominio_id: condominioId,

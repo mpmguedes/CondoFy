@@ -15,7 +15,6 @@ const drive = require('./drive');
 const mailer = require('./mailer');
 const { enfileirarEmail } = require('./email-fila');
 const { audit } = require('./audit');
-const { getCondominio } = require('./condominio');
 
 function anoAtual(data) {
   const d = data ? new Date(data) : new Date();
@@ -65,8 +64,14 @@ async function guardarDocumentoNoDrive({
   if (!drive.isConfigured()) {
     return { ok: false, erro: 'Google Drive não está ligado (Configuração → Google Drive).' };
   }
+  // O condomínio é obrigatório para escolher a pasta física no Drive — nunca se
+  // deduz por tipo/ano/ficheiro nem se assume o "primeiro condomínio" da BD.
+  const cid = condominioId ? Number(condominioId) : null;
+  if (!cid) {
+    return { ok: false, erro: 'condominioId é obrigatório para guardar o documento no Google Drive.' };
+  }
   try {
-    const pastaId = await drive.pastaParaDocumento(tipo, ano || anoAtual(data));
+    const pastaId = await drive.pastaParaDocumento(tipo, ano || anoAtual(data), cid);
     const up = await drive.uploadArquivo({
       nome,
       mimeType,
@@ -88,13 +93,6 @@ async function guardarDocumentoNoDrive({
         drive_uploaded_at: new Date(),
       });
     } else {
-      // Novo documento: o condomínio vem do contexto ativo da rota; em
-      // fluxos antigos (pré multi-condomínio) cai para o condomínio único.
-      let cid = condominioId || null;
-      if (!cid) {
-        const cond = await getCondominio();
-        cid = cond ? cond.id : null;
-      }
       documento = await Documento.create({
         condominio_id: cid,
         tipo: tipo || 'outro',
@@ -186,6 +184,9 @@ async function enviarDocumentoPorEmail({
           text: mensagem || '',
           html: corpoHtml || null,
           attachments: anexos,
+          // Remetente contextualizado pelo condomínio do documento (quando
+          // aplicável) — nunca o "primeiro condomínio" da BD.
+          condominioId: documento ? documento.condominio_id : undefined,
         });
         await EmailFila.create({
           ...reg,

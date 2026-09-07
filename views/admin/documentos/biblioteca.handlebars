@@ -3,7 +3,14 @@
     <h1>Documentos</h1>
     <p class="subtitle">Biblioteca visual do condomínio — escolha uma categoria ou pasta</p>
   </div>
-  <a href="/admin/documentos/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">upload</span>Novo documento</a>
+  <div class="d-flex gap-2">
+    {{#if driveLigado}}
+    <a href="/admin/documentos/drive/pasta" class="btn btn-outline-secondary" title="Abrir a pasta deste condomínio no Google Drive (a pasta é criada automaticamente no primeiro documento)">
+      <span class="material-symbols-outlined me-1">folder_open</span>Abrir pasta no Drive
+    </a>
+    {{/if}}
+    <a href="/admin/documentos/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">upload</span>Novo documento</a>
+  </div>
 </div>
 
 {{#unless driveLigado}}

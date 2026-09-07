@@ -153,7 +153,7 @@ async function main() {
       });
       const buffer = await gerarPdfRecibo(recibo, cond);
       const ano = recibo.data_emissao ? new Date(recibo.data_emissao).getFullYear() : new Date().getFullYear();
-      const pastaDrive = await storage.pastaParaDocumento('recibo', ano);
+      const pastaDrive = await storage.pastaParaDocumento('recibo', ano, recibo.condominio_id);
       const up = await storage.uploadArquivo({
         nome: `Recibo ${recibo.codigo}.pdf`,
         mimeType: 'application/pdf',

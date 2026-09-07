@@ -309,7 +309,9 @@ router.post('/fornecedores/:id/pagamentos/:pid/comprovativo', upload.single('fic
     if (!req.file) throw new Error('Selecione o ficheiro do comprovativo.');
     if (!drive.isConfigured()) throw new Error('O Google Drive não está ligado — é necessário para guardar o comprovativo.');
     const ano = pagamento.data_pagamento ? new Date(pagamento.data_pagamento).getFullYear() : new Date().getFullYear();
-    const pastas = await drive.pastaParaFornecedor({ nome: fornecedor.nome || 'Fornecedor', ano, subpasta: 'Comprovativos' });
+    // Comprovativo físico DENTRO da árvore do condomínio ativo (o Documento
+    // registado abaixo fica com condominio_id = req.condominioId).
+    const pastas = await drive.pastaParaFornecedor({ condominioId: req.condominioId, nome: fornecedor.nome || 'Fornecedor', ano, subpasta: 'Comprovativos' });
     const up = await drive.uploadArquivo({ nome: req.file.originalname, mimeType: req.file.mimetype, buffer: req.file.buffer, parentFolderId: pastas.subpastaId });
 
     const documento = await Documento.create({
@@ -350,7 +352,8 @@ router.get('/fornecedores/:id/pagamentos/:pid/comprovativo/enviar', async (req, 
   });
   if (!pagamento) return res.redirect('/admin/fornecedores');
   const fornecedor = pagamento.fornecedor || {};
-  const condominio = (await getCondominio()) || {};
+  // Contexto do condomínio ATIVO (o módulo exige condomínio ativo na sessão).
+  const condominio = (await getCondominio({ id: req.condominioId })) || {};
   res.render('admin/fornecedores/comprovativo-enviar', {
     titulo: 'Enviar comprovativo ao fornecedor',
     pagamento,
@@ -384,7 +387,7 @@ router.post('/fornecedores/:id/pagamentos/:pid/comprovativo/enviar', async (req,
 
     // Template central de fornecedor (mantém saudação/assinatura). Se o
     // administrador editou a mensagem, é usada a versão personalizada.
-    const cond = await getCondominio();
+    const cond = await getCondominio({ id: req.condominioId });
     const condNome = String((cond && cond.designacao) || '').trim();
     const adminNome = String((cond && cond.administracao_nome) || '').trim();
     const tpl = comporEmail('fornecedor', {
@@ -411,6 +414,9 @@ router.post('/fornecedores/:id/pagamentos/:pid/comprovativo/enviar', async (req,
       text: corpoTexto,
       html: corpoHtml,
       attachments: [{ filename: nomeAnexo, content: buffer }],
+      // Remetente contextualizado: usa o condomínio ativo quando não houver
+      // smtp_from_name explícito (nunca o "primeiro condomínio" da BD).
+      condominioId: req.condominioId,
     });
     await EmailFila.create({
       destinatario_email: para,

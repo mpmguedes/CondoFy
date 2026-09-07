@@ -32,8 +32,13 @@ module.exports = {
   uploadArquivo(opcoes) {
     return provedorAtual().uploadArquivo(opcoes);
   },
-  pastaParaDocumento(tipo, ano) {
-    return provedorAtual().pastaParaDocumento(tipo, ano);
+  // A pasta do documento é SEMPRE do condomínio (condominioId obrigatório) —
+  // ver helpers/drive.js. Nunca se deduz o condomínio por nomes/ano/tipo.
+  pastaParaDocumento(tipo, ano, condominioId) {
+    return provedorAtual().pastaParaDocumento(tipo, ano, condominioId);
+  },
+  pastaParaFornecedor(opcoes) {
+    return provedorAtual().pastaParaFornecedor(opcoes);
   },
   descargarArquivo(fileId) {
     return provedorAtual().descargarArquivo(fileId);
@@ -44,7 +49,14 @@ module.exports = {
   testarLigacao() {
     return provedorAtual().testarLigacao();
   },
-  criarEstruturaPastas() {
-    return provedorAtual().criarEstruturaPastas();
+  criarEstruturaPastas(condominioId, ano) {
+    return provedorAtual().criarEstruturaPastas(condominioId, ano);
+  },
+  // Pasta raiz do condomínio (resolve/regista condominios.drive_folder_id).
+  obterPastaCondominioId(condominioId) {
+    return provedorAtual().obterPastaCondominioId(condominioId);
+  },
+  linkPastaDrive(folderId) {
+    return provedorAtual().linkPastaDrive(folderId);
   },
 };
