@@ -128,9 +128,8 @@
     <span class="material-symbols-outlined me-1">picture_as_pdf</span>Gerar PDF
   </button>
   {{#if driveLigado}}
-  <div class="form-check ms-lg-auto mb-0">
-    <input class="form-check-input" type="checkbox" name="guardar_drive" value="on" id="guardarDrive" />
-    <label class="form-check-label small" for="guardarDrive">Guardar também no Google Drive</label>
-  </div>
+  <span class="small text-muted ms-lg-auto"><span class="material-symbols-outlined me-1" style="font-size:.95rem">cloud_done</span>Ao gerar o PDF, a convocatória é guardada automaticamente nos Documentos.</span>
+  {{else}}
+  <span class="small text-muted ms-lg-auto">Google Drive não ligado — o PDF é gerado sem ficar guardado nos Documentos.</span>
   {{/if}}
 </div>

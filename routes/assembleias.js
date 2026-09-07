@@ -345,6 +345,45 @@ router.get('/assembleias/:id/convocatoria', async (req, res) => {
     local: assembleia.local,
     ordemTrabalhos: agenda.length ? agenda : pontos(assembleia.ordem_trabalhos),
   });
+
+  // Comportamento igual ao módulo Convocatórias: ao gerar a convocatória da
+  // assembleia, registá-la automaticamente nos Documentos (idempotente — se já
+  // existir convocatória guardada, não cria outra).
+  if (drive.isConfigured() && !assembleia.convocatoria_documento_id) {
+    try {
+      const ano = assembleia.data ? new Date(assembleia.data).getFullYear() : new Date().getFullYear();
+      const pastaId = await drive.pastaParaDocumento('convocatoria', ano);
+      const up = await drive.uploadArquivo({
+        nome: `Convocatoria_${assembleia.numero || assembleia.id}.pdf`,
+        mimeType: 'application/pdf',
+        buffer,
+        parentFolderId: pastaId,
+      });
+      const doc = await Documento.create({
+        condominio_id: req.condominioId,
+        tipo: 'convocatoria',
+        numero_documento: null,
+        nome: `Convocatória ${assembleia.numero || assembleia.id}`,
+        pasta: 'assembleias',
+        disponivel_condominos: true,
+        drive_file_id: up.driveFileId,
+        drive_folder_id: pastaId,
+        mime_type: 'application/pdf',
+        tamanho: up.tamanho,
+        data: new Date(),
+        url: up.url,
+        drive_status: 'guardado',
+        drive_uploaded_at: new Date(),
+        entidade_tipo: 'Assembleia',
+        entidade_id: assembleia.id,
+        created_by: req.user.id,
+      });
+      await assembleia.update({ convocatoria_documento_id: doc.id });
+    } catch (err) {
+      console.error('[assembleia-convocatoria-auto]', err.message);
+    }
+  }
+
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="convocatoria_${assembleia.numero || assembleia.id}.pdf"`);
   res.send(buffer);
@@ -385,6 +424,10 @@ router.post('/assembleias/:id/convocatoria/drive', async (req, res) => {
   if (!assembleia) return res.redirect('/admin/assembleias');
   if (!drive.isConfigured()) {
     req.flash('error_msg', 'Google Drive não configurado.');
+    return res.redirect(`/admin/assembleias/${assembleia.id}`);
+  }
+  if (assembleia.convocatoria_documento_id) {
+    req.flash('success_msg', 'A convocatória desta assembleia já está registada nos Documentos.');
     return res.redirect(`/admin/assembleias/${assembleia.id}`);
   }
   try {

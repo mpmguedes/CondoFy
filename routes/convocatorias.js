@@ -175,13 +175,11 @@ router.post('/convocatorias', async (req, res) => {
       .filter(Boolean)
       .join('-');
 
-    // Opcional: guardar também no Google Drive (antes de devolver o PDF).
-    const guardarDrive = req.body.guardar_drive === 'on' || req.body.guardar_drive === '1';
+    // Guardar automaticamente na Biblioteca de Documentos quando o Drive está
+    // ligado (o "Gerar PDF" deixa sempre o documento registado; a opção manual
+    // mantém-se apenas para compatibilidade). Sem Drive, devolve o PDF normal.
+    const guardarDrive = drive.isConfigured();
     if (guardarDrive) {
-      if (!drive.isConfigured()) {
-        req.flash('error_msg', 'O Google Drive não está ligado — ligue a conta em Configuração ou remova a opção.');
-        return res.render('admin/convocatorias/nova', base);
-      }
       try {
         const ano = valores.data ? Number(valores.data.slice(0, 4)) : new Date().getFullYear();
         const pastaId = await drive.pastaParaDocumento('convocatoria', ano);
@@ -191,29 +189,38 @@ router.post('/convocatorias', async (req, res) => {
           buffer,
           parentFolderId: pastaId,
         });
-        await Documento.create({
-          condominio_id: req.condominioId,
-          tipo: 'convocatoria',
-          // Convocatórias destinadas aos condóminos.
-          disponivel_condominos: true,
-          nome: `${doc.textos.titulo}${valores.reuniao_numero ? ` — ${valores.reuniao_numero}` : ''}`,
-          pasta: 'convocatorias',
-          drive_file_id: up.driveFileId,
-          drive_folder_id: pastaId,
-          mime_type: 'application/pdf',
-          tamanho: up.tamanho,
-          data: valores.data || new Date(),
-          url: up.url,
-          drive_status: 'guardado',
-          drive_uploaded_at: new Date(),
-          created_by: req.user.id,
+        const tituloDoc = `${doc.textos.titulo}${valores.reuniao_numero ? ` — ${valores.reuniao_numero}` : ''}`;
+        const jaRegistada = await Documento.findOne({
+          where: { condominio_id: req.condominioId, tipo: 'convocatoria', pasta: 'convocatorias', nome: tituloDoc },
         });
-        req.flash('success_msg', 'Convocatória guardada no Google Drive.');
+        if (jaRegistada) {
+          req.flash('success_msg', 'PDF gerado (convocatória já registada nos Documentos — não foi criada outra).');
+        } else {
+          await Documento.create({
+            condominio_id: req.condominioId,
+            tipo: 'convocatoria',
+            // Convocatórias destinadas aos condóminos.
+            disponivel_condominos: true,
+            nome: tituloDoc,
+            pasta: 'convocatorias',
+            drive_file_id: up.driveFileId,
+            drive_folder_id: pastaId,
+            mime_type: 'application/pdf',
+            tamanho: up.tamanho,
+            data: valores.data || new Date(),
+            url: up.url,
+            drive_status: 'guardado',
+            drive_uploaded_at: new Date(),
+            created_by: req.user.id,
+          });
+          req.flash('success_msg', 'PDF gerado e convocatória guardada nos Documentos.');
+        }
       } catch (err) {
         console.error('[convocatoria] erro ao guardar no Drive:', err.message);
-        req.flash('error_msg', err.message);
-        return res.render('admin/convocatorias/nova', base);
+        req.flash('error_msg', `${err.message} (o PDF continua a ser descarregado).`);
       }
+    } else {
+      req.flash('success_msg', 'PDF gerado (Google Drive não ligado — a convocatória não fica guardada nos Documentos).');
     }
 
     try {
