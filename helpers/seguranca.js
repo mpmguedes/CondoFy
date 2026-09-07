@@ -27,3 +27,28 @@ function createLimiter({ rotulo, max = 10, janelaMs = 10 * 60 * 1000, msg }) {
 }
 
 module.exports = { createLimiter };
+
+// ── CSRF ────────────────────────────────────────────────────────────
+// Proteção por origem/referer para pedidos de escrita: quando o browser
+// envia Origin (todos os POST fetch e formulários modernos), a origem tem
+// de bater com o host da aplicação. Pedidos sem Origin/Referer (clientes
+// antigos/APIs internas) passam — o cookie SameSite=Lax cobre o CSRF clássico.
+function protegerOrigem(req, res, next) {
+  if (['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(req.method)) return next();
+  const host = req.get('host');
+  const originHeader = req.headers.origin;
+  const referer = req.headers.referer;
+  const origem = originHeader || referer;
+  if (!origem) return next();
+
+  const alvo = originHeader || referer;
+  try {
+    const u = new URL(alvo);
+    return u.host === host ? next() : res.status(403).send('Pedido rejeitado (origem não permitida).');
+  } catch (err) {
+    return alvo.startsWith(`${req.protocol}://${host}`) ? next() : res.status(403).send('Pedido rejeitado (origem não permitida).');
+  }
+}
+
+module.exports = { createLimiter, protegerOrigem };
+

@@ -1,7 +1,7 @@
 // Testes de segurança (sem rede/base de dados).
 // Utilização: node scripts/test-seguranca.js
 const assert = require('assert');
-const { createLimiter } = require('../helpers/seguranca');
+const { createLimiter, protegerOrigem } = require('../helpers/seguranca');
 
 function novoLimiter(max, janelaMs = 60 * 1000) {
   return createLimiter({ rotulo: `teste-${Math.random().toString(36).slice(2)}`, max, janelaMs, msg: 'limitado' });
@@ -50,5 +50,42 @@ function testarLimite() {
   assert.strictEqual(avancosOutro, 2, 'limites independentes por IP');
 }
 
+function testarCSRF() {
+  const base = (extra) => ({
+    method: 'POST',
+    protocol: 'https',
+    get: (h) => (h === 'host' ? 'gescondu.pt' : undefined),
+    headers: {},
+    ...extra,
+  });
+  const resposta403 = () => {
+    const res = { enviado: null, status(c) { this.enviado = c; return this; }, send() {} };
+    return res;
+  };
+  const verificaAvanco = (tipo) => (req) => {
+    let avancou = false;
+    protegerOrigem(req, resposta403(), () => { avancou = true; });
+    assert.ok(avancou, `${tipo}: pedido avança`);
+  };
+
+  // Sem Origin/Referer → avança (SameSite cobre o CSRF clássico).
+  verificaAvanco('sem origem')(base());
+  // Origin igual ao host → avança.
+  verificaAvanco('mesma origem')(base({ headers: { origin: 'https://gescondu.pt' } }));
+  // Referer do próprio host → avança.
+  verificaAvanco('referer próprio')(base({ headers: { referer: 'https://gescondu.pt/admin/quotas' } }));
+  // GET nunca é bloqueado.
+  verificaAvanco('GET')(base({ method: 'GET', headers: { origin: 'https://inimigo.example' } }));
+
+  // Origem diferente → 403 e não avança.
+  const reqMau = base({ headers: { origin: 'https://inimigo.example' } });
+  let avancouMau = false;
+  const resMau = { enviado: null, status(c) { this.enviado = c; return this; }, send() {} };
+  protegerOrigem(reqMau, resMau, () => { avancouMau = true; });
+  assert.strictEqual(avancouMau, false, 'origem diferente não avança');
+  assert.strictEqual(resMau.enviado, 403, 'origem diferente → 403');
+}
+
 testarLimite();
+testarCSRF();
 console.log('✓ Testes de segurança (rate limiting) passaram (sem rede).');

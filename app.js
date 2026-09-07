@@ -15,6 +15,7 @@ const tenant = require('./helpers/tenant');
 const drive = require('./helpers/drive');
 const mailer = require('./helpers/mailer');
 const background = require('./helpers/background-jobs');
+const { protegerOrigem } = require('./helpers/seguranca');
 require('./config/passport')(passport);
 
 const app = express();
@@ -56,6 +57,10 @@ app.use(
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(methodOverride('_method'));
+
+// ── CSRF (origem) ──────────────────────────────────────────────────
+// Bloqueia pedidos de escrita com origem diferente da aplicação.
+app.use(protegerOrigem);
 
 // ── Passport + flash ───────────────────────────────────────────────
 app.use(passport.initialize());
