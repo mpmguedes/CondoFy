@@ -612,6 +612,7 @@ router.post('/quotas/recibos/emitir', async (req, res) => {
 
     const valorGlobal = parseFloat(String(req.body.valor_global || '').replace(',', '.'));
     const criados = await recibosHelper.emitirRecibos({
+      condominioId: req.condominioId,
       fracaoId,
       meses: mesesCompletos,
       modo,

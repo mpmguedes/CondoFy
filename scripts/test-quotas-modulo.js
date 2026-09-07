@@ -378,6 +378,13 @@ async function testModosDistribuicao() {
     /Modo de distribuição inválido/,
     'modos desconhecidos são rejeitados explicitamente'
   );
+  // Multi-condomínio: emitir recibo SEM condominioId é rejeitado antes da BD
+  // (evita Recibo.condominio_id null em produção).
+  await assert.rejects(
+    () => emitirRecibos({ fracaoId: 1, meses: [], modo: 'mes' }),
+    /condominioId é obrigatório/,
+    'emitir recibo exige condominioId (multi-condomínio)'
+  );
 }
 
 // ── 5. Distribuição FIFO de pagamentos (anulados nunca contam) ──

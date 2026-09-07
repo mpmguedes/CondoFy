@@ -12,7 +12,7 @@ const documentActions = require('../helpers/document-actions');
 const { enfileirarEmail: enfileirarEmailFila } = require('../helpers/email-fila');
 const { compor: comporEmail, nomeFicheiro: nomeFicheiroEmail } = require('../helpers/email-templates');
 const { getCondominio, clearCondominioCache } = require('../helpers/condominio');
-const { PASTAS_BASE: PASTAS, mapaPastas, pastasPersonalizadas, novaKey } = require('../helpers/documento-pastas');
+const { PASTAS_BASE: PASTAS, mapaPastas, pastasPersonalizadas, novaKey, resolverPastaDocumento } = require('../helpers/documento-pastas');
 
 const router = express.Router();
 // Isolamento: todas as operações usam o condomínio ativo (sessão validada).
@@ -191,7 +191,14 @@ router.post('/documentos', upload.single('ficheiro'), async (req, res) => {
     const { nome, tipo, data, url, pasta } = req.body;
     const cond = await getCondominio({ id: req.condominioId });
     const mapa = mapaPastas(cond);
-    const pastaEscolhida = pasta && mapa[pasta] ? pasta : 'outros';
+    // Classificação central: respeita uma escolha válida/compatível; corrige
+    // automaticamente (com aviso) quando a escolha é incompatível com o tipo.
+    const decisao = resolverPastaDocumento({
+      tipo: tipo || 'outro',
+      pastaEscolhida: pasta,
+      pastasValidas: Object.keys(mapa),
+    });
+    const pastaEscolhida = decisao.pasta;
     const ano = data ? new Date(data).getFullYear() : new Date().getFullYear();
 
     let driveFileId = null;
@@ -250,7 +257,7 @@ router.post('/documentos', upload.single('ficheiro'), async (req, res) => {
     }
 
     await audit({ userId: req.user.id, acao: 'criar_documento', entidade: 'Documento', entidadeId: documento.id });
-    req.flash('success_msg', 'Documento guardado.');
+    req.flash('success_msg', decisao.corrigida ? `Documento guardado. ${decisao.motivo}.` : 'Documento guardado.');
   } catch (err) {
     console.error(err);
     req.flash('error_msg', `Erro ao guardar o documento: ${err.message}`);

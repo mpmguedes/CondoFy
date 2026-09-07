@@ -327,10 +327,15 @@ async function detalhePorEmitir({ ano, condominioId } = {}) {
 //  · valorGlobal: valor do recibo único (≤ soma dos limites)
 //  · tipo: 'ordinario' | 'extraordinario'
 // Devolve os recibos criados (já com as coberturas).
-async function emitirRecibos({ fracaoId, meses, modo = 'mes', valorGlobal, tipo = 'ordinario', userId, ano }) {
+async function emitirRecibos({ fracaoId, meses, modo = 'mes', valorGlobal, tipo = 'ordinario', userId, ano, condominioId }) {
   const MODOS_VALIDOS = ['plano', 'unico', 'mes', 'selecionar'];
   if (!MODOS_VALIDOS.includes(modo)) {
     throw new Error('Modo de distribuição inválido.');
+  }
+  // Multi-condomínio: o condomínio vem SEMPRE do contexto ativo da rota
+  // (req.condominioId) — nunca é opcional nem inferido de outro contexto.
+  if (!condominioId) {
+    throw new Error('condominioId é obrigatório para emitir recibos.');
   }
   const reciboUnico = modo === 'unico';
   const t = await sequelize.transaction();
@@ -340,7 +345,8 @@ async function emitirRecibos({ fracaoId, meses, modo = 'mes', valorGlobal, tipo 
     if (!quotaIds.length) throw new Error('Selecione pelo menos um mês.');
 
     const quotas = await Quota.findAll({
-      where: { id: { [Op.in]: quotaIds }, fracao_id: fracaoId, estado: { [Op.ne]: 'anulada' } },
+      // Só quotas do condomínio ATIVO (bloqueia IDs de outro condomínio).
+      where: { id: { [Op.in]: quotaIds }, fracao_id: fracaoId, condominio_id: condominioId, estado: { [Op.ne]: 'anulada' } },
       order: [['ano', 'ASC'], ['mes', 'ASC']],
       lock: t.LOCK.UPDATE,
       transaction: t,
@@ -396,6 +402,7 @@ async function emitirRecibos({ fracaoId, meses, modo = 'mes', valorGlobal, tipo 
       const totalC = alocacoes.reduce((s, a) => s + a.valorC, 0);
       const recibo = await Recibo.create(
         {
+          condominio_id: condominioId,
           fracao_id: fracaoId,
           codigo,
           codigo_verificacao: gerarCodigoVerificacao(anoNum, codigo),
@@ -430,6 +437,7 @@ async function emitirRecibos({ fracaoId, meses, modo = 'mes', valorGlobal, tipo 
         const { codigo, numero } = await proximoReciboNumero({ ano: anoNum, transaction: t });
         const recibo = await Recibo.create(
           {
+            condominio_id: condominioId,
             fracao_id: fracaoId,
             codigo,
             codigo_verificacao: gerarCodigoVerificacao(anoNum, codigo),
