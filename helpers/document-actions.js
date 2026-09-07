@@ -15,6 +15,7 @@ const drive = require('./drive');
 const mailer = require('./mailer');
 const { enfileirarEmail } = require('./email-fila');
 const { audit } = require('./audit');
+const { getCondominio } = require('./condominio');
 
 function anoAtual(data) {
   const d = data ? new Date(data) : new Date();
@@ -59,6 +60,7 @@ async function guardarDocumentoNoDrive({
   data,
   documentoId,
   userId,
+  condominioId,
 }) {
   if (!drive.isConfigured()) {
     return { ok: false, erro: 'Google Drive não está ligado (Configuração → Google Drive).' };
@@ -86,7 +88,15 @@ async function guardarDocumentoNoDrive({
         drive_uploaded_at: new Date(),
       });
     } else {
+      // Novo documento: o condomínio vem do contexto ativo da rota; em
+      // fluxos antigos (pré multi-condomínio) cai para o condomínio único.
+      let cid = condominioId || null;
+      if (!cid) {
+        const cond = await getCondominio();
+        cid = cond ? cond.id : null;
+      }
       documento = await Documento.create({
+        condominio_id: cid,
         tipo: tipo || 'outro',
         nome,
         pasta: pasta || 'outros',

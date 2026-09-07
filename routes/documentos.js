@@ -3,6 +3,7 @@ const multer = require('multer');
 const { Op } = require('sequelize');
 const { Documento, Pessoa } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
+const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const drive = require('../helpers/drive');
 const documentActions = require('../helpers/document-actions');
@@ -12,6 +13,8 @@ const { getCondominio } = require('../helpers/condominio');
 
 const router = express.Router();
 router.use(eAdmin);
+// Isolamento: todas as operações usam o condomínio ativo (sessão validada).
+router.use(tenant.comCondominioAtivo);
 
 function toArray(v) {
   if (!v) return [];
@@ -53,7 +56,8 @@ const TIPOS_POR_PASTA = {
 
 router.get('/documentos', async (req, res) => {
   const pasta = req.query.pasta || null;
-  const where = pasta && PASTAS[pasta] ? { pasta } : {};
+  const where = { condominio_id: req.condominioId };
+  if (pasta && PASTAS[pasta]) where.pasta = pasta;
   const documentos = await Documento.findAll({ where, order: [['data', 'DESC'], ['id', 'DESC']] });
   res.render('admin/documentos/listar', {
     titulo: 'Documentos',
@@ -106,6 +110,7 @@ router.post('/documentos', upload.single('ficheiro'), async (req, res) => {
     }
 
     const documento = await Documento.create({
+      condominio_id: req.condominioId,
       tipo: tipo || 'outro',
       nome: nome || (req.file ? req.file.originalname : 'Documento'),
       pasta: pastaEscolhida,
@@ -129,7 +134,7 @@ router.post('/documentos', upload.single('ficheiro'), async (req, res) => {
 });
 
 router.post('/documentos/:id/eliminar', async (req, res) => {
-  const documento = await Documento.findByPk(req.params.id);
+  const documento = await Documento.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
   if (documento) {
     await documento.destroy();
     await audit({ userId: req.user.id, acao: 'eliminar_documento', entidade: 'Documento', entidadeId: req.params.id });
@@ -142,13 +147,13 @@ router.post('/documentos/:id/eliminar', async (req, res) => {
 // Enviar documento por email (fila normal). Pré-preenche destinatários
 // manualmente e/ou por seleção de condóminos.
 router.get('/documentos/:id/email', async (req, res) => {
-  const documento = await Documento.findByPk(req.params.id);
+  const documento = await Documento.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
   if (!documento) return res.redirect('/admin/documentos');
   const pessoas = await Pessoa.findAll({
-    where: { ativo: true, email: { [Op.ne]: null } },
+    where: { ativo: true, email: { [Op.ne]: null }, condominio_id: req.condominioId },
     order: [['nome', 'ASC']],
   });
-  const cond = await getCondominio();
+  const cond = await getCondominio({ id: req.condominioId });
   const emissorNome = String((cond && (cond.administracao_nome || cond.designacao)) || '').trim() || 'GesCondu';
   res.render('admin/documentos/email', {
     titulo: 'Enviar documento por email',
@@ -161,7 +166,7 @@ router.get('/documentos/:id/email', async (req, res) => {
 });
 
 router.post('/documentos/:id/email', async (req, res) => {
-  const documento = await Documento.findByPk(req.params.id);
+  const documento = await Documento.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
   if (!documento) return res.redirect('/admin/documentos');
 
   const destinatarios = [];
@@ -171,10 +176,10 @@ router.post('/documentos/:id/email', async (req, res) => {
     .map((s) => s.trim())
     .filter(Boolean);
   for (const email of manual) destinatarios.push({ email, nome: null });
-  // condóminos selecionados
+  // condóminos selecionados (apenas do condomínio ativo)
   const ids = toArray(req.body.pessoas).map(Number);
   if (ids.length) {
-    const pessoas = await Pessoa.findAll({ where: { id: { [Op.in]: ids }, email: { [Op.ne]: null } } });
+    const pessoas = await Pessoa.findAll({ where: { id: { [Op.in]: ids }, email: { [Op.ne]: null }, condominio_id: req.condominioId } });
     for (const p of pessoas) destinatarios.push({ email: p.email, nome: p.nome });
   }
 
