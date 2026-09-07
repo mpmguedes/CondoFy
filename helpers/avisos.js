@@ -6,23 +6,38 @@ const { emailsPreferidosPorPessoa } = require('./contactos');
 // O email é o preferido do condómino (contacto principal → primeiro ativo →
 // email legado), mantendo compatibilidade com os dados existentes.
 // selecao = { modo: 'todos' | 'fracoes' | 'pessoas', fracoes: [ids], pessoas: [ids] }
-async function resolverDestinatarios(selecao) {
+// condominioId (opcional): restringe frações/pessoas ao condomínio ativo.
+async function resolverDestinatarios(selecao, condominioId) {
   const unicos = new Map();
   const add = (p) => {
     if (p) unicos.set(p.id, { pessoa_id: p.id, email: p.email || '', nome: p.nome });
   };
+  // Escopo por condomínio ativo quando indicado (multi-condomínio).
+  const escopoPessoa = condominioId ? { condominio_id: condominioId } : null;
+  const wherePessoa = (extra = {}) => (escopoPessoa ? { ...escopoPessoa, ...extra } : extra);
 
   if (selecao.modo === 'todos') {
-    const todas = await Pessoa.findAll({ where: { ativo: true } });
+    const todas = await Pessoa.findAll({ where: wherePessoa({ ativo: true }) });
     todas.forEach(add);
   } else if (selecao.modo === 'fracoes' && selecao.fracoes && selecao.fracoes.length) {
+    let fracoes = selecao.fracoes.map(Number);
+    if (escopoPessoa) {
+      // Apenas frações do condomínio ativo (evita envio via ids de outro condomínio).
+      const donas = await Fracao.findAll({
+        where: { id: { [Op.in]: fracoes }, condominio_id: condominioId },
+        attributes: ['id'],
+        raw: true,
+      });
+      fracoes = donas.map((f) => f.id);
+    }
+    if (!fracoes.length) return [];
     const vinculos = await FracaoPessoa.findAll({
-      where: { fracao_id: { [Op.in]: selecao.fracoes } },
-      include: [{ model: Pessoa, as: 'pessoa' }],
+      where: { fracao_id: { [Op.in]: fracoes } },
+      include: [{ model: Pessoa, as: 'pessoa', where: wherePessoa() }],
     });
     vinculos.forEach((v) => add(v.pessoa));
   } else if (selecao.modo === 'pessoas' && selecao.pessoas && selecao.pessoas.length) {
-    const ps = await Pessoa.findAll({ where: { id: { [Op.in]: selecao.pessoas } } });
+    const ps = await Pessoa.findAll({ where: wherePessoa({ id: { [Op.in]: selecao.pessoas.map(Number) } }) });
     ps.forEach(add);
   }
 
