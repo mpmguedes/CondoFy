@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const multer = require('multer');
 const { Condominio, BackupLog } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
+const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const { getCondominio, clearCondominioCache } = require('../helpers/condominio');
 const { getConfig, setConfig } = require('../helpers/config');
@@ -13,6 +14,8 @@ const drive = require('../helpers/drive');
 
 const router = express.Router();
 router.use(eAdmin);
+// Isolamento: a configuração edita o condomínio ATIVO (sessão).
+router.use(tenant.comCondominioAtivo);
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -20,7 +23,7 @@ const upload = multer({
 });
 
 router.get('/config', async (req, res) => {
-  const condominio = await getCondominio({ force: true });
+  const condominio = await getCondominio({ force: true, id: req.condominioId });
   const driveEstado = await drive.estadoLigacao();
 
   const [ultimoBackup, raizDbRaw, backupsDb] = await Promise.all([
@@ -61,12 +64,12 @@ router.post('/config', upload.single('logotipo'), async (req, res) => {
       identidade_visual: req.body.identidade_visual || 'designacao',
     };
 
-    let condominio = await Condominio.findOne();
+    let condominio = await Condominio.findOne({ where: { id: req.condominioId } });
     if (!condominio) {
-      condominio = await Condominio.create(dados);
-    } else {
-      await condominio.update(dados);
+      req.flash('error_msg', 'Condomínio não encontrado.');
+      return res.redirect('/admin/config');
     }
+    await condominio.update(dados);
 
     // Logótipo
     if (req.file) {
