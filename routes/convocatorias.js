@@ -5,6 +5,7 @@ const express = require('express');
 const { Op } = require('sequelize');
 const { Assembleia, Documento } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
+const tenant = require('../helpers/tenant');
 const { getCondominio } = require('../helpers/condominio');
 const { audit } = require('../helpers/audit');
 const drive = require('../helpers/drive');
@@ -18,6 +19,8 @@ const { gerarConvocatoriaCartaPDF } = require('../helpers/pdf-convocatoria');
 
 const router = express.Router();
 router.use(eAdmin);
+// Isolamento: condomínio ativo (sessão validada) em todas as operações.
+router.use(tenant.comCondominioAtivo);
 
 function strB(v) {
   return v == null ? '' : String(v).trim();
@@ -46,12 +49,13 @@ function slug(v) {
   return s || 'convocatoria';
 }
 
-// Próximo número de reunião sugerido (ex.: "2026/3") — apenas sugestão.
-async function proximoNumero() {
+// Próximo número de reunião sugerido (ex.: "2026/3") — apenas sugestão,
+// contada dentro do condomínio ativo.
+async function proximoNumero(condominioId) {
   try {
     const ano = new Date().getFullYear();
     const ultima = await Assembleia.findOne({
-      where: { numero: { [Op.like]: `${ano}/%` } },
+      where: { numero: { [Op.like]: `${ano}/%` }, condominio_id: condominioId },
       order: [['id', 'DESC']],
     });
     if (!ultima || !ultima.numero) return `${ano}/1`;
@@ -117,9 +121,9 @@ function validar(v) {
 router.get('/convocatorias', (req, res) => res.redirect('/admin/convocatorias/nova'));
 
 router.get('/convocatorias/nova', async (req, res) => {
-  const cond = await getCondominio();
+  const cond = await getCondominio({ id: req.condominioId });
   const c = cond ? cond.toJSON() : {};
-  const numero = await proximoNumero();
+  const numero = await proximoNumero(req.condominioId);
   res.render('admin/convocatorias/nova', {
     titulo: 'Nova Convocatória',
     valores: valoresPorOmissao(c, numero),
@@ -163,7 +167,7 @@ router.post('/convocatorias', async (req, res) => {
       return res.render('admin/convocatorias/nova', base);
     }
 
-    const cond = await getCondominio();
+    const cond = await getCondominio({ id: req.condominioId });
     const buffer = await gerarConvocatoriaCartaPDF(cond ? cond.toJSON() : {}, doc);
 
     const refSlug = slug(valores.reuniao_numero || valores.data || doc.tipoLabel);
@@ -188,6 +192,7 @@ router.post('/convocatorias', async (req, res) => {
           parentFolderId: pastaId,
         });
         await Documento.create({
+          condominio_id: req.condominioId,
           tipo: 'convocatoria',
           nome: `${doc.textos.titulo}${valores.reuniao_numero ? ` — ${valores.reuniao_numero}` : ''}`,
           pasta: 'convocatorias',
