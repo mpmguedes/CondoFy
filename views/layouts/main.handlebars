@@ -102,6 +102,7 @@
             <span class="material-symbols-outlined">forum</span>
             <span class="sidebar-item-text">Assembleias</span>
           </a>
+          {{#if (ne condominioAtivo.role 'gestor')}}
           <a class="sidebar-item {{isActive currentPath '/admin/votacoes'}}" href="/admin/votacoes" title="Votações">
             <span class="material-symbols-outlined">how_to_vote</span>
             <span class="sidebar-item-text">Votações</span>
@@ -110,32 +111,40 @@
             <span class="material-symbols-outlined">calendar_month</span>
             <span class="sidebar-item-text">Calendário</span>
           </a>
+          {{/if}}
         </div>
 
         <div class="sidebar-group">
           <div class="sidebar-group-title">Serviços</div>
+          {{#if (ne condominioAtivo.role 'gestor')}}
           <a class="sidebar-item {{isActive currentPath '/admin/tickets'}}" href="/admin/tickets" title="Tickets">
             <span class="material-symbols-outlined">confirmation_number</span>
             <span class="sidebar-item-text">Tickets</span>
           </a>
+          {{/if}}
           <a class="sidebar-item {{isActive currentPath '/admin/fornecedores'}}" href="/admin/fornecedores" title="Fornecedores">
             <span class="material-symbols-outlined">local_shipping</span>
             <span class="sidebar-item-text">Fornecedores</span>
           </a>
+          {{#if (ne condominioAtivo.role 'gestor')}}
           <a class="sidebar-item {{isActive currentPath '/admin/seguros'}}" href="/admin/seguros" title="Seguros">
             <span class="material-symbols-outlined">shield</span>
             <span class="sidebar-item-text">Seguros</span>
           </a>
+          {{/if}}
           <a class="sidebar-item {{isActive currentPath '/admin/avisos'}}" href="/admin/avisos" title="Comunicações">
             <span class="material-symbols-outlined">campaign</span>
             <span class="sidebar-item-text">Comunicações</span>
           </a>
+          {{#if (ne condominioAtivo.role 'gestor')}}
           <a class="sidebar-item {{isActive currentPath '/admin/emails'}}" href="/admin/emails" title="Emails">
             <span class="material-symbols-outlined">mail</span>
             <span class="sidebar-item-text">Emails</span>
           </a>
+          {{/if}}
         </div>
 
+        {{#if (ne condominioAtivo.role 'gestor')}}
         <div class="sidebar-group">
           <div class="sidebar-group-title">Sistema</div>
           <a class="sidebar-item {{isActive currentPath '/admin/utilizadores'}}" href="/admin/utilizadores" title="Utilizadores">
@@ -151,6 +160,7 @@
             <span class="sidebar-item-text">Auditoria</span>
           </a>
         </div>
+        {{/if}}
         {{#if (eq user.role_global 'super_admin')}}
         <div class="sidebar-group sidebar-group-super">
           <div class="sidebar-group-title">Administração global</div>

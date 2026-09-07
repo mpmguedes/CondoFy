@@ -285,4 +285,23 @@ assert.ok(html.includes('Em desenvolvimento'), 'placeholder: título de desenvol
 assert.ok(html.includes('/admin/assembleias'), 'placeholder: sugestão com link contextual');
 assert.ok(html.includes('Entretanto, pode:'), 'placeholder: caixa de sugestão presente');
 
+// 16. Sidebar papel-aware: gestor não vê itens de plataforma/admin
+const ctxGestor = {
+  body: 'ok',
+  user: { nome: 'Gestor', role: 'condomino' },
+  isAdmin: true,
+  condominio: contexto.condominio,
+  condominioAtivo: { role: 'gestor' },
+  currentPath: '/admin/quotas',
+};
+html = layout(ctxGestor);
+assert.ok(!html.includes('href="/admin/emails"'), 'gestor: sem link Emails');
+assert.ok(!html.includes('sidebar-group-title">Sistema'), 'gestor: sem grupo Sistema');
+assert.ok(!html.includes('href="/admin/tickets"'), 'gestor: sem link Tickets');
+assert.ok(html.includes('href="/admin/avisos"'), 'gestor: mantém Comunicações');
+assert.ok(html.includes('href="/admin/fornecedores"'), 'gestor: mantém Fornecedores');
+html = layout({ ...ctxGestor, condominioAtivo: { role: 'admin' } });
+assert.ok(html.includes('href="/admin/emails"'), 'admin: link Emails presente');
+assert.ok(html.includes('sidebar-group-title">Sistema'), 'admin: grupo Sistema presente');
+
 console.log('✓ Todas as vistas da convocatória renderizam corretamente.');
