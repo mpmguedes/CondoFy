@@ -1,0 +1,51 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <nav class="small mb-1" aria-label="breadcrumb">
+      <a href="/admin/documentos" class="text-decoration-none">Biblioteca</a>
+      <span class="text-muted mx-1">/</span>
+      <a href="/admin/documentos?pasta=recibos" class="text-decoration-none">Recibos de Pagamento</a>
+      <span class="text-muted mx-1">/</span>
+      <span class="text-muted">{{ano}}</span>
+    </nav>
+    <h1>Recibos de Pagamento — {{ano}}</h1>
+  </div>
+  <a href="/admin/documentos?pasta=recibos" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar aos anos</a>
+</div>
+
+{{#if linhas}}
+<div class="card">
+  <ul class="list-group list-group-flush">
+    {{#each linhas}}
+    <li class="list-group-item">
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <div class="flex-grow-1" style="min-width:220px">
+          <div class="fw-semibold">{{codigo}}{{#if fracao}} · Fração {{fracao}}{{/if}}</div>
+          {{#if periodos}}<div class="small text-muted">{{periodos}}{{#if valor}} · {{eur valor}}{{/if}}</div>{{/if}}
+          <div class="small text-muted">
+            {{#if uid}}UID {{uid}}{{/if}}{{#if enviado}} · <span class="text-success">Enviado</span>{{else}} · <span class="text-secondary">Não enviado</span>{{/if}}
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-1">
+          {{#if reciboPdf}}<a href="{{reciboPdf}}" target="_blank" class="btn btn-sm btn-primary">Ver PDF</a>{{/if}}
+          <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="material-symbols-outlined">more_vert</span></button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              {{#if url}}<li><a class="dropdown-item" href="{{url}}" target="_blank" rel="noopener">Abrir ficheiro</a></li>{{/if}}
+              <li><a class="dropdown-item" href="/admin/documentos/{{id}}/email">Enviar por email</a></li>
+              <li><hr class="dropdown-divider" /></li>
+              <li>
+                <form action="/admin/documentos/{{id}}/eliminar" method="POST" onsubmit="return confirm('Eliminar este documento?');">
+                  <button class="dropdown-item text-danger">Eliminar</button>
+                </form>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </li>
+    {{/each}}
+  </ul>
+</div>
+{{else}}
+<div class="alert alert-light border small">Sem recibos de {{ano}}.</div>
+{{/if}}

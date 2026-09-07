@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const { Op } = require('sequelize');
-const { Documento, Pessoa, Categoria, DocumentoCategoria } = require('../models');
+const { Documento, Pessoa, Categoria, DocumentoCategoria, Recibo, Fracao, Quota } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
@@ -103,6 +103,74 @@ router.get('/documentos', async (req, res) => {
     : pasta
       ? mapa[pasta]
       : null;
+
+  // ── Recibos de Pagamento: navegação UX por anos (sem tabela técnica) ──
+  if (rotulo === 'Recibos de Pagamento') {
+    const anoRecibos = parseInt(req.query.ano, 10) || null;
+    if (!anoRecibos) {
+      const dados = await Documento.findAll({
+        where: { condominio_id: req.condominioId, pasta: 'recibos', data: { [Op.ne]: null } },
+        attributes: ['data'],
+        raw: true,
+      });
+      const porAno = new Map();
+      for (const d of dados) {
+        const ano = d.data ? new Date(d.data).getFullYear() : null;
+        if (!ano) continue;
+        porAno.set(ano, (porAno.get(ano) || 0) + 1);
+      }
+      const anos = [...porAno.entries()].map(([value, n]) => ({ ano: value, n })).sort((a, b) => b.ano - a.ano);
+      return res.render('admin/documentos/recibos-anos', {
+        titulo: 'Recibos de Pagamento',
+        anos,
+        driveLigado: drive.isConfigured(),
+      });
+    }
+
+    const inicio = `${anoRecibos}-01-01`;
+    const fim = `${anoRecibos}-12-31`;
+    const docs = await Documento.findAll({
+      where: { condominio_id: req.condominioId, pasta: 'recibos', data: { [Op.between]: [inicio, fim] } },
+      order: [['data', 'DESC'], ['id', 'DESC']],
+    });
+    const codigos = docs.map((d) => d.numero_documento).filter(Boolean);
+    const recibos = codigos.length
+      ? await Recibo.findAll({
+          where: { condominio_id: req.condominioId, codigo: { [Op.in]: codigos } },
+          include: [
+            { model: Fracao, as: 'fracao' },
+            { model: Quota, as: 'quotas', through: { attributes: [] }, attributes: ['mes', 'ano'] },
+          ],
+        })
+      : [];
+    const reciboPorCodigo = new Map(recibos.map((r) => [r.codigo, r]));
+    const MESES_CURTO = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    const linhas = docs.map((doc) => {
+      const rec = doc.numero_documento ? reciboPorCodigo.get(doc.numero_documento) : null;
+      const periodos = rec
+        ? [...new Set((rec.quotas || []).map((q) => `${MESES_CURTO[q.mes - 1]} ${q.ano}`))]
+        : [];
+      return {
+        id: doc.id,
+        url: doc.url,
+        drive_status: doc.drive_status,
+        codigo: rec ? rec.codigo : doc.numero_documento || doc.nome,
+        fracao: rec && rec.fracao ? rec.fracao.designacao : null,
+        periodos: periodos.join(', '),
+        valor: rec ? rec.valor : null,
+        uid: rec ? rec.codigo_verificacao : null,
+        enviado: rec ? Boolean(rec.enviado_at) : false,
+        reciboPdf: rec && rec.id ? `/admin/quotas/recibos/${rec.id}/pdf` : null,
+      };
+    });
+    return res.render('admin/documentos/recibos', {
+      titulo: 'Recibos de Pagamento',
+      ano: anoRecibos,
+      linhas,
+      driveLigado: drive.isConfigured(),
+    });
+  }
+
   const documentos = await Documento.findAll({
     where,
     include: [{ model: Categoria, as: 'categorias', through: { attributes: [] }, required: false }],

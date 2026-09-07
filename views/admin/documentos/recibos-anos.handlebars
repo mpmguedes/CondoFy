@@ -1,0 +1,32 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <nav class="small mb-1" aria-label="breadcrumb">
+      <a href="/admin/documentos" class="text-decoration-none">Biblioteca</a>
+      <span class="text-muted mx-1">/</span>
+      <span class="text-muted">Recibos de Pagamento</span>
+    </nav>
+    <h1>Recibos de Pagamento</h1>
+    <p class="subtitle mb-0">Escolha o ano para consultar os recibos</p>
+  </div>
+  <a href="/admin/documentos" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar à biblioteca</a>
+</div>
+
+{{#if anos}}
+<div class="row g-3">
+  {{#each anos}}
+  <div class="col-12 col-sm-6 col-lg-4">
+    <a href="/admin/documentos?pasta=recibos&ano={{ano}}" class="card doc-card h-100 text-decoration-none">
+      <div class="card-body d-flex align-items-center justify-content-between">
+        <div>
+          <h2 class="h5 mb-1">{{ano}}</h2>
+          <div class="text-muted small">{{n}} {{#if (eq n 1)}}recibo{{else}}recibos{{/if}}</div>
+        </div>
+        <span class="material-symbols-outlined doc-card-seta">arrow_forward</span>
+      </div>
+    </a>
+  </div>
+  {{/each}}
+</div>
+{{else}}
+<div class="alert alert-light border small">Ainda não existem recibos nesta biblioteca.</div>
+{{/if}}

@@ -343,4 +343,17 @@ html = layout({ body: 'ok', user: { nome: 'Ana', role: 'condomino' }, isAdmin: f
 assert.ok(html.includes('href="/condomino/quotas"'), 'sidebar condómino: Quotas');
 assert.ok(html.includes('href="/condomino/recibos"'), 'sidebar condómino: Recibos');
 
+// 19. Recibos de Pagamento (biblioteca) — anos e listagem UX
+const recAnos = handlebars.compile(ler('admin/documentos/recibos-anos.handlebars'));
+html = recAnos({ anos: [{ ano: 2026, n: 3 }, { ano: 2025, n: 0 }], driveLigado: true });
+assert.ok(html.includes('2026'), 'recibos anos: ano presente');
+assert.ok(!html.includes('Pasta') && !html.includes('Drive') && !html.includes('Categorias'), 'recibos anos: sem colunas técnicas');
+const recLista = handlebars.compile(ler('admin/documentos/recibos.handlebars'));
+html = recLista({ ano: 2026, linhas: [{ id: 9, codigo: 'RCP-2026-0003', fracao: 'A', periodos: 'Jul 2026', valor: 61.22, uid: '2026-D44450A9', enviado: true, reciboPdf: '/admin/quotas/recibos/3/pdf', url: null }], driveLigado: true });
+assert.ok(html.includes('RCP-2026-0003') && html.includes('Fração A'), 'recibos lista: número e fração');
+assert.ok(html.includes('2026-D44450A9'), 'recibos lista: UID');
+assert.ok(html.includes('Ver PDF'), 'recibos lista: Ver PDF');
+assert.ok(!html.includes('<th>Pasta</th>') && !html.includes('<th>Drive</th>'), 'recibos lista: sem colunas técnicas');
+assert.ok(html.includes('Voltar aos anos'), 'recibos lista: voltar aos anos');
+
 console.log('✓ Todas as vistas da convocatória renderizam corretamente.');
