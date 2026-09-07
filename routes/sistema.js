@@ -1,10 +1,12 @@
 const express = require('express');
 const { AuditLog, User } = require('../models');
-const { eAdmin } = require('../helpers/eAdmin');
+const tenant = require('../helpers/tenant');
 const { executarBackup } = require('../jobs/backup');
 
 const router = express.Router();
-router.use(eAdmin);
+// Sistema (auditoria/backup) — módulo de plataforma/condomínio admin.
+router.use(tenant.comCondominioAtivo);
+router.use(tenant.comPapel('admin'));
 
 router.get('/auditoria', async (req, res) => {
   const logs = await AuditLog.findAll({

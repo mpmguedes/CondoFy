@@ -16,6 +16,7 @@ const {
   User,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
+const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const drive = require('../helpers/drive');
 const mailer = require('../helpers/mailer');
@@ -23,7 +24,10 @@ const { compor: comporEmail } = require('../helpers/email-templates');
 const { getCondominio } = require('../helpers/condominio');
 
 const router = express.Router();
-router.use(eAdmin);
+// Isolamento: exige condomínio ativo e papel gestor/admin (o catálogo de
+// fornecedores mantém-se partilhado do operador, decisão documentada).
+router.use(tenant.comCondominioAtivo);
+router.use(tenant.comPapel('gestor'));
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -309,6 +313,7 @@ router.post('/fornecedores/:id/pagamentos/:pid/comprovativo', upload.single('fic
     const up = await drive.uploadArquivo({ nome: req.file.originalname, mimeType: req.file.mimetype, buffer: req.file.buffer, parentFolderId: pastas.subpastaId });
 
     const documento = await Documento.create({
+      condominio_id: req.condominioId,
       tipo: 'comprovativo',
       nome: `Comprovativo ${fornecedor.nome || ''} — ${pagamento.referencia || pagamento.id}`.trim(),
       pasta: 'fornecedores',

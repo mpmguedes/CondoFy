@@ -5,6 +5,7 @@ const express = require('express');
 const { Op } = require('sequelize');
 const { EmailFila, Documento, Aviso, User } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
+const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const mailer = require('../helpers/mailer');
 const {
@@ -16,7 +17,9 @@ const {
 const { listarPreferencias, guardarPreferencias } = require('../helpers/notificacoes');
 
 const router = express.Router();
-router.use(eAdmin);
+// Central de emails (fila + SMTP) — módulo de plataforma/condomínio admin.
+router.use(tenant.comCondominioAtivo);
+router.use(tenant.comPapel('admin'));
 
 const ESTADOS_LABEL = {
   pendente: 'Pendente',
