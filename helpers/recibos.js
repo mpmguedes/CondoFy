@@ -236,10 +236,11 @@ async function pagamentosDasQuotas(quotaIds) {
 //  · pode      — disponível > 0 (pode ser emitido; parciais suportados).
 // Devolve sempre TODAS as quotas (meses sem pagamento incluídos) para a
 // interface mostrar a situação completa; a seleção só é permitida quando pode.
-async function quotasComSaldo({ fracaoId, ano } = {}) {
+async function quotasComSaldo({ fracaoId, ano, condominioId } = {}) {
   const where = { estado: { [Op.ne]: 'anulada' } };
   if (fracaoId) where.fracao_id = fracaoId;
   if (ano) where.ano = ano;
+  if (condominioId) where.condominio_id = condominioId; // isolamento por condomínio
   const quotas = await Quota.findAll({ where, order: [['ano', 'ASC'], ['mes', 'ASC']] });
   if (!quotas.length) return [];
   const ids = quotas.map((q) => q.id);
@@ -275,8 +276,8 @@ async function mesesPorEmitir(fracaoId, { ano } = {}) {
 //  · Pago / Enviado: totais confirmados (e parcela já enviada em recibos);
 //  · Por emitir: soma do valor disponível (pago − coberto por recibos válidos);
 //  · meses: número de meses com valor disponível.
-async function porEmitirPorFracao({ ano } = {}) {
-  const linhas = await quotasComSaldo({ ano });
+async function porEmitirPorFracao({ ano, condominioId } = {}) {
+  const linhas = await quotasComSaldo({ ano, condominioId });
   if (!linhas.length) return [];
   const ids = [...new Set(linhas.map((l) => l.quotaId))];
   const enviadoMap = await coberturaPorQuota(ids, { apenasEnviados: true });
@@ -306,8 +307,8 @@ async function porEmitirPorFracao({ ano } = {}) {
 // Detalhe por fração: TODOS os meses (com quota) com pago/coberto/disponível —
 // para a modal mostrar a situação completa (meses sem disponível visíveis e
 // não selecionáveis).
-async function detalhePorEmitir({ ano } = {}) {
-  const linhas = await quotasComSaldo({ ano });
+async function detalhePorEmitir({ ano, condominioId } = {}) {
+  const linhas = await quotasComSaldo({ ano, condominioId });
   const mapa = new Map();
   for (const l of linhas) {
     if (!mapa.has(l.fracaoId)) mapa.set(l.fracaoId, []);

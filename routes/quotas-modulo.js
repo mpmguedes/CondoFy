@@ -38,9 +38,11 @@ const { resolverDestinatarios } = require('../helpers/avisos');
 const { enfileirarEmail } = require('../helpers/email-fila');
 const comprovativos = require('../helpers/comprovativos');
 const recibosHelper = require('../helpers/recibos');
+const tenant = require('../helpers/tenant');
 
 const router = express.Router();
 router.use(eAdmin);
+router.use(tenant.comCondominioAtivo); // condomínio ativo (sessão) validado
 
 // Abreviaturas PT-PT de meses.
 const MESES_CURTO = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -82,9 +84,11 @@ function descricaoFracao(fracao) {
 }
 
 // Anos disponíveis nas quotas.
-async function anosDisponiveis() {
+async function anosDisponiveis(condominioId) {
+  const where = condominioId ? { condominio_id: condominioId } : {};
   const linhas = await Quota.findAll({
     attributes: [[sequelize.fn('DISTINCT', sequelize.col('ano')), 'ano']],
+    where,
     order: [['ano', 'DESC']],
     raw: true,
   });
@@ -96,15 +100,25 @@ function toArray(value) {
   return Array.isArray(value) ? value : [value];
 }
 
+// Guarda IDOR: o registo tem de pertencer ao condomínio ativo da sessão.
+function pertenceAoAtivo(req, registo) {
+  return Boolean(registo && tenant.pertenceAoAtivo(registo.condominio_id, req));
+}
+function redirecionarSemAcesso(req, res, destino = '/admin/quotas/comprovativos') {
+  req.flash('error_msg', 'Não tem acesso a este registo.');
+  return res.redirect(destino);
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // TAB 1 — MAPA DE QUOTAS (página principal do módulo)
 // ═══════════════════════════════════════════════════════════════════
 router.get('/quotas', async (req, res) => {
+  const cid = req.condominioId;
   const ano = parseInt(req.query.ano, 10) || new Date().getFullYear();
   const [fracoes, quotasAno, anos, quotaConfig] = await Promise.all([
-    Fracao.findAll({ order: [['designacao', 'ASC']] }),
-    Quota.findAll({ where: { ano } }),
-    anosDisponiveis(),
+    Fracao.findAll({ where: { condominio_id: cid }, order: [['designacao', 'ASC']] }),
+    Quota.findAll({ where: { ano, condominio_id: cid } }),
+    anosDisponiveis(cid),
     getQuotaConfig(),
   ]);
 
@@ -162,13 +176,13 @@ router.get('/quotas', async (req, res) => {
   const [totalQuotaPorFracao, totalPagoPorFracao] = await Promise.all([
     Quota.findAll({
       attributes: ['fracao_id', [sequelize.fn('SUM', sequelize.col('valor')), 'total']],
-      where: { estado: { [Op.ne]: 'anulada' } },
+      where: { estado: { [Op.ne]: 'anulada' }, condominio_id: cid },
       group: ['fracao_id'],
       raw: true,
     }),
     Pagamento.findAll({
       attributes: ['fracao_id', [sequelize.fn('SUM', sequelize.col('valor')), 'total']],
-      where: { estado: 'confirmado' },
+      where: { estado: 'confirmado', condominio_id: cid },
       group: ['fracao_id'],
       raw: true,
     }),
@@ -177,7 +191,7 @@ router.get('/quotas', async (req, res) => {
   const pagoFracaoC = new Map(totalPagoPorFracao.map((r) => [r.fracao_id, toCents(Number(r.total) || 0)]));
 
   // Meses do ano por emitir (para a coluna "Por emitir" — valor real + meses).
-  const linhasDetalhe = await recibosHelper.detalhePorEmitir({ ano });
+  const linhasDetalhe = await recibosHelper.detalhePorEmitir({ ano, condominioId: cid });
   const porEmitirAno = new Map();
   for (const grupo of linhasDetalhe) {
     const disponiveis = grupo.meses.filter((m) => m.pode);
@@ -230,7 +244,7 @@ router.get('/quotas', async (req, res) => {
   const anoFim = `${ano}-12-31`;
   const recebidoAnoC = toCents(
     await Pagamento.sum('valor', {
-      where: { estado: 'confirmado', data_pagamento: { [Op.between]: [anoInicio, anoFim] } },
+      where: { estado: 'confirmado', condominio_id: cid, data_pagamento: { [Op.between]: [anoInicio, anoFim] } },
     })
   );
   const totalQuotasGlobalC = [...dividaC.values()].reduce((s, v) => s + v, 0);
@@ -321,6 +335,7 @@ router.post('/quotas/transitados', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 router.get('/quotas/comprovativos', async (req, res) => {
   const pagamentos = await Pagamento.findAll({
+    where: { condominio_id: req.condominioId },
     include: [
       { model: Fracao, as: 'fracao' },
       { model: MetodoPagamento, as: 'metodo_pagamento' },
@@ -376,6 +391,7 @@ router.post('/pagamentos/:id/comprovativo', (req, res) => {
         req.flash('error_msg', 'Pagamento não encontrado.');
         return res.redirect('/admin/quotas/comprovativos');
       }
+      if (!pertenceAoAtivo(req, pagamento)) return redirecionarSemAcesso(req, res);
       if (err) {
         req.flash('error_msg', err.message || 'Erro ao carregar o comprovativo.');
         return res.redirect('/admin/quotas/comprovativos');
@@ -412,6 +428,7 @@ function validarComprovativoRedirect(req, res) {
 router.post('/pagamentos/:id/comprovativo/validar', async (req, res) => {
   const pagamento = await Pagamento.findByPk(req.params.id);
   if (!pagamento) return validarComprovativoRedirect(req, res);
+  if (!pertenceAoAtivo(req, pagamento)) return redirecionarSemAcesso(req, res);
   await pagamento.update({ comprovativo_estado: 'validado', comprovativo_motivo: null, comprovativo_data: new Date() });
   await audit({ userId: req.user.id, acao: 'validar_comprovativo', entidade: 'Pagamento', entidadeId: pagamento.id }).catch(() => {});
   req.flash('success_msg', 'Comprovativo validado.');
@@ -421,6 +438,7 @@ router.post('/pagamentos/:id/comprovativo/validar', async (req, res) => {
 router.post('/pagamentos/:id/comprovativo/rejeitar', async (req, res) => {
   const pagamento = await Pagamento.findByPk(req.params.id);
   if (!pagamento) return validarComprovativoRedirect(req, res);
+  if (!pertenceAoAtivo(req, pagamento)) return redirecionarSemAcesso(req, res);
   await pagamento.update({
     comprovativo_estado: 'rejeitado',
     comprovativo_motivo: String(req.body.motivo || '').trim() || null,
@@ -438,6 +456,7 @@ router.get('/pagamentos/:id/comprovativo', async (req, res) => {
     req.flash('error_msg', 'Sem comprovativo associado.');
     return res.redirect('/admin/quotas/comprovativos');
   }
+  if (!pertenceAoAtivo(req, pagamento)) return redirecionarSemAcesso(req, res);
   if (!comprovativos.existeComprovativo(pagamento)) {
     req.flash('error_msg', 'Ficheiro do comprovativo não encontrado.');
     return res.redirect('/admin/quotas/comprovativos');
@@ -456,10 +475,12 @@ router.get('/pagamentos/:id/comprovativo', async (req, res) => {
 // TAB 3 — RECIBOS (por emitir + emitidos + envio + anulação)
 // ═══════════════════════════════════════════════════════════════════
 router.get('/quotas/recibos', async (req, res) => {
+  const cid = req.condominioId;
   const emitirFracaoId = parseInt(req.query.emitir, 10) || null;
 
-  // Recibos emitidos (com histórico de anulados).
+  // Recibos emitidos (com histórico de anulados) — apenas deste condomínio.
   const recibos = await Recibo.findAll({
+    where: { condominio_id: cid },
     include: [
       { model: Fracao, as: 'fracao' },
       {
@@ -507,9 +528,9 @@ router.get('/quotas/recibos', async (req, res) => {
   };
 
   // "Por emitir": frações com valor pago ainda não coberto (valor real + meses).
-  const detalhe = await recibosHelper.detalhePorEmitir();
+  const detalhe = await recibosHelper.detalhePorEmitir({ condominioId: cid });
   const detalhePorFracao = new Map(detalhe.map((d) => [d.fracaoId, d.meses]));
-  const mapaFracao = new Map((await Fracao.findAll()).map((f) => [f.id, f]));
+  const mapaFracao = new Map((await Fracao.findAll({ where: { condominio_id: cid } })).map((f) => [f.id, f]));
 
   // Cada mês com quota: quota/pago/já-em-recibo/disponível (€) + pode.
   const enriquecerMes = (m) => ({
@@ -525,7 +546,7 @@ router.get('/quotas/recibos', async (req, res) => {
     pode: m.pode,
   });
 
-  const porEmitir = (await recibosHelper.porEmitirPorFracao())
+  const porEmitir = (await recibosHelper.porEmitirPorFracao({ condominioId: cid }))
     .map((l) => {
       const f = mapaFracao.get(l.fracaoId);
       const meses = (detalhePorFracao.get(l.fracaoId) || []).map(enriquecerMes);
@@ -565,7 +586,7 @@ router.post('/quotas/recibos/emitir', async (req, res) => {
     if (!quotaIds.length) throw new Error('Selecione pelo menos um mês.');
 
     const mesesCompletos = [];
-    const quotas = await Quota.findAll({ where: { id: { [Op.in]: quotaIds }, fracao_id: fracaoId } });
+    const quotas = await Quota.findAll({ where: { id: { [Op.in]: quotaIds }, fracao_id: fracaoId, condominio_id: req.condominioId } });
     const porId = new Map(quotas.map((q) => [q.id, q]));
     for (const qid of quotaIds) {
       const q = porId.get(qid);
@@ -630,14 +651,16 @@ router.post('/quotas/recibos/emitir', async (req, res) => {
 // Anulação de recibo (mantém histórico; devolve os meses a "por emitir").
 router.post('/quotas/recibos/:id/anular', async (req, res) => {
   try {
-    const anulado = await recibosHelper.anularRecibo(req.params.id, {
+    const recibo = await Recibo.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
+    if (!recibo) return redirecionarSemAcesso(req, res, '/admin/quotas/recibos');
+    const anulado = await recibosHelper.anularRecibo(recibo.id, {
       motivo: String(req.body.motivo || '').trim(),
     });
     await audit({
       userId: req.user.id,
       acao: 'anular_recibo',
       entidade: 'Recibo',
-      entidadeId: req.params.id,
+      entidadeId: recibo.id,
       detalhes: { motivo: String(req.body.motivo || '').trim() || null },
     }).catch(() => {});
     req.flash('success_msg', anulado ? 'Recibo anulado. Os meses abrangidos voltaram a estar disponíveis para emissão.' : 'O recibo já se encontrava anulado.');
@@ -702,7 +725,8 @@ async function pdfDeRecibo(recibo, condRow) {
 // Ver PDF do recibo.
 router.get('/quotas/recibos/:id/pdf', async (req, res) => {
   try {
-    const recibo = await Recibo.findByPk(req.params.id, {
+    const recibo = await Recibo.findOne({
+      where: { id: req.params.id, condominio_id: req.condominioId },
       include: [
         { model: Fracao, as: 'fracao' },
         {
@@ -716,7 +740,7 @@ router.get('/quotas/recibos/:id/pdf', async (req, res) => {
       req.flash('error_msg', 'Recibo não encontrado.');
       return res.redirect('/admin/quotas/recibos');
     }
-    const condominio = await getCondominio();
+    const condominio = await getCondominio({ id: req.condominioId });
     const condRow = condominio && condominio.toJSON ? condominio.toJSON() : condominio || {};
     const buffer = await pdfDeRecibo(recibo, condRow);
     res.setHeader('Content-Type', 'application/pdf');
@@ -731,7 +755,7 @@ router.get('/quotas/recibos/:id/pdf', async (req, res) => {
 
 // Envia (enfileira) o recibo por email usando os contactos do condómino.
 // Devolve { destinatarios: n } quando enfileirado; lança erro se sem email.
-async function enfileirarReciboPorEmail(reciboId, { protocol, host, userId }) {
+async function enfileirarReciboPorEmail(reciboId, { protocol, host, userId, condominioId }) {
   const recibo = await Recibo.findByPk(reciboId, {
     include: [
       { model: Fracao, as: 'fracao' },
@@ -746,7 +770,7 @@ async function enfileirarReciboPorEmail(reciboId, { protocol, host, userId }) {
 
   const baseUrl = `${protocol}://${host}`;
   const urlOnline = `${baseUrl}/admin/quotas/recibos/${recibo.id}/pdf`;
-  const condEm = await getCondominio();
+  const condEm = await getCondominio({ id: condominioId || recibo.condominio_id });
   const condNome = condEm && condEm.designacao ? String(condEm.designacao) : '';
   const adminNome = condEm && condEm.administracao_nome ? String(condEm.administracao_nome) : '';
   const condRow = condEm && condEm.toJSON ? condEm.toJSON() : condEm || {};
@@ -785,7 +809,9 @@ async function enfileirarReciboPorEmail(reciboId, { protocol, host, userId }) {
 // Envio do recibo por email (contactos existentes do condómino).
 router.post('/quotas/recibos/:id/enviar', async (req, res) => {
   try {
-    const r = await enfileirarReciboPorEmail(req.params.id, {
+    const recibo = await Recibo.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
+    if (!recibo) return redirecionarSemAcesso(req, res, '/admin/quotas/recibos');
+    const r = await enfileirarReciboPorEmail(recibo.id, {
       protocol: req.protocol,
       host: req.get('host'),
       userId: req.user.id,
@@ -794,7 +820,7 @@ router.post('/quotas/recibos/:id/enviar', async (req, res) => {
       userId: req.user.id,
       acao: 'enviar_recibo_email',
       entidade: 'Recibo',
-      entidadeId: req.params.id,
+      entidadeId: recibo.id,
       detalhes: { destinatarios: r.destinatarios },
     }).catch(() => {});
     req.flash('success_msg', `Recibo ${r.codigo} enviado para ${r.destinatarios} destinatário(s) (fila de email).`);

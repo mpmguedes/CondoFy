@@ -79,6 +79,60 @@ async function eAdminCondominio(req) {
   return papel === 'admin';
 }
 
+// ── Middlewares de isolamento por condomínio ativo ─────────────────
+// Valida que o utilizador tem condomínio ativo na sessão (associação real)
+// e expõe req.condominioId + req.papelCondominio.
+function comCondominioAtivo(req, res, next) {
+  return (async () => {
+    if (!req.isAuthenticated()) {
+      req.flash('error_msg', 'Inicie sessão para continuar.');
+      return res.redirect('/login');
+    }
+    const id = ativo(req);
+    if (!id) {
+      req.flash('error_msg', 'Selecione um condomínio para continuar.');
+      return res.redirect('/condominios');
+    }
+    if (eSuperAdmin(req.user)) {
+      // Super Admin em modo suporte — o condomínio tem de existir e estar ativo.
+      const cond = await Condominio.findOne({ where: { id, estado: 'ativo' } });
+      if (!cond) {
+        req.flash('error_msg', 'O condomínio selecionado não está disponível.');
+        return res.redirect('/condominios');
+      }
+      req.condominioId = id;
+      req.papelCondominio = 'admin';
+      return next();
+    }
+    const associacao = await associacaoAtiva(req.user.id, id);
+    if (!associacao) {
+      delete req.session.condominio_ativo_id;
+      req.flash('error_msg', 'Não tem acesso a este condomínio.');
+      return res.redirect('/condominios');
+    }
+    req.condominioId = id;
+    req.papelCondominio = associacao.role;
+    return next();
+  })();
+}
+
+// Permite apenas papéis ≥ mínimo (usa req.papelCondominio definido antes).
+function comPapel(minimo) {
+  return (req, res, next) => {
+    const papel = req.papelCondominio || (req.user && eSuperAdmin(req.user) ? 'admin' : null);
+    if (!papel || !papelMaiorOuIgual(papel, minimo)) {
+      req.flash('error_msg', 'Não tem permissões para esta ação.');
+      return res.redirect('/');
+    }
+    return next();
+  };
+}
+
+// true quando o registo pertence ao condomínio ativo (proteção IDOR).
+function pertenceAoAtivo(condominioIdRegisto, req) {
+  return Number(condominioIdRegisto) === Number(req.condominioId || ativo(req));
+}
+
 module.exports = {
   eSuperAdmin,
   ativo,
@@ -89,6 +143,9 @@ module.exports = {
   podeEscrever,
   papelMaiorOuIgual,
   eAdminCondominio,
+  comCondominioAtivo,
+  comPapel,
+  pertenceAoAtivo,
   PAPEIS,
   UserCondominio,
   User,
