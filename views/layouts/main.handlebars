@@ -98,10 +98,6 @@
             <span class="material-symbols-outlined">calendar_month</span>
             <span class="sidebar-item-text">Calendário</span>
           </a>
-          <a class="sidebar-item {{isActive currentPath '/admin/amenidades'}}" href="/admin/amenidades" title="Amenidades">
-            <span class="material-symbols-outlined">weekend</span>
-            <span class="sidebar-item-text">Amenidades</span>
-          </a>
         </div>
 
         <div class="sidebar-group">
@@ -210,6 +206,7 @@
         {{> _flash}}
         {{{body}}}
       </main>
+      {{> _bottom-bar}}
     </div>
   </div>
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>

@@ -25,6 +25,8 @@ module.exports = {
   checked: (a) => (a ? 'checked' : ''),
   // isActive(path, prefix) → 'active' se o path atual pertence a esse item
   isActive: (path, prefix) => (path === prefix || (path && path.startsWith(prefix + '/'))) ? 'active' : '',
+  // startsPath(path, prefix) → true se o path é igual ou está dentro do prefixo
+  startsPath: (path, prefix) => Boolean(path && (path === prefix || path.startsWith(prefix + '/'))),
   // saudacao() → cumprimento conforme a hora do dia
   saudacao: () => {
     const h = new Date().getHours();

@@ -21,6 +21,7 @@ const parciais = {
   '_convocatoria-documento': ler('partials/_convocatoria-documento.handlebars'),
   '_convocatoria-editor': ler('partials/_convocatoria-editor.handlebars'),
   '_condominio-seletor': ler('partials/_condominio-seletor.handlebars'),
+  '_bottom-bar': ler('partials/_bottom-bar.handlebars'),
 };
 Object.keys(parciais).forEach((k) => handlebars.registerPartial(k, parciais[k]));
 
@@ -255,5 +256,17 @@ html = layout({ body: 'ok', user: { nome: 'Ana', role: 'condomino', role_global:
 assert.ok(html.includes('href="/admin/global"'), 'sidebar: link Global visível para super_admin');
 html = layout({ body: 'ok', user: { nome: 'Bruno', role: 'admin' }, isAdmin: true, condominio: contexto.condominio, currentPath: '/admin/quotas' });
 assert.ok(!html.includes('Administração global'), 'sidebar: grupo Global oculto sem super_admin');
+
+// 13. Navegação — Amenidades removida da sidebar; barra inferior móvel
+html = layout({ body: 'ok', user: { nome: 'Ana', role: 'admin' }, isAdmin: true, condominio: contexto.condominio, currentPath: '/admin/quotas/recibos' });
+assert.ok(!html.includes('/admin/amenidades'), 'nav: Amenidades removida da sidebar');
+assert.ok(html.includes('mobile-bottom-bar'), 'nav: barra inferior móvel presente');
+assert.ok(html.includes('href="/admin/quotas/recibos"'), 'nav: atalho Recibos na barra inferior');
+assert.ok(html.includes('href="/admin/quotas"'), 'nav: atalho Quotas na barra inferior');
+assert.ok(html.includes('href="/admin/avisos"'), 'nav: atalho Avisos na barra inferior');
+assert.ok(html.includes('mb-item-ativo'), 'nav: item ativo assinalado na barra inferior (recibos)');
+html = layout({ body: 'ok', user: { nome: 'Bruno', role: 'condomino' }, isAdmin: false, condominio: contexto.condominio, currentPath: '/condomino' });
+assert.ok(html.includes('href="/condominios"'), 'nav condómino: atalho Os meus condomínios na barra inferior');
+assert.ok(html.includes('href="/condomino"'), 'nav condómino: atalho A minha área na barra inferior');
 
 console.log('✓ Todas as vistas da convocatória renderizam corretamente.');

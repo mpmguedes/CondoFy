@@ -1,0 +1,24 @@
+{{!-- Barra inferior para ecrãs pequenos (acessos rápidos). --}}
+<nav class="mobile-bottom-bar" aria-label="Acessos rápidos">
+  {{#if isAdmin}}
+  <a class="mb-item {{#if (eq currentPath '/admin')}}mb-item-ativo{{/if}}" href="/admin" title="Painel">
+    <span class="material-symbols-outlined">dashboard</span><span class="mb-label">Painel</span>
+  </a>
+  <a class="mb-item {{#if (and (startsPath currentPath '/admin/quotas') (not (startsPath currentPath '/admin/quotas/recibos')))}}mb-item-ativo{{/if}}" href="/admin/quotas" title="Quotas">
+    <span class="material-symbols-outlined">receipt_long</span><span class="mb-label">Quotas</span>
+  </a>
+  <a class="mb-item {{#if (startsPath currentPath '/admin/quotas/recibos')}}mb-item-ativo{{/if}}" href="/admin/quotas/recibos" title="Recibos">
+    <span class="material-symbols-outlined">confirmation_number</span><span class="mb-label">Recibos</span>
+  </a>
+  <a class="mb-item {{#if (startsPath currentPath '/admin/avisos')}}mb-item-ativo{{/if}}" href="/admin/avisos" title="Comunicações">
+    <span class="material-symbols-outlined">campaign</span><span class="mb-label">Avisos</span>
+  </a>
+  {{else}}
+  <a class="mb-item {{#if (startsPath currentPath '/condomino')}}mb-item-ativo{{/if}}" href="/condomino" title="A minha área">
+    <span class="material-symbols-outlined">home</span><span class="mb-label">A minha área</span>
+  </a>
+  <a class="mb-item {{#if (startsPath currentPath '/condominios')}}mb-item-ativo{{/if}}" href="/condominios" title="Os meus condomínios">
+    <span class="material-symbols-outlined">apartment</span><span class="mb-label">Condomínios</span>
+  </a>
+  {{/if}}
+</nav>
