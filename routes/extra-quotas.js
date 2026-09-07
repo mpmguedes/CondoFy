@@ -9,6 +9,7 @@ const {
   MovimentoBancario,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
+const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const { toCents, fromCents } = require('../helpers/money');
 const { MESES } = require('../helpers/dates');
@@ -18,6 +19,8 @@ const { criarMovimento } = require('../helpers/movimentos');
 const router = express.Router();
 
 router.use(eAdmin);
+// Isolamento: condomínio ativo (sessão validada) em todas as operações.
+router.use(tenant.comCondominioAtivo);
 
 function parseDecimal(value, fallback = 0) {
   if (value === null || value === undefined || value === '') return fallback;
@@ -63,7 +66,7 @@ async function resumoExtra(extra) {
 // LISTA
 // ═══════════════════════════════════════════════════════════════════
 router.get('/quotas-extra', async (req, res) => {
-  const extras = await ExtraQuota.findAll({ order: [['created_at', 'DESC']] });
+  const extras = await ExtraQuota.findAll({ where: { condominio_id: req.condominioId }, order: [['created_at', 'DESC']] });
   const linhas = [];
   for (const e of extras) {
     const r = await resumoExtra(e);
@@ -76,7 +79,7 @@ router.get('/quotas-extra', async (req, res) => {
 // NOVA
 // ═══════════════════════════════════════════════════════════════════
 router.get('/quotas-extra/nova', async (req, res) => {
-  const fracoes = await Fracao.findAll({ where: { estado: 'ativo' }, order: [['designacao', 'ASC']] });
+  const fracoes = await Fracao.findAll({ where: { estado: 'ativo', condominio_id: req.condominioId }, order: [['designacao', 'ASC']] });
   const ano = new Date().getFullYear();
   res.render('admin/quotas-extra/form', {
     titulo: 'Nova quota extraordinária',
@@ -126,9 +129,9 @@ router.post('/quotas-extra', async (req, res) => {
     return res.redirect('/admin/quotas-extra/nova');
   }
 
-  const fracoes = await Fracao.findAll({ where: { id: { [Op.in]: fracaoIds }, estado: 'ativo' } });
+  const fracoes = await Fracao.findAll({ where: { id: { [Op.in]: fracaoIds }, estado: 'ativo', condominio_id: req.condominioId } });
   if (fracoes.length === 0) {
-    req.flash('error_msg', 'Nenhuma fração selecionada está ativa.');
+    req.flash('error_msg', 'Nenhuma fração selecionada está ativa neste condomínio.');
     return res.redirect('/admin/quotas-extra/nova');
   }
 
@@ -136,6 +139,7 @@ router.post('/quotas-extra', async (req, res) => {
   try {
     const extra = await ExtraQuota.create(
       {
+        condominio_id: req.condominioId,
         designacao,
         valor_total: valorTotal,
         metodo_divisao: metodo,
@@ -192,7 +196,7 @@ router.post('/quotas-extra', async (req, res) => {
 // DETALHE
 // ═══════════════════════════════════════════════════════════════════
 router.get('/quotas-extra/:id', async (req, res) => {
-  const extra = await ExtraQuota.findByPk(req.params.id);
+  const extra = await ExtraQuota.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
   if (!extra) return res.redirect('/admin/quotas-extra');
 
   const parcelas = await ExtraQuotaParcela.findAll({
@@ -200,7 +204,7 @@ router.get('/quotas-extra/:id', async (req, res) => {
     include: [{ model: Fracao, as: 'fracao' }],
     order: [['fracao_id', 'ASC'], ['parcela_numero', 'ASC']],
   });
-  const contas = await ContaBancaria.findAll({ where: { ativa: true }, order: [['nome', 'ASC']] });
+  const contas = await ContaBancaria.findAll({ where: { ativa: true, condominio_id: req.condominioId }, order: [['nome', 'ASC']] });
 
   // Agrupa parcelas por fração para a vista.
   const porFracao = new Map();
@@ -236,7 +240,7 @@ router.get('/quotas-extra/:id', async (req, res) => {
 
 // Anula a quota extra e todas as suas parcelas (não apaga dados).
 router.post('/quotas-extra/:id/anular', async (req, res) => {
-  const extra = await ExtraQuota.findByPk(req.params.id);
+  const extra = await ExtraQuota.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
   if (!extra) return res.redirect('/admin/quotas-extra');
 
   const t = await sequelize.transaction();
@@ -255,9 +259,17 @@ router.post('/quotas-extra/:id/anular', async (req, res) => {
 
 // Marca uma parcela como paga e cria o movimento bancário de entrada.
 router.post('/quotas-extra/parcelas/:id/pagar', async (req, res) => {
-  const parcela = await ExtraQuotaParcela.findByPk(req.params.id, { include: [{ model: ExtraQuota, as: 'extra_quota' }] });
-  if (!parcela) return res.redirect('/admin/quotas-extra');
-  const contaId = parseInt(req.body.conta_bancaria_id, 10) || null;
+  const parcela = await ExtraQuotaParcela.findByPk(req.params.id, {
+    include: [{ model: ExtraQuota, as: 'extra_quota', where: { condominio_id: req.condominioId } }],
+  });
+  if (!parcela || !parcela.extra_quota) return res.redirect('/admin/quotas-extra');
+  // Conta bancária tem de pertencer ao condomínio ativo (guarda IDOR).
+  const contaIdRaw = parseInt(req.body.conta_bancaria_id, 10) || null;
+  let contaId = null;
+  if (contaIdRaw) {
+    const conta = await ContaBancaria.findOne({ where: { id: contaIdRaw, condominio_id: req.condominioId, ativa: true } });
+    contaId = conta ? conta.id : null;
+  }
 
   if (parcela.estado === 'anulada') {
     req.flash('error_msg', 'Parcela anulada não pode ser paga.');
@@ -296,8 +308,10 @@ router.post('/quotas-extra/parcelas/:id/pagar', async (req, res) => {
 
 // Reverte o pagamento de uma parcela e anula o movimento associado.
 router.post('/quotas-extra/parcelas/:id/desfazer', async (req, res) => {
-  const parcela = await ExtraQuotaParcela.findByPk(req.params.id);
-  if (!parcela) return res.redirect('/admin/quotas-extra');
+  const parcela = await ExtraQuotaParcela.findByPk(req.params.id, {
+    include: [{ model: ExtraQuota, as: 'extra_quota', where: { condominio_id: req.condominioId } }],
+  });
+  if (!parcela || !parcela.extra_quota) return res.redirect('/admin/quotas-extra');
   if (parcela.estado !== 'paga') {
     return res.redirect(`/admin/quotas-extra/${parcela.extra_quota_id}`);
   }
