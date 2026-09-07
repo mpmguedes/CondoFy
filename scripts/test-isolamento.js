@@ -118,6 +118,8 @@ const ISOLADOS = [
   'orcamento.js',
   'configuracao.js',
   'financeiro.js',
+  'emails.js',
+  'fornecedores.js',
 ];
 
 // Módulos com gate de papel (gestor ou admin conforme a operação de gestão).
@@ -132,6 +134,8 @@ const COM_PAPEL = {
   'financeiro.js': 'gestor',
   'admin.js': 'admin',
   'configuracao.js': 'admin',
+  'emails.js': 'admin',
+  'fornecedores.js': 'gestor',
 };
 
 function testarRoutersIsolados() {
@@ -153,13 +157,51 @@ function testarRoutersIsolados() {
       assert.ok(src.includes('status(404)'), 'condomino: acesso indevido devolve 404');
       assert.ok(!src.includes('findByPk(req.params.id'), 'condomino: sem findByPk direto do browser');
     }
+
+    // Central de Emails e Fornecedores: listagens/ações obrigatoriamente
+    // filtradas pelo condomínio ativo; nenhum id do browser carrega por
+    // findByPk sem escopo de condomínio.
+    if (nome === 'emails.js' || nome === 'fornecedores.js') {
+      assert.ok(src.includes('condominio_id: req.condominioId') || src.includes('escopoFornecedor(req') || src.includes('filtroFilaPorCondominio'),
+        `${nome}: consultas filtram pelo condomínio ativo`);
+      assert.ok(!src.includes('findByPk(req.params'), `${nome}: sem findByPk direto do id do browser`);
+      if (nome === 'emails.js') {
+        assert.ok(src.includes('filtroFilaPorCondominio'), 'emails: usa o filtro da fila por condomínio');
+      }
+      if (nome === 'fornecedores.js') {
+        assert.ok(src.includes('condominio_id: req.condominioId'), 'fornecedores: cria/consulta com condominio_id ativo');
+        assert.ok(src.includes('carregarFornecedor') || src.includes('carregarPagamento'), 'fornecedores: carregadores escopados');
+      }
+    }
   }
+}
+
+// ── 4. Invariantes de dados dos módulos recém-isolados ───────────────
+function testarModelosComCondominio() {
+  for (const [nome, Modelo] of [
+    ['EmailFila', models.EmailFila],
+    ['Fornecedor', models.Fornecedor],
+    ['PagamentoFornecedor', models.PagamentoFornecedor],
+  ]) {
+    const attrs = Modelo && Modelo.rawAttributes ? Modelo.rawAttributes : {};
+    assert.ok(attrs.condominio_id, `${nome}: modelo tem condominio_id`);
+  }
+
+  // Regra de ouro: um registo pertence ao condomínio quando os ids coincidem;
+  // NULL/outro condomínio nunca pertence.
+  const reqA = { condominioId: 1 };
+  const reqB = { condominioId: 2 };
+  assert.strictEqual(tenant.pertenceAoAtivo(1, reqA), true, 'email/fornecedor de A em A → pertence');
+  assert.strictEqual(tenant.pertenceAoAtivo(1, reqB), false, 'email/fornecedor de A em B → não pertence');
+  assert.strictEqual(tenant.pertenceAoAtivo(2, reqB), true, 'de B em B → pertence');
+  assert.strictEqual(tenant.pertenceAoAtivo(null, reqA), false, 'registo órfão (NULL) → nunca pertence a um condomínio');
 }
 
 async function main() {
   await testarComCondominioAtivo();
   testarPapeis();
   testarRoutersIsolados();
+  testarModelosComCondominio();
   console.log('✓ Testes de isolamento/permissões passaram (sem base de dados).');
 }
 

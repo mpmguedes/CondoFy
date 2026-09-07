@@ -475,6 +475,7 @@ router.post('/documentos/:id/email', async (req, res) => {
       documento_id: documento.id,
       entidade_tipo: 'Documento',
       entidade_id: documento.id,
+      condominioId: req.condominioId,
       userId: req.user.id,
       anexoNome: comAnexo ? anexoNome : null,
       anexoBuffer: comAnexo ? anexoBuffer : null,

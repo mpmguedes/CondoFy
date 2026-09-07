@@ -5,6 +5,9 @@ module.exports = (sequelize) => {
     'Fornecedor',
     {
       id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+      // Condomínio dono do fornecedor (cada condomínio tem a sua lista).
+      // NULL = histórico ambíguo/global — não listado nas áreas dos condomínios.
+      condominio_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       nome: { type: DataTypes.STRING(191), allowNull: false },
       nif: { type: DataTypes.STRING(20), allowNull: true },
       morada: { type: DataTypes.STRING(255), allowNull: true },

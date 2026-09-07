@@ -5,6 +5,9 @@ module.exports = (sequelize) => {
     'EmailFila',
     {
       id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+      // Condomínio dono do email (persistido na criação). NULL = histórico
+      // órfão/ambíguo — nunca aparece nas áreas dos condomínios.
+      condominio_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       destinatario_email: { type: DataTypes.STRING(191), allowNull: false },
       destinatario_nome: { type: DataTypes.STRING(191), allowNull: true },
       assunto: { type: DataTypes.STRING(255), allowNull: false },

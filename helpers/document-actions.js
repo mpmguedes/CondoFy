@@ -152,6 +152,7 @@ async function enviarDocumentoPorEmail({
   mensagem,
   documentoId,
   avisoId,
+  condominioId,
   userId,
   imediato = false,
   anexos = [],
@@ -164,6 +165,9 @@ async function enviarDocumentoPorEmail({
   if (documentoId) documento = await Documento.findByPk(documentoId).catch(() => null);
   const linkDoc = documento && documento.url ? documento.url : null;
   const corpo = [mensagem || '', linkDoc ? `\n\nDocumento: ${linkDoc}` : ''].filter(Boolean).join('');
+  // Condomínio do envio: explícito ou o do documento (relação segura); nunca
+  // deduzido de nomes/primeiro registo. Persistido na EmailFila quando criada.
+  const cidEmail = condominioId || (documento ? documento.condominio_id : null);
 
   const resultados = [];
   for (const dest of lista) {
@@ -175,6 +179,7 @@ async function enviarDocumentoPorEmail({
         corpo: corpo || mensagem || null,
         documento_id: documentoId || null,
         aviso_id: avisoId || null,
+        condominio_id: cidEmail ? Number(cidEmail) : null,
         tipo: 'normal',
       };
       try {
@@ -186,7 +191,7 @@ async function enviarDocumentoPorEmail({
           attachments: anexos,
           // Remetente contextualizado pelo condomínio do documento (quando
           // aplicável) — nunca o "primeiro condomínio" da BD.
-          condominioId: documento ? documento.condominio_id : undefined,
+          condominioId: cidEmail || undefined,
         });
         await EmailFila.create({
           ...reg,
@@ -209,6 +214,7 @@ async function enviarDocumentoPorEmail({
         corpo_html: corpoHtml || null,
         documento_id: documentoId || null,
         aviso_id: avisoId || null,
+        condominioId: cidEmail,
       });
       resultados.push({ email: dest.email, nome: dest.nome, ok: true, enfileirado: true });
     }

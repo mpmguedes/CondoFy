@@ -13,6 +13,7 @@ const {
   cancelarEmail,
   contarFila,
   reenviarEmail,
+  filtroFilaPorCondominio,
 } = require('../helpers/email-fila');
 const { listarPreferencias, guardarPreferencias } = require('../helpers/notificacoes');
 
@@ -57,10 +58,15 @@ router.get('/emails', async (req, res) => {
     : 'todas';
   const tipo = Object.prototype.hasOwnProperty.call(ORIGENS, req.query.tipo) ? req.query.tipo : 'todas';
 
+  // Isolamento: a Central de Emails vive dentro de um condomínio — todas as
+  // listagens/contagens filtram condominio_id = ativo. Registos históricos sem
+  // condominio_id (NULL/órfãos) nunca aparecem aqui.
+  const baseCondominio = filtroFilaPorCondominio(req.condominioId);
+
   const [contagens, emails, estadoSmtp, preferencias] = await Promise.all([
-    contarFila(),
+    contarFila({ condominioId: req.condominioId }),
     EmailFila.findAll({
-      where: { ...filtraPor(filtro), ...filtraOrigem(tipo) },
+      where: { ...baseCondominio, ...filtraPor(filtro), ...filtraOrigem(tipo) },
       include: [
         { model: Documento, as: 'documento', attributes: ['id', 'nome', 'drive_status', 'url'] },
         { model: Aviso, as: 'aviso', attributes: ['id', 'assunto'] },
@@ -165,16 +171,20 @@ router.post('/emails/teste', async (req, res) => {
   res.redirect('/admin/emails#smtp');
 });
 
-// ── Ações sobre a fila ──────────────────────────────────────────────
+// ── Ações sobre a fila (sempre isoladas por condomínio ativo) ───────
 router.post('/emails/:id/reenviar', async (req, res) => {
   try {
-    const item = await EmailFila.findByPk(req.params.id);
-    if (!item) throw new Error('Registo não encontrado.');
-    await reenviarEmail(item.id);
+    // O helper verifica que o email pertence ao condomínio ativo; um email de
+    // outro condomínio é tratado como inexistente (nunca é reenviado).
+    const item = await EmailFila.findOne({
+      where: { id: req.params.id, condominio_id: req.condominioId },
+    });
+    if (!item) throw new Error('Registo de email não encontrado neste condomínio.');
+    await reenviarEmail(item.id, req.condominioId);
     if (item.estado === 'enviado') {
       req.flash('success_msg', 'Email marcado para reenvio (será processado pela fila).');
     } else {
-      await processarEmailUnico(item.id);
+      await processarEmailUnico(item.id, req.condominioId);
       req.flash('success_msg', `Email reenviado para ${item.destinatario_email}.`);
     }
     await audit({ userId: req.user.id, acao: 'reenviar_email', entidade: 'EmailFila', entidadeId: item.id }).catch(() => {});
@@ -187,10 +197,15 @@ router.post('/emails/:id/reenviar', async (req, res) => {
 
 router.post('/emails/:id/cancelar', async (req, res) => {
   try {
-    const item = await cancelarEmail(req.params.id);
+    const item = await EmailFila.findOne({
+      where: { id: req.params.id, condominio_id: req.condominioId },
+    });
+    if (!item) throw new Error('Registo de email não encontrado neste condomínio.');
+    await cancelarEmail(item.id, req.condominioId);
     await audit({ userId: req.user.id, acao: 'cancelar_email', entidade: 'EmailFila', entidadeId: item.id }).catch(() => {});
     req.flash('success_msg', 'Email cancelado.');
   } catch (err) {
+    console.error('[emails] cancelar:', err.message);
     req.flash('error_msg', `Não foi possível cancelar: ${err.message}`);
   }
   res.redirect('/admin/emails');

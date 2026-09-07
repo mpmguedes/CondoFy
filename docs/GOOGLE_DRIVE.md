@@ -48,8 +48,9 @@ válida e é reutilizada se existir — nunca são criadas pastas duplicadas.
 > estão (`<raiz>/<ano>/…`), apontados pelos `Documento.drive_file_id` — **não são movidos
 > automaticamente**. Apenas os novos ficheiros passam a usar a árvore do condomínio.
 >
-> **Fornecedores**: o catálogo é partilhado do operador (sem `condominio_id`), mas os
-> comprovativos são documentos do condomínio e ficam na árvore desse condomínio.
+> **Fornecedores**: cada condomínio tem a sua lista de fornecedores
+> (`fornecedores.condominio_id`, migração 065) e os comprovativos são documentos do
+> condomínio — o ficheiro físico fica na árvore desse condomínio.
 
 ## 1. Configuração no Google Cloud Console
 

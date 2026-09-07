@@ -888,6 +888,8 @@ async function enfileirarReciboPorEmail(reciboId, { protocol, host, userId, cond
       corpo_html: tpl.html,
       entidade_tipo: 'Recibo',
       entidade_id: recibo.id,
+      // Relação persistida: o recibo pertence ao condomínio (nunca NULL).
+      condominioId: recibo.condominio_id || condominioId,
       userId,
       anexoNome,
       anexoBuffer: buffer,

@@ -64,6 +64,9 @@ function escaparHtml(t) {
 }
 
 // Enfileira um email normal da aplicação.
+// `condominioId`: condomínio dono do email (persistido na fila). Quando o
+// envio está associado a um condomínio, o valor é OBRIGATÓRIO — nunca se
+// deduz do primeiro condomínio nem se deixa NULL.
 async function enfileirarEmail({
   destinatario_email,
   destinatario_nome,
@@ -74,6 +77,7 @@ async function enfileirarEmail({
   aviso_id,
   entidade_tipo,
   entidade_id,
+  condominioId,
   userId,
   data_prevista,
   tipo = 'normal',
@@ -96,6 +100,7 @@ async function enfileirarEmail({
     aviso_id: aviso_id || null,
     entidade_tipo: entidade_tipo || null,
     entidade_id: entidade_id || null,
+    condominio_id: condominioId ? Number(condominioId) : null,
     user_id: userId || null,
     tipo: tipo === 'teste' ? 'teste' : 'normal',
     data_prevista: data_prevista || new Date(),
@@ -163,13 +168,19 @@ async function enviarItem(item) {
     attachments.push({ filename: item.anexo_nome || 'documento.pdf', path: item.anexo_caminho });
   }
 
+  // Condomínio do remetente: usa o condominio_id PERSISTIDO na fila (fonte de
+  // verdade); só em registos antigos sem a coluna preenchida (NULL) deriva das
+  // relações seguras. Nunca o condomínio ativo de quem desencadeou o envio.
+  let cid = item.condominio_id ? Number(item.condominio_id) : null;
+  if (!cid) cid = await condominioDoItem(item);
+
   const res = await sendMail({
     to: item.destinatario_email,
     subject: item.assunto,
     text: item.corpo || '',
     html: item.corpo_html || escaparHtml(item.corpo),
     attachments,
-    condominioId: await condominioDoItem(item),
+    condominioId: cid || undefined,
   });
   if (res.enviado) {
     limparAnexo(item.anexo_caminho); // remove cópia local após envio (mantém registo do nome)
@@ -216,19 +227,31 @@ async function processarFilaEmail(limite = 20) {
   return { processados: pendentes.length, enviados, erros, presosRecuperados: presos.length };
 }
 
-// Envia imediatamente UM email da fila (ação "Reenviar" na central).
-async function processarEmailUnico(id) {
+// Carrega um item da fila para GESTÃO manual (reenviar/cancelar) garantindo
+// que pertence ao condomínio indicado (quando o condomínio existe). Um email
+// de outro condomínio é tratado como "não encontrado" (não revela existência).
+async function carregarItemDeGestao(id, condominioId) {
   const item = await EmailFila.findByPk(id);
-  if (!item) throw new Error('Registo de email não encontrado.');
+  if (!item) throw new Error('Registo de email não encontrado neste condomínio.');
+  if (condominioId && Number(item.condominio_id) !== Number(condominioId)) {
+    throw new Error('Registo de email não encontrado neste condomínio.');
+  }
+  return item;
+}
+
+// Envia imediatamente UM email da fila (ação "Reenviar" na central).
+// `condominioId` (opcional): quando presente, o email tem de pertencer a esse
+// condomínio — caso contrário é tratado como inexistente (isolamento).
+async function processarEmailUnico(id, condominioId) {
+  const item = await carregarItemDeGestao(id, condominioId);
   if (item.estado === 'enviado') throw new Error('Este email já foi enviado.');
   await enviarItem(item);
   return item;
 }
 
-// Repõe um email como pendente para nova tentativa manual.
-async function reenviarEmail(id) {
-  const item = await EmailFila.findByPk(id);
-  if (!item) throw new Error('Registo de email não encontrado.');
+// Repõe um email como pendente para nova tentativa manual (isolado por condomínio).
+async function reenviarEmail(id, condominioId) {
+  const item = await carregarItemDeGestao(id, condominioId);
   if (item.estado === 'enviado') {
     await item.update({ estado: 'pendente', tentativas: 0, erro: null, data_enviada: null, message_id: null });
   } else {
@@ -237,23 +260,32 @@ async function reenviarEmail(id) {
   return item;
 }
 
-// Cancela um email ainda não enviado.
-async function cancelarEmail(id) {
-  const item = await EmailFila.findByPk(id);
-  if (!item) throw new Error('Registo de email não encontrado.');
+// Cancela um email ainda não enviado (isolado por condomínio).
+async function cancelarEmail(id, condominioId) {
+  const item = await carregarItemDeGestao(id, condominioId);
   if (item.estado === 'enviado') throw new Error('Este email já foi enviado — não pode ser cancelado.');
   await item.update({ estado: 'cancelado' });
   return item;
 }
 
-// Contagens para a central de emails.
-async function contarFila() {
+// Builder puro do filtro de isolamento da EmailFila (usado pela Central e
+// pelas contagens): qualquer listagem dentro de um condomínio tem de filtrar
+// por condominio_id = ativo. Registos NULL (históricos órfãos) ficam sempre de
+// fora — só os emails do condomínio são devolvidos.
+function filtroFilaPorCondominio(condominioId, extra = {}) {
+  return { condominio_id: condominioId, ...extra };
+}
+
+// Contagens para a central de emails. `condominioId` presente → apenas os
+// emails desse condomínio (registos NULL/órfãos ficam sempre de fora).
+async function contarFila({ condominioId } = {}) {
+  const base = condominioId ? filtroFilaPorCondominio(condominioId) : {};
   const [total, pendentes, enviados, erros, cancelados] = await Promise.all([
-    EmailFila.count(),
-    EmailFila.count({ where: { estado: { [Op.in]: ['pendente', 'a_enviar'] } } }),
-    EmailFila.count({ where: { estado: 'enviado' } }),
-    EmailFila.count({ where: { estado: 'erro' } }),
-    EmailFila.count({ where: { estado: 'cancelado' } }),
+    EmailFila.count({ where: base }),
+    EmailFila.count({ where: { ...base, estado: { [Op.in]: ['pendente', 'a_enviar'] } } }),
+    EmailFila.count({ where: { ...base, estado: 'enviado' } }),
+    EmailFila.count({ where: { ...base, estado: 'erro' } }),
+    EmailFila.count({ where: { ...base, estado: 'cancelado' } }),
   ]);
   return { total, pendentes, enviados, erros, cancelados };
 }
@@ -267,5 +299,6 @@ module.exports = {
   contarFila,
   contextoDoItem,
   modeloPorEntidade,
+  filtroFilaPorCondominio,
   MAX_TENTATIVAS,
 };

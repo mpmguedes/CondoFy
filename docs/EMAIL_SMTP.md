@@ -68,6 +68,13 @@ Estados:
 * **Não envia duplicados**: só estados `pendente`/`erro` são lidos.
 * Na central **Emails** (`/admin/emails`) é possível filtrar (Todas,
   Pendentes, Enviados, Erros, Cancelados), **Reenviar** e **Cancelar**.
+* **Isolamento multi-condomínio**: cada email guarda o condomínio a que pertence
+  (`email_fila.condominio_id`, migração 064). A central, as contagens e as ações
+  (reenviar/cancelar) mostram **apenas os emails do condomínio ativo** — um email
+  de outro condomínio é tratado como inexistente. Registos históricos sem
+  `condominio_id` (órfãos/ambíguos) nunca aparecem nas áreas dos condomínios.
+  O agendador de envio é infraestrutura global: processa os pendentes de todos os
+  condomínios usando o condomínio persistido para o nome do remetente.
 
 ## Enviar documentos por email
 
@@ -91,8 +98,9 @@ comunicações genéricas, sempre em PT-PT:
 
 * **HTML profissional + versão texto**; saudação personalizada
   (“Exmo./Exma. Senhor(a) [Nome]”) ou neutra.
-* **Remetente** (display name): nome da administração → nome do condomínio →
-  “GesCondu” (nunca “CondoFy”).
+* **Remetente** (display name): `displayName` explícito → `smtp_from_name`
+  (override global explícito) → **nome do condomínio do envio** → “GesCondu”
+  (último fallback; nunca “CondoFy” nem o “primeiro condomínio” da BD).
 * **Anexo + link**: o PDF é gerado/obtido por destinatário e anexado ao email;
   o link online é sempre complementar. Se não houver PDF disponível, envia-se
   apenas o link (sem bloquear o envio).

@@ -1,5 +1,11 @@
 // ─────────────────────────────────────────────────────────────────────
 // Fornecedores — CRUD e ficha do fornecedor (despesas, documentos).
+//
+// ISOLAMENTO MULTI-TENANT: cada condomínio tem a SUA lista de fornecedores
+// (fornecedores.condominio_id). Todas as operações usam o condomínio ativo do
+// backend (req.condominioId); um id de outro condomínio é tratado como
+// inexistente (404/redirect). Fornecedores históricos sem condominio_id
+// (ambíguos/globais) nunca aparecem aqui.
 // ─────────────────────────────────────────────────────────────────────
 const express = require('express');
 const multer = require('multer');
@@ -24,8 +30,7 @@ const { compor: comporEmail } = require('../helpers/email-templates');
 const { getCondominio } = require('../helpers/condominio');
 
 const router = express.Router();
-// Isolamento: exige condomínio ativo e papel gestor/admin (o catálogo de
-// fornecedores mantém-se partilhado do operador, decisão documentada).
+// Isolamento: exige condomínio ativo e papel gestor/admin.
 router.use(tenant.comCondominioAtivo);
 router.use(tenant.comPapel('gestor'));
 
@@ -59,9 +64,30 @@ function validarIban(iban) {
   return { ok: true };
 }
 
+// ── Escopos por condomínio ativo (nunca confiar em ids do browser) ──
+function escopoFornecedor(req, extra = {}) {
+  return { condominio_id: req.condominioId, ...extra };
+}
+
+function carregarFornecedor(req) {
+  return Fornecedor.findOne({ where: escopoFornecedor(req, { id: req.params.id }) });
+}
+
+function carregarPagamento(req, incluir = []) {
+  return PagamentoFornecedor.findOne({
+    where: { id: req.params.pid, condominio_id: req.condominioId },
+    include: incluir,
+  });
+}
+
+// Garante que o pagamento pertence ao fornecedor indicado na URL (coerência).
+function pagamentoDoFornecedor(pagamento, fornecedorId) {
+  return Boolean(pagamento && Number(pagamento.fornecedor_id) === Number(fornecedorId));
+}
+
 router.get('/fornecedores', async (req, res) => {
   const filtro = req.query.estado === 'inativos' ? false : req.query.estado === 'todos' ? null : true;
-  const where = filtro === null ? {} : { ativo: filtro };
+  const where = escopoFornecedor(req, filtro === null ? {} : { ativo: filtro });
   const fornecedores = await Fornecedor.findAll({ where, order: [['nome', 'ASC']] });
   res.render('admin/fornecedores/listar', {
     titulo: 'Fornecedores',
@@ -107,8 +133,8 @@ router.post('/fornecedores', async (req, res) => {
       return res.redirect('/admin/fornecedores/novo');
     }
 
-    const fornecedor = await Fornecedor.create(dados);
-    await audit({ userId: req.user.id, acao: 'criar_fornecedor', entidade: 'Fornecedor', entidadeId: fornecedor.id });
+    const fornecedor = await Fornecedor.create({ ...dados, condominio_id: req.condominioId });
+    await audit({ userId: req.user.id, acao: 'criar_fornecedor', entidade: 'Fornecedor', entidadeId: fornecedor.id, detalhes: { condominioId: req.condominioId } });
     req.flash('success_msg', 'Fornecedor criado.');
     res.redirect(`/admin/fornecedores/${fornecedor.id}`);
   } catch (err) {
@@ -119,7 +145,7 @@ router.post('/fornecedores', async (req, res) => {
 });
 
 router.get('/fornecedores/:id/editar', async (req, res) => {
-  const fornecedor = await Fornecedor.findByPk(req.params.id);
+  const fornecedor = await carregarFornecedor(req);
   if (!fornecedor) {
     req.flash('error_msg', 'Fornecedor não encontrado.');
     return res.redirect('/admin/fornecedores');
@@ -128,7 +154,7 @@ router.get('/fornecedores/:id/editar', async (req, res) => {
 });
 
 router.post('/fornecedores/:id', async (req, res) => {
-  const fornecedor = await Fornecedor.findByPk(req.params.id);
+  const fornecedor = await carregarFornecedor(req);
   if (!fornecedor) return res.redirect('/admin/fornecedores');
   try {
     const dados = dadosDoFormulario(req.body);
@@ -157,31 +183,31 @@ router.post('/fornecedores/:id', async (req, res) => {
 });
 
 router.post('/fornecedores/:id/eliminar', async (req, res) => {
-  const fornecedor = await Fornecedor.findByPk(req.params.id);
+  const fornecedor = await carregarFornecedor(req);
   if (fornecedor) {
     await fornecedor.destroy();
-    await audit({ userId: req.user.id, acao: 'eliminar_fornecedor', entidade: 'Fornecedor', entidadeId: req.params.id });
+    await audit({ userId: req.user.id, acao: 'eliminar_fornecedor', entidade: 'Fornecedor', entidadeId: req.params.id, detalhes: { condominioId: req.condominioId } }).catch(() => {});
     req.flash('success_msg', 'Fornecedor eliminado (as despesas associadas ficam sem fornecedor).');
   }
   res.redirect('/admin/fornecedores');
 });
 
 router.get('/fornecedores/:id', async (req, res) => {
-  const fornecedor = await Fornecedor.findByPk(req.params.id);
+  const fornecedor = await carregarFornecedor(req);
   if (!fornecedor) return res.redirect('/admin/fornecedores');
 
   const [despesas, documentos, pagamentos] = await Promise.all([
     Despesa.findAll({
-      where: { fornecedor_id: fornecedor.id },
+      where: escopoFornecedor(req, { fornecedor_id: fornecedor.id }),
       include: [{ model: Categoria, as: 'categoria' }],
       order: [['data', 'DESC'], ['id', 'DESC']],
     }),
     Documento.findAll({
-      where: { entidade_tipo: 'Fornecedor', entidade_id: fornecedor.id },
+      where: escopoFornecedor(req, { entidade_tipo: 'Fornecedor', entidade_id: fornecedor.id }),
       order: [['id', 'DESC']],
     }),
     PagamentoFornecedor.findAll({
-      where: { fornecedor_id: fornecedor.id },
+      where: escopoFornecedor(req, { fornecedor_id: fornecedor.id }),
       include: [
         { model: MetodoPagamento, as: 'metodo_pagamento' },
         { model: Documento, as: 'comprovativo' },
@@ -191,12 +217,13 @@ router.get('/fornecedores/:id', async (req, res) => {
     }),
   ]);
 
-  // Comunicações: emails associados aos pagamentos deste fornecedor.
+  // Comunicações: emails associados aos pagamentos deste fornecedor (sempre
+  // dentro do condomínio ativo).
   let comunicacoes = [];
   const idsPagamentos = pagamentos.map((p) => p.id);
   if (idsPagamentos.length) {
     comunicacoes = await EmailFila.findAll({
-      where: { entidade_tipo: 'PagamentoFornecedor', entidade_id: { [Op.in]: idsPagamentos } },
+      where: escopoFornecedor(req, { entidade_tipo: 'PagamentoFornecedor', entidade_id: { [Op.in]: idsPagamentos } }),
       include: [{ model: User, as: 'utilizador', attributes: ['id', 'nome'] }],
       order: [['id', 'DESC']],
       limit: 20,
@@ -217,12 +244,12 @@ router.get('/fornecedores/:id', async (req, res) => {
 // PAGAMENTOS A FORNECEDORES
 // ═══════════════════════════════════════════════════════════════════
 router.get('/fornecedores/:id/pagamentos/novo', async (req, res) => {
-  const fornecedor = await Fornecedor.findByPk(req.params.id);
+  const fornecedor = await carregarFornecedor(req);
   if (!fornecedor) return res.redirect('/admin/fornecedores');
   const [despesas, metodos, contas] = await Promise.all([
-    Despesa.findAll({ where: { fornecedor_id: fornecedor.id }, order: [['data', 'DESC']] }),
+    Despesa.findAll({ where: escopoFornecedor(req, { fornecedor_id: fornecedor.id }), order: [['data', 'DESC']] }),
     MetodoPagamento.findAll({ where: { ativo: true }, order: [['nome', 'ASC']] }),
-    ContaBancaria.findAll({ where: { ativa: true }, order: [['nome', 'ASC']] }),
+    ContaBancaria.findAll({ where: escopoFornecedor(req, { ativa: true }), order: [['nome', 'ASC']] }),
   ]);
   res.render('admin/fornecedores/pagamento-novo', {
     titulo: 'Novo pagamento a fornecedor',
@@ -236,23 +263,35 @@ router.get('/fornecedores/:id/pagamentos/novo', async (req, res) => {
 });
 
 router.post('/fornecedores/:id/pagamentos', async (req, res) => {
-  const fornecedor = await Fornecedor.findByPk(req.params.id);
+  const fornecedor = await carregarFornecedor(req);
   if (!fornecedor) return res.redirect('/admin/fornecedores');
   try {
+    // Despesa e conta bancária têm de pertencer ao condomínio ativo (IDOR).
+    let despesaId = parseInt(req.body.despesa_id, 10) || null;
+    if (despesaId) {
+      const despesa = await Despesa.findOne({ where: escopoFornecedor(req, { id: despesaId }) });
+      despesaId = despesa ? despesa.id : null;
+    }
+    let contaId = parseInt(req.body.conta_bancaria_id, 10) || null;
+    if (contaId) {
+      const conta = await ContaBancaria.findOne({ where: escopoFornecedor(req, { id: contaId }) });
+      contaId = conta ? conta.id : null;
+    }
     const pagamento = await PagamentoFornecedor.create({
+      condominio_id: req.condominioId,
       fornecedor_id: fornecedor.id,
-      despesa_id: parseInt(req.body.despesa_id, 10) || null,
+      despesa_id: despesaId,
       valor: parseFloat(String(req.body.valor).replace(',', '.')) || 0,
       data_pagamento: req.body.data_pagamento || new Date(),
       metodo_pagamento_id: parseInt(req.body.metodo_pagamento_id, 10) || null,
-      conta_bancaria_id: parseInt(req.body.conta_bancaria_id, 10) || null,
+      conta_bancaria_id: contaId,
       iban_utilizado: req.body.iban_utilizado || fornecedor.iban || null,
       referencia: req.body.referencia || null,
       observacoes: req.body.observacoes || null,
       estado: ['pendente', 'pago', 'cancelado'].includes(req.body.estado) ? req.body.estado : 'pendente',
       created_by: req.user.id,
     });
-    await audit({ userId: req.user.id, acao: 'criar_pagamento_fornecedor', entidade: 'PagamentoFornecedor', entidadeId: pagamento.id });
+    await audit({ userId: req.user.id, acao: 'criar_pagamento_fornecedor', entidade: 'PagamentoFornecedor', entidadeId: pagamento.id, detalhes: { condominioId: req.condominioId } });
     req.flash('success_msg', 'Pagamento registado.');
     res.redirect(`/admin/fornecedores/${fornecedor.id}/pagamentos/${pagamento.id}`);
   } catch (err) {
@@ -263,29 +302,29 @@ router.post('/fornecedores/:id/pagamentos', async (req, res) => {
 });
 
 router.post('/fornecedores/:id/pagamentos/:pid/estado', async (req, res) => {
-  const pagamento = await PagamentoFornecedor.findByPk(req.params.pid);
-  if (!pagamento) return res.redirect('/admin/fornecedores');
+  const pagamento = await carregarPagamento(req);
+  if (!pagamento || !pagamentoDoFornecedor(pagamento, req.params.id)) {
+    return res.redirect('/admin/fornecedores');
+  }
   if (['pendente', 'pago', 'cancelado'].includes(req.body.estado)) {
     await pagamento.update({ estado: req.body.estado });
-    await audit({ userId: req.user.id, acao: 'estado_pagamento_fornecedor', entidade: 'PagamentoFornecedor', entidadeId: pagamento.id, detalhes: { estado: req.body.estado } }).catch(() => {});
+    await audit({ userId: req.user.id, acao: 'estado_pagamento_fornecedor', entidade: 'PagamentoFornecedor', entidadeId: pagamento.id, detalhes: { estado: req.body.estado, condominioId: req.condominioId } }).catch(() => {});
   }
-  res.redirect(`/admin/fornecedores/${pagamento.fornecedor_id}/pagamentos/${pagamento.id}`);
+  res.redirect(`/admin/fornecedores/${req.params.id}/pagamentos/${pagamento.id}`);
 });
 
 router.get('/fornecedores/:id/pagamentos/:pid', async (req, res) => {
-  const pagamento = await PagamentoFornecedor.findByPk(req.params.pid, {
-    include: [
-      { model: Fornecedor, as: 'fornecedor' },
-      { model: Despesa, as: 'despesa' },
-      { model: MetodoPagamento, as: 'metodo_pagamento' },
-      { model: ContaBancaria, as: 'conta_bancaria' },
-      { model: Documento, as: 'comprovativo' },
-      { model: User, as: 'criador', attributes: ['id', 'nome'] },
-    ],
-  });
-  if (!pagamento) return res.redirect('/admin/fornecedores');
+  const pagamento = await carregarPagamento(req, [
+    { model: Fornecedor, as: 'fornecedor' },
+    { model: Despesa, as: 'despesa' },
+    { model: MetodoPagamento, as: 'metodo_pagamento' },
+    { model: ContaBancaria, as: 'conta_bancaria' },
+    { model: Documento, as: 'comprovativo' },
+    { model: User, as: 'criador', attributes: ['id', 'nome'] },
+  ]);
+  if (!pagamento || !pagamentoDoFornecedor(pagamento, req.params.id)) return res.redirect('/admin/fornecedores');
   const envios = await EmailFila.findAll({
-    where: { entidade_tipo: 'PagamentoFornecedor', entidade_id: pagamento.id },
+    where: escopoFornecedor(req, { entidade_tipo: 'PagamentoFornecedor', entidade_id: pagamento.id }),
     include: [{ model: User, as: 'utilizador', attributes: ['id', 'nome'] }],
     order: [['id', 'DESC']],
   });
@@ -300,10 +339,8 @@ router.get('/fornecedores/:id/pagamentos/:pid', async (req, res) => {
 
 // Comprovativo: upload (guardado no Google Drive e registado como Documento).
 router.post('/fornecedores/:id/pagamentos/:pid/comprovativo', upload.single('ficheiro'), async (req, res) => {
-  const pagamento = await PagamentoFornecedor.findByPk(req.params.pid, {
-    include: [{ model: Fornecedor, as: 'fornecedor' }],
-  });
-  if (!pagamento) return res.redirect('/admin/fornecedores');
+  const pagamento = await carregarPagamento(req, [{ model: Fornecedor, as: 'fornecedor' }]);
+  if (!pagamento || !pagamentoDoFornecedor(pagamento, req.params.id)) return res.redirect('/admin/fornecedores');
   const fornecedor = pagamento.fornecedor || {};
   try {
     if (!req.file) throw new Error('Selecione o ficheiro do comprovativo.');
@@ -343,14 +380,12 @@ router.post('/fornecedores/:id/pagamentos/:pid/comprovativo', upload.single('fic
 
 // Enviar comprovativo ao fornecedor (formulário pré-preenchido).
 router.get('/fornecedores/:id/pagamentos/:pid/comprovativo/enviar', async (req, res) => {
-  const pagamento = await PagamentoFornecedor.findByPk(req.params.pid, {
-    include: [
-      { model: Fornecedor, as: 'fornecedor' },
-      { model: Despesa, as: 'despesa' },
-      { model: Documento, as: 'comprovativo' },
-    ],
-  });
-  if (!pagamento) return res.redirect('/admin/fornecedores');
+  const pagamento = await carregarPagamento(req, [
+    { model: Fornecedor, as: 'fornecedor' },
+    { model: Despesa, as: 'despesa' },
+    { model: Documento, as: 'comprovativo' },
+  ]);
+  if (!pagamento || !pagamentoDoFornecedor(pagamento, req.params.id)) return res.redirect('/admin/fornecedores');
   const fornecedor = pagamento.fornecedor || {};
   // Contexto do condomínio ATIVO (o módulo exige condomínio ativo na sessão).
   const condominio = (await getCondominio({ id: req.condominioId })) || {};
@@ -368,13 +403,11 @@ router.get('/fornecedores/:id/pagamentos/:pid/comprovativo/enviar', async (req, 
 });
 
 router.post('/fornecedores/:id/pagamentos/:pid/comprovativo/enviar', async (req, res) => {
-  const pagamento = await PagamentoFornecedor.findByPk(req.params.pid, {
-    include: [
-      { model: Fornecedor, as: 'fornecedor' },
-      { model: Documento, as: 'comprovativo' },
-    ],
-  });
-  if (!pagamento) return res.redirect('/admin/fornecedores');
+  const pagamento = await carregarPagamento(req, [
+    { model: Fornecedor, as: 'fornecedor' },
+    { model: Documento, as: 'comprovativo' },
+  ]);
+  if (!pagamento || !pagamentoDoFornecedor(pagamento, req.params.id)) return res.redirect('/admin/fornecedores');
   const fornecedor = pagamento.fornecedor || {};
   try {
     const para = String(req.body.para || '').trim();
@@ -427,6 +460,7 @@ router.post('/fornecedores/:id/pagamentos/:pid/comprovativo/enviar', async (req,
       documento_id: pagamento.comprovativo.id,
       entidade_tipo: 'PagamentoFornecedor',
       entidade_id: pagamento.id,
+      condominio_id: req.condominioId,
       user_id: req.user.id,
       tipo: 'normal',
       estado: 'enviado',

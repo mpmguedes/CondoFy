@@ -34,10 +34,13 @@ Ordem e propósito:
 | `…061-classificar-documentos` | Classificação central dos documentos (tipo → pasta lógica via `resolverPastaDocumento`) e reclassificação dos registos existentes; aditiva. |
 | `…062-documento-disponivel-condominos` | `documentos.disponivel_condominos` (default `0`): visibilidade na área do Condómino; convocatórias/atas/assembleias ficam disponíveis automaticamente. |
 | `…063-add-condominio-drive-folder` | `condominios.drive_folder_id`: pasta raiz do condomínio no Google Drive (árvore `<raiz>/<Condomínio>/<ano>/…`). **Aditiva** — ficheiros antigos não são movidos. |
+| `…064-email-fila-condominio` | `email_fila.condominio_id` (persistido na criação) — a Central de Emails/contagens/ações passam a ser por condomínio. Backfill por relações inequívocas (documento/aviso/entidade com `condominio_id`); sem relação ou conflito → `NULL` (órfão, nunca listado nos condomínios). |
+| `…065-fornecedor-condominio` | `fornecedores.condominio_id` — cada condomínio tem a sua lista. Backfill só quando TODAS as provas (despesas/documentos/pagamentos) apontam para o mesmo condomínio; ambíguos/globais ficam `NULL` (fora das listas; decisão manual de migração no relatório). |
+| `…066-pagamento-fornecedor-condominio` | `pagamentos_fornecedores.condominio_id` (cadeia Fornecedor → Pagamento → Documento coerente). Backfill via fornecedor/comprovativo/despesa; sem relação → `NULL`. |
 
 Reverter (só se necessário, sempre com backup):
 ```bash
-npm run db:migrate:undo   # uma migração de cada vez, da 063 para a 056
+npm run db:migrate:undo   # uma migração de cada vez, da 066 para a 056
 ```
 
 ---
@@ -75,8 +78,11 @@ npm run db:migrate:undo   # uma migração de cada vez, da 063 para a 056
 
 ## 5. Notas de decisão (comportamento atual)
 
-- **Dados-mestre partilhados do operador**: categorias, fornecedores, métodos de
-  pagamento, configuração SMTP/Drive — sem `condominio_id` (decisão documentada).
+- **Dados-mestre partilhados do operador**: categorias, métodos de pagamento,
+  configuração SMTP e infraestrutura Google Drive — sem `condominio_id`
+  (decisão documentada). **Fornecedores, pagamentos a fornecedores e a fila de
+  emails deixaram de ser partilhados**: passam a ter `condominio_id`
+  (migrações 064–066) e vivem dentro do condomínio ativo.
 - **Eliminação de condomínio** (Super Admin): requer estado `inativo` e confirmação
   `ELIMINAR`; remove as linhas das tabelas de negócio com `condominio_id` (as tabelas
   de junção como `pagamento_quotas`/`recibo_quotas`/`documento_categorias` ficam
@@ -114,25 +120,44 @@ Pontos-chave após aplicar a migração e reiniciar (`systemctl restart condofy.
   o `folderId`). O botão "Criar estrutura" da Configuração cria a árvore do condomínio
   ativo (a pasta `Backups` é sempre global).
 - **Condomínios inativos**: não criam pastas novas; pastas existentes não são apagadas.
-- **Fornecedores (decisão documentada)**: o *catálogo* de fornecedores mantém-se
-  partilhado do operador (tabela `fornecedores` sem `condominio_id`), mas os
-  *comprovativos* são documentos por condomínio (`documentos.condominio_id` = condomínio
-  ativo no upload) e por isso o ficheiro físico fica na árvore do condomínio.
+- **Fornecedores**: cada condomínio tem a sua lista (`fornecedores.condominio_id`,
+  migração 065) e os comprovativos são documentos do condomínio — o ficheiro físico
+  fica na árvore desse condomínio.
 - **SMTP / remetente**: configuração SMTP continua global. Prioridade do nome visível do
   remetente: `displayName` explícito → `smtp_from_name` explícito → **contexto do
   condomínio** (quando conhecido: convites, recibos, avisos, documentos, fornecedores) →
-  `GesCondu`. Nunca usa "o primeiro condomínio da BD". Para a fila de emails sem relação
-  com documento/aviso/recibo, o contexto por coluna própria em `email_fila` fica como
-  evolução P2.
+  `GesCondu`. Nunca usa "o primeiro condomínio da BD". O contexto é persistido na própria
+  fila (`email_fila.condominio_id`, migração 064) — no processamento posterior já não se
+  depende de relações indiretas.
 
 ---
 
-## 7. Validação automática (sem BD)
+## 7. Isolamento de Emails e Fornecedores (migrações 064–066)
+
+- **Central de Emails por condomínio**: a listagem, os filtros (estado/origem), as
+  contagens e as ações (reenviar/cancelar) filtram `email_fila.condominio_id` = condomínio
+  ativo. Registos históricos sem `condominio_id` (órfãos/ambíguos) **não aparecem em
+  nenhuma área de condomínio** — não são inventados nem atribuídos ao "primeiro
+  condomínio". O scheduler continua global (infraestrutura) e envia os itens pendentes de
+  todos os condomínios com o remetente do condomínio persistido.
+- **Fornecedores por condomínio**: listar/criar/editar/eliminar/detalhe, despesas,
+  pagamentos, comprovativos, emails e os dropdowns de despesas usam
+  `fornecedores.condominio_id`/`pagamentos_fornecedores.condominio_id` = ativo. Aceder por
+  id a um registo de outro condomínio devolve "não encontrado" (404/redirect).
+- **Histórico**: só recebeu `condominio_id` o que era inequívoco (todas as relações com o
+  mesmo condomínio). Fornecedores partilhados/ambíguos ficaram `NULL` e **não são
+  listados** — exigem decisão manual (estratégia segura no relatório de implementação);
+  nada foi movido/eliminado.
+
+---
+
+## 8. Validação automática (sem BD)
 
 ```bash
 node scripts/check-templates.js
 node scripts/test-vistas.js
 node scripts/test-isolamento.js
+node scripts/test-multitenant-emails-fornecedores.js
 node scripts/test-seguranca.js
 node scripts/test-convites.js
 node scripts/test-2fa.js

@@ -186,6 +186,7 @@ router.post('/avisos/:id/enviar', async (req, res) => {
       aviso_id: aviso.id,
       entidade_tipo: 'Aviso',
       entidade_id: aviso.id,
+      condominioId: req.condominioId,
       userId: req.user.id,
       anexoNome: comAnexo ? anexoNome : null,
       anexoBuffer: comAnexo ? anexoBuffer : null,

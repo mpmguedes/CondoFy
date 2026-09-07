@@ -73,15 +73,17 @@ router.get('/', async (req, res) => {
       resumoCondominio(req.condominioId),
       Quota.findAll({ where: onde(req, { estado: { [Op.ne]: 'anulada' } }) }),
       BackupLog.findOne({ order: [['id', 'DESC']] }),
-      EmailFila.count({ where: { estado: 'pendente' } }),
-      EmailFila.count({ where: { estado: 'erro' } }),
+      // Contagens da fila isoladas por condomínio (nunca globais).
+      EmailFila.count({ where: onde(req, { estado: 'pendente' }) }),
+      EmailFila.count({ where: onde(req, { estado: 'erro' }) }),
     ]);
 
   const [nDriveDocs, nEmailsEnviados, nFornecedores, nPagFornecedorPendentes] = await Promise.all([
     Documento.count({ where: onde(req, { drive_status: 'guardado' }) }),
-    EmailFila.count({ where: { estado: 'enviado' } }),
-    Fornecedor.count({ where: { ativo: true } }),
-    PagamentoFornecedor.count({ where: { estado: 'pendente' } }),
+    // Contagens isoladas por condomínio (nunca globais).
+    EmailFila.count({ where: onde(req, { estado: 'enviado' }) }),
+    Fornecedor.count({ where: onde(req, { ativo: true }) }),
+    PagamentoFornecedor.count({ where: onde(req, { estado: 'pendente' }) }),
   ]);
 
   const nPagas = quotas.filter((q) => q.estado === 'paga').length;

@@ -182,7 +182,8 @@ router.get('/despesas/nova', async (req, res) => {
     Categoria.findAll({ where: { tipo: 'despesa', ativa: true }, order: [['nome', 'ASC']] }),
     ContaBancaria.findAll({ where: ondeCondominio(req, { ativa: true }), order: [['nome', 'ASC']] }),
     MetodoPagamento.findAll({ where: { ativo: true }, order: [['nome', 'ASC']] }),
-    Fornecedor.findAll({ where: { ativo: true }, order: [['nome', 'ASC']] }),
+    // Fornecedores apenas do condomínio ativo (cada condomínio tem a sua lista).
+    Fornecedor.findAll({ where: { condominio_id: req.condominioId, ativo: true }, order: [['nome', 'ASC']] }),
   ]);
   res.render('admin/despesas/form', { titulo: 'Nova despesa', despesa: null, categorias, contas, metodos, fornecedores });
 });
@@ -200,10 +201,11 @@ router.post('/despesas', async (req, res) => {
   }
 
   // Fornecedor: estruturado (id) com texto legado sincronizado para compatibilidade.
+  // O fornecedor tem de pertencer ao condomínio ativo (nunca um id de outro).
   let fornecedor_id = parseInt(req.body.fornecedor_id, 10) || null;
   let fornecedorTexto = (fornecedor || '').trim();
   if (fornecedor_id) {
-    const f = await Fornecedor.findByPk(fornecedor_id);
+    const f = await Fornecedor.findOne({ where: { id: fornecedor_id, condominio_id: req.condominioId } });
     if (!f) fornecedor_id = null;
     else fornecedorTexto = f.nome;
   }
@@ -237,7 +239,7 @@ router.get('/despesas/:id/editar', async (req, res) => {
     Categoria.findAll({ where: { tipo: 'despesa' }, order: [['nome', 'ASC']] }),
     ContaBancaria.findAll({ where: ondeCondominio(req), order: [['nome', 'ASC']] }),
     MetodoPagamento.findAll({ order: [['nome', 'ASC']] }),
-    Fornecedor.findAll({ order: [['nome', 'ASC']] }),
+    Fornecedor.findAll({ where: { condominio_id: req.condominioId }, order: [['nome', 'ASC']] }),
   ]);
   res.render('admin/despesas/form', { titulo: 'Editar despesa', despesa, categorias, contas, metodos, fornecedores });
 });
@@ -257,7 +259,7 @@ router.post('/despesas/:id', async (req, res) => {
   let fornecedor_id = parseInt(req.body.fornecedor_id, 10) || null;
   let fornecedorTexto = (fornecedor || '').trim();
   if (fornecedor_id) {
-    const f = await Fornecedor.findByPk(fornecedor_id);
+    const f = await Fornecedor.findOne({ where: { id: fornecedor_id, condominio_id: req.condominioId } });
     if (!f) fornecedor_id = null;
     else fornecedorTexto = f.nome;
   }
@@ -720,6 +722,7 @@ async function enfileirarLoteEmails({
   corpo,
   mensagemDe,
   anexoDe,
+  condominioId,
   userId,
   reenviar = false,
 }) {
@@ -757,6 +760,7 @@ async function enfileirarLoteEmails({
         corpo_html: mensagem.corpo_html || null,
         entidade_tipo: entidadeTipo,
         entidade_id: linha.id,
+        condominioId,
         userId,
         anexoNome: anexo ? anexo.nome : null,
         anexoBuffer: anexo ? anexo.buffer : null,
@@ -787,6 +791,7 @@ router.post('/quotas/enviar', async (req, res) => {
     linhas: alvos,
     entidadeTipo: 'Quota',
     reenviar,
+    condominioId: req.condominioId,
     userId: req.user.id,
     link: (l) => `${baseUrl}/admin/quotas/${l.id}/aviso`,
     assunto: (l) => `Aviso de quota ${l.numero} — ${l.periodo}`,
@@ -1043,6 +1048,7 @@ router.post('/pagamentos/enviar-recibos', async (req, res) => {
     linhas: alvos,
     entidadeTipo: 'Pagamento',
     reenviar,
+    condominioId: req.condominioId,
     userId: req.user.id,
     link: (l) => `${baseUrl}/admin/pagamentos/${l.id}/recibo`,
     assunto: (l) => `Recibo ${l.numero || ''} — ${l.fracao}`.trim(),
@@ -1395,6 +1401,7 @@ async function processarPosGeracaoQuotas({ ano, mes, guardarDrive, enviarEmail, 
           corpo_html: tpl.html,
           entidade_tipo: 'Quota',
           entidade_id: l.id,
+          condominioId: cid,
           userId,
           anexoNome: anexo ? anexo.nome : null,
           anexoBuffer: anexo ? anexo.buffer : null,

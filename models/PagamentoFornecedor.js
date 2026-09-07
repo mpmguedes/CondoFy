@@ -5,6 +5,9 @@ module.exports = (sequelize) => {
     'PagamentoFornecedor',
     {
       id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+      // Condomínio a que pertence o pagamento (cadeia Fornecedor → Pagamento →
+      // Documento/comprovativo coerente). NULL = histórico órfão/ambíguo.
+      condominio_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       fornecedor_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
       despesa_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       valor: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },

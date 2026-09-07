@@ -113,6 +113,7 @@ async function enviarLembretesAutomaticos() {
         corpo,
         entidade_tipo: 'Quota',
         entidade_id: q.id,
+        condominioId: q.condominio_id,
       });
       enviados++;
     }
