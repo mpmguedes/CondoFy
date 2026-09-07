@@ -7,6 +7,8 @@ const { sendMail } = require('../helpers/mailer');
 const { audit } = require('../helpers/audit');
 const { createLimiter } = require('../helpers/seguranca');
 const convites = require('../helpers/convites');
+const doisFatores = require('../helpers/doisfatores');
+const { eAutenticado } = require('../helpers/eAdmin');
 
 const router = express.Router();
 
@@ -29,6 +31,12 @@ const limiteRedefinir = createLimiter({
   janelaMs: 60 * 60 * 1000,
   msg: 'Demasiadas tentativas de redefinição. Aguarde 1 hora.',
 });
+const limite2fa = createLimiter({
+  rotulo: '2fa',
+  max: 8,
+  janelaMs: 15 * 60 * 1000,
+  msg: 'Demasiadas tentativas de verificação. Aguarde 15 minutos.',
+});
 
 // ── Login ──────────────────────────────────────────────────────────
 router.get('/login', (req, res) => {
@@ -38,15 +46,214 @@ router.get('/login', (req, res) => {
   res.render('auth/login');
 });
 
+// Envia o código 2FA por email (best-effort). Devolve { ok, erro? }.
+async function enviarCodigo2fa(user, req) {
+  const codigo = doisFatores.gerarCodigo();
+  const hash = doisFatores.hashCodigo(codigo);
+  await user.update({
+    two_fa_email_codigo_hash: hash,
+    two_fa_email_codigo_expira: doisFatores.codigoExpiracao(),
+    two_fa_email_tentativas: 0,
+  });
+  try {
+    await sendMail({
+      to: user.email,
+      subject: 'Código de verificação — GesCondu',
+      text: `Olá ${user.nome},\n\nO seu código de verificação é:\n\n${codigo}\n\nÉ válido durante 10 minutos.`,
+      html: `<p>Olá ${user.nome},</p><p>O seu código de verificação é:</p><p style="font-size:1.4rem;font-weight:bold;letter-spacing:2px">${codigo}</p><p>É válido durante 10 minutos.</p>`,
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error('[2fa-email]', err.message);
+    return { ok: false, erro: err.message };
+  }
+}
+
 router.post(
   '/login',
   limiteLogin,
-  passport.authenticate('local', {
-    successRedirect: '/',
-    failureRedirect: '/login',
-    failureFlash: true,
-  })
+  (req, res, next) => {
+    passport.authenticate('local', async (err, user, info) => {
+      if (err) return next(err);
+      if (!user) {
+        req.flash('error_msg', (info && info.message) || 'Credenciais inválidas.');
+        return res.redirect('/login');
+      }
+      // 2FA ativo → segundo fator antes de iniciar sessão.
+      if (user.two_fa_ativo) {
+        const envio = await enviarCodigo2fa(user, req).catch((e) => ({ ok: false, erro: e.message }));
+        req.session.pendente2faLogin = user.id;
+        await audit({ userId: user.id, acao: '2fa_codigo_enviado', entidade: 'User', entidadeId: user.id, detalhes: { fase: 'login' } }).catch(() => {});
+        if (!envio.ok) {
+          req.flash('error_msg', 'Palavra-passe correta. Não foi possível enviar o código por email (verifique o SMTP) — tente novamente mais tarde.');
+          delete req.session.pendente2faLogin;
+          return res.redirect('/login');
+        }
+        return res.redirect('/2fa/entrar');
+      }
+      req.login(user, (e) => {
+        if (e) return next(e);
+        return res.redirect('/');
+      });
+    })(req, res, next);
+  }
 );
+
+// ── 2FA — segundo fator do login ────────────────────────────────────
+router.get('/2fa/entrar', (req, res) => {
+  if (!req.session.pendente2faLogin) return res.redirect('/login');
+  res.render('auth/2fa-entrar', { titulo: 'Verificação em duas etapas' });
+});
+
+router.post('/2fa/entrar', limite2fa, async (req, res, next) => {
+  const userId = req.session.pendente2faLogin;
+  if (!userId) return res.redirect('/login');
+  const user = await User.findByPk(userId);
+  if (!user || !user.two_fa_ativo) {
+    delete req.session.pendente2faLogin;
+    return res.redirect('/login');
+  }
+  const codigo = String(req.body.codigo || '').trim();
+  const ehRecovery = String(req.body.tipo || '') === 'recovery';
+
+  // Limite de tentativas por código (5); excede → pedir novo código.
+  if (user.two_fa_email_tentativas >= 5) {
+    req.flash('error_msg', 'Demasiadas tentativas. Volte a iniciar sessão para receber um novo código.');
+    delete req.session.pendente2faLogin;
+    return res.redirect('/login');
+  }
+
+  let valido = false;
+  if (ehRecovery) {
+    const restante = doisFatores.consumirRecovery(user.two_fa_recovery_hash, codigo);
+    if (restante !== null) {
+      valido = true;
+      await user.update({ two_fa_recovery_hash: restante, two_fa_email_codigo_hash: null, two_fa_email_codigo_expira: null, two_fa_email_tentativas: 0 });
+    }
+  } else {
+    const hash = doisFatores.hashCodigo(codigo);
+    const okCodigo = user.two_fa_email_codigo_hash && hash === user.two_fa_email_codigo_hash;
+    const naoExpirado = user.two_fa_email_codigo_expira && new Date(user.two_fa_email_codigo_expira) > new Date();
+    if (okCodigo && naoExpirado) {
+      valido = true;
+      await user.update({ two_fa_email_codigo_hash: null, two_fa_email_codigo_expira: null, two_fa_email_tentativas: 0 });
+    }
+  }
+
+  if (!valido) {
+    await user.update({ two_fa_email_tentativas: (user.two_fa_email_tentativas || 0) + 1 });
+    await audit({ userId: user.id, acao: '2fa_falhou', entidade: 'User', entidadeId: user.id, detalhes: { viaRecovery: ehRecovery } }).catch(() => {});
+    req.flash('error_msg', 'Código inválido ou expirado.');
+    return res.redirect('/2fa/entrar');
+  }
+
+  delete req.session.pendente2faLogin;
+  await user.update({ last_login_at: new Date() });
+  await audit({ userId: user.id, acao: 'inicio_sessao', entidade: 'User', entidadeId: user.id, detalhes: { email: user.email } }).catch(() => {});
+  await audit({ userId: user.id, acao: '2fa_verificado', entidade: 'User', entidadeId: user.id, detalhes: { viaRecovery: ehRecovery } }).catch(() => {});
+  req.login(user, (e) => {
+    if (e) return next(e);
+    req.flash('success_msg', 'Sessão iniciada com verificação em duas etapas.');
+    return res.redirect('/');
+  });
+});
+
+// ── Conta / Segurança (2FA email + códigos de recuperação) ─────────
+router.get('/conta/seguranca', eAutenticado, async (req, res) => {
+  const user = await User.findByPk(req.user.id);
+  res.render('conta/seguranca', {
+    titulo: 'Segurança da conta',
+    doisFatoresAtivo: Boolean(user && user.two_fa_ativo),
+    doisFatoresMetodo: user ? user.two_fa_metodo : 'email',
+    temRecovery: Boolean(user && user.two_fa_recovery_hash),
+  });
+});
+
+// Passo 1 da ativação — envia código e prepara a confirmação.
+router.post('/conta/2fa/ativar', eAutenticado, async (req, res) => {
+  const user = await User.findByPk(req.user.id);
+  if (!user) return res.redirect('/login');
+  const envio = await enviarCodigo2fa(user, req);
+  if (!envio.ok) {
+    req.flash('error_msg', 'Não foi possível enviar o código de verificação (verifique o SMTP em Emails).');
+    return res.redirect('/conta/seguranca');
+  }
+  req.session.pendente2faAtivar = user.id;
+  await audit({ userId: user.id, acao: '2fa_codigo_enviado', entidade: 'User', entidadeId: user.id, detalhes: { fase: 'ativar' } }).catch(() => {});
+  req.flash('success_msg', 'Enviámos um código para o seu email. Introduza-o para ativar a verificação em duas etapas.');
+  return res.redirect('/conta/2fa/ativar/codigo');
+});
+
+router.get('/conta/2fa/ativar/codigo', eAutenticado, (req, res) => {
+  if (req.session.pendente2faAtivar !== req.user.id) return res.redirect('/conta/seguranca');
+  res.render('auth/2fa-ativar', { titulo: 'Ativar verificação em duas etapas' });
+});
+
+// Passo 2 — confirma o código e guarda os códigos de recuperação.
+router.post('/conta/2fa/ativar/codigo', eAutenticado, limite2fa, async (req, res) => {
+  const user = await User.findByPk(req.user.id);
+  if (!user || req.session.pendente2faAtivar !== user.id) return res.redirect('/conta/seguranca');
+  const codigo = String(req.body.codigo || '').trim();
+  const hash = doisFatores.hashCodigo(codigo);
+  const valido =
+    user.two_fa_email_codigo_hash &&
+    hash === user.two_fa_email_codigo_hash &&
+    user.two_fa_email_codigo_expira &&
+    new Date(user.two_fa_email_codigo_expira) > new Date();
+  if (!valido) {
+    await user.update({ two_fa_email_tentativas: (user.two_fa_email_tentativas || 0) + 1 });
+    req.flash('error_msg', 'Código inválido ou expirado.');
+    return res.redirect('/conta/2fa/ativar/codigo');
+  }
+  // Ativa 2FA e gera códigos de recuperação (mostrados uma única vez).
+  const recovery = doisFatores.gerarRecoveryCodes(10);
+  await user.update({
+    two_fa_ativo: true,
+    two_fa_metodo: 'email',
+    two_fa_email_codigo_hash: null,
+    two_fa_email_codigo_expira: null,
+    two_fa_email_tentativas: 0,
+    two_fa_recovery_hash: doisFatores.hashRecovery(recovery),
+  });
+  delete req.session.pendente2faAtivar;
+  req.session.codigosRecuperacao = recovery;
+  await audit({ userId: user.id, acao: 'ativar_2fa', entidade: 'User', entidadeId: user.id }).catch(() => {});
+  return res.redirect('/conta/2fa/codigos');
+});
+
+// Mostra uma única vez os códigos de recuperação gerados na ativação.
+router.get('/conta/2fa/codigos', eAutenticado, (req, res) => {
+  const codigos = req.session.codigosRecuperacao;
+  if (!codigos || !codigos.length) return res.redirect('/conta/seguranca');
+  res.render('conta/codigos-recuperacao', { titulo: 'Códigos de recuperação', codigos });
+});
+
+router.post('/conta/2fa/codigos-guardados', eAutenticado, (req, res) => {
+  delete req.session.codigosRecuperacao;
+  req.flash('success_msg', 'Verificação em duas etapas ativada. Guarde os códigos de recuperação num local seguro.');
+  res.redirect('/conta/seguranca');
+});
+
+// Desativação (com confirmação explícita).
+router.post('/conta/2fa/desativar', eAutenticado, async (req, res) => {
+  const confirmar = req.body.confirmar === '1' || req.body.confirmar === 'on';
+  if (!confirmar) {
+    req.flash('error_msg', 'Confirme que pretende desativar a verificação em duas etapas.');
+    return res.redirect('/conta/seguranca');
+  }
+  const user = await User.findByPk(req.user.id);
+  if (!user) return res.redirect('/login');
+  await user.update({
+    two_fa_ativo: false,
+    two_fa_email_codigo_hash: null,
+    two_fa_email_codigo_expira: null,
+    two_fa_email_tentativas: 0,
+    two_fa_recovery_hash: null,
+  });
+  await audit({ userId: user.id, acao: 'desativar_2fa', entidade: 'User', entidadeId: user.id }).catch(() => {});
+  req.flash('success_msg', 'Verificação em duas etapas desativada.');
+  res.redirect('/conta/seguranca');
+});
 
 router.get('/logout', (req, res, next) => {
   const userId = req.user ? req.user.id : null;

@@ -32,8 +32,12 @@ module.exports = (passport) => {
             await auditSafe({ userId: user.id, acao: 'login_falhou', entidade: 'User', entidadeId: user.id, detalhes: { email, motivo: 'password_incorreta' } });
             return done(null, false, { message: 'Palavra-passe incorreta.' });
           }
-          await user.update({ last_login_at: new Date() });
-          await auditSafe({ userId: user.id, acao: 'inicio_sessao', entidade: 'User', entidadeId: user.id, detalhes: { email } });
+          // Com 2FA ativo, o início de sessão só se completa após o 2.º fator
+          // (a atualização de last_login_at/auditoria acontece nesse momento).
+          if (!user.two_fa_ativo) {
+            await user.update({ last_login_at: new Date() });
+            await auditSafe({ userId: user.id, acao: 'inicio_sessao', entidade: 'User', entidadeId: user.id, detalhes: { email } });
+          }
           return done(null, user);
         } catch (err) {
           return done(err);

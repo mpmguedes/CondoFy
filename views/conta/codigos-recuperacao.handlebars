@@ -1,0 +1,25 @@
+<div class="page-heading">
+  <h1>Códigos de recuperação</h1>
+  <p class="subtitle">Guardados uma única vez — imprima-os ou guarde-os num local seguro</p>
+</div>
+
+<div class="alert alert-danger d-flex align-items-center gap-2">
+  <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+  <span>Estes códigos <strong>não voltarão a ser mostrados</strong>. Cada código só pode ser usado uma vez.</span>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="row row-cols-2 row-cols-md-3 g-2">
+      {{#each codigos}}
+      <div class="col">
+        <code class="d-block text-center p-2 border rounded bg-light">{{this}}</code>
+      </div>
+      {{/each}}
+    </div>
+  </div>
+</div>
+
+<form action="/conta/2fa/codigos-guardados" method="POST">
+  <button class="btn btn-primary">Guardei os códigos</button>
+</form>
