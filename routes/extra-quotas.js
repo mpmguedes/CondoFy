@@ -18,9 +18,9 @@ const { criarMovimento } = require('../helpers/movimentos');
 
 const router = express.Router();
 
-router.use(eAdmin);
 // Isolamento: condomínio ativo (sessão validada) em todas as operações.
 router.use(tenant.comCondominioAtivo);
+router.use(tenant.comPapel('gestor'));
 
 function parseDecimal(value, fallback = 0) {
   if (value === null || value === undefined || value === '') return fallback;

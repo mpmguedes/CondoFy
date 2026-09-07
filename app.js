@@ -94,6 +94,12 @@ app.use(async (req, res, next) => {
         }
       }
       res.locals.condominioAtivo = escolhido;
+      // Interface conforme o papel no condomínio ativo (admin/gestor vêm a
+      // navegação de gestão; leitura usa a área do condómino).
+      if (escolhido) {
+        const papel = await tenant.papelNoAtivo(req).catch(() => null);
+        if (papel === 'admin' || papel === 'gestor') res.locals.isAdmin = true;
+      }
       if (escolhido) {
         req.session.condominio_ativo_id = escolhido.id;
         if (!condominio || condominio.id !== escolhido.id) {

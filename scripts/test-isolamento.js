@@ -120,6 +120,20 @@ const ISOLADOS = [
   'financeiro.js',
 ];
 
+// Módulos com gate de papel (gestor ou admin conforme a operação de gestão).
+const COM_PAPEL = {
+  'quotas-modulo.js': 'gestor',
+  'documentos.js': 'gestor',
+  'avisos.js': 'gestor',
+  'extra-quotas.js': 'gestor',
+  'convocatorias.js': 'gestor',
+  'assembleias.js': 'gestor',
+  'orcamento.js': 'gestor',
+  'financeiro.js': 'gestor',
+  'admin.js': 'admin',
+  'configuracao.js': 'admin',
+};
+
 function testarRoutersIsolados() {
   const root = path.join(__dirname, '..', 'routes');
   for (const nome of ISOLADOS) {
@@ -127,6 +141,9 @@ function testarRoutersIsolados() {
     assert.ok(src.includes('comCondominioAtivo'), `${nome}: declara comCondominioAtivo`);
     assert.ok(!/getCondominio\(\)/.test(src), `${nome}: sem getCondominio() sem id`);
     assert.ok(!/resumoCondominio\(\)/.test(src), `${nome}: sem resumoCondominio() sem id`);
+    if (COM_PAPEL[nome]) {
+      assert.ok(src.includes(`comPapel('${COM_PAPEL[nome]}')`), `${nome}: gate de papel ${COM_PAPEL[nome]}`);
+    }
   }
 }
 

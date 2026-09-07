@@ -20,9 +20,9 @@ const { getCondominio } = require('../helpers/condominio');
 const drive = require('../helpers/drive');
 
 const router = express.Router();
-router.use(eAdmin);
 // Isolamento: condomínio ativo (sessão validada) em todas as operações.
 router.use(tenant.comCondominioAtivo);
+router.use(tenant.comPapel('gestor'));
 
 function toArray(v) {
   if (!v) return [];

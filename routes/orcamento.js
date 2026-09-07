@@ -23,9 +23,9 @@ const { proximoNumero } = require('../helpers/numeracao');
 const { getQuotaConfig } = require('../helpers/quotas-config');
 
 const router = express.Router();
-router.use(eAdmin);
 // Isolamento: condomínio ativo (sessão validada) em todas as operações.
 router.use(tenant.comCondominioAtivo);
+router.use(tenant.comPapel('gestor'));
 
 // Orçamento do condomínio ATIVO (null quando não pertence — bloqueia IDOR).
 function carregarOrcamento(req, incluir = []) {

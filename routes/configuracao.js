@@ -13,9 +13,9 @@ const { listarAutomacoes, guardarAutomacoes } = require('../helpers/automacoes')
 const drive = require('../helpers/drive');
 
 const router = express.Router();
-router.use(eAdmin);
 // Isolamento: a configuração edita o condomínio ATIVO (sessão).
 router.use(tenant.comCondominioAtivo);
+router.use(tenant.comPapel('admin'));
 
 const upload = multer({
   storage: multer.memoryStorage(),

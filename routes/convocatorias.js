@@ -18,9 +18,9 @@ const {
 const { gerarConvocatoriaCartaPDF } = require('../helpers/pdf-convocatoria');
 
 const router = express.Router();
-router.use(eAdmin);
 // Isolamento: condomínio ativo (sessão validada) em todas as operações.
 router.use(tenant.comCondominioAtivo);
+router.use(tenant.comPapel('gestor'));
 
 function strB(v) {
   return v == null ? '' : String(v).trim();

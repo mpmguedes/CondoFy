@@ -41,8 +41,8 @@ const recibosHelper = require('../helpers/recibos');
 const tenant = require('../helpers/tenant');
 
 const router = express.Router();
-router.use(eAdmin);
 router.use(tenant.comCondominioAtivo); // condomínio ativo (sessão) validado
+router.use(tenant.comPapel('gestor'));
 
 // Abreviaturas PT-PT de meses.
 const MESES_CURTO = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];

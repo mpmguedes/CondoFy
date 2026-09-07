@@ -43,9 +43,9 @@ const drive = require('../helpers/drive');
 
 const router = express.Router();
 
-router.use(eAdmin);
 // Isolamento: condomínio ativo (sessão validada) nas operações deste módulo.
 router.use(tenant.comCondominioAtivo);
+router.use(tenant.comPapel('gestor'));
 
 // Carregadores restritos ao condomínio ativo (bloqueiam IDOR).
 function carregarConta(req) {

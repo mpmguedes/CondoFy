@@ -16,9 +16,9 @@ const drive = require('../helpers/drive');
 const { gerarConvocatoriaPDF, gerarAtaPDF } = require('../helpers/pdf');
 
 const router = express.Router();
-router.use(eAdmin);
 // Isolamento: condomínio ativo (sessão validada) em todas as operações.
 router.use(tenant.comCondominioAtivo);
+router.use(tenant.comPapel('gestor'));
 
 // Anexos: PDF, JPG, PNG, WebP até 20 MB.
 const upload = multer({

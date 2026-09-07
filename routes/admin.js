@@ -36,9 +36,9 @@ const { sincronizarContactosPessoa, parseContactosForm, validarContactos, contac
 
 const router = express.Router();
 
-router.use(eAdmin);
 // Isolamento: condomínio ativo (sessão validada) em todas as operações.
 router.use(tenant.comCondominioAtivo);
+router.use(tenant.comPapel('admin'));
 
 // Escopo e carregadores restritos ao condomínio ativo (bloqueiam IDOR).
 function onde(req, extra = {}) {

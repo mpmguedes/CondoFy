@@ -12,9 +12,9 @@ const { compor: comporEmail, nomeFicheiro: nomeFicheiroEmail } = require('../hel
 const { getCondominio } = require('../helpers/condominio');
 
 const router = express.Router();
-router.use(eAdmin);
 // Isolamento: todas as operações usam o condomínio ativo (sessão validada).
 router.use(tenant.comCondominioAtivo);
+router.use(tenant.comPapel('gestor'));
 
 function toArray(v) {
   if (!v) return [];
