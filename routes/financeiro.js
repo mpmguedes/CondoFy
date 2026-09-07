@@ -384,7 +384,11 @@ router.post('/quotas/config', async (req, res) => {
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
     const futuras = await Quota.findAll({
-      where: { estado: { [Op.in]: ['pendente', 'parcialmente_paga'] }, data_vencimento: { [Op.gte]: hoje } },
+      where: {
+        estado: { [Op.in]: ['pendente', 'parcialmente_paga'] },
+        data_vencimento: { [Op.gte]: hoje },
+        condominio_id: req.condominioId,
+      },
     });
     for (const q of futuras) {
       const fracao = await Fracao.findByPk(q.fracao_id);
@@ -412,9 +416,9 @@ router.post('/quotas/config', async (req, res) => {
 router.get('/quotas/grelha', async (req, res) => {
   const ano = parseInt(req.query.ano || new Date().getFullYear(), 10);
   const [fracoes, quotas, anos] = await Promise.all([
-    Fracao.findAll({ order: [['designacao', 'ASC']] }),
-    Quota.findAll({ where: { ano } }),
-    Quota.findAll({ attributes: [[sequelize.fn('DISTINCT', sequelize.col('ano')), 'ano']], order: [['ano', 'DESC']], raw: true }),
+    Fracao.findAll({ where: ondeCondominio(req), order: [['designacao', 'ASC']] }),
+    Quota.findAll({ where: { ano, condominio_id: req.condominioId } }),
+    Quota.findAll({ attributes: [[sequelize.fn('DISTINCT', sequelize.col('ano')), 'ano']], where: { condominio_id: req.condominioId }, order: [['ano', 'DESC']], raw: true }),
   ]);
 
   const porFracao = {};
@@ -441,14 +445,14 @@ router.get('/quotas/grelha', async (req, res) => {
 
 router.get('/quotas/gerar', async (req, res) => {
   const [fracoes, quotaConfig, orcamentos, existentes] = await Promise.all([
-    Fracao.findAll({ where: { estado: 'ativo' }, order: [['designacao', 'ASC']] }),
+    Fracao.findAll({ where: { estado: 'ativo', condominio_id: req.condominioId }, order: [['designacao', 'ASC']] }),
     getQuotaConfig(),
     Orcamento.findAll({
-      where: { estado: { [Op.ne]: 'anulado' } },
+      where: { estado: { [Op.ne]: 'anulado' }, condominio_id: req.condominioId },
       include: [{ model: OrcamentoRubrica, as: 'rubricas' }],
       order: [['data_inicio', 'DESC']],
     }),
-    Quota.findAll({ attributes: ['fracao_id', 'ano', 'mes'], raw: true }),
+    Quota.findAll({ attributes: ['fracao_id', 'ano', 'mes'], where: { condominio_id: req.condominioId }, raw: true }),
   ]);
 
   // Orçamentos com total de rubricas (receita anual definida pelo orçamento).
@@ -500,7 +504,7 @@ router.post('/quotas/gerar', async (req, res) => {
     return res.redirect('/admin/quotas/gerar');
   }
 
-  const fracoes = await Fracao.findAll({ where: { estado: 'ativo' }, order: [['designacao', 'ASC']] });
+  const fracoes = await Fracao.findAll({ where: { estado: 'ativo', condominio_id: req.condominioId }, order: [['designacao', 'ASC']] });
   const meses = escopo === 'ano' ? Array.from({ length: 12 }, (_, i) => i + 1) : [mesNum];
 
   // Método 1 (permilagem + FCR via config) vs Método 2 (orçamento define a receita).
@@ -511,11 +515,12 @@ router.post('/quotas/gerar', async (req, res) => {
       req.flash('error_msg', 'Selecione o orçamento que define a receita.');
       return res.redirect('/admin/quotas/gerar');
     }
-    const orcamento = await Orcamento.findByPk(orcamentoId, {
+    const orcamento = await Orcamento.findOne({
+      where: { id: orcamentoId, condominio_id: req.condominioId },
       include: [{ model: OrcamentoRubrica, as: 'rubricas' }],
     });
     if (!orcamento) {
-      req.flash('error_msg', 'Orçamento não encontrado.');
+      req.flash('error_msg', 'Orçamento não encontrado neste condomínio.');
       return res.redirect('/admin/quotas/gerar');
     }
     const totalAnualC = orcamento.rubricas.filter((r) => r.ativo).reduce((s, r) => s + toCents(r.valor_anual), 0);
@@ -542,7 +547,7 @@ router.post('/quotas/gerar', async (req, res) => {
     for (const f of fracoes) {
       const v = valoresPorFracao.get(f.id);
       for (const m of meses) {
-        const existente = await Quota.findOne({ where: { fracao_id: f.id, ano: anoNum, mes: m }, transaction: t });
+        const existente = await Quota.findOne({ where: { fracao_id: f.id, ano: anoNum, mes: m, condominio_id: req.condominioId }, transaction: t });
         if (existente) {
           ignoradas++;
           continue;
@@ -550,6 +555,7 @@ router.post('/quotas/gerar', async (req, res) => {
         const numero = await proximoNumero('aviso_quota', { ano: anoNum, transaction: t });
         const nova = await Quota.create(
           {
+            condominio_id: req.condominioId,
             numero_documento: numero,
             fracao_id: f.id,
             ano: anoNum,
@@ -587,6 +593,7 @@ router.post('/quotas/gerar', async (req, res) => {
           background.enqueue('quotas_pos_processamento', {
             ano: anoNum,
             mes: mesNum,
+            condominioId: req.condominioId,
             guardarDrive: Boolean(guardarDrive && drive.isConfigured()),
             enviarEmail: Boolean(enviarEmail),
             userId: req.user.id,
@@ -637,13 +644,13 @@ function emailsUnicos(pessoas) {
 }
 
 // Lista de quotas com destinatários/estado para a página de envio em lote.
-async function contextoEnvioQuotas({ ano, mes }) {
+async function contextoEnvioQuotas({ ano, mes, condominioId }) {
   const agora = new Date();
   const anoNum = parseInt(ano, 10) || agora.getFullYear();
   const mesNum = parseInt(mes, 10) || agora.getMonth() + 1;
 
   const quotas = await Quota.findAll({
-    where: { ano: anoNum, mes: mesNum },
+    where: { ano: anoNum, mes: mesNum, ...(condominioId ? { condominio_id: condominioId } : {}) },
     include: [{ model: Fracao, as: 'fracao' }],
     order: [[{ model: Fracao, as: 'fracao' }, 'designacao', 'ASC']],
   });
@@ -760,12 +767,12 @@ async function enfileirarLoteEmails({
 }
 
 router.get('/quotas/enviar', async (req, res) => {
-  const ctx = await contextoEnvioQuotas({ ano: req.query.ano, mes: req.query.mes });
+  const ctx = await contextoEnvioQuotas({ ano: req.query.ano, mes: req.query.mes, condominioId: req.condominioId });
   res.render('admin/quotas/enviar', { titulo: 'Enviar quotas por email', driveLigado: drive.isConfigured(), ...ctx });
 });
 
 router.post('/quotas/enviar', async (req, res) => {
-  const ctx = await contextoEnvioQuotas({ ano: req.body.ano, mes: req.body.mes });
+  const ctx = await contextoEnvioQuotas({ ano: req.body.ano, mes: req.body.mes, condominioId: req.condominioId });
   const pedidoIds = new Set((Array.isArray(req.body.ids) ? req.body.ids : req.body.ids ? [req.body.ids] : []).map(Number));
   const reenviar = req.body.reenviar === '1' || req.body.reenviar === 'on';
   const modoPendentes = req.body.modo === 'pendentes';
@@ -797,7 +804,7 @@ router.post('/quotas/enviar', async (req, res) => {
       return { assunto: tpl.assunto, corpo: tpl.text, corpo_html: tpl.html };
     },
     anexoDe: async (l) => {
-      const { buffer } = await construirAvisoQuota(l.id);
+      const { buffer } = await construirAvisoQuota(l.id, req.condominioId);
       return { nome: nomeFicheiroEmail('quota', { ano: String(l.ano || ''), mes: l.mes || '', fracao: l.fracao }), buffer };
     },
   });
@@ -812,7 +819,7 @@ router.post('/quotas/enviar', async (req, res) => {
 });
 
 router.get('/quotas/:id', async (req, res) => {
-  const quota = await Quota.findByPk(req.params.id, { include: [{ model: Fracao, as: 'fracao' }] });
+  const quota = await Quota.findOne({ where: { id: req.params.id, condominio_id: req.condominioId }, include: [{ model: Fracao, as: 'fracao' }] });
   if (!quota) return res.redirect('/admin/quotas');
   const aplicacoes = await PagamentoQuota.findAll({
     where: { quota_id: quota.id },
@@ -842,13 +849,13 @@ router.get('/quotas/:id', async (req, res) => {
 });
 
 router.get('/quotas/:id/editar', async (req, res) => {
-  const quota = await Quota.findByPk(req.params.id, { include: [{ model: Fracao, as: 'fracao' }] });
+  const quota = await Quota.findOne({ where: { id: req.params.id, condominio_id: req.condominioId }, include: [{ model: Fracao, as: 'fracao' }] });
   if (!quota) return res.redirect('/admin/quotas');
   res.render('admin/quotas/form', { titulo: 'Editar quota', quota });
 });
 
 router.post('/quotas/:id', async (req, res) => {
-  const quota = await Quota.findByPk(req.params.id);
+  const quota = await Quota.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
   if (!quota) return res.redirect('/admin/quotas');
   const { valor, data_emissao, data_vencimento, observacoes } = req.body;
   await quota.update({
@@ -863,7 +870,7 @@ router.post('/quotas/:id', async (req, res) => {
 });
 
 router.post('/quotas/:id/anular', async (req, res) => {
-  const quota = await Quota.findByPk(req.params.id);
+  const quota = await Quota.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
   if (quota) {
     await quota.update({ estado: 'anulada' });
     await audit({ userId: req.user.id, acao: 'anular_quota', entidade: 'Quota', entidadeId: quota.id });
@@ -877,6 +884,7 @@ router.post('/quotas/:id/anular', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 router.get('/pagamentos', async (req, res) => {
   const pagamentos = await Pagamento.findAll({
+    where: ondeCondominio(req),
     include: [
       { model: Fracao, as: 'fracao' },
       { model: MetodoPagamento, as: 'metodo_pagamento' },
@@ -889,9 +897,9 @@ router.get('/pagamentos', async (req, res) => {
 
 router.get('/pagamentos/nova', async (req, res) => {
   const [fracoes, metodos, contas] = await Promise.all([
-    Fracao.findAll({ order: [['designacao', 'ASC']] }),
+    Fracao.findAll({ where: ondeCondominio(req), order: [['designacao', 'ASC']] }),
     MetodoPagamento.findAll({ where: { ativo: true }, order: [['nome', 'ASC']] }),
-    ContaBancaria.findAll({ where: { ativa: true }, order: [['nome', 'ASC']] }),
+    ContaBancaria.findAll({ where: ondeCondominio(req, { ativa: true }), order: [['nome', 'ASC']] }),
   ]);
   res.render('admin/pagamentos/form', { titulo: 'Registar pagamento', fracoes, metodos, contas });
 });
@@ -913,16 +921,29 @@ router.post('/pagamentos', (req, res, next) => {
     ? { ficheiro: req.file.filename, nome: req.file.originalname, mime: req.file.mimetype }
     : null;
   try {
+    // Guardas de condomínio: fração e conta têm de pertencer ao ativo (IDOR).
+    const fracaoValida = await Fracao.findOne({ where: { id: parseInt(fracao_id, 10) || 0, condominio_id: req.condominioId } });
+    if (!fracaoValida) {
+      if (comprovativo) apagarComprovativo(comprovativo.ficheiro);
+      req.flash('error_msg', 'Fração não encontrada neste condomínio.');
+      return res.redirect('/admin/pagamentos/nova');
+    }
+    let contaBancariaId = parseInt(conta_bancaria_id, 10) || null;
+    if (contaBancariaId) {
+      const conta = await ContaBancaria.findOne({ where: { id: contaBancariaId, condominio_id: req.condominioId } });
+      contaBancariaId = conta ? conta.id : null;
+    }
     const resultado = await registarPagamento({
-      fracaoId: fracao_id,
+      fracaoId: fracaoValida.id,
       valor: toNumber(valor),
       dataPagamento: data_pagamento || new Date(),
       metodoPagamentoId: metodo_pagamento_id || null,
-      contaBancariaId: conta_bancaria_id || null,
+      contaBancariaId,
       referencia,
       observacoes,
       userId: req.user.id,
       comprovativo,
+      condominioId: req.condominioId,
     });
     await audit({
       userId: req.user.id,
@@ -1040,7 +1061,7 @@ router.post('/pagamentos/enviar-recibos', async (req, res) => {
       return { assunto: tpl.assunto, corpo: tpl.text, corpo_html: tpl.html };
     },
     anexoDe: async (l) => {
-      const { buffer } = await construirRecibo(l.id);
+      const { buffer } = await construirRecibo(l.id, req.condominioId);
       return { nome: nomeFicheiroEmail('recibo', { numero: l.numero || l.id }), buffer };
     },
   });
@@ -1055,7 +1076,8 @@ router.post('/pagamentos/enviar-recibos', async (req, res) => {
 });
 
 router.get('/pagamentos/:id', async (req, res) => {
-  const pagamento = await Pagamento.findByPk(req.params.id, {
+  const pagamento = await Pagamento.findOne({
+    where: { id: req.params.id, condominio_id: req.condominioId },
     include: [
       { model: Fracao, as: 'fracao' },
       { model: MetodoPagamento, as: 'metodo_pagamento' },
@@ -1069,8 +1091,14 @@ router.get('/pagamentos/:id', async (req, res) => {
 
 router.post('/pagamentos/:id/anular', async (req, res) => {
   try {
-    const ok = await anularPagamento(req.params.id);
-    await audit({ userId: req.user.id, acao: 'anular_pagamento', entidade: 'Pagamento', entidadeId: req.params.id });
+    // Guarda IDOR: só anula pagamentos do condomínio ativo.
+    const pagamento = await Pagamento.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
+    if (!pagamento) {
+      req.flash('error_msg', 'Pagamento não encontrado neste condomínio.');
+      return res.redirect('/admin/pagamentos');
+    }
+    const ok = await anularPagamento(pagamento.id);
+    await audit({ userId: req.user.id, acao: 'anular_pagamento', entidade: 'Pagamento', entidadeId: pagamento.id });
     req.flash('success_msg', ok ? 'Pagamento anulado.' : 'Pagamento já se encontrava anulado.');
   } catch (err) {
     console.error(err);
@@ -1089,10 +1117,13 @@ async function nomeProprietarioPrincipal(fracaoId) {
 }
 
 // Gera o buffer do aviso de quota (partilhado entre ver/descarregar e Drive).
-async function construirAvisoQuota(quotaId) {
-  const quota = await Quota.findByPk(quotaId, { include: [{ model: Fracao, as: 'fracao' }] });
-  if (!quota) throw new Error('Quota não encontrada.');
-  const condominio = await getCondominio({ id: req.condominioId });
+async function construirAvisoQuota(quotaId, condominioId) {
+  const quota = await Quota.findOne({
+    where: { id: quotaId, condominio_id: condominioId },
+    include: [{ model: Fracao, as: 'fracao' }],
+  });
+  if (!quota) throw new Error('Quota não encontrada neste condomínio.');
+  const condominio = await getCondominio({ id: condominioId });
   const resumo = await resumoFracao(quota.fracao_id);
   const destinatarioNome = await nomeProprietarioPrincipal(quota.fracao_id);
 
@@ -1131,16 +1162,17 @@ async function construirAvisoQuota(quotaId) {
 }
 
 // Gera o buffer do recibo (partilhado entre ver/descarregar e Drive).
-async function construirRecibo(pagamentoId) {
-  const pagamento = await Pagamento.findByPk(pagamentoId, {
+async function construirRecibo(pagamentoId, condominioId) {
+  const pagamento = await Pagamento.findOne({
+    where: { id: pagamentoId, condominio_id: condominioId },
     include: [
       { model: Fracao, as: 'fracao' },
       { model: MetodoPagamento, as: 'metodo_pagamento' },
       { model: Quota, as: 'quotas', through: { attributes: ['valor_aplicado'] } },
     ],
   });
-  if (!pagamento) throw new Error('Pagamento não encontrado.');
-  const condominio = await getCondominio({ id: req.condominioId });
+  if (!pagamento) throw new Error('Pagamento não encontrado neste condomínio.');
+  const condominio = await getCondominio({ id: condominioId });
   const resumo = await resumoFracao(pagamento.fracao_id);
   const condominoNome = await nomeProprietarioPrincipal(pagamento.fracao_id);
 
@@ -1165,7 +1197,7 @@ async function construirRecibo(pagamentoId) {
 
 router.get('/quotas/:id/aviso', async (req, res) => {
   try {
-    const { buffer, quota } = await construirAvisoQuota(req.params.id);
+    const { buffer, quota } = await construirAvisoQuota(req.params.id, req.condominioId);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="aviso_${quota.numero_documento || quota.id}.pdf"`);
     res.send(buffer);
@@ -1178,7 +1210,7 @@ router.get('/quotas/:id/aviso', async (req, res) => {
 
 router.get('/pagamentos/:id/recibo', async (req, res) => {
   try {
-    const { buffer, pagamento } = await construirRecibo(req.params.id);
+    const { buffer, pagamento } = await construirRecibo(req.params.id, req.condominioId);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="recibo_${pagamento.numero_documento || pagamento.id}.pdf"`);
     res.send(buffer);
@@ -1191,11 +1223,12 @@ router.get('/pagamentos/:id/recibo', async (req, res) => {
 
 // Guarda no Google Drive um PDF gerado pelo Financeiro (aviso/recibo) e
 // regista-o como Documento (fica disponível na biblioteca para enviar por email).
-async function guardarPdfFinanceiroDrive({ tipo, numeroDocumento, nome, buffer, anoData, userId }) {
+async function guardarPdfFinanceiroDrive({ tipo, numeroDocumento, nome, buffer, anoData, userId, condominioId }) {
   if (!drive.isConfigured()) throw new Error('Google Drive não está ligado (Configuração → Google Drive).');
   const pastaId = await drive.pastaParaDocumento(tipo, anoData);
   const up = await drive.uploadArquivo({ nome, mimeType: 'application/pdf', buffer, parentFolderId: pastaId });
   const doc = await Documento.create({
+    condominio_id: condominioId,
     tipo,
     numero_documento: numeroDocumento || null,
     nome,
@@ -1215,7 +1248,7 @@ async function guardarPdfFinanceiroDrive({ tipo, numeroDocumento, nome, buffer, 
 
 router.post('/quotas/:id/aviso/drive', async (req, res) => {
   try {
-    const { buffer, quota } = await construirAvisoQuota(req.params.id);
+    const { buffer, quota } = await construirAvisoQuota(req.params.id, req.condominioId);
     const ano = quota.data_emissao ? new Date(quota.data_emissao).getFullYear() : new Date().getFullYear();
     const { doc } = await guardarPdfFinanceiroDrive({
       tipo: 'aviso_quota',
@@ -1224,6 +1257,7 @@ router.post('/quotas/:id/aviso/drive', async (req, res) => {
       buffer,
       anoData: ano,
       userId: req.user.id,
+      condominioId: req.condominioId,
     });
     await audit({ userId: req.user.id, acao: 'guardar_documento_drive', entidade: 'Documento', entidadeId: doc.id, detalhes: { tipo: 'aviso_quota' } }).catch(() => {});
     req.flash('success_msg', 'Aviso de quota guardado no Google Drive.');
@@ -1236,7 +1270,7 @@ router.post('/quotas/:id/aviso/drive', async (req, res) => {
 
 router.post('/pagamentos/:id/recibo/drive', async (req, res) => {
   try {
-    const { buffer, pagamento } = await construirRecibo(req.params.id);
+    const { buffer, pagamento } = await construirRecibo(req.params.id, req.condominioId);
     const ano = pagamento.data_pagamento ? new Date(pagamento.data_pagamento).getFullYear() : new Date().getFullYear();
     const { doc } = await guardarPdfFinanceiroDrive({
       tipo: 'recibo',
@@ -1245,6 +1279,7 @@ router.post('/pagamentos/:id/recibo/drive', async (req, res) => {
       buffer,
       anoData: ano,
       userId: req.user.id,
+      condominioId: req.condominioId,
     });
     await audit({ userId: req.user.id, acao: 'guardar_documento_drive', entidade: 'Documento', entidadeId: doc.id, detalhes: { tipo: 'recibo' } }).catch(() => {});
     req.flash('success_msg', 'Recibo guardado no Google Drive.');
@@ -1259,11 +1294,20 @@ router.post('/pagamentos/:id/recibo/drive', async (req, res) => {
 // (PDFs → Google Drive → emails para a email_fila). Idempotente: não
 // duplica documentos (verifica Documento associado) nem emails
 // (existeEnvioPara), mesmo quando a tarefa corre/repete mais do que uma vez.
-async function processarPosGeracaoQuotas({ ano, mes, guardarDrive, enviarEmail, userId, baseUrl }, progresso) {
+async function processarPosGeracaoQuotas({ ano, mes, guardarDrive, enviarEmail, userId, baseUrl, condominioId }, progresso) {
   if (!ano || !mes || (!guardarDrive && !enviarEmail)) return;
 
+  // Multi-condomínio: processa apenas o condomínio que gerou as quotas.
+  // Sem condominioId (tarefas antigas) não adivinha — ignora (evita processar
+  // ou enviar dados do condomínio errado).
+  const cid = condominioId || null;
+  if (!cid) {
+    console.warn('[quotas-bg] tarefa sem condominioId — ignorada.');
+    return;
+  }
+
   const quotas = await Quota.findAll({
-    where: { ano, mes },
+    where: { ano, mes, condominio_id: cid },
     include: [{ model: Fracao, as: 'fracao' }],
     order: [[{ model: Fracao, as: 'fracao' }, 'designacao', 'ASC']],
   });
@@ -1287,7 +1331,7 @@ async function processarPosGeracaoQuotas({ ano, mes, guardarDrive, enviarEmail, 
           where: { entidade_tipo: 'Quota', entidade_id: q.id, drive_status: 'guardado' },
         });
         if (!jaGuardado) {
-          const { buffer } = await construirAvisoQuota(q.id);
+          const { buffer } = await construirAvisoQuota(q.id, cid);
           const { doc } = await guardarPdfFinanceiroDrive({
             tipo: 'aviso_quota',
             numeroDocumento: q.numero_documento,
@@ -1295,6 +1339,7 @@ async function processarPosGeracaoQuotas({ ano, mes, guardarDrive, enviarEmail, 
             buffer,
             anoData: q.ano,
             userId,
+            condominioId: cid,
           });
           await doc.update({ entidade_tipo: 'Quota', entidade_id: q.id }).catch(() => {});
         }
@@ -1311,10 +1356,10 @@ async function processarPosGeracaoQuotas({ ano, mes, guardarDrive, enviarEmail, 
 
   // 2) Colocar emails na fila (nunca envia diretamente; o scheduler trata)
   if (enviarEmail) {
-    const cond = await getCondominio({ id: req.condominioId });
+    const cond = await getCondominio({ id: cid });
     const condNome = (cond && String(cond.designacao || '').trim()) || '';
     const adminNome = (cond && String(cond.administracao_nome || '').trim()) || '';
-    const cctx = await contextoEnvioQuotas({ ano, mes });
+    const cctx = await contextoEnvioQuotas({ ano, mes, condominioId: cid });
     const base = baseUrl || '';
     let enfileirados = 0;
     let atual = 0;
@@ -1332,7 +1377,7 @@ async function processarPosGeracaoQuotas({ ano, mes, guardarDrive, enviarEmail, 
       });
       let anexo = null;
       try {
-        const { buffer } = await construirAvisoQuota(l.id);
+        const { buffer } = await construirAvisoQuota(l.id, cid);
         anexo = { nome: nomeFicheiroEmail('quota', { ano: String(l.ano || ''), mes: l.mes || '', fracao: l.fracao }), buffer };
       } catch (e) {
         console.error('[quotas-bg-anexo]', e.message);

@@ -1,6 +1,6 @@
 const sequelize = require('../config/database');
 const { Op } = require('sequelize');
-const { Quota, Pagamento, PagamentoQuota, MovimentoBancario } = require('../models');
+const { Quota, Pagamento, PagamentoQuota, MovimentoBancario, Fracao } = require('../models');
 const { toCents, fromCents } = require('./money');
 const { proximoNumero } = require('./numeracao');
 const { criarMovimento } = require('./movimentos');
@@ -76,14 +76,24 @@ async function registarPagamento({
   observacoes,
   userId,
   comprovativo,
+  condominioId,
 }) {
   const t = await sequelize.transaction();
   try {
     const valorC = toCents(valor);
     const numero = await proximoNumero('recibo', { transaction: t });
 
+    // Multi-condomínio: o pagamento herda o condomínio do contexto ativo da
+    // rota; em fluxos legados cai para o condomínio da fração.
+    let cid = condominioId || null;
+    if (!cid) {
+      const fracaoCtx = await Fracao.findOne({ where: { id: fracaoId }, attributes: ['condominio_id'] });
+      cid = fracaoCtx ? fracaoCtx.condominio_id : null;
+    }
+
     const pagamento = await Pagamento.create(
       {
+        condominio_id: cid,
         numero_documento: numero,
         fracao_id: fracaoId,
         conta_bancaria_id: contaBancariaId || null,
