@@ -37,9 +37,18 @@
             </div>
           </div>
           <div class="mb-3">
-            <label class="form-label">{{#if user}}Nova palavra-passe (deixar em branco para manter){{else}}Palavra-passe{{/if}}</label>
-            <input type="password" class="form-control" name="password" autocomplete="new-password" {{#unless user}}required{{/unless}} />
+            <label class="form-label">{{#if user}}Nova palavra-passe (deixar em branco para manter){{else}}Palavra-passe (opcional se enviar convite){{/if}}</label>
+            <input type="password" class="form-control" name="password" autocomplete="new-password" />
           </div>
+          {{#unless user}}
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="enviar_convite" name="enviar_convite" value="1" />
+            <label class="form-check-label" for="enviar_convite">
+              <strong>Enviar convite por email</strong> — o utilizador escolhe a palavra-passe ao aceitar o convite
+              (link válido por 30 dias; não é preciso definir palavra-passe agora).
+            </label>
+          </div>
+          {{/unless}}
           {{#if user}}
           <div class="form-check form-switch mb-3">
             <input class="form-check-input" type="checkbox" id="ativo" name="ativo" {{#if user.ativo}}checked{{/if}} />

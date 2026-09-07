@@ -1,0 +1,23 @@
+<div class="auth-wrap">
+  <div class="auth-card card shadow-sm">
+    <div class="card-body p-4 p-md-5">
+      <div class="text-center mb-4">
+        <img src="/img/logo_gescondu.png" alt="GesCondu" class="login-logo mx-auto d-block mb-3" />
+        <h1 class="h4 mb-1">Aceitar convite</h1>
+        <p class="text-muted mb-0">Defina a sua palavra-passe para confirmar o email e ativar a conta.</p>
+      </div>
+
+      <form action="/aceitar-convite/{{token}}" method="POST">
+        <div class="mb-3">
+          <label for="password" class="form-label">Palavra-passe</label>
+          <input type="password" class="form-control" id="password" name="password" minlength="8" required autofocus autocomplete="new-password" />
+        </div>
+        <div class="mb-3">
+          <label for="password2" class="form-label">Confirmar palavra-passe</label>
+          <input type="password" class="form-control" id="password2" name="password2" minlength="8" required autocomplete="new-password" />
+        </div>
+        <button type="submit" class="btn btn-primary w-100">Ativar conta</button>
+      </form>
+    </div>
+  </div>
+</div>

@@ -22,6 +22,11 @@ module.exports = (passport) => {
             await auditSafe({ userId: user.id, acao: 'login_falhou', entidade: 'User', entidadeId: user.id, detalhes: { email, motivo: 'conta_desativada' } });
             return done(null, false, { message: 'Conta desativada.' });
           }
+          // Confirmação de email obrigatória (contas criadas por convite).
+          if (!user.email_confirmado) {
+            await auditSafe({ userId: user.id, acao: 'login_falhou', entidade: 'User', entidadeId: user.id, detalhes: { email, motivo: 'email_nao_confirmado' } });
+            return done(null, false, { message: 'Confirme o seu email antes de iniciar sessão (verifique o convite na sua caixa de entrada).' });
+          }
           const match = await bcrypt.compare(password, user.password_hash);
           if (!match) {
             await auditSafe({ userId: user.id, acao: 'login_falhou', entidade: 'User', entidadeId: user.id, detalhes: { email, motivo: 'password_incorreta' } });

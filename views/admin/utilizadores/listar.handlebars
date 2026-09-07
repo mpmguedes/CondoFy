@@ -32,8 +32,22 @@
           <td>{{#if pessoa}}{{pessoa.nome}}{{else}}<span class="text-muted">—</span>{{/if}}</td>
           <td>
             {{#if ativo}}<span class="badge text-bg-success">Ativo</span>{{else}}<span class="badge text-bg-secondary">Inativo</span>{{/if}}
+            {{#if convite_token}}
+              {{#if (eq estadoConvite 'aceite')}}<span class="badge text-bg-success-subtle border">Convite aceite</span>
+              {{else if (eq estadoConvite 'revogado')}}<span class="badge text-bg-light border">Convite revogado</span>
+              {{else if (eq estadoConvite 'expirado')}}<span class="badge text-bg-warning-subtle border">Convite expirado</span>
+              {{else}}<span class="badge text-bg-info-subtle border">Convite enviado</span>{{/if}}
+            {{/if}}
           </td>
           <td class="text-end">
+            {{#if podeConvite}}
+            <form action="/admin/utilizadores/{{id}}/reenviar-convite" method="POST" class="d-inline">
+              <button class="btn btn-sm btn-outline-primary" title="Reenviar convite"><span class="material-symbols-outlined">forward_to_inbox</span></button>
+            </form>
+            <form action="/admin/utilizadores/{{id}}/revogar-convite" method="POST" class="d-inline" onsubmit="return confirm('Revogar este convite?');">
+              <button class="btn btn-sm btn-outline-secondary" title="Revogar convite"><span class="material-symbols-outlined">block</span></button>
+            </form>
+            {{/if}}
             <a href="/admin/utilizadores/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
             <form action="/admin/utilizadores/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar este utilizador?');">
               <button class="btn btn-sm btn-outline-danger" title="Eliminar"><span class="material-symbols-outlined">delete</span></button>

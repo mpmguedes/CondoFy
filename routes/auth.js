@@ -6,6 +6,7 @@ const { User } = require('../models');
 const { sendMail } = require('../helpers/mailer');
 const { audit } = require('../helpers/audit');
 const { createLimiter } = require('../helpers/seguranca');
+const convites = require('../helpers/convites');
 
 const router = express.Router();
 
@@ -126,6 +127,68 @@ router.post('/redefinir/:token', limiteRedefinir, async (req, res) => {
   await user.update({ password_hash: hash, reset_token: null, reset_token_expires: null });
   await audit({ userId: user.id, acao: 'redefinicao_password', entidade: 'User', entidadeId: user.id });
   req.flash('success_msg', 'Palavra-passe redefinida. Inicie sessão.');
+  res.redirect('/login');
+});
+
+// ── Aceitar convite (definir palavra-passe + confirmar email) ──────
+// Token único com validade (30 dias por omissão); estados pendente/enviado
+// → aceite. Um convite revogado/aceite não pode ser reutilizado.
+async function utilizadorPorConvite(token) {
+  const user = await User.findOne({ where: { convite_token: token } });
+  return user || null;
+}
+
+router.get('/aceitar-convite/:token', async (req, res) => {
+  const user = await utilizadorPorConvite(req.params.token);
+  if (!user) {
+    req.flash('error_msg', 'Convite inválido.');
+    return res.redirect('/login');
+  }
+  const estado = convites.estadoDoConvite(user);
+  if (estado === 'aceite' || estado === 'revogado') {
+    req.flash('error_msg', 'Este convite já foi utilizado.');
+    return res.redirect('/login');
+  }
+  if (estado === 'expirado') {
+    req.flash('error_msg', 'Este convite expirou. Peça à administração para o reenviar.');
+    return res.redirect('/login');
+  }
+  res.render('auth/aceitar-convite', { titulo: 'Aceitar convite', token: req.params.token });
+});
+
+router.post('/aceitar-convite/:token', limiteRedefinir, async (req, res) => {
+  const { password, password2 } = req.body;
+  if (!password || password.length < 8) {
+    req.flash('error_msg', 'A palavra-passe deve ter pelo menos 8 caracteres.');
+    return res.redirect(`/aceitar-convite/${req.params.token}`);
+  }
+  if (password !== password2) {
+    req.flash('error_msg', 'As palavras-passe não coincidem.');
+    return res.redirect(`/aceitar-convite/${req.params.token}`);
+  }
+  const user = await utilizadorPorConvite(req.params.token);
+  if (!user) {
+    req.flash('error_msg', 'Convite inválido.');
+    return res.redirect('/login');
+  }
+  const estado = convites.estadoDoConvite(user);
+  if (estado === 'aceite' || estado === 'revogado' || estado === 'expirado') {
+    req.flash('error_msg', estado === 'expirado'
+      ? 'Este convite expirou. Peça à administração para o reenviar.'
+      : 'Este convite já não pode ser utilizado.');
+    return res.redirect('/login');
+  }
+  const hash = await bcrypt.hash(password, 10);
+  await user.update({
+    password_hash: hash,
+    email_confirmado: true,
+    email_confirmado_at: new Date(),
+    convite_token: null,
+    convite_token_expira: null,
+    convite_estado: 'aceite',
+  });
+  await audit({ userId: user.id, acao: 'aceitar_convite', entidade: 'User', entidadeId: user.id, detalhes: { email: user.email } }).catch(() => {});
+  req.flash('success_msg', 'Conta ativada. Já pode iniciar sessão.');
   res.redirect('/login');
 });
 

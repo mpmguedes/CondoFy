@@ -29,7 +29,8 @@ const { getCondominio } = require('../helpers/condominio');
 const { resumoCondominio, resumoFracao, estadoEfetivo } = require('../helpers/saldos');
 const { resumoFinanceiroMes, resumoEmAtraso, orcamentoDoAno } = require('../helpers/dashboard');
 const drive = require('../helpers/drive');
-const { smtpConfigured } = require('../helpers/mailer');
+const { smtpConfigured, sendMail } = require('../helpers/mailer');
+const convites = require('../helpers/convites');
 const background = require('../helpers/background-jobs');
 const { sincronizarContactosPessoa, parseContactosForm, validarContactos, contactosParaForm } = require('../helpers/contactos');
 
@@ -532,6 +533,31 @@ function roleLegadoDoPapel(papel) {
   return papel === 'admin' ? 'admin' : 'condomino';
 }
 
+// Gera/renova o convite de um utilizador e tenta o envio por email.
+async function enviarConviteAoUtilizador(user, req) {
+  const token = convites.gerarToken();
+  const expira = convites.calcularExpiracao();
+  await user.update({
+    convite_token: token,
+    convite_token_expira: expira,
+    convite_estado: 'enviado',
+    email_confirmado: false,
+  });
+  const link = `${req.protocol}://${req.get('host')}/aceitar-convite/${token}`;
+  try {
+    await sendMail({
+      to: user.email,
+      subject: 'Convite de acesso — GesCondu',
+      text: `Olá ${user.nome},\n\nFoi criada uma conta para si no GesCondu.\nPara definir a sua palavra-passe e confirmar o email, abra o link (válido por ${convites.diasValidade()} dias):\n\n${link}\n\nSe não esperava este convite, ignore este email.`,
+      html: `<p>Olá ${user.nome},</p><p>Foi criada uma conta para si no <strong>GesCondu</strong>.</p><p>Para definir a sua palavra-passe e confirmar o email, clique em:</p><p><a href="${link}">${link}</a></p><p>Este link é válido por ${convites.diasValidade()} dias.</p><p>Se não esperava este convite, ignore este email.</p>`,
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error('[convite-email]', err.message);
+    return { ok: false, erro: err.message };
+  }
+}
+
 async function assocDeUtilizador(req, userId) {
   return UserCondominio.findOne({ where: { utilizador_id: userId, condominio_id: req.condominioId } });
 }
@@ -552,6 +578,8 @@ router.get('/utilizadores', async (req, res) => {
       json.papel = a.role;
       json.estadoAssoc = a.estado;
       json.role = roleLegadoDoPapel(a.role);
+      json.estadoConvite = convites.estadoDoConvite(json);
+      json.podeConvite = Boolean(json.convite_token) && ['pendente', 'enviado'].includes(json.convite_estado);
       return json;
     })
     .filter(Boolean);
@@ -565,13 +593,20 @@ router.get('/utilizadores/nova', async (req, res) => {
 
 router.post('/utilizadores', async (req, res) => {
   const { nome, email, password, role, pessoa_id, ativo } = req.body;
+  const enviarConvite = req.body.enviar_convite === '1' || req.body.enviar_convite === 'on';
   try {
+    if (!password && !enviarConvite) {
+      req.flash('error_msg', 'Defina uma palavra-passe ou escolha o envio de convite.');
+      return res.redirect('/admin/utilizadores/nova');
+    }
     const existente = await User.findOne({ where: { email } });
     if (existente) {
       req.flash('error_msg', 'Já existe uma conta com esse email.');
       return res.redirect('/admin/utilizadores/nova');
     }
     const passwordHash = password ? await bcrypt.hash(password, 10) : null;
+    const token = enviarConvite ? convites.gerarToken() : null;
+    const expira = enviarConvite ? convites.calcularExpiracao() : null;
     const user = await User.create({
       nome,
       email,
@@ -579,6 +614,11 @@ router.post('/utilizadores', async (req, res) => {
       role: role || 'condomino',
       pessoa_id: pessoa_id || null,
       ativo: ativo === 'on' || ativo === '1' || ativo === true,
+      // Por convite: o email só fica confirmado quando o utilizador aceitar.
+      email_confirmado: enviarConvite ? false : true,
+      convite_token: token,
+      convite_token_expira: expira,
+      convite_estado: enviarConvite ? 'pendente' : null,
     });
     // Associa ao condomínio ativo (só assim a conta entra na área certa).
     await UserCondominio.create({
@@ -587,8 +627,15 @@ router.post('/utilizadores', async (req, res) => {
       role: papelDaAssociacao(role),
       estado: 'ativo',
     });
-    await audit({ userId: req.user.id, acao: 'criar_utilizador', entidade: 'User', entidadeId: user.id, detalhes: { condominio_id: req.condominioId, papel: papelDaAssociacao(role) } });
-    req.flash('success_msg', 'Utilizador criado.');
+    await audit({ userId: req.user.id, acao: 'criar_utilizador', entidade: 'User', entidadeId: user.id, detalhes: { condominio_id: req.condominioId, papel: papelDaAssociacao(role), porConvite: Boolean(enviarConvite) } });
+    if (enviarConvite) {
+      const envio = await enviarConviteAoUtilizador(user, req);
+      req.flash('success_msg', envio.ok
+        ? 'Utilizador criado e convite enviado por email (válido 30 dias).'
+        : 'Utilizador criado com convite pendente — o email não foi enviado (configure o SMTP em Emails e use "Reenviar convite").');
+    } else {
+      req.flash('success_msg', 'Utilizador criado.');
+    }
     res.redirect('/admin/utilizadores');
   } catch (err) {
     console.error(err);
@@ -651,6 +698,43 @@ router.post('/utilizadores/:id/eliminar', async (req, res) => {
   }
   await audit({ userId: req.user.id, acao: 'eliminar_utilizador', entidade: 'User', entidadeId: userId, detalhes: { condominio_id: req.condominioId } });
   req.flash('success_msg', 'Utilizador removido deste condomínio.');
+  res.redirect('/admin/utilizadores');
+});
+
+// ── Convites (estados/validade; confirmação de email) ──────────────
+router.post('/utilizadores/:id/reenviar-convite', async (req, res) => {
+  const assoc = await assocDeUtilizador(req, req.params.id);
+  if (!assoc) return res.redirect('/admin/utilizadores');
+  const user = await User.findByPk(req.params.id);
+  if (!user) return res.redirect('/admin/utilizadores');
+  if (user.convite_estado === 'aceite') {
+    req.flash('error_msg', 'Este utilizador já aceitou o convite.');
+    return res.redirect('/admin/utilizadores');
+  }
+  if (user.convite_estado === 'revogado') {
+    req.flash('error_msg', 'Convite revogado. Crie/edite o utilizador para gerar um novo convite.');
+    return res.redirect('/admin/utilizadores');
+  }
+  const envio = await enviarConviteAoUtilizador(user, req);
+  await audit({ userId: req.user.id, acao: 'reenviar_convite', entidade: 'User', entidadeId: user.id, detalhes: { email: user.email } }).catch(() => {});
+  req.flash('success_msg', envio.ok
+    ? 'Convite reenviado por email (válido 30 dias).'
+    : 'Convite renovado mas o email não foi enviado (verifique o SMTP).');
+  res.redirect('/admin/utilizadores');
+});
+
+router.post('/utilizadores/:id/revogar-convite', async (req, res) => {
+  const assoc = await assocDeUtilizador(req, req.params.id);
+  if (!assoc) return res.redirect('/admin/utilizadores');
+  const user = await User.findByPk(req.params.id);
+  if (!user) return res.redirect('/admin/utilizadores');
+  if (user.convite_estado === 'aceite') {
+    req.flash('error_msg', 'Não pode revogar o convite de uma conta já ativada.');
+    return res.redirect('/admin/utilizadores');
+  }
+  await user.update({ convite_token: null, convite_token_expira: null, convite_estado: 'revogado' });
+  await audit({ userId: req.user.id, acao: 'revogar_convite', entidade: 'User', entidadeId: user.id, detalhes: { email: user.email } }).catch(() => {});
+  req.flash('success_msg', 'Convite revogado.');
   res.redirect('/admin/utilizadores');
 });
 
