@@ -5,6 +5,7 @@ module.exports = (sequelize) => {
     'Recibo',
     {
       id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+      condominio_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
       fracao_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
       // Código único e legível, ex.: RCP-2026-0006.
       codigo: { type: DataTypes.STRING(40), allowNull: false, unique: true },

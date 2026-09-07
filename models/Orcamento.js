@@ -5,6 +5,7 @@ module.exports = (sequelize) => {
     'Orcamento',
     {
       id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+      condominio_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
       designacao: { type: DataTypes.STRING(120), allowNull: false },
       ano: { type: DataTypes.INTEGER, allowNull: true },
       saldo_transitado: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },

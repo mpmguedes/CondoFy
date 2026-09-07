@@ -5,6 +5,7 @@ module.exports = (sequelize) => {
     'ContaBancaria',
     {
       id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+      condominio_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
       nome: { type: DataTypes.STRING(120), allowNull: false },
       banco: { type: DataTypes.STRING(120), allowNull: true },
       iban: { type: DataTypes.STRING(40), allowNull: true },

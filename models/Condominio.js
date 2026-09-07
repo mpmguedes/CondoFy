@@ -24,6 +24,12 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: 'designacao',
       },
+      // Ciclo Ativo → Desativado → Eliminação permanente (Super Admin).
+      estado: {
+        type: DataTypes.ENUM('ativo', 'inativo'),
+        allowNull: false,
+        defaultValue: 'ativo',
+      },
     },
     { tableName: 'condominios', underscored: true }
   );

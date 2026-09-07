@@ -13,6 +13,19 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: 'condomino',
       },
+      // Super Admin GLOBAL (independente dos papéis por condomínio).
+      role_global: { type: DataTypes.ENUM('super_admin'), allowNull: true },
+      // Confirmação de email (obrigatória antes de acesso normal).
+      email_confirmado: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+      email_confirmado_at: { type: DataTypes.DATE, allowNull: true },
+      telefone: { type: DataTypes.STRING(40), allowNull: true },
+      // Convite de ativação (token único/expirável + estado).
+      convite_token: { type: DataTypes.STRING(255), allowNull: true },
+      convite_token_expira: { type: DataTypes.DATE, allowNull: true },
+      convite_estado: {
+        type: DataTypes.ENUM('pendente', 'enviado', 'aceite', 'expirado', 'revogado'),
+        allowNull: true,
+      },
       // provider prepara a autenticação para OAuth/Google no futuro,
       // sem reescrever o sistema de utilizadores.
       provider: {

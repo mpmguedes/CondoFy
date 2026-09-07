@@ -18,6 +18,8 @@ fs.readdirSync(__dirname)
 // ── Associações (todas por ID / foreign key) ───────────────────────
 const {
   User,
+  UserCondominio,
+  Condominio,
   Pessoa,
   ContactoPessoa,
   Fracao,
@@ -55,6 +57,44 @@ const {
 // Utilizador ↔ Pessoa (relação explícita, nunca por nome)
 User.belongsTo(Pessoa, { foreignKey: 'pessoa_id', as: 'pessoa' });
 Pessoa.hasMany(User, { foreignKey: 'pessoa_id', as: 'users' });
+
+// ── Multi-condomínio: utilizador ↔ condomínio (papel por condomínio) ──
+User.belongsToMany(Condominio, {
+  through: UserCondominio,
+  foreignKey: 'utilizador_id',
+  otherKey: 'condominio_id',
+  as: 'condominios',
+});
+Condominio.belongsToMany(User, {
+  through: UserCondominio,
+  foreignKey: 'condominio_id',
+  otherKey: 'utilizador_id',
+  as: 'utilizadores',
+});
+UserCondominio.belongsTo(User, { foreignKey: 'utilizador_id', as: 'utilizador' });
+UserCondominio.belongsTo(Condominio, { foreignKey: 'condominio_id', as: 'condominio' });
+
+// Entidades de negócio → condomínio (isolamento por condominio_id)
+const MODELOS_COM_CONDOMINIO = [
+  Fracao,
+  Pessoa,
+  ContactoPessoa,
+  Quota,
+  Pagamento,
+  Recibo,
+  Documento,
+  Assembleia,
+  Despesa,
+  ContaBancaria,
+  Orcamento,
+  ExtraQuota,
+  Aviso,
+];
+for (const M of MODELOS_COM_CONDOMINIO) {
+  M.belongsTo(Condominio, { foreignKey: 'condominio_id', as: 'condominio' });
+}
+Condominio.hasMany(Fracao, { foreignKey: 'condominio_id', as: 'fracoes' });
+Condominio.hasMany(Pessoa, { foreignKey: 'condominio_id', as: 'pessoas' });
 
 // Fração ↔ Pessoa (muitos-para-muitos, com papel/vínculo)
 Fracao.belongsToMany(Pessoa, {

@@ -5,7 +5,8 @@ module.exports = (sequelize) => {
     'Documento',
     {
       id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
-        tipo: {
+      condominio_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+      tipo: {
         type: DataTypes.ENUM(
           'aviso_quota',
           'recibo',

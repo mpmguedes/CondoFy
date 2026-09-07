@@ -5,6 +5,7 @@ module.exports = (sequelize) => {
     'Assembleia',
     {
       id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+      condominio_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
       numero: { type: DataTypes.STRING(40), allowNull: true },
       tipo: {
         type: DataTypes.ENUM('ordinaria', 'extraordinaria', 'urgencia'),

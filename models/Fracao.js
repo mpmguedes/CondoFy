@@ -5,6 +5,7 @@ module.exports = (sequelize) => {
     'Fracao',
     {
       id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+      condominio_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
       designacao: { type: DataTypes.STRING(120), allowNull: false },
       permilagem: { type: DataTypes.DECIMAL(7, 2), allowNull: true },
       andar: { type: DataTypes.STRING(60), allowNull: true },
