@@ -61,16 +61,20 @@ async function saldoConta(conta) {
 }
 
 // Resumo financeiro global do condomínio.
-async function resumoCondominio() {
-  const contas = await ContaBancaria.findAll({ where: { ativa: true } });
+// condominioId (opcional, multi-condomínio): restringe contas/pagamentos/
+// despesas/quotas ao condomínio ativo; sem ele mantém o comportamento
+// legado de instalação com um único condomínio.
+async function resumoCondominio(condominioId) {
+  const onde = condominioId ? { condominio_id: condominioId } : {};
+  const contas = await ContaBancaria.findAll({ where: { ativa: true, ...onde } });
   const saldosContas = await Promise.all(contas.map((c) => saldoConta(c)));
 
   const totalInicialC = contas.reduce((s, c) => s + toCents(c.saldo_inicial), 0);
   const totalReceitasC = toCents(
-    await Pagamento.sum('valor', { where: { estado: 'confirmado' } })
+    await Pagamento.sum('valor', { where: { estado: 'confirmado', ...onde } })
   );
   const totalDespesasC = toCents(
-    await Despesa.sum('valor', { where: { estado: { [Op.ne]: 'anulada' } } })
+    await Despesa.sum('valor', { where: { estado: { [Op.ne]: 'anulada' }, ...onde } })
   );
 
   let fundoReservaC = 0;
@@ -89,7 +93,7 @@ async function resumoCondominio() {
   });
 
   const totalQuotasC = toCents(
-    await Quota.sum('valor', { where: { estado: { [Op.ne]: 'anulada' } } })
+    await Quota.sum('valor', { where: { estado: { [Op.ne]: 'anulada' }, ...onde } })
   );
   const emDividaGlobalC = totalQuotasC - totalReceitasC;
 
