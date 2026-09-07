@@ -43,6 +43,7 @@ const {
   Fornecedor,
   PagamentoFornecedor,
   Documento,
+  DocumentoCategoria,
   Assembleia,
   AssembleiaParticipante,
   Aviso,
@@ -235,6 +236,20 @@ AvisoDestinatario.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 EmailFila.belongsTo(Documento, { foreignKey: 'documento_id', as: 'documento' });
 EmailFila.belongsTo(Aviso, { foreignKey: 'aviso_id', as: 'aviso' });
 EmailFila.belongsTo(User, { foreignKey: 'user_id', as: 'utilizador' });
+
+// Documento ↔ Categoria (many-to-many; categorias tipo 'documento')
+Documento.belongsToMany(Categoria, {
+  through: DocumentoCategoria,
+  foreignKey: 'documento_id',
+  otherKey: 'categoria_id',
+  as: 'categorias',
+});
+Categoria.belongsToMany(Documento, {
+  through: DocumentoCategoria,
+  foreignKey: 'categoria_id',
+  otherKey: 'documento_id',
+  as: 'documentos',
+});
 
 // Auditoria
 AuditLog.belongsTo(User, { foreignKey: 'user_id', as: 'user' });

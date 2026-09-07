@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const { Op } = require('sequelize');
-const { Documento, Pessoa } = require('../models');
+const { Documento, Pessoa, Categoria, DocumentoCategoria } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
@@ -47,7 +47,11 @@ router.get('/documentos', async (req, res) => {
   const pasta = req.query.pasta || null;
   const where = { condominio_id: req.condominioId };
   if (pasta && mapa[pasta]) where.pasta = pasta;
-  const documentos = await Documento.findAll({ where, order: [['data', 'DESC'], ['id', 'DESC']] });
+  const documentos = await Documento.findAll({
+    where,
+    include: [{ model: Categoria, as: 'categorias', through: { attributes: [] }, required: false }],
+    order: [['data', 'DESC'], ['id', 'DESC']],
+  });
   res.render('admin/documentos/listar', {
     titulo: 'Documentos',
     documentos,
@@ -114,9 +118,11 @@ router.post('/documentos/pastas/:key/eliminar', async (req, res) => {
 
 router.get('/documentos/nova', async (req, res) => {
   const cond = await getCondominio({ id: req.condominioId });
+  const categoriasDoc = await Categoria.findAll({ where: { tipo: 'documento', ativa: true }, order: [['nome', 'ASC']] });
   res.render('admin/documentos/form', {
     titulo: 'Novo documento',
     pastas: mapaPastas(cond),
+    categoriasDoc,
     driveLigado: drive.isConfigured(),
   });
 });
@@ -171,6 +177,19 @@ router.post('/documentos', upload.single('ficheiro'), async (req, res) => {
       drive_uploaded_at: driveUploadedAt,
       created_by: req.user.id,
     });
+
+    // Categorias de documento (many-to-many) — validadas como tipo 'documento'.
+    const catIds = toArray(req.body.categorias).map(Number).filter(Boolean);
+    if (catIds.length) {
+      const validas = await Categoria.findAll({ where: { id: { [Op.in]: catIds }, tipo: 'documento', ativa: true }, attributes: ['id'] });
+      for (const cat of validas) {
+        await DocumentoCategoria.findOrCreate({
+          where: { documento_id: documento.id, categoria_id: cat.id },
+          defaults: { documento_id: documento.id, categoria_id: cat.id },
+        });
+      }
+    }
+
     await audit({ userId: req.user.id, acao: 'criar_documento', entidade: 'Documento', entidadeId: documento.id });
     req.flash('success_msg', 'Documento guardado.');
   } catch (err) {

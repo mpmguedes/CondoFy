@@ -1,6 +1,6 @@
 <div class="page-heading">
   <h1>Categorias</h1>
-  <p class="subtitle">Categorias de despesa e receita usadas no orçamento</p>
+  <p class="subtitle">Categorias de despesa, receita e documentos (catálogo partilhado)</p>
 </div>
 
 <div class="card mb-4">
@@ -15,6 +15,7 @@
         <select class="form-select" name="tipo">
           <option value="despesa">Despesa</option>
           <option value="receita">Receita</option>
+          <option value="documento">Documento</option>
         </select>
       </div>
       <div class="col-6 col-md-3 d-grid">
@@ -44,6 +45,7 @@
             <select form="cat-{{id}}" class="form-select form-select-sm" name="tipo">
               <option value="despesa" {{selected tipo 'despesa'}}>Despesa</option>
               <option value="receita" {{selected tipo 'receita'}}>Receita</option>
+              <option value="documento" {{selected tipo 'documento'}}>Documento</option>
             </select>
           </td>
           <td>
