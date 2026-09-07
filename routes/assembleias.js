@@ -9,6 +9,7 @@ const {
   Documento,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
+const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const { getCondominio } = require('../helpers/condominio');
 const drive = require('../helpers/drive');
@@ -16,6 +17,8 @@ const { gerarConvocatoriaPDF, gerarAtaPDF } = require('../helpers/pdf');
 
 const router = express.Router();
 router.use(eAdmin);
+// Isolamento: condomínio ativo (sessão validada) em todas as operações.
+router.use(tenant.comCondominioAtivo);
 
 // Anexos: PDF, JPG, PNG, WebP até 20 MB.
 const upload = multer({
@@ -53,9 +56,18 @@ function parseHoraSegundos(hora) {
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
 }
 
-async function proximoNumeroAssembleia(ano) {
+// Assembleia do condomínio ATIVO (null quando não pertence — bloqueia IDOR).
+function carregarAssembleia(req, incluir = []) {
+  return Assembleia.findOne({ where: { id: req.params.id, condominio_id: req.condominioId }, include: incluir });
+}
+
+function escopoAssembleia(req, extra = {}) {
+  return { condominio_id: req.condominioId, ...extra };
+}
+
+async function proximoNumeroAssembleia(ano, condominioId) {
   const ultima = await Assembleia.findOne({
-    where: { numero: { [require('sequelize').Op.like]: `${ano}/%` } },
+    where: { numero: { [require('sequelize').Op.like]: `${ano}/%` }, condominio_id: condominioId },
     order: [['id', 'DESC']],
   });
   if (!ultima) return `${ano}/1`;
@@ -71,17 +83,17 @@ async function enviarParaDrive(tipo, ano, nome, buffer, mimeType) {
 // ── Lista (dashboard + filtros) ────────────────────────────────────
 router.get('/assembleias', async (req, res) => {
   const filtro = req.query.estado || 'todas';
-  const where = {};
+  const where = escopoAssembleia(req);
   if (['rascunho', 'agendada', 'convocada', 'realizada', 'cancelada'].includes(filtro)) {
     where.estado = filtro;
   }
   const assembleias = await Assembleia.findAll({ where, order: [['data', 'DESC'], ['id', 'DESC']] });
 
   const [nRascunhos, nAgendadas, nRealizadas, nTotal] = await Promise.all([
-    Assembleia.count({ where: { estado: 'rascunho' } }),
-    Assembleia.count({ where: { estado: { [require('sequelize').Op.in]: ['agendada', 'convocada'] } } }),
-    Assembleia.count({ where: { estado: 'realizada' } }),
-    Assembleia.count(),
+    Assembleia.count({ where: escopoAssembleia(req, { estado: 'rascunho' }) }),
+    Assembleia.count({ where: escopoAssembleia(req, { estado: { [require('sequelize').Op.in]: ['agendada', 'convocada'] } }) }),
+    Assembleia.count({ where: escopoAssembleia(req, { estado: 'realizada' }) }),
+    Assembleia.count({ where: escopoAssembleia(req) }),
   ]);
 
   res.render('admin/assembleias/listar', {
@@ -96,7 +108,7 @@ router.get('/assembleias', async (req, res) => {
 
 router.get('/assembleias/nova', async (req, res) => {
   const ano = new Date().getFullYear();
-  const numero = await proximoNumeroAssembleia(ano);
+  const numero = await proximoNumeroAssembleia(ano, req.condominioId);
   res.render('admin/assembleias/form', {
     titulo: 'Nova assembleia',
     assembleia: null,
@@ -108,6 +120,7 @@ router.get('/assembleias/nova', async (req, res) => {
 router.post('/assembleias', async (req, res) => {
   const { numero, tipo, data, hora, local } = req.body;
   const assembleia = await Assembleia.create({
+    condominio_id: req.condominioId,
     numero: numero || null,
     tipo: tipo || 'ordinaria',
     data: data || null,
@@ -121,13 +134,11 @@ router.post('/assembleias', async (req, res) => {
 });
 
 router.get('/assembleias/:id', async (req, res) => {
-  const assembleia = await Assembleia.findByPk(req.params.id, {
-    include: [
-      { model: Documento, as: 'convocatoria' },
-      { model: Documento, as: 'ata' },
-      { model: AgendaItem, as: 'agenda_itens' },
-    ],
-  });
+  const assembleia = await carregarAssembleia(req, [
+    { model: Documento, as: 'convocatoria' },
+    { model: Documento, as: 'ata' },
+    { model: AgendaItem, as: 'agenda_itens' },
+  ]);
   if (!assembleia) return res.redirect('/admin/assembleias');
 
   const [participantes, fracoes, pessoas, anexos] = await Promise.all([
@@ -139,10 +150,10 @@ router.get('/assembleias/:id', async (req, res) => {
       ],
       order: [[{ model: Fracao, as: 'fracao' }, 'designacao', 'ASC']],
     }),
-    Fracao.findAll({ order: [['designacao', 'ASC']] }),
-    Pessoa.findAll({ where: { ativo: true }, order: [['nome', 'ASC']] }),
+    Fracao.findAll({ where: escopoAssembleia(req), order: [['designacao', 'ASC']] }),
+    Pessoa.findAll({ where: escopoAssembleia(req, { ativo: true }), order: [['nome', 'ASC']] }),
     Documento.findAll({
-      where: { entidade_tipo: 'Assembleia', entidade_id: assembleia.id },
+      where: { entidade_tipo: 'Assembleia', entidade_id: assembleia.id, condominio_id: req.condominioId },
       order: [['id', 'DESC']],
     }),
   ]);
@@ -161,7 +172,7 @@ router.get('/assembleias/:id', async (req, res) => {
 });
 
 router.get('/assembleias/:id/editar', async (req, res) => {
-  const assembleia = await Assembleia.findByPk(req.params.id);
+  const assembleia = await carregarAssembleia(req);
   if (!assembleia) return res.redirect('/admin/assembleias');
   res.render('admin/assembleias/form', {
     titulo: 'Editar assembleia',
@@ -172,7 +183,7 @@ router.get('/assembleias/:id/editar', async (req, res) => {
 });
 
 router.post('/assembleias/:id', async (req, res) => {
-  const assembleia = await Assembleia.findByPk(req.params.id);
+  const assembleia = await carregarAssembleia(req);
   if (!assembleia) return res.redirect('/admin/assembleias');
   const { numero, tipo, data, hora, local, estado } = req.body;
   await assembleia.update({
@@ -190,7 +201,7 @@ router.post('/assembleias/:id', async (req, res) => {
 
 // ── Ordem de trabalhos (itens) ─────────────────────────────────────
 router.post('/assembleias/:id/agenda', async (req, res) => {
-  const assembleia = await Assembleia.findByPk(req.params.id);
+  const assembleia = await carregarAssembleia(req);
   if (!assembleia) return res.redirect('/admin/assembleias');
   const descricao = (req.body.descricao || '').trim();
   if (!descricao) {
@@ -209,8 +220,10 @@ router.post('/assembleias/:id/agenda', async (req, res) => {
 });
 
 router.post('/assembleias/:id/agenda/:aid', async (req, res) => {
+  const assembleia = await carregarAssembleia(req);
+  if (!assembleia) return res.redirect('/admin/assembleias');
   const item = await AgendaItem.findByPk(req.params.aid);
-  if (!item || item.assembleia_id !== parseInt(req.params.id, 10)) return res.redirect('/admin/assembleias');
+  if (!item || item.assembleia_id !== assembleia.id) return res.redirect('/admin/assembleias');
   await item.update({
     descricao: (req.body.descricao || item.descricao).trim() || item.descricao,
     sujeito_votacao: req.body.sujeito_votacao === 'on' || req.body.sujeito_votacao === '1' || req.body.sujeito_votacao === true,
@@ -220,22 +233,26 @@ router.post('/assembleias/:id/agenda/:aid', async (req, res) => {
 });
 
 router.post('/assembleias/:id/agenda/:aid/eliminar', async (req, res) => {
-  await AgendaItem.destroy({ where: { id: req.params.aid, assembleia_id: req.params.id } });
+  const assembleia = await carregarAssembleia(req);
+  if (!assembleia) return res.redirect('/admin/assembleias');
+  await AgendaItem.destroy({ where: { id: req.params.aid, assembleia_id: assembleia.id } });
   req.flash('success_msg', 'Ponto removido.');
-  res.redirect(`/admin/assembleias/${req.params.id}`);
+  res.redirect(`/admin/assembleias/${assembleia.id}`);
 });
 
 router.post('/assembleias/:id/agenda/reordenar', async (req, res) => {
+  const assembleia = await carregarAssembleia(req);
+  if (!assembleia) return res.redirect('/admin/assembleias');
   const ordem = req.body.ordem || [];
   for (let i = 0; i < ordem.length; i++) {
-    await AgendaItem.update({ ordem: i + 1 }, { where: { id: parseInt(ordem[i], 10), assembleia_id: req.params.id } });
+    await AgendaItem.update({ ordem: i + 1 }, { where: { id: parseInt(ordem[i], 10), assembleia_id: assembleia.id } });
   }
-  res.redirect(`/admin/assembleias/${req.params.id}`);
+  res.redirect(`/admin/assembleias/${assembleia.id}`);
 });
 
 // ── Anexos ─────────────────────────────────────────────────────────
 router.post('/assembleias/:id/anexos', upload.single('ficheiro'), async (req, res) => {
-  const assembleia = await Assembleia.findByPk(req.params.id);
+  const assembleia = await carregarAssembleia(req);
   if (!assembleia) return res.redirect('/admin/assembleias');
   try {
     if (!req.file) {
@@ -249,6 +266,7 @@ router.post('/assembleias/:id/anexos', upload.single('ficheiro'), async (req, re
     const ano = assembleia.data ? new Date(assembleia.data).getFullYear() : new Date().getFullYear();
     const up = await enviarParaDrive('ata', ano, req.file.originalname, req.file.buffer, req.file.mimetype);
     await Documento.create({
+      condominio_id: req.condominioId,
       tipo: 'outro',
       numero_documento: null,
       nome: req.file.originalname,
@@ -273,17 +291,19 @@ router.post('/assembleias/:id/anexos', upload.single('ficheiro'), async (req, re
 });
 
 router.post('/assembleias/:id/anexos/:did/eliminar', async (req, res) => {
-  const doc = await Documento.findByPk(req.params.did);
-  if (doc && doc.entidade_id === parseInt(req.params.id, 10)) {
+  const assembleia = await carregarAssembleia(req);
+  if (!assembleia) return res.redirect('/admin/assembleias');
+  const doc = await Documento.findOne({ where: { id: req.params.did, condominio_id: req.condominioId } });
+  if (doc && doc.entidade_id === assembleia.id) {
     await doc.destroy();
     req.flash('success_msg', 'Anexo eliminado.');
   }
-  res.redirect(`/admin/assembleias/${req.params.id}`);
+  res.redirect(`/admin/assembleias/${assembleia.id}`);
 });
 
 // ── Participantes ──────────────────────────────────────────────────
 router.post('/assembleias/:id/participantes', async (req, res) => {
-  const assembleia = await Assembleia.findByPk(req.params.id);
+  const assembleia = await carregarAssembleia(req);
   if (!assembleia) return res.redirect('/admin/assembleias');
   const { fracao_id, pessoa_id, presente, permilagem } = req.body;
   await AssembleiaParticipante.create({
@@ -298,18 +318,18 @@ router.post('/assembleias/:id/participantes', async (req, res) => {
 });
 
 router.post('/assembleias/:id/participantes/:pid/eliminar', async (req, res) => {
-  await AssembleiaParticipante.destroy({ where: { id: req.params.pid, assembleia_id: req.params.id } });
+  const assembleia = await carregarAssembleia(req);
+  if (!assembleia) return res.redirect('/admin/assembleias');
+  await AssembleiaParticipante.destroy({ where: { id: req.params.pid, assembleia_id: assembleia.id } });
   req.flash('success_msg', 'Participante removido.');
-  res.redirect(`/admin/assembleias/${req.params.id}`);
+  res.redirect(`/admin/assembleias/${assembleia.id}`);
 });
 
 // ── PDFs ───────────────────────────────────────────────────────────
 router.get('/assembleias/:id/convocatoria', async (req, res) => {
-  const assembleia = await Assembleia.findByPk(req.params.id, {
-    include: [{ model: AgendaItem, as: 'agenda_itens' }],
-  });
+  const assembleia = await carregarAssembleia(req, [{ model: AgendaItem, as: 'agenda_itens' }]);
   if (!assembleia) return res.redirect('/admin/assembleias');
-  const condominio = await getCondominio();
+  const condominio = await getCondominio({ id: req.condominioId });
   const agenda = (assembleia.agenda_itens || [])
     .slice()
     .sort((a, b) => a.ordem - b.ordem)
@@ -329,11 +349,9 @@ router.get('/assembleias/:id/convocatoria', async (req, res) => {
 });
 
 router.get('/assembleias/:id/ata', async (req, res) => {
-  const assembleia = await Assembleia.findByPk(req.params.id, {
-    include: [{ model: AgendaItem, as: 'agenda_itens' }],
-  });
+  const assembleia = await carregarAssembleia(req, [{ model: AgendaItem, as: 'agenda_itens' }]);
   if (!assembleia) return res.redirect('/admin/assembleias');
-  const condominio = await getCondominio();
+  const condominio = await getCondominio({ id: req.condominioId });
   const participantes = await AssembleiaParticipante.findAll({
     where: { assembleia_id: assembleia.id },
     include: [{ model: Fracao, as: 'fracao' }],
@@ -361,16 +379,14 @@ router.get('/assembleias/:id/ata', async (req, res) => {
 
 // Guardar convocatória no Drive
 router.post('/assembleias/:id/convocatoria/drive', async (req, res) => {
-  const assembleia = await Assembleia.findByPk(req.params.id, {
-    include: [{ model: AgendaItem, as: 'agenda_itens' }],
-  });
+  const assembleia = await carregarAssembleia(req, [{ model: AgendaItem, as: 'agenda_itens' }]);
   if (!assembleia) return res.redirect('/admin/assembleias');
   if (!drive.isConfigured()) {
     req.flash('error_msg', 'Google Drive não configurado.');
     return res.redirect(`/admin/assembleias/${assembleia.id}`);
   }
   try {
-    const condominio = await getCondominio();
+    const condominio = await getCondominio({ id: req.condominioId });
     const agenda = (assembleia.agenda_itens || []).slice().sort((a, b) => a.ordem - b.ordem).map((i) => i.descricao);
     const buffer = await gerarConvocatoriaPDF(condominio.toJSON(), {
       numero: assembleia.numero,
@@ -384,6 +400,7 @@ router.post('/assembleias/:id/convocatoria/drive', async (req, res) => {
     const ano = assembleia.data ? new Date(assembleia.data).getFullYear() : new Date().getFullYear();
     const up = await enviarParaDrive('convocatoria', ano, `Convocatoria_${assembleia.numero || assembleia.id}.pdf`, buffer, 'application/pdf');
     const doc = await Documento.create({
+      condominio_id: req.condominioId,
       tipo: 'convocatoria',
       numero_documento: null,
       nome: `Convocatória ${assembleia.numero || assembleia.id}`,
@@ -410,16 +427,14 @@ router.post('/assembleias/:id/convocatoria/drive', async (req, res) => {
 
 // Guardar ata no Drive
 router.post('/assembleias/:id/ata/drive', async (req, res) => {
-  const assembleia = await Assembleia.findByPk(req.params.id, {
-    include: [{ model: AgendaItem, as: 'agenda_itens' }],
-  });
+  const assembleia = await carregarAssembleia(req, [{ model: AgendaItem, as: 'agenda_itens' }]);
   if (!assembleia) return res.redirect('/admin/assembleias');
   if (!drive.isConfigured()) {
     req.flash('error_msg', 'Google Drive não configurado.');
     return res.redirect(`/admin/assembleias/${assembleia.id}`);
   }
   try {
-    const condominio = await getCondominio();
+    const condominio = await getCondominio({ id: req.condominioId });
     const participantes = await AssembleiaParticipante.findAll({
       where: { assembleia_id: assembleia.id },
       include: [{ model: Fracao, as: 'fracao' }],
@@ -439,6 +454,7 @@ router.post('/assembleias/:id/ata/drive', async (req, res) => {
     const ano = assembleia.data ? new Date(assembleia.data).getFullYear() : new Date().getFullYear();
     const up = await enviarParaDrive('ata', ano, `Ata_${assembleia.numero || assembleia.id}.pdf`, buffer, 'application/pdf');
     const doc = await Documento.create({
+      condominio_id: req.condominioId,
       tipo: 'ata',
       numero_documento: null,
       nome: `Ata ${assembleia.numero || assembleia.id}`,
