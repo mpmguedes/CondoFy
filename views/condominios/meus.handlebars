@@ -1,121 +1,144 @@
-<div class="meus-grid">
-  <div class="meus-esquerda">
-    <div class="meus-mensagem">
-      <h2 class="meus-mensagem-titulo">A gestão do seu condomínio,<br />simplificada</h2>
-      <p class="meus-mensagem-apoio">Gestão simples, organizada e transparente.</p>
+<div class="auth-page">
+  <header class="auth-head">
+    <a class="auth-logo" href="/" title="GesCondu">
+      <img src="/img/gescondu_pb_hor.svg" alt="GesCondu" />
+    </a>
+    {{#if user}}
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <span class="auth-sessao">
+        <span class="material-symbols-outlined" style="font-size:1rem">lock</span>
+        Sessão iniciada
+      </span>
+      <span class="fw-semibold small">{{user.nome}}</span>
+      <a href="/logout" class="btn btn-sm btn-outline-light">Sair</a>
     </div>
-  </div>
+    {{/if}}
+  </header>
 
-  <div class="meus-direita">
-    <div class="meus-card">
-      <div class="meus-card-body">
-        <h1 class="meus-titulo">Os meus condomínios</h1>
-        <p class="meus-hint">Escolha um condomínio para continuar.</p>
+  <div class="auth-stage">
+    <section class="auth-message">
+      <h2>A gestão do seu condomínio,<br />simplificada</h2>
+      <p class="auth-message-apoio">Gestão simples, organizada e transparente.</p>
+    </section>
 
-        {{#if lista}}
-        <div class="meus-lista">
-          {{#each lista}}
-          <form action="/condominios/{{id}}/entrar" method="POST" class="meus-item meus-item-form">
-            <div class="meus-item-linha1">
-              <span class="meus-item-nome">{{designacao}}</span>
-              <span class="meus-papel">{{papelLabel}}</span>
-            </div>
-            {{#if local}}
-            <p class="meus-item-meta">
-              <span class="material-symbols-outlined">location_on</span>
-              {{local}}
-            </p>
-            {{else}}
-            <p class="meus-item-meta">Sem morada registada</p>
-            {{/if}}
-            <p class="meus-item-meta">
-              <span class="material-symbols-outlined">domain</span>
-              {{fracoes}} {{#if (eq fracoes 1)}}fração{{else}}frações{{/if}}
-            </p>
-            <div class="meus-item-cta">
-              <button type="submit" class="btn btn-sm btn-primary">
-                Entrar <span class="material-symbols-outlined align-middle ms-1">arrow_forward</span>
-              </button>
-            </div>
-          </form>
-          {{/each}}
-        </div>
-        {{else}}
-        <div class="meus-vazio text-center py-4">
-          <span class="material-symbols-outlined d-block mx-auto mb-2">apartment</span>
-          <p class="mb-0">Ainda não está associado a nenhum condomínio.</p>
-        </div>
-        {{/if}}
+    <section class="auth-panel-col">
+      <div class="auth-panel">
+        <div class="auth-panel-inner">
+          <h1 class="auth-titulo">Os meus condomínios</h1>
+          <p class="auth-hint">Escolha um condomínio para continuar.</p>
 
-        {{#if podeCriar}}
-        <div class="meus-divisor">Adicionar outro condomínio</div>
-        <div class="meus-opcoes">
-          <button type="button" class="meus-opcao" data-bs-toggle="collapse" data-bs-target="#addCondominio"
-                  aria-expanded="false" aria-controls="addCondominio">
-            <span class="material-symbols-outlined">add_business</span>
-            <span>
-              <span class="d-block fw-semibold">+ Criar novo</span>
-              <span class="small text-muted">Registar um novo condomínio</span>
-            </span>
-            <span class="material-symbols-outlined ms-auto text-muted">expand_more</span>
-          </button>
-          <div class="collapse" id="addCondominio">
-            <div class="meus-form-collapse">
-              <form action="/condominios" method="POST" class="row g-3 align-items-end">
-                <div class="col-12">
-                  <label class="form-label">Nome do condomínio *</label>
-                  <input type="text" class="form-control" name="designacao" required placeholder="Ex: Condomínio Jardim das Flores" />
-                </div>
-                <div class="col-12">
-                  <label class="form-label">Morada</label>
-                  <input type="text" class="form-control" name="morada" placeholder="Ex: Rua das Flores, 25, 2.º Esq." />
-                </div>
-                <div class="col-6">
-                  <label class="form-label">Código postal</label>
-                  <input type="text" class="form-control" name="codigo_postal" placeholder="Ex: 1000-000" />
-                </div>
-                <div class="col-6">
-                  <label class="form-label">Localidade</label>
-                  <input type="text" class="form-control" name="localidade" placeholder="Ex: Lisboa" />
-                </div>
-                <div class="col-12">
-                  <button type="submit" class="btn btn-primary w-100">
-                    <span class="material-symbols-outlined me-1" style="font-size:1.1rem">add</span>Criar condomínio
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-
-          <button type="button" class="meus-opcao" data-bs-toggle="collapse" data-bs-target="#addCodigo"
-                  aria-expanded="false" aria-controls="addCodigo">
-            <span class="material-symbols-outlined">key</span>
-            <span>
-              <span class="d-block fw-semibold">Com um código</span>
-              <span class="small text-muted">Entrar num condomínio com convite</span>
-            </span>
-            <span class="material-symbols-outlined ms-auto text-muted">expand_more</span>
-          </button>
-          <div class="collapse" id="addCodigo">
-            <div class="meus-form-collapse">
-              <label class="form-label">Código de convite</label>
-              <div class="input-group">
-                <input type="text" id="codigoConvite" class="form-control" placeholder="Cole aqui o código/link de convite" autocomplete="off" />
-                <button type="button" class="btn btn-outline-primary" id="btnAceitarConvite">Aceitar convite</button>
+          {{#if lista}}
+          <div class="auth-cond-lista">
+            {{#each lista}}
+            <form action="/condominios/{{id}}/entrar" method="POST" class="auth-cond">
+              <div class="auth-cond-row">
+                <span class="auth-cond-nome">{{designacao}}</span>
+                <span class="auth-cond-papel">{{papelLabel}}</span>
               </div>
-              <small class="text-muted d-block mt-2">Utilize o código do convite que recebeu por email (link <code>/aceitar-convite/…</code>).</small>
+              {{#if local}}
+              <p class="auth-cond-meta">
+                <span class="material-symbols-outlined">location_on</span>
+                {{local}}
+              </p>
+              {{else}}
+              <p class="auth-cond-meta">Sem morada registada</p>
+              {{/if}}
+              <p class="auth-cond-meta">
+                <span class="material-symbols-outlined">domain</span>
+                {{fracoes}} {{#if (eq fracoes 1)}}fração{{else}}frações{{/if}}
+              </p>
+              <div class="auth-cond-cta">
+                <button type="submit" class="btn btn-sm btn-primary">
+                  Entrar <span class="material-symbols-outlined align-middle ms-1">arrow_forward</span>
+                </button>
+              </div>
+            </form>
+            {{/each}}
+          </div>
+          {{else}}
+          <div class="auth-vazio text-center py-4">
+            <span class="material-symbols-outlined d-block mx-auto mb-2">apartment</span>
+            <p class="mb-0">Ainda não está associado a nenhum condomínio.</p>
+          </div>
+          {{/if}}
+
+          {{#if podeCriar}}
+          <div class="auth-divisor">Adicionar outro condomínio</div>
+          <div class="auth-opcoes">
+            <button type="button" class="auth-opcao" data-bs-toggle="collapse" data-bs-target="#addCondominio"
+                    aria-expanded="false" aria-controls="addCondominio">
+              <span class="material-symbols-outlined">add_business</span>
+              <span>
+                <span class="d-block fw-semibold">+ Criar novo</span>
+                <span class="small text-muted">Registar um novo condomínio</span>
+              </span>
+              <span class="material-symbols-outlined ms-auto text-muted">expand_more</span>
+            </button>
+            <div class="collapse" id="addCondominio">
+              <div class="auth-colapso">
+                <form action="/condominios" method="POST" class="row g-3 align-items-end">
+                  <div class="col-12">
+                    <label class="form-label">Nome do condomínio *</label>
+                    <input type="text" class="form-control" name="designacao" required placeholder="Ex: Condomínio Jardim das Flores" />
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label">Morada</label>
+                    <input type="text" class="form-control" name="morada" placeholder="Ex: Rua das Flores, 25, 2.º Esq." />
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label">Código postal</label>
+                    <input type="text" class="form-control" name="codigo_postal" placeholder="Ex: 1000-000" />
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label">Localidade</label>
+                    <input type="text" class="form-control" name="localidade" placeholder="Ex: Lisboa" />
+                  </div>
+                  <div class="col-12">
+                    <button type="submit" class="btn btn-primary w-100">
+                      <span class="material-symbols-outlined me-1" style="font-size:1.1rem">add</span>Criar condomínio
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <button type="button" class="auth-opcao" data-bs-toggle="collapse" data-bs-target="#addCodigo"
+                    aria-expanded="false" aria-controls="addCodigo">
+              <span class="material-symbols-outlined">key</span>
+              <span>
+                <span class="d-block fw-semibold">Com um código</span>
+                <span class="small text-muted">Entrar num condomínio com convite</span>
+              </span>
+              <span class="material-symbols-outlined ms-auto text-muted">expand_more</span>
+            </button>
+            <div class="collapse" id="addCodigo">
+              <div class="auth-colapso">
+                <label class="form-label">Código de convite</label>
+                <div class="input-group">
+                  <input type="text" id="codigoConvite" class="form-control" placeholder="Cole aqui o código/link de convite" autocomplete="off" />
+                  <button type="button" class="btn btn-outline-primary" id="btnAceitarConvite">Aceitar convite</button>
+                </div>
+                <small class="text-muted d-block mt-2">Utilize o código do convite que recebeu por email (link <code>/aceitar-convite/…</code>).</small>
+              </div>
             </div>
           </div>
+          {{/if}}
         </div>
-        {{/if}}
       </div>
-    </div>
+    </section>
   </div>
+
+  <footer class="auth-foot">© 2026 GesCondu. Todos os direitos reservados.</footer>
 </div>
+
+<style>
+  /* Conteúdo da lista de condomínios (linhas internas do card). */
+  .auth-cond-lista { display: flex; flex-direction: column; gap: .7rem; }
+</style>
 
 <script>
   // O cartão de condomínio é totalmente clicável (clique fora do botão também entra).
-  document.querySelectorAll('.meus-item-form').forEach(function (form) {
+  document.querySelectorAll('.auth-cond').forEach(function (form) {
     form.addEventListener('click', function (event) {
       if (event.target.closest('button, a, input, select, textarea, label')) return;
       if (typeof form.requestSubmit === 'function') form.requestSubmit();

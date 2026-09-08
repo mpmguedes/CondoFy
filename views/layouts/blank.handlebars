@@ -11,186 +11,24 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0,0" rel="stylesheet" />
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="/css/styles.css?v=20260117d" rel="stylesheet" />
   <style>
-    /* ── Shell institucional GesCondu (página independente) ─────────
-       Usado por "Os meus condomínios" (passo seguinte ao Login).
-       Mesma linguagem visual do Login: fundo azul institucional,
-       marca no topo à esquerda, mensagem institucional e floating card. */
-    html, body { height: 100%; }
+    /* Casca auth (página independente): fundo e flash. A composição
+       (logo/slogan/cartão/rodapé) vive nas classes .auth-* do styles.css. */
     body.blank-page {
-      font-family: 'Roboto', system-ui, -apple-system, sans-serif;
-      background: linear-gradient(155deg, #174a8f 0%, #0f2a4a 55%, #0b2140 100%);
+      background: var(--auth-bg);
       background-attachment: fixed;
       color: #ffffff;
-      min-height: 100vh;
-      min-height: 100dvh;
       margin: 0;
     }
-    .blank-shell { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
-
-    .blank-topbar {
-      display: flex; align-items: center; justify-content: space-between;
-      gap: 1rem; flex-wrap: wrap;
-      padding: clamp(18px, 3vh, 36px) clamp(16px, 5vw, 80px) 0;
-    }
-    .blank-brand { display: flex; align-items: center; }
-    .blank-brand img { height: clamp(96px, 10vw, 150px); width: auto; display: block; }
-    .blank-sessao {
-      display: inline-flex; align-items: center; gap: .4rem;
-      font-size: .78rem; color: #ffffff;
-      background: rgba(255, 255, 255, .14);
-      border: 1px solid rgba(255, 255, 255, .3);
-      border-radius: 999px; padding: .3rem .75rem;
-    }
-    .blank-user { color: #ffffff; }
-
-    .blank-main { flex: 1 0 auto; display: flex; align-items: stretch; }
-    .blank-main .container {
-      width: 100%; max-width: 1440px; margin: 0 auto;
-      display: flex; flex-direction: column;
-      padding: 0 clamp(16px, 5vw, 80px);
-    }
-    .blank-flash { width: 100%; max-width: 640px; margin: 0 auto 1rem; }
-
-    /* ── Grelha duas zonas: institucional (esquerda) | interação (direita) */
-    .meus-grid {
-      flex: 1 0 auto;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      gap: clamp(16px, 3vw, 48px);
-      align-items: center;
-      padding: clamp(12px, 2.5vh, 32px) 0 clamp(20px, 4vh, 48px);
-    }
-    .meus-esquerda { display: flex; align-items: center; }
-    .meus-mensagem { max-width: 620px; }
-    .meus-mensagem-titulo {
-      margin: 0;
-      font-size: clamp(1.75rem, 1.15rem + 1.9vw, 2.6rem); /* ~36–44px desktop */
-      font-weight: 700;
-      line-height: 1.16;
-      letter-spacing: -0.01em;
-    }
-    .meus-mensagem-apoio {
-      margin: 1.1rem 0 0;
-      font-size: 1rem;
-      color: rgba(255, 255, 255, 0.82);
-      max-width: 40ch;
-    }
-
-    .meus-direita {
-      display: flex; align-items: center; justify-content: flex-end;
-      padding-left: clamp(12px, 2vw, 40px);
-      padding-right: clamp(16px, 7.5vw, 140px);
-    }
-    .meus-card {
-      background: #ffffff; color: #1f2937;
-      width: 100%; max-width: 440px; margin: 0;
-      border: 0; border-radius: 18px;
-      box-shadow: 0 16px 40px rgba(4, 16, 36, 0.35), 0 4px 12px rgba(4, 16, 36, 0.18);
-    }
-    .meus-card-body { padding: 1.9rem 1.6rem; }
-    .meus-titulo { font-size: 1.4rem; font-weight: 700; color: #0f2a4a; margin: 0 0 .15rem; }
-    .meus-hint { font-size: .85rem; color: #5f6368; margin: 0 0 1.25rem; }
-
-    /* Lista de condomínios (dentro do floating card) */
-    .meus-lista { display: flex; flex-direction: column; gap: .7rem; }
-    .meus-item {
-      border: 1px solid #e6eaf0; border-radius: 14px; background: #ffffff;
-      padding: .85rem .95rem .7rem; margin: 0; cursor: pointer;
-      transition: border-color .12s ease, box-shadow .12s ease, background .12s ease;
-    }
-    .meus-item:hover { border-color: #b9cff2; background: #f7faff; }
-    .meus-item-linha1 { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
-    .meus-item-nome { font-weight: 600; color: #0f2a4a; }
-    .meus-papel {
-      font-size: .66rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
-      color: #5b6472; background: #f1f3f7; border: 1px solid #e2e6ee;
-      border-radius: 999px; padding: .22rem .6rem; white-space: nowrap; flex-shrink: 0;
-    }
-    .meus-item-meta {
-      display: flex; align-items: center; gap: .35rem;
-      color: #6a7380; font-size: .8rem; margin: .5rem 0 0;
-    }
-    .meus-item-meta .material-symbols-outlined { font-size: 1rem; }
-    .meus-item-cta { display: flex; justify-content: flex-end; margin-top: .6rem; }
-    .meus-item-cta .material-symbols-outlined { font-size: 1.05rem; }
-
-    .meus-vazio { color: #5f6368; }
-    .meus-vazio .material-symbols-outlined { font-size: 2.4rem; }
-
-    /* Adicionar outro condomínio (dentro do floating card) */
-    .meus-divisor {
-      margin: 1.4rem 0 .7rem; padding-top: 1rem;
-      border-top: 1px solid #eceef2;
-      font-size: .72rem; font-weight: 700; letter-spacing: .12em;
-      text-transform: uppercase; color: #8a93a0;
-    }
-    .meus-opcoes { display: flex; flex-direction: column; gap: .55rem; }
-    .meus-opcao {
-      display: flex; align-items: center; gap: .75rem; text-align: left; width: 100%;
-      border: 1px dashed #c9d4e4; border-radius: 12px; background: #ffffff;
-      color: #1c2733; padding: .7rem .85rem;
-      transition: border-color .12s ease, background .12s ease;
-    }
-    .meus-opcao:hover { border-color: #1a73e8; background: #f6f9ff; }
-    .meus-opcao .material-symbols-outlined { font-size: 1.3rem; }
-    .meus-form-collapse { border: 1px solid #e6eaf0; border-radius: 12px; padding: .9rem; background: #fbfcfe; }
-
-    .blank-footer {
-      border-top: 1px solid rgba(255, 255, 255, .16);
-      background: transparent;
-      font-size: .78rem; color: rgba(255, 255, 255, .72);
-      padding: .9rem 1rem 1.1rem; text-align: center;
-    }
-
-    /* Desktop/tablet largo: institucional à esquerda, card à direita */
-    @media (min-width: 992px) {
-      .meus-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); /* ≈55/45 */ }
-    }
-
-    /* Telemóvel: logo (topbar) → slogan → cartão → rodapé */
-    @media (max-width: 991.98px) {
-      .blank-topbar { padding: clamp(14px, 3vw, 22px) 1.25rem 0; }
-      .blank-brand img { height: 96px; }
-      .meus-grid { gap: 1rem; padding: 1rem 0 1.25rem; }
-      .meus-mensagem-titulo { font-size: clamp(1.7rem, 1.3rem + 2vw, 2.2rem); }
-      .meus-mensagem-apoio { font-size: .92rem; }
-      .meus-direita { justify-content: center; padding: 0; }
-      .meus-card { margin: 0 auto; }
-    }
+    .blank-flash { width: 100%; max-width: 640px; margin: 0 auto; padding: 1rem 1rem 0; }
   </style>
 </head>
 <body class="blank-page">
-  <div class="blank-shell">
-    <header class="blank-topbar">
-      <a href="/" class="blank-brand" title="GesCondu">
-        <img src="/img/gescondu_pb.svg" alt="GesCondu" />
-      </a>
-      <div class="d-flex align-items-center gap-3 flex-wrap">
-        {{#if user}}
-        <span class="blank-sessao">
-          <span class="material-symbols-outlined" style="font-size:1rem">lock</span>
-          Sessão iniciada
-        </span>
-        <span class="fw-semibold small blank-user">{{user.nome}}</span>
-        <a href="/logout" class="btn btn-sm btn-outline-light">Sair</a>
-        {{/if}}
-      </div>
-    </header>
-
-    <main class="blank-main" id="conteudo">
-      <div class="container">
-        <div class="blank-flash">
-          {{> _flash}}
-        </div>
-        {{{body}}}
-      </div>
-    </main>
-
-    <footer class="blank-footer">
-      © 2026 GesCondu. Todos os direitos reservados.
-    </footer>
+  <div class="blank-flash">
+    {{> _flash}}
   </div>
+  {{{body}}}
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>

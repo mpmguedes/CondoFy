@@ -1059,3 +1059,105 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
    (base para uniformizar valores globais / textos explicativos) */
 .valor-resumo { font-size: 18px; font-family: Arial, Helvetica, sans-serif; }
 .texto-descricao { font-size: 14px; font-family: Arial, Helvetica, sans-serif; }
+/* ============================================================
+   Auth shell GesCondu — Login + "Os meus condominios"
+   Fonte unica da composicao: logo topo-esquerda, slogan
+   centro-esquerda, floating card no lado direito.
+   ============================================================ */
+:root {
+  --auth-bg: linear-gradient(155deg, #174a8f 0%, #0f2a4a 55%, #0b2140 100%);
+  --auth-panel-w: 480px;
+  --auth-panel-h: 520px;
+  --auth-px: clamp(40px, 6vw, 84px);
+}
+.auth-page { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; color: #ffffff; }
+
+.auth-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap;
+  padding: clamp(40px, 6vh, 60px) var(--auth-px) 0;
+}
+.auth-logo { display: inline-flex; align-items: center; }
+.auth-logo img { display: block; height: clamp(56px, 5.4vw, 88px); width: auto; }
+.auth-sessao {
+  display: inline-flex; align-items: center; gap: .4rem;
+  font-size: .78rem; color: #ffffff;
+  background: rgba(255, 255, 255, .14);
+  border: 1px solid rgba(255, 255, 255, .3);
+  border-radius: 999px; padding: .3rem .75rem;
+}
+
+.auth-stage {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(24px, 4vw, 56px);
+  align-items: center;
+  padding: clamp(10px, 2.5vh, 24px) var(--auth-px) clamp(20px, 4vh, 44px);
+}
+.auth-message { max-width: 34rem; }
+.auth-message h2 {
+  margin: 0;
+  font-size: clamp(2rem, 1.1rem + 1.9vw, 2.75rem); /* ~36-44px desktop */
+  font-weight: 700; line-height: 1.16; letter-spacing: -0.01em;
+}
+.auth-message-apoio { margin: 1.1rem 0 0; font-size: 1rem; color: rgba(255, 255, 255, 0.82); max-width: 40ch; }
+
+.auth-panel-col { display: flex; align-items: center; justify-content: flex-end; }
+.auth-panel {
+  width: 100%; max-width: var(--auth-panel-w, 480px);
+  background: #ffffff; color: #1f2937;
+  border: 0; border-radius: 20px;
+  box-shadow: 0 16px 40px rgba(4, 16, 36, 0.35), 0 4px 12px rgba(4, 16, 36, 0.18);
+}
+.auth-panel-inner {
+  min-height: var(--auth-panel-h, 520px);
+  display: flex; flex-direction: column;
+  padding: clamp(1.6rem, 3.5vh, 2.6rem) clamp(1.4rem, 3vw, 2.4rem);
+}
+.auth-panel-center { justify-content: center; }
+.auth-titulo { font-size: 1.5rem; font-weight: 700; color: #0f2a4a; margin: 0 0 .1rem; }
+.auth-sub { font-size: 1.02rem; font-weight: 500; color: #1f2937; margin: 0 0 .2rem; }
+.auth-hint { font-size: 12.5px; color: #5f6368; margin: 0 0 1.4rem; }
+.auth-form .form-label { font-size: .86rem; font-weight: 600; color: #1f2937; }
+.auth-form .form-control { height: 48px; border-radius: 10px; }
+.auth-btn { height: 48px; border-radius: 10px; font-weight: 600; }
+.auth-recuperar { margin-top: 1.1rem; }
+.auth-recuperar a { font-size: .82rem; color: #1557b0; }
+.auth-recuperar a:hover { color: #1a73e8; text-decoration: underline; }
+
+.auth-foot { padding: .9rem 1rem 1.1rem; text-align: center; font-size: .78rem; color: rgba(255, 255, 255, 0.72); }
+
+@media (min-width: 992px) {
+  .auth-stage { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+}
+
+@media (max-width: 991.98px) {
+  .auth-head { padding: clamp(28px, 5vh, 44px) clamp(20px, 6vw, 40px) 0; }
+  .auth-stage { padding-left: clamp(20px, 6vw, 40px); padding-right: clamp(20px, 6vw, 40px); gap: 1.5rem; }
+  .auth-panel-col { justify-content: center; }
+  .auth-message h2 { font-size: clamp(1.8rem, 1.2rem + 2.5vw, 2.35rem); }
+}
+@media (max-width: 575.98px) {
+  .auth-logo img { height: 54px; }
+  .auth-panel-inner { min-height: 0; padding: 1.6rem 1.3rem; }
+  .auth-panel { max-width: 100%; }
+}
+/* Conteudo dos cards de auth: itens (condominios) e opcoes */
+.auth-cond { border: 1px solid #e6eaf0; border-radius: 14px; background: #ffffff; padding: .85rem .95rem .7rem; cursor: pointer; transition: border-color .12s ease, box-shadow .12s ease, background .12s ease; }
+.auth-cond:hover { border-color: #b9cff2; background: #f7faff; }
+.auth-cond-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+.auth-cond-nome { font-weight: 600; color: #0f2a4a; }
+.auth-cond-papel { font-size: .66rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #5b6472; background: #f1f3f7; border: 1px solid #e2e6ee; border-radius: 999px; padding: .22rem .6rem; white-space: nowrap; flex-shrink: 0; }
+.auth-cond-meta { display: flex; align-items: center; gap: .35rem; color: #6a7380; font-size: .8rem; margin: .45rem 0 0; }
+.auth-cond-meta .material-symbols-outlined { font-size: 1rem; }
+.auth-cond-cta { display: flex; justify-content: flex-end; margin-top: .55rem; }
+.auth-cond-cta .material-symbols-outlined { font-size: 1.05rem; }
+.auth-vazio { color: #5f6368; }
+.auth-vazio .material-symbols-outlined { font-size: 2.4rem; }
+.auth-divisor { margin: 1.4rem 0 .7rem; padding-top: 1rem; border-top: 1px solid #eceef2; font-size: .72rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #8a93a0; }
+.auth-opcoes { display: flex; flex-direction: column; gap: .55rem; }
+.auth-opcao { display: flex; align-items: center; gap: .75rem; text-align: left; width: 100%; border: 1px dashed #c9d4e4; border-radius: 12px; background: #ffffff; color: #1c2733; padding: .7rem .85rem; transition: border-color .12s ease, background .12s ease; }
+.auth-opcao:hover { border-color: #1a73e8; background: #f6f9ff; }
+.auth-opcao .material-symbols-outlined { font-size: 1.3rem; }
+.auth-colapso { border: 1px solid #e6eaf0; border-radius: 12px; padding: .9rem; background: #fbfcfe; }
