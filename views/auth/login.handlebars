@@ -1,11 +1,11 @@
 <div class="login-page">
   <style>
     /* ── Página de entrada GesCondu (auth sem shell) ─────────────────
-       A página vive dentro de <main.auth-body> (layout principal sem
-       sessão). Este bloco adapta essa zona para o ecrã completo azul e
-       define a composição: marca no topo, caixa de autenticação ao centro,
-       rodapé institucional. Reutiliza as variáveis do design system
-       (--c-primary, --c-primary-dark, --c-text, --c-text-muted…). */
+       Composição institucional: marca + mensagem à esquerda, caixa de
+       autenticação à direita (referência apenas de layout). O estilo vive
+       nesta página (só existe na rota /login) e reutiliza as variáveis do
+       design system (--c-primary, --c-primary-dark, --c-text,
+       --c-text-muted…) e o Bootstrap (form-control, btn, card). */
     .auth-body { background: linear-gradient(155deg, #174a8f 0%, #0f2a4a 55%, #0b2140 100%); padding: 0; }
     .auth-flash { max-width: 420px; margin: 0 auto 0; padding: 1rem 1rem 0; }
 
@@ -17,25 +17,61 @@
       color: #ffffff;
     }
 
-    /* Marca — canto superior esquerdo */
-    .login-brand { display: flex; align-items: center; gap: 1rem; padding: 1.5rem 1.75rem; }
-    .login-emblem { height: 68px; width: auto; flex-shrink: 0; }
-    .login-brand-text { display: flex; flex-direction: column; min-width: 0; }
-    .login-brand-nome { font-size: 1.45rem; font-weight: 700; line-height: 1.1; letter-spacing: 0.01em; }
-    .login-slogan {
-      font-size: 0.95rem; font-weight: 500; color: rgba(255, 255, 255, 0.86);
-      margin: 0; max-width: 34ch; line-height: 1.35;
+    /* Grelha principal: esquerda institucional | direita autenticação */
+    .login-layout {
+      flex: 1 0 auto;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
     }
 
-    /* Zona central da caixa */
-    .login-center {
+    /* ── Zona esquerda (marca + mensagem) ── */
+    .login-zona-esquerda {
+      display: flex;
+      flex-direction: column;
+      padding: clamp(20px, 3.5vh, 44px) clamp(20px, 5vw, 72px) 0;
+    }
+    .login-marca { flex: 0 0 auto; }
+    .login-emblem {
+      height: clamp(104px, 14vw, 128px);
+      width: auto;
+      display: block;
+    }
+    .login-mensagem {
       flex: 1 0 auto;
-      display: flex; align-items: center; justify-content: center;
-      padding: 1.25rem 1rem 2.25rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: clamp(16px, 3vh, 40px) 0 clamp(24px, 4vh, 56px);
+      max-width: 620px;
+    }
+    .login-mensagem-titulo {
+      margin: 0;
+      font-size: clamp(1.75rem, 1.15rem + 1.9vw, 2.6rem); /* ~36–44px desktop */
+      font-weight: 700;
+      line-height: 1.16;
+      letter-spacing: -0.01em;
+    }
+    .login-mensagem-apoio {
+      margin: 1.1rem 0 0;
+      font-size: 1rem;
+      font-weight: 400;
+      color: rgba(255, 255, 255, 0.82);
+      max-width: 40ch;
+    }
+
+    /* ── Zona direita (caixa de autenticação) ── */
+    .login-zona-direita {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.25rem clamp(18px, 5vw, 110px) clamp(24px, 4vh, 56px);
     }
     .login-card {
-      width: 100%; max-width: 420px; margin: 0 auto;
-      border: 0; border-radius: 18px;
+      width: 100%;
+      max-width: 430px;
+      margin: 0 auto;
+      border: 0;
+      border-radius: 18px;
       box-shadow: 0 16px 40px rgba(4, 16, 36, 0.35), 0 4px 12px rgba(4, 16, 36, 0.18);
     }
     .login-card .card-body { padding: 2rem 1.75rem; }
@@ -51,49 +87,70 @@
 
     /* Rodapé */
     .login-footer {
-      padding: 0.9rem 1rem 1.1rem; text-align: center;
-      font-size: 0.78rem; color: rgba(255, 255, 255, 0.72);
+      padding: 0.9rem 1rem 1.1rem;
+      text-align: center;
+      font-size: 0.78rem;
+      color: rgba(255, 255, 255, 0.72);
     }
 
-    @media (max-width: 575.98px) {
-      .login-brand { padding: 1.1rem 1rem 0.25rem; }
-      .login-emblem { height: 56px; }
-      .login-brand-nome { font-size: 1.25rem; }
-      .login-slogan { font-size: 0.88rem; }
-      .login-card .card-body { padding: 1.6rem 1.25rem; }
-      .login-center { padding: 1.5rem 0.75rem; }
+    /* Desktop/tablet largo: duas zonas lado a lado (esquerda ~55%) */
+    @media (min-width: 992px) {
+      .login-layout {
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); /* ≈55/45 */
+      }
+      .login-zona-esquerda { padding: clamp(28px, 4vh, 52px) clamp(28px, 5.5vw, 88px) 0; }
+      .login-emblem { height: clamp(150px, 14vw, 200px); }
+      .login-mensagem-titulo { font-size: clamp(2.25rem, 1.2rem + 1.7vw, 2.75rem); }
+    }
+
+    /* Telemóvel: logo → slogan → caixa → rodapé (sem duas colunas) */
+    @media (max-width: 991.98px) {
+      .login-zona-esquerda { padding: clamp(18px, 4vw, 32px) 1.25rem 0; }
+      .login-emblem { height: 118px; }
+      .login-mensagem {
+        justify-content: flex-start;
+        padding: 0.9rem 0 0.5rem;
+        max-width: 100%;
+      }
+      .login-mensagem-titulo { font-size: clamp(1.7rem, 1.3rem + 2vw, 2.2rem); }
+      .login-mensagem-apoio { font-size: 0.92rem; }
+      .login-zona-direita { padding: 0.5rem 1rem 1.5rem; align-items: stretch; }
     }
   </style>
 
-  <div class="login-brand">
-    <img src="/img/gescondu_pb.svg" alt="GesCondu" class="login-emblem" />
-    <div class="login-brand-text">
-      <span class="login-brand-nome">GesCondu</span>
-      <span class="login-slogan">A gestão do seu condomínio, simplificada</span>
+  <div class="login-layout">
+    <div class="login-zona-esquerda">
+      <div class="login-marca">
+        <img src="/img/gescondu_pb.svg" alt="GesCondu" class="login-emblem" />
+      </div>
+      <div class="login-mensagem">
+        <h2 class="login-mensagem-titulo">A gestão do seu condomínio,<br />simplificada</h2>
+        <p class="login-mensagem-apoio">Gestão simples, organizada e transparente.</p>
+      </div>
     </div>
-  </div>
 
-  <div class="login-center">
-    <div class="login-card card shadow-sm">
-      <div class="card-body">
-        <h1 class="login-titulo">Bem-vindo</h1>
-        <p class="login-subtitulo">ao seu serviço de condomínio</p>
-        <p class="login-hint">Autentique-se para aceder ao serviço</p>
+    <div class="login-zona-direita">
+      <div class="login-card card shadow-sm">
+        <div class="card-body">
+          <h1 class="login-titulo">Bem-vindo</h1>
+          <p class="login-subtitulo">ao seu serviço de condomínio</p>
+          <p class="login-hint">Autentique-se para aceder ao serviço</p>
 
-        <form action="/login" method="POST" class="login-form">
-          <div class="mb-3">
-            <label for="email" class="form-label">Email</label>
-            <input type="email" class="form-control" id="email" name="email" autocomplete="email" placeholder="nome@exemplo.pt" required autofocus />
+          <form action="/login" method="POST" class="login-form">
+            <div class="mb-3">
+              <label for="email" class="form-label">Email</label>
+              <input type="email" class="form-control" id="email" name="email" autocomplete="email" placeholder="nome@exemplo.pt" required autofocus />
+            </div>
+            <div class="mb-3">
+              <label for="password" class="form-label">Palavra-passe</label>
+              <input type="password" class="form-control" id="password" name="password" autocomplete="current-password" placeholder="••••••••" required />
+            </div>
+            <button type="submit" class="btn btn-primary w-100 login-btn">Entrar</button>
+          </form>
+
+          <div class="text-center login-recuperar">
+            <a href="/recuperar">Esqueci-me da palavra-passe</a>
           </div>
-          <div class="mb-3">
-            <label for="password" class="form-label">Palavra-passe</label>
-            <input type="password" class="form-control" id="password" name="password" autocomplete="current-password" placeholder="••••••••" required />
-          </div>
-          <button type="submit" class="btn btn-primary w-100 login-btn">Entrar</button>
-        </form>
-
-        <div class="text-center login-recuperar">
-          <a href="/recuperar">Esqueci-me da palavra-passe</a>
         </div>
       </div>
     </div>
