@@ -792,6 +792,14 @@ router.get('/quotas/conta-corrente', async (req, res) => {
     // Coluna esquerda: todas as frações do condomínio ativo + saldo.
     fracoes = await contaCorrente.listaFracoes({ condominioId: cid });
 
+    // Sem fração indicada no URL → seleciona automaticamente a primeira
+    // fração disponível do condomínio ativo (comporta-se como se tivesse
+    // sido clicada). Só são consideradas frações do condomínio ativo.
+    if (!fracaoId && fracoes.length) {
+      const primeira = fracoes.find((f) => f.estado === 'ativo') || fracoes[0];
+      fracaoId = Number(primeira.id);
+    }
+
     if (fracaoId) {
       // Isolamento: a fração tem de pertencer ao condomínio ativo — nunca se
       // confia apenas no id enviado pelo browser.

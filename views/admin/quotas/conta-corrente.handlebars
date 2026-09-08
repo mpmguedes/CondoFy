@@ -20,7 +20,6 @@
     .cc-fracoes-lista { max-height: calc(100vh - 250px); }
     .cc-fracoes { position: sticky; top: 1rem; }
   }
-  .cc-saldo-grande { font-size: 1.9rem; line-height: 1.15; font-weight: 700; }
   .cc-extrato { min-width: 620px; }
   .cc-extrato-inicial td { background: #f8fafc; }
   .cc-extrato .cc-cel-saldo { font-variant-numeric: tabular-nums; }
@@ -32,7 +31,7 @@
     <div class="card cc-fracoes">
       <div class="card-body">
         <div class="fw-semibold fs-6">Frações</div>
-        <div class="small text-muted mb-2">Pesquise e escolha a fração a consultar.</div>
+        <div class="texto-descricao text-muted mb-2">Pesquise e escolha a fração a consultar.</div>
         <input
           type="search"
           id="ccPesquisa"
@@ -77,16 +76,16 @@
       <div class="card-body">
         <div class="row g-3 align-items-stretch">
           <div class="col-12 col-md-5 col-xl-4">
-            <div class="text-muted small text-uppercase">Saldo · {{selecao.fracao.designacao}}</div>
-            <div class="cc-saldo-grande {{#if selecao.emDivida}}text-danger{{else}}{{#if selecao.temCredito}}text-success{{else}}text-muted{{/if}}{{/if}}">
+            <div class="texto-descricao text-muted text-uppercase">Saldo · {{selecao.fracao.designacao}}</div>
+            <div class="valor-resumo fw-bold {{#if selecao.emDivida}}text-danger{{else}}{{#if selecao.temCredito}}text-success{{else}}text-muted{{/if}}{{/if}}">
               {{eur selecao.saldo}}
             </div>
-            <div class="small text-muted">
+            <div class="texto-descricao text-muted">
               {{#if selecao.emDivida}}valor em dívida pela fração{{else}}{{#if selecao.temCredito}}crédito a favor da fração{{else}}sem dívida nem crédito{{/if}}{{/if}}
             </div>
             {{#if (ne selecao.transitado 0)}}
-            <div class="small text-muted mt-2" title="Valor configurado no Mapa de Quotas (Transitados), incluído no saldo.">
-              Inclui <strong>{{eur selecao.transitado}}</strong> de valor transitado.
+            <div class="texto-descricao text-muted mt-2" title="Valor configurado no Mapa de Quotas (Transitados), incluído no saldo.">
+              Inclui <strong class="{{#if (gt selecao.transitado 0)}}text-danger{{else}}text-success{{/if}}">{{eur selecao.transitado}}</strong> de valor transitado.
             </div>
             {{/if}}
           </div>
@@ -94,18 +93,18 @@
             <div class="row g-2 h-100 align-items-center text-center text-md-start">
               <div class="col-6 col-md-4">
                 <div class="mini-stat-label">Quotas em dívida</div>
-                <div class="fs-5 fw-bold text-nowrap">{{eur selecao.quotasEmDivida}}</div>
-                <div class="small text-muted">{{selecao.nQuotas}} quotas emitidas</div>
+                <div class="valor-resumo fw-bold text-danger text-nowrap">{{eur selecao.quotasEmDivida}}</div>
+                <div class="texto-descricao text-muted">{{selecao.nQuotas}} quotas emitidas</div>
               </div>
               <div class="col-6 col-md-4">
                 <div class="mini-stat-label">Quotas Extra em dívida</div>
-                <div class="fs-5 fw-bold text-nowrap">{{eur selecao.extrasEmDivida}}</div>
-                <div class="small text-muted">{{selecao.nParcelas}} parcelas imputadas</div>
+                <div class="valor-resumo fw-bold text-danger text-nowrap">{{eur selecao.extrasEmDivida}}</div>
+                <div class="texto-descricao text-muted">{{selecao.nParcelas}} parcelas imputadas</div>
               </div>
               <div class="col-6 col-md-4">
                 <div class="mini-stat-label">Total pago</div>
-                <div class="fs-5 fw-bold text-success text-nowrap">{{eur selecao.totalPago}}</div>
-                <div class="small text-muted">{{selecao.nPagamentos}} pagamentos</div>
+                <div class="valor-resumo fw-bold text-success text-nowrap">{{eur selecao.totalPago}}</div>
+                <div class="texto-descricao text-muted">{{selecao.nPagamentos}} pagamentos</div>
               </div>
             </div>
           </div>
@@ -155,10 +154,10 @@
                 </div>
                 {{#if detalhe}}<div class="small text-muted">{{detalhe}}</div>{{/if}}
               </td>
-              <td class="text-end text-nowrap small">
+              <td class="text-end text-nowrap small text-danger">
                 {{#if (gt debito 0)}}{{eur debito}}{{else}}<span class="text-muted">—</span>{{/if}}
               </td>
-              <td class="text-end text-nowrap small">
+              <td class="text-end text-nowrap small text-success">
                 {{#if (gt credito 0)}}{{eur credito}}{{else}}<span class="text-muted">—</span>{{/if}}
               </td>
               <td class="text-end text-nowrap small fw-semibold cc-cel-saldo {{#if (gt saldo 0)}}text-danger{{else}}{{#if (lt saldo 0)}}text-success{{else}}text-muted{{/if}}{{/if}}">
@@ -171,7 +170,7 @@
           </tbody>
         </table>
       </div>
-      <div class="card-footer small text-muted">
+      <div class="card-footer texto-descricao text-muted">
         Débitos = quotas ordinárias + parcelas de Quotas Extra imputadas (extra processada) + valor transitado.
         Créditos = pagamentos confirmados. Um pagamento combinado conta uma única vez (1 linha = 1 pagamento).
         Recibos são apenas documentos — nunca entram como movimentos.

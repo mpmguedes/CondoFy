@@ -1054,3 +1054,8 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
 .doc-card-icone { font-size: 2rem; color: #1a73e8; }
 .doc-card-seta { font-size: 1.1rem; color: var(--c-text-muted); transition: transform .15s ease; }
 .doc-card:hover .doc-card-seta { transform: translateX(3px); }
+
+/* ===== Tipografia reutilizavel para resumos e descricoes =====
+   (base para uniformizar valores globais / textos explicativos) */
+.valor-resumo { font-size: 18px; font-family: Arial, Helvetica, sans-serif; }
+.texto-descricao { font-size: 14px; font-family: Arial, Helvetica, sans-serif; }
