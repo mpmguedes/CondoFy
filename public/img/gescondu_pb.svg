@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" role="img" aria-label="GesCondu">
+  <!-- Opcional: fundo navy embutido (para avatar/ícone autocontido).
+       Descomenta a linha seguinte se quiseres o quadrado escuro incluído:
+  <rect width="640" height="640" fill="#0F2A4A"/> -->
+
+  <!-- Edifício off-white com janelas vazadas -->
+  <path fill="#F5F6F8" fill-rule="evenodd" d="M265 70H355V100H370V430H380V446H170V430H185V190L250 160V100H265Z
+    M268 120h20v20h-20Z M302 120h20v20h-20Z M336 120h20v20h-20Z
+    M268 158h20v20h-20Z M302 158h20v20h-20Z M336 158h20v20h-20Z
+    M205 220h18v18h-18Z M205 262h18v18h-18Z M205 304h18v18h-18Z"/>
+
+  <!-- Escudo teal -->
+  <path d="M330 205L405 228V290C405 345 372 380 330 402C288 380 255 345 255 290V228Z"
+        fill="none" stroke="#2EC4B6" stroke-width="18" stroke-linejoin="round"/>
+
+  <!-- Check branco -->
+  <path d="M293 302L325 334L392 246" fill="none" stroke="#FFFFFF"
+        stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Wordmark branco -->
+  <text x="320" y="565" text-anchor="middle" font-family="Poppins, Montserrat, Arial, sans-serif"
+        font-size="92" font-weight="600" fill="#FFFFFF">GesCondu</text>
+</svg>

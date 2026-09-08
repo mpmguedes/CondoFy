@@ -1,31 +1,103 @@
-<div class="auth-wrap">
-  <div class="auth-card card shadow-sm">
-    <div class="card-body p-4 p-md-5">
-      <div class="text-center mb-4">
-        <img src="/img/logo_gescondu.png" alt="GesCondu" class="login-logo mx-auto d-block mb-3" />
-        <h1 class="h4 mb-1">{{condominio.designacao}}</h1>
-        <p class="text-muted mb-0">GesCondu — Gestão de condomínios</p>
-      </div>
+<div class="login-page">
+  <style>
+    /* ── Página de entrada GesCondu (auth sem shell) ─────────────────
+       A página vive dentro de <main.auth-body> (layout principal sem
+       sessão). Este bloco adapta essa zona para o ecrã completo azul e
+       define a composição: marca no topo, caixa de autenticação ao centro,
+       rodapé institucional. Reutiliza as variáveis do design system
+       (--c-primary, --c-primary-dark, --c-text, --c-text-muted…). */
+    .auth-body { background: linear-gradient(155deg, #174a8f 0%, #0f2a4a 55%, #0b2140 100%); padding: 0; }
+    .auth-flash { max-width: 420px; margin: 0 auto 0; padding: 1rem 1rem 0; }
 
-      {{#if error}}
-        <div class="alert alert-danger py-2 small">{{error}}</div>
-      {{/if}}
+    .login-page {
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      color: #ffffff;
+    }
 
-      <form action="/login" method="POST">
-        <div class="mb-3">
-          <label for="email" class="form-label">Email</label>
-          <input type="email" class="form-control" id="email" name="email" autocomplete="email" required autofocus />
+    /* Marca — canto superior esquerdo */
+    .login-brand { display: flex; align-items: center; gap: 1rem; padding: 1.5rem 1.75rem; }
+    .login-emblem { height: 68px; width: auto; flex-shrink: 0; }
+    .login-brand-text { display: flex; flex-direction: column; min-width: 0; }
+    .login-brand-nome { font-size: 1.45rem; font-weight: 700; line-height: 1.1; letter-spacing: 0.01em; }
+    .login-slogan {
+      font-size: 0.95rem; font-weight: 500; color: rgba(255, 255, 255, 0.86);
+      margin: 0; max-width: 34ch; line-height: 1.35;
+    }
+
+    /* Zona central da caixa */
+    .login-center {
+      flex: 1 0 auto;
+      display: flex; align-items: center; justify-content: center;
+      padding: 1.25rem 1rem 2.25rem;
+    }
+    .login-card {
+      width: 100%; max-width: 420px; margin: 0 auto;
+      border: 0; border-radius: 18px;
+      box-shadow: 0 16px 40px rgba(4, 16, 36, 0.35), 0 4px 12px rgba(4, 16, 36, 0.18);
+    }
+    .login-card .card-body { padding: 2rem 1.75rem; }
+    .login-titulo { font-size: 1.55rem; font-weight: 700; color: #0f2a4a; margin: 0 0 0.1rem; }
+    .login-subtitulo { font-size: 1.02rem; font-weight: 500; color: #1f2937; margin: 0 0 0.15rem; }
+    .login-hint { font-size: 12.5px; color: #5f6368; margin: 0 0 1.4rem; }
+    .login-form .form-label { font-size: 0.85rem; font-weight: 600; color: #1f2937; }
+    .login-form .form-control { height: 46px; border-radius: 10px; }
+    .login-btn { height: 46px; border-radius: 10px; font-weight: 600; }
+    .login-recuperar { margin-top: 1rem; }
+    .login-recuperar a { font-size: 0.82rem; color: var(--c-primary-dark); }
+    .login-recuperar a:hover { color: var(--c-primary); text-decoration: underline; }
+
+    /* Rodapé */
+    .login-footer {
+      padding: 0.9rem 1rem 1.1rem; text-align: center;
+      font-size: 0.78rem; color: rgba(255, 255, 255, 0.72);
+    }
+
+    @media (max-width: 575.98px) {
+      .login-brand { padding: 1.1rem 1rem 0.25rem; }
+      .login-emblem { height: 56px; }
+      .login-brand-nome { font-size: 1.25rem; }
+      .login-slogan { font-size: 0.88rem; }
+      .login-card .card-body { padding: 1.6rem 1.25rem; }
+      .login-center { padding: 1.5rem 0.75rem; }
+    }
+  </style>
+
+  <div class="login-brand">
+    <img src="/img/gescondu_pb.svg" alt="GesCondu" class="login-emblem" />
+    <div class="login-brand-text">
+      <span class="login-brand-nome">GesCondu</span>
+      <span class="login-slogan">A gestão do seu condomínio, simplificada</span>
+    </div>
+  </div>
+
+  <div class="login-center">
+    <div class="login-card card shadow-sm">
+      <div class="card-body">
+        <h1 class="login-titulo">Bem-vindo</h1>
+        <p class="login-subtitulo">ao seu serviço de condomínio</p>
+        <p class="login-hint">Autentique-se para aceder ao serviço</p>
+
+        <form action="/login" method="POST" class="login-form">
+          <div class="mb-3">
+            <label for="email" class="form-label">Email</label>
+            <input type="email" class="form-control" id="email" name="email" autocomplete="email" placeholder="nome@exemplo.pt" required autofocus />
+          </div>
+          <div class="mb-3">
+            <label for="password" class="form-label">Palavra-passe</label>
+            <input type="password" class="form-control" id="password" name="password" autocomplete="current-password" placeholder="••••••••" required />
+          </div>
+          <button type="submit" class="btn btn-primary w-100 login-btn">Entrar</button>
+        </form>
+
+        <div class="text-center login-recuperar">
+          <a href="/recuperar">Esqueci-me da palavra-passe</a>
         </div>
-        <div class="mb-3">
-          <label for="password" class="form-label">Palavra-passe</label>
-          <input type="password" class="form-control" id="password" name="password" autocomplete="current-password" required />
-        </div>
-        <button type="submit" class="btn btn-primary w-100">Entrar</button>
-      </form>
-
-      <div class="text-center mt-3">
-        <a href="/recuperar" class="small">Esqueci a minha palavra-passe</a>
       </div>
     </div>
   </div>
+
+  <footer class="login-footer">© 2026 GesCondu. Todos os direitos reservados.</footer>
 </div>
