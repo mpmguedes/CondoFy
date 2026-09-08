@@ -28,6 +28,7 @@ const { audit } = require('../helpers/audit');
 const { getCondominio } = require('../helpers/condominio');
 const { resumoCondominio, resumoFracao, estadoEfetivo } = require('../helpers/saldos');
 const { resumoFinanceiroMes, resumoEmAtraso, orcamentoDoAno } = require('../helpers/dashboard');
+const { validarNif } = require('../public/js/validacao-fiscal');
 const drive = require('../helpers/drive');
 const { smtpConfigured, sendMail } = require('../helpers/mailer');
 const convites = require('../helpers/convites');
@@ -385,12 +386,13 @@ router.post('/condominos', async (req, res) => {
   const vinculo = req.body.vinculo || 'proprietario';
   const { emails, telefones } = parseContactosForm(req.body);
   const erro = validarContactos({ emails, telefones });
+  const nifValidado = validarNif(nif);
   const fracoesSelecionadas = toArray(req.body.fracoes).map(Number);
 
-  if (erro) {
+  if (erro || !nifValidado.ok) {
     const fracoes = await Fracao.findAll({ where: onde(req), order: [['designacao', 'ASC']] });
     const selecionadas = new Set(fracoesSelecionadas);
-    res.locals.error_msg = [erro];
+    res.locals.error_msg = [erro || nifValidado.mensagem];
     return res.render('admin/condominos/form', {
       titulo: 'Novo condómino',
       edicao: false,
@@ -403,7 +405,7 @@ router.post('/condominos', async (req, res) => {
   const pessoa = await Pessoa.create({
     condominio_id: req.condominioId,
     nome,
-    nif,
+    nif: nifValidado.valor || null,
     tipo: tipo || 'proprietario',
     observacoes,
     email: null,
@@ -454,15 +456,16 @@ router.post('/condominos/:id', async (req, res) => {
   const vinculo = req.body.vinculo || 'proprietario';
   const { emails, telefones } = parseContactosForm(req.body);
   const erro = validarContactos({ emails, telefones });
+  const nifValidado = validarNif(nif);
   const fracoesSelecionadas = toArray(req.body.fracoes).map(Number);
 
-  if (erro) {
+  if (erro || !nifValidado.ok) {
     // Reapresenta a ficha com os valores submetidos (sem perder nada).
     const atuais = await FracaoPessoa.findAll({ where: { pessoa_id: pessoa.id } });
     const atuaisIds = new Set(atuais.map((a) => a.fracao_id));
     const selecionadas = new Set(fracoesSelecionadas);
     const fracoes = await Fracao.findAll({ where: onde(req), order: [['designacao', 'ASC']] });
-    res.locals.error_msg = [erro];
+    res.locals.error_msg = [erro || nifValidado.mensagem];
     return res.render('admin/condominos/form', {
       titulo: 'Editar condómino',
       edicao: true,
@@ -484,7 +487,7 @@ router.post('/condominos/:id', async (req, res) => {
 
   await pessoa.update({
     nome,
-    nif,
+    nif: nifValidado.valor || null,
     tipo: tipo || 'proprietario',
     observacoes,
     ativo,

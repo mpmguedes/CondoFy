@@ -9,6 +9,7 @@ const { Condominio, Fracao, UserCondominio } = require('../models');
 const { eAutenticado } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
 const tenant = require('../helpers/tenant');
+const { validarNif } = require('../public/js/validacao-fiscal');
 
 const router = express.Router();
 
@@ -65,12 +66,17 @@ router.post('/condominios', eAutenticado, async (req, res) => {
     return res.redirect('/condominios');
   }
   try {
+    const nifValidado = validarNif(req.body.nif);
+    if (!nifValidado.ok) {
+      req.flash('error_msg', nifValidado.mensagem);
+      return res.redirect('/condominios');
+    }
     const condominio = await Condominio.create({
       designacao,
       morada: String(req.body.morada || '').trim() || null,
       codigo_postal: String(req.body.codigo_postal || '').trim() || null,
       localidade: String(req.body.localidade || '').trim() || null,
-      nif: String(req.body.nif || '').trim() || null,
+      nif: nifValidado.valor || null,
       estado: 'ativo',
     });
     await UserCondominio.create({

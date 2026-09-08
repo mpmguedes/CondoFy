@@ -2,6 +2,7 @@ const express = require('express');
 const sequelize = require('../config/database');
 const { Op } = require('sequelize');
 const { toDateInput } = require('../helpers/dates');
+const { validarIban } = require('../public/js/validacao-fiscal');
 const {
   ContaBancaria,
   Categoria,
@@ -97,11 +98,16 @@ router.get('/contas/nova', (req, res) => {
 
 router.post('/contas', async (req, res) => {
   const { nome, banco, iban, tipo, saldo_inicial } = req.body;
+  const ibanValidado = validarIban(iban);
+  if (!ibanValidado.ok) {
+    req.flash('error_msg', ibanValidado.mensagem);
+    return res.redirect('/admin/contas/nova');
+  }
   const conta = await ContaBancaria.create({
     condominio_id: req.condominioId,
     nome,
     banco,
-    iban,
+    iban: ibanValidado.valor || null,
     tipo: tipo || 'corrente',
     saldo_inicial: toNumber(saldo_inicial),
   });
@@ -120,10 +126,15 @@ router.post('/contas/:id', async (req, res) => {
   const conta = await carregarConta(req);
   if (!conta) return res.redirect('/admin/contas');
   const { nome, banco, iban, tipo, saldo_inicial, ativa } = req.body;
+  const ibanValidado = validarIban(iban);
+  if (!ibanValidado.ok) {
+    req.flash('error_msg', ibanValidado.mensagem);
+    return res.redirect(`/admin/contas/${conta.id}/editar`);
+  }
   await conta.update({
     nome,
     banco,
-    iban,
+    iban: ibanValidado.valor || null,
     tipo: tipo || 'corrente',
     saldo_inicial: toNumber(saldo_inicial),
     ativa: ativa === 'on' || ativa === '1' || ativa === true,

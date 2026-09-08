@@ -11,6 +11,7 @@ const { getCondominio, clearCondominioCache } = require('../helpers/condominio')
 const { getConfig, setConfig } = require('../helpers/config');
 const { listarAutomacoes, guardarAutomacoes } = require('../helpers/automacoes');
 const drive = require('../helpers/drive');
+const { validarNif, validarIban } = require('../public/js/validacao-fiscal');
 
 const router = express.Router();
 // Isolamento: a configuração edita o condomínio ATIVO (sessão).
@@ -48,17 +49,29 @@ router.get('/config', async (req, res) => {
 
 router.post('/config', upload.single('logotipo'), async (req, res) => {
   try {
+    // NIF e IBAN: normalizar e validar antes de guardar (nunca confiar no browser).
+    const nifValidado = validarNif(req.body.nif);
+    if (!nifValidado.ok) {
+      req.flash('error_msg', nifValidado.mensagem);
+      return res.redirect('/admin/config');
+    }
+    const ibanValidado = validarIban(req.body.iban_principal);
+    if (!ibanValidado.ok) {
+      req.flash('error_msg', ibanValidado.mensagem);
+      return res.redirect('/admin/config');
+    }
+
     const dados = {
       designacao: req.body.designacao,
       administracao_nome: req.body.administracao_nome || null,
       website: req.body.website || null,
-      nif: req.body.nif || null,
+      nif: nifValidado.valor || null,
       morada: req.body.morada || null,
       codigo_postal: req.body.codigo_postal || null,
       localidade: req.body.localidade || null,
       email: req.body.email || null,
       telefone: req.body.telefone || null,
-      iban_principal: req.body.iban_principal || null,
+      iban_principal: ibanValidado.valor || null,
       outros_meios_pagamento: req.body.outros_meios_pagamento || null,
       dados_bancarios_adicionais: req.body.dados_bancarios_adicionais || null,
       identidade_visual: req.body.identidade_visual || 'designacao',

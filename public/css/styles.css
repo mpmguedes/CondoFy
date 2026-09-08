@@ -346,6 +346,15 @@ a:hover { color: var(--c-primary-dark); }
   outline: none;
 }
 .form-text { color: var(--c-text-muted); }
+
+/* Validacao de campos (NIF/IBAN): indicador discreto na linha do rotulo.
+   Nao altera alturas nem espacamentos; o texto com simbolo evita depender
+   apenas da cor. */
+.campo-validacao { margin-left: 0.4rem; font-size: 0.72rem; font-weight: 600; }
+.campo-validacao-ok { color: var(--c-success); }
+.campo-validacao-erro { color: var(--c-error); }
+.form-control.is-valid { border-color: var(--c-success); }
+.form-control.is-invalid { border-color: var(--c-error); }
 .form-check-input:checked { background-color: var(--c-primary); border-color: var(--c-primary); }
 .mb-3 { margin-bottom: var(--sp-4) !important; }
 

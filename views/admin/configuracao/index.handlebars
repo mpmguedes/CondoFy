@@ -24,7 +24,7 @@
           <div class="row">
             <div class="col-md-4 mb-3">
               <label class="form-label">NIF</label>
-              <input type="text" class="form-control" name="nif" value="{{condominio.nif}}" />
+              <input type="text" class="form-control" name="nif" value="{{condominio.nif}}" data-validar="nif" />
             </div>
             <div class="col-md-8 mb-3">
               <label class="form-label">Morada</label>
@@ -55,7 +55,7 @@
           <h5 class="mt-2 mb-3">Pagamentos</h5>
           <div class="mb-3">
             <label class="form-label">IBAN principal</label>
-            <input type="text" class="form-control" name="iban_principal" value="{{condominio.iban_principal}}" placeholder="PT50 ..." />
+            <input type="text" class="form-control" name="iban_principal" value="{{condominio.iban_principal}}" placeholder="PT50 ..." data-validar="iban" />
           </div>
           <div class="mb-3">
             <label class="form-label">Outros meios de pagamento</label>

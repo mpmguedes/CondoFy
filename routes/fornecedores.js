@@ -28,6 +28,7 @@ const drive = require('../helpers/drive');
 const mailer = require('../helpers/mailer');
 const { compor: comporEmail } = require('../helpers/email-templates');
 const { getCondominio } = require('../helpers/condominio');
+const { validarNif, validarIban } = require('../public/js/validacao-fiscal');
 
 const router = express.Router();
 // Isolamento: exige condomínio ativo e papel gestor/admin.
@@ -51,18 +52,9 @@ function emailValido(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-// IBAN: aceita IBAN portugueses (PT + 23 dígitos) e estrangeiros válidos.
-function validarIban(iban) {
-  const limpo = String(iban || '').replace(/\s+/g, '').toUpperCase();
-  if (!limpo) return { ok: true };
-  if (!/^[A-Z]{2}[0-9A-Z]{11,32}$/.test(limpo)) {
-    return { ok: false, mensagem: 'IBAN inválido (deve começar por 2 letras e ter entre 15 e 34 caracteres).' };
-  }
-  if (limpo.startsWith('PT') && limpo.length !== 25) {
-    return { ok: false, mensagem: 'IBAN português deve ter 25 caracteres.' };
-  }
-  return { ok: true };
-}
+// IBAN: validado com o módulo partilhado (estrutura + MOD-97). Aceita IBAN
+// portugueses (PT + 25 caracteres) e estrangeiros válidos; normaliza sem espaços.
+// NIF: validado com o algoritmo oficial português (9 dígitos normalizados).
 
 // ── Escopos por condomínio ativo (nunca confiar em ids do browser) ──
 function escopoFornecedor(req, extra = {}) {
@@ -127,11 +119,18 @@ router.post('/fornecedores', async (req, res) => {
       req.flash('error_msg', 'Email do fornecedor inválido.');
       return res.redirect('/admin/fornecedores/novo');
     }
+    const nif = validarNif(dados.nif);
+    if (!nif.ok) {
+      req.flash('error_msg', nif.mensagem);
+      return res.redirect('/admin/fornecedores/novo');
+    }
     const iban = validarIban(dados.iban);
     if (!iban.ok) {
       req.flash('error_msg', iban.mensagem);
       return res.redirect('/admin/fornecedores/novo');
     }
+    dados.nif = nif.valor || null;
+    dados.iban = iban.valor || null;
 
     const fornecedor = await Fornecedor.create({ ...dados, condominio_id: req.condominioId });
     await audit({ userId: req.user.id, acao: 'criar_fornecedor', entidade: 'Fornecedor', entidadeId: fornecedor.id, detalhes: { condominioId: req.condominioId } });
@@ -166,11 +165,18 @@ router.post('/fornecedores/:id', async (req, res) => {
       req.flash('error_msg', 'Email do fornecedor inválido.');
       return res.redirect(`/admin/fornecedores/${fornecedor.id}/editar`);
     }
+    const nif = validarNif(dados.nif);
+    if (!nif.ok) {
+      req.flash('error_msg', nif.mensagem);
+      return res.redirect(`/admin/fornecedores/${fornecedor.id}/editar`);
+    }
     const iban = validarIban(dados.iban);
     if (!iban.ok) {
       req.flash('error_msg', iban.mensagem);
       return res.redirect(`/admin/fornecedores/${fornecedor.id}/editar`);
     }
+    dados.nif = nif.valor || null;
+    dados.iban = iban.valor || null;
     await fornecedor.update(dados);
     await audit({ userId: req.user.id, acao: 'editar_fornecedor', entidade: 'Fornecedor', entidadeId: fornecedor.id });
     req.flash('success_msg', 'Fornecedor atualizado.');
@@ -277,6 +283,11 @@ router.post('/fornecedores/:id/pagamentos', async (req, res) => {
       const conta = await ContaBancaria.findOne({ where: escopoFornecedor(req, { id: contaId }) });
       contaId = conta ? conta.id : null;
     }
+    const ibanUtilizado = validarIban(req.body.iban_utilizado || fornecedor.iban || '');
+    if (!ibanUtilizado.ok) {
+      req.flash('error_msg', ibanUtilizado.mensagem);
+      return res.redirect(`/admin/fornecedores/${fornecedor.id}/pagamentos/novo`);
+    }
     const pagamento = await PagamentoFornecedor.create({
       condominio_id: req.condominioId,
       fornecedor_id: fornecedor.id,
@@ -285,7 +296,7 @@ router.post('/fornecedores/:id/pagamentos', async (req, res) => {
       data_pagamento: req.body.data_pagamento || new Date(),
       metodo_pagamento_id: parseInt(req.body.metodo_pagamento_id, 10) || null,
       conta_bancaria_id: contaId,
-      iban_utilizado: req.body.iban_utilizado || fornecedor.iban || null,
+      iban_utilizado: ibanUtilizado.valor || null,
       referencia: req.body.referencia || null,
       observacoes: req.body.observacoes || null,
       estado: ['pendente', 'pago', 'cancelado'].includes(req.body.estado) ? req.body.estado : 'pendente',
