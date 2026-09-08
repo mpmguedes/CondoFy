@@ -34,6 +34,18 @@
   --nav-surface: rgba(255, 255, 255, 0.10);        /* pill/chip sobre o fundo */
   --nav-surface-strong: rgba(255, 255, 255, 0.20); /* pill/chip em hover */
 
+  /* Sidebar (identidade derivada do login: #174a8f / --nav-bg).
+     Superficie neutra + realce azul; nada de pintar a sidebar toda de azul. */
+  --sidebar-bg: var(--c-surface);                   /* mantem o fundo neutro atual */
+  --sidebar-text: var(--c-text);                    /* item inativo - 14.7:1 */
+  --sidebar-text-muted: var(--c-text-muted);        /* icone inativo / titulos - 6.1:1 */
+  --sidebar-hover-bg: var(--c-surface-2);           /* hover subtil (igual ao anterior) */
+  --sidebar-active-bg: var(--c-primary-light);      /* realce derivado de --nav-bg - texto a 6.1:1 */
+  --sidebar-active-text: var(--c-primary-dark);     /* texto ativo - 6.1:1 sobre o realce */
+  --sidebar-active-icon: #0b2140;                   /* icone ativo (paragem escura do login) - 14.0:1 */
+  --sidebar-active-accent: var(--c-primary);        /* barra lateral do item ativo - 4.5:1 */
+  --sidebar-focus: var(--c-primary);                /* focus visivel no fundo claro */
+
   /* Espaçamento (escala) */
   --sp-1: 4px;
   --sp-2: 8px;
@@ -102,7 +114,7 @@ a:hover { color: var(--c-primary-dark); }
   left: 0;
   bottom: 0;
   width: var(--sidebar-w);
-  background: var(--c-surface);
+  background: var(--sidebar-bg);
   border-right: 1px solid var(--c-border);
   display: flex;
   flex-direction: column;
@@ -131,7 +143,7 @@ a:hover { color: var(--c-primary-dark); }
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--c-text-muted);
+  color: var(--sidebar-text-muted);
   padding: var(--sp-2) var(--sp-3);
   white-space: nowrap;
 }
@@ -143,15 +155,21 @@ a:hover { color: var(--c-primary-dark); }
   padding: var(--sp-2) var(--sp-3);
   margin-bottom: 2px;
   border-radius: var(--radius-sm);
-  color: var(--c-text);
+  color: var(--sidebar-text);
   font-weight: 500;
   white-space: nowrap;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
-.sidebar-item:hover { background: var(--c-surface-2); color: var(--c-text); }
-.sidebar-item .material-symbols-outlined { color: var(--c-text-muted); }
-.sidebar-item.active { background: var(--c-primary-light); color: var(--c-primary-dark); }
-.sidebar-item.active .material-symbols-outlined { color: var(--c-primary); }
+.sidebar-item:hover { background: var(--sidebar-hover-bg); color: var(--sidebar-text); }
+.sidebar-item:focus-visible { outline: 2px solid var(--sidebar-focus); outline-offset: 1px; }
+.sidebar-item .material-symbols-outlined { color: var(--sidebar-text-muted); transition: color 0.15s ease; }
+.sidebar-item:hover .material-symbols-outlined { color: var(--sidebar-text); }
+.sidebar-item.active {
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-active-text);
+  box-shadow: inset 3px 0 0 var(--sidebar-active-accent);
+}
+.sidebar-item.active .material-symbols-outlined { color: var(--sidebar-active-icon); }
 
 /* Sidebar recolhida */
 .app-shell.collapsed .sidebar { width: var(--sidebar-w-collapsed); }
@@ -982,13 +1000,16 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
   background: var(--c-surface-2); color: var(--c-text); padding: 6px 10px;
   text-align: left; font-size: 0.82rem; font-weight: 600; cursor: pointer;
 }
-.cond-seletor-btn:hover { border-color: var(--c-primary); background: var(--c-primary-light); }
-.cond-seletor-icone { color: var(--c-primary); font-size: 18px; }
+.cond-seletor-btn:hover { border-color: var(--sidebar-active-accent); background: var(--sidebar-active-bg); }
+.cond-seletor-icone { color: var(--sidebar-active-accent); font-size: 18px; }
 .cond-seletor-nome { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cond-seletor-caret { font-size: 18px; color: var(--c-text-muted); }
+.cond-seletor-caret { font-size: 18px; color: var(--sidebar-text-muted); }
 .cond-seletor-menu { width: 100%; }
 .cond-seletor-item { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; }
-.sidebar-group-super { margin-top: 6px; padding-top: 10px; border-top: 1px solid rgba(127,127,127,.25); }
+.sidebar-group-super { margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--c-border); }
+.sidebar .dropdown-menu { color: var(--sidebar-text); }
+.sidebar .dropdown-item { color: var(--sidebar-text); }
+.sidebar .dropdown-item:hover { background: var(--sidebar-hover-bg); color: var(--sidebar-text); }
 
 /* ── Barra inferior móvel (acessos rápidos) ── */
 .mobile-bottom-bar { display: none; }
