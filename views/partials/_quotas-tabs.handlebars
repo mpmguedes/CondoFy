@@ -1,4 +1,4 @@
-{{!-- Tabs superiores do módulo Quotas — recebe "ativo": mapa | extra | pagamentos(comprovativos) | recibos --}}
+{{!-- Tabs superiores do módulo Quotas — recebe "ativo": mapa | extra | pagamentos(comprovativos) | recibos | contacorrente --}}
 <nav class="quotas-tabs" aria-label="Secções do módulo Quotas">
   <a class="quotas-tab {{#if (eq ativo 'mapa')}}active{{/if}}" href="/admin/quotas">
     <span class="material-symbols-outlined">grid_view</span>Quotas
@@ -11,5 +11,8 @@
   </a>
   <a class="quotas-tab {{#if (eq ativo 'recibos')}}active{{/if}}" href="/admin/quotas/recibos">
     <span class="material-symbols-outlined">receipt_long</span>Recibos
+  </a>
+  <a class="quotas-tab {{#if (eq ativo 'contacorrente')}}active{{/if}}" href="/admin/quotas/conta-corrente">
+    <span class="material-symbols-outlined">account_balance</span>Conta-corrente
   </a>
 </nav>

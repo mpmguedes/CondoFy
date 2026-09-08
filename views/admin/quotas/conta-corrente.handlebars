@@ -1,0 +1,226 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Conta-corrente</h1>
+    <p class="subtitle">Situação financeira por fração — quotas, pagamentos e saldo resultante</p>
+  </div>
+</div>
+
+{{> _quotas-tabs ativo='contacorrente'}}
+
+<style>
+  /* Conta-corrente: duas zonas (frações + detalhe) sem forçar 100vh rígido.
+     A lista de frações tem scroll próprio; o detalhe acompanha a página. */
+  .cc-fracoes-lista { display: flex; flex-direction: column; gap: 0.2rem; overflow-y: auto; max-height: 20rem; }
+  .cc-fracao { display: block; padding: 0.55rem 0.65rem; border-radius: 0.5rem; text-decoration: none; color: inherit; border: 1px solid transparent; }
+  .cc-fracao:hover { background: #eef2f7; }
+  .cc-fracao.active { background: #e7f1ff; border-color: #6ea8fe; }
+  .cc-fracao.active .cc-fracao-desig { color: #084298; }
+  .cc-fracao-saldo { font-weight: 600; }
+  @media (min-width: 992px) {
+    .cc-fracoes-lista { max-height: calc(100vh - 250px); }
+    .cc-fracoes { position: sticky; top: 1rem; }
+  }
+  .cc-saldo-grande { font-size: 1.9rem; line-height: 1.15; font-weight: 700; }
+  .cc-extrato { min-width: 620px; }
+  .cc-extrato-inicial td { background: #f8fafc; }
+  .cc-extrato .cc-cel-saldo { font-variant-numeric: tabular-nums; }
+</style>
+
+<div class="row g-3 mt-1">
+  {{!-- Coluna esquerda — frações --}}
+  <div class="col-12 col-lg-4 col-xl-3">
+    <div class="card cc-fracoes">
+      <div class="card-body">
+        <div class="fw-semibold fs-6">Frações</div>
+        <div class="small text-muted mb-2">Pesquise e escolha a fração a consultar.</div>
+        <input
+          type="search"
+          id="ccPesquisa"
+          class="form-control form-control-sm mb-2"
+          placeholder="Fração, andar ou porta..."
+          autocomplete="off"
+          aria-label="Pesquisar frações" />
+        <div class="cc-fracoes-lista" id="ccFracoesLista">
+          {{#each fracoes}}
+          <a
+            class="cc-fracao {{#if (eq id ../fracaoId)}}active{{/if}}"
+            href="/admin/quotas/conta-corrente?fracao={{id}}{{#if ../anoAtivo}}&amp;ano={{../anoAtivo}}{{/if}}"
+            data-search="{{designacao}} {{andar}} {{porta}}"
+            {{#if (eq id ../fracaoId)}}aria-current="true"{{/if}}>
+            <div class="d-flex justify-content-between align-items-center gap-2">
+              <div class="min-w-0">
+                <div class="fw-semibold text-truncate cc-fracao-desig">{{designacao}}</div>
+                {{#if andar}}<div class="small text-muted text-nowrap">{{andar}}{{#if porta}} · {{porta}}{{/if}}</div>{{/if}}
+              </div>
+              <div class="text-end text-nowrap cc-fracao-saldo {{#if emDivida}}text-danger{{else}}{{#if temCredito}}text-success{{else}}text-muted{{/if}}{{/if}}">
+                {{eur saldo}}
+              </div>
+            </div>
+          </a>
+          {{else}}
+          <div class="small text-muted py-2">Sem frações neste condomínio.</div>
+          {{/each}}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {{!-- Coluna direita — detalhe da fração --}}
+  <div class="col-12 col-lg-8 col-xl-9">
+    {{#if erro}}
+    <div class="alert alert-danger small">{{erro}}</div>
+    {{/if}}
+
+    {{#if selecao}}
+    {{!-- Resumo --}}
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="row g-3 align-items-stretch">
+          <div class="col-12 col-md-5 col-xl-4">
+            <div class="text-muted small text-uppercase">Saldo · {{selecao.fracao.designacao}}</div>
+            <div class="cc-saldo-grande {{#if selecao.emDivida}}text-danger{{else}}{{#if selecao.temCredito}}text-success{{else}}text-muted{{/if}}{{/if}}">
+              {{eur selecao.saldo}}
+            </div>
+            <div class="small text-muted">
+              {{#if selecao.emDivida}}valor em dívida pela fração{{else}}{{#if selecao.temCredito}}crédito a favor da fração{{else}}sem dívida nem crédito{{/if}}{{/if}}
+            </div>
+            {{#if (ne selecao.transitado 0)}}
+            <div class="small text-muted mt-2" title="Valor configurado no Mapa de Quotas (Transitados), incluído no saldo.">
+              Inclui <strong>{{eur selecao.transitado}}</strong> de valor transitado.
+            </div>
+            {{/if}}
+          </div>
+          <div class="col-12 col-md-7 col-xl-8">
+            <div class="row g-2 h-100 align-items-center text-center text-md-start">
+              <div class="col-6 col-md-4">
+                <div class="mini-stat-label">Quotas em dívida</div>
+                <div class="fs-5 fw-bold text-nowrap">{{eur selecao.quotasEmDivida}}</div>
+                <div class="small text-muted">{{selecao.nQuotas}} quotas emitidas</div>
+              </div>
+              <div class="col-6 col-md-4">
+                <div class="mini-stat-label">Quotas Extra em dívida</div>
+                <div class="fs-5 fw-bold text-nowrap">{{eur selecao.extrasEmDivida}}</div>
+                <div class="small text-muted">{{selecao.nParcelas}} parcelas imputadas</div>
+              </div>
+              <div class="col-6 col-md-4">
+                <div class="mini-stat-label">Total pago</div>
+                <div class="fs-5 fw-bold text-success text-nowrap">{{eur selecao.totalPago}}</div>
+                <div class="small text-muted">{{selecao.nPagamentos}} pagamentos</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {{!-- Extrato --}}
+    <div class="card">
+      <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+          <strong>Extrato de conta corrente</strong>
+          {{#if selecao.anoAtivo}}<span class="text-muted"> · {{selecao.anoAtivo}}</span>{{/if}}
+        </div>
+        <form action="/admin/quotas/conta-corrente" method="get" class="d-flex align-items-center gap-2">
+          <input type="hidden" name="fracao" value="{{selecao.fracao.id}}" />
+          {{#if anos.length}}
+          <select name="ano" class="form-select form-select-sm" aria-label="Ano do extrato" onchange="this.form.submit()">
+            {{#each anos}}
+            <option value="{{this}}" {{selected ../anoAtivo this}}>{{this}}</option>
+            {{/each}}
+          </select>
+          {{else}}
+          <span class="small text-muted">Sem movimentos</span>
+          {{/if}}
+        </form>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0 cc-extrato">
+          <thead class="table-light">
+            <tr>
+              <th>Data</th>
+              <th>Movimento</th>
+              <th class="text-end">Débito</th>
+              <th class="text-end">Crédito</th>
+              <th class="text-end">Saldo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#each selecao.extratoLinhas}}
+            <tr class="{{#if sintetico}}cc-extrato-inicial{{/if}}">
+              <td class="text-nowrap small">{{#if dataISO}}{{formatDate dataISO}}{{else}}—{{/if}}</td>
+              <td>
+                <div class="fw-semibold">
+                  {{#if (eq tipo 'pagamento')}}<span class="material-symbols-outlined align-middle me-1" style="font-size:1rem">payments</span>{{/if}}
+                  {{rotulo}}
+                </div>
+                {{#if detalhe}}<div class="small text-muted">{{detalhe}}</div>{{/if}}
+              </td>
+              <td class="text-end text-nowrap small">
+                {{#if (gt debito 0)}}{{eur debito}}{{else}}<span class="text-muted">—</span>{{/if}}
+              </td>
+              <td class="text-end text-nowrap small">
+                {{#if (gt credito 0)}}{{eur credito}}{{else}}<span class="text-muted">—</span>{{/if}}
+              </td>
+              <td class="text-end text-nowrap small fw-semibold cc-cel-saldo {{#if (gt saldo 0)}}text-danger{{else}}{{#if (lt saldo 0)}}text-success{{else}}text-muted{{/if}}{{/if}}">
+                {{eur saldo}}
+              </td>
+            </tr>
+            {{else}}
+            <tr><td colspan="5" class="text-muted small py-3 text-center">Sem movimentos financeiros registados{{#if ../selecao.anoAtivo}} neste ano{{/if}}.</td></tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer small text-muted">
+        Débitos = quotas ordinárias + parcelas de Quotas Extra imputadas (extra processada) + valor transitado.
+        Créditos = pagamentos confirmados. Um pagamento combinado conta uma única vez (1 linha = 1 pagamento).
+        Recibos são apenas documentos — nunca entram como movimentos.
+      </div>
+    </div>
+    {{else}}
+    <div class="card">
+      <div class="card-body text-center py-5">
+        <span class="material-symbols-outlined d-block mx-auto mb-2 text-muted" style="font-size:3rem">account_balance</span>
+        <h2 class="fs-5 mb-1">Selecione uma fração</h2>
+        <p class="text-muted small mb-0">
+          Escolha a fração na coluna <strong>Frações</strong> para ver o saldo, o que lhe foi imputado
+          (quotas ordinárias e extraordinárias), o que já pagou e o extrato cronológico.
+        </p>
+      </div>
+    </div>
+    {{/if}}
+  </div>
+</div>
+
+<script>
+  (function () {
+    'use strict';
+    var input = document.getElementById('ccPesquisa');
+    var lista = document.getElementById('ccFracoesLista');
+    if (!input || !lista) return;
+    input.addEventListener('input', function () {
+      var termo = input.value.trim().toLowerCase();
+      var itens = lista.querySelectorAll('.cc-fracao');
+      var visiveis = 0;
+      for (var i = 0; i < itens.length; i++) {
+        var alvo = itens[i];
+        var texto = (alvo.getAttribute('data-search') || '').toLowerCase();
+        var ok = !termo || texto.indexOf(termo) !== -1;
+        alvo.style.display = ok ? '' : 'none';
+        if (ok) visiveis++;
+      }
+      var vazio = document.getElementById('ccPesquisaSemResultados');
+      if (!visiveis) {
+        if (!vazio) {
+          vazio = document.createElement('div');
+          vazio.id = 'ccPesquisaSemResultados';
+          vazio.className = 'small text-muted py-2';
+          vazio.textContent = 'Sem frações correspondentes.';
+          lista.appendChild(vazio);
+        }
+      } else if (vazio) {
+        vazio.remove();
+      }
+    });
+  })();
+</script>

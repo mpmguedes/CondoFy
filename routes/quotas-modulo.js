@@ -41,6 +41,7 @@ const { resolverDestinatarios } = require('../helpers/avisos');
 const { enfileirarEmail } = require('../helpers/email-fila');
 const comprovativos = require('../helpers/comprovativos');
 const recibosHelper = require('../helpers/recibos');
+const contaCorrente = require('../helpers/conta-corrente');
 const tenant = require('../helpers/tenant');
 const storage = require('../helpers/storage');
 const { mapaPastas, resolverPastaDocumento } = require('../helpers/documento-pastas');
@@ -768,6 +769,64 @@ router.post('/quotas/recibos/:id/anular', async (req, res) => {
     req.flash('error_msg', err.message || 'Erro ao anular o recibo.');
   }
   res.redirect('/admin/quotas/recibos');
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// TAB 5 — CONTA-CORRENTE (consulta/reconciliação por fração)
+// ═══════════════════════════════════════════════════════════════════
+// Lê apenas os dados financeiros existentes (quotas, quotas extra,
+// pagamentos, transitado). Não cria movimentos, não regista pagamentos e não
+// altera nenhuma funcionalidade existente. O saldo é calculado pelo helper
+// conta-corrente a partir das obrigações e pagamentos reais da fração.
+router.get('/quotas/conta-corrente', async (req, res) => {
+  const cid = req.condominioId;
+  const fracaoId = parseInt(req.query.fracao, 10) || null;
+  const anoPedido = parseInt(req.query.ano, 10) || null;
+
+  let fracoes = [];
+  let selecao = null;
+  let anoAtivo = anoPedido;
+  let anos = [];
+  let erro = null;
+  try {
+    // Coluna esquerda: todas as frações do condomínio ativo + saldo.
+    fracoes = await contaCorrente.listaFracoes({ condominioId: cid });
+
+    if (fracaoId) {
+      // Isolamento: a fração tem de pertencer ao condomínio ativo — nunca se
+      // confia apenas no id enviado pelo browser.
+      const pertence = fracoes.some((f) => Number(f.id) === Number(fracaoId));
+      if (!pertence) {
+        req.flash('error_msg', 'Fração não encontrada neste condomínio.');
+        return res.redirect('/admin/quotas/conta-corrente');
+      }
+      selecao = await contaCorrente.contaCorrenteFracao({ condominioId: cid, fracaoId });
+      anos = selecao.anos || [];
+      if (!anoAtivo) {
+        const anoCorrente = new Date().getFullYear();
+        anoAtivo = anos.includes(anoCorrente) ? anoCorrente : anos[0] || null;
+      }
+      const filtrado = contaCorrente.filtrarExtratoPorAno(selecao.extrato, anoAtivo);
+      selecao.extratoLinhas = filtrado.linhas;
+      selecao.anoAtivo = anoAtivo || '';
+    } else {
+      anos = await contaCorrente.anosContaCorrente({ condominioId: cid });
+    }
+  } catch (err) {
+    console.error('[conta-corrente]', err.message);
+    erro = err.message;
+  }
+
+  res.render('admin/quotas/conta-corrente', {
+    titulo: 'Quotas · Conta-corrente',
+    secao: 'contacorrente',
+    fracoes,
+    selecao,
+    fracaoId,
+    anos,
+    anoAtivo: selecao ? anoAtivo || '' : null,
+    erro,
+  });
 });
 
 // Formata permilagem PT-PT (ex.: 125 → "125,000 ‰").
