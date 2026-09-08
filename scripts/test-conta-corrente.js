@@ -10,6 +10,10 @@ const { construirExtrato, filtrarExtratoPorAno } = require('../helpers/conta-cor
 const rotaQuotas = fs.readFileSync(path.join(__dirname, '..', 'routes', 'quotas-modulo.js'), 'utf8');
 const helperCC = fs.readFileSync(path.join(__dirname, '..', 'helpers', 'conta-corrente.js'), 'utf8');
 const vistaCC = fs.readFileSync(path.join(__dirname, '..', 'views', 'admin', 'quotas', 'conta-corrente.handlebars'), 'utf8');
+const vistaMapa = fs.readFileSync(path.join(__dirname, '..', 'views', 'admin', 'quotas', 'mapa.handlebars'), 'utf8');
+const vistaRecibos = fs.readFileSync(path.join(__dirname, '..', 'views', 'admin', 'quotas', 'recibos.handlebars'), 'utf8');
+const vistaPagamentos = fs.readFileSync(path.join(__dirname, '..', 'views', 'admin', 'quotas', 'comprovativos.handlebars'), 'utf8');
+const vistaExtraListar = fs.readFileSync(path.join(__dirname, '..', 'views', 'admin', 'quotas-extra', 'listar.handlebars'), 'utf8');
 const tabs = fs.readFileSync(path.join(__dirname, '..', 'views', 'partials', '_quotas-tabs.handlebars'), 'utf8');
 
 function quota(mes, ano, valor, dataISO) {
@@ -235,18 +239,39 @@ function cenarioIsolamento() {
   assert.ok(!vistaCC.includes('Adicionar crédito'), 'sem ação "Adicionar crédito" nesta fase');
   assert.ok(!vistaCC.includes('Plano de pagamento'), 'sem planos de pagamento nesta fase');
 
-  // Ordem visual dos separadores: Conta-corrente | Recibos | Pagamentos |
-  // Quotas Extra | Quotas (o tab ativo continua por página, sem URL novo).
-  const pCC = tabs.indexOf('Conta-corrente');
-  const pRec = tabs.indexOf('Recibos');
-  const pPag = tabs.indexOf('Pagamentos');
-  const pExtra = tabs.indexOf('Quotas Extra');
-  const pQuotas = tabs.indexOf('grid_view');
-  const asc = [pCC, pRec, pPag, pExtra, pQuotas];
-  assert.ok(asc.every((x) => x !== -1), 'separadores presentes no partial');
-  for (let i = 1; i < asc.length; i++) {
-    assert.ok(asc[i - 1] < asc[i], `separador ${i} na ordem correta`);
+  // Ordem visual dos separadores: Conta-corrente | Quotas | Quotas Extra |
+  // Pagamentos | Recibos (o tab ativo continua por página, sem URL novo).
+  const anchors = [
+    'href="/admin/quotas/conta-corrente"',
+    'href="/admin/quotas"',
+    'href="/admin/quotas-extra"',
+    'href="/admin/quotas/comprovativos"',
+    'href="/admin/quotas/recibos"',
+  ];
+  const pos = anchors.map((a) => tabs.indexOf(a));
+  assert.ok(pos.every((x) => x !== -1), 'links dos separadores presentes no partial');
+  for (let i = 1; i < pos.length; i++) {
+    assert.ok(pos[i - 1] < pos[i], `separador ${i} na ordem pretendida`);
   }
+}
+
+// Estrutura vertical: [TABS] → [TÍTULO] → [DESCRIÇÃO] → [CONTEÚDO].
+// Os separadores aparecem SEMPRE antes do título em todas as páginas do módulo.
+function testarEstruturaVertical() {
+  const paginas = {
+    'Conta-corrente': vistaCC,
+    Quotas: vistaMapa,
+    Recibos: vistaRecibos,
+    Pagamentos: vistaPagamentos,
+    'Quotas Extra': vistaExtraListar,
+  };
+  Object.entries(paginas).forEach(([nome, conteudo]) => {
+    const iTabs = conteudo.indexOf('_quotas-tabs');
+    const iH1 = conteudo.indexOf('<h1>');
+    assert.ok(iTabs !== -1, `${nome}: separadores presentes`);
+    assert.ok(iH1 !== -1, `${nome}: título presente`);
+    assert.ok(iTabs < iH1, `${nome}: separadores ficam no topo, antes do título`);
+  });
 }
 
 cenarioQuotaSemPagamento();
@@ -263,4 +288,5 @@ cenarioRecibosNaoContam();
 cenarioNenhumaDuplicacao();
 cenarioFiltroAno();
 cenarioIsolamento();
+testarEstruturaVertical();
 console.log('✓ Testes da Conta-corrente passaram (sem base de dados).');
