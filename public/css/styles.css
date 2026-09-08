@@ -19,6 +19,21 @@
   --c-text-muted: #5f6368;
   --c-border: #e2e5ea;
 
+  /* Navegacao (identidade cromatica do login GesCondu - ver --auth-bg).
+     A barra superior do dashboard (desktop) e a barra inferior (mobile)
+     usam exatamente estes valores: nao repetir cores literais nas regras. */
+  --nav-bg: #174a8f; /* cor de fundo principal usada no login */
+  --nav-bg-image: linear-gradient(155deg, #174a8f 0%, #0f2a4a 55%, #0b2140 100%); /* fundo exato do login */
+  --nav-text: #ffffff;                             /* texto/icone base - 8.7:1 sobre o fundo */
+  --nav-text-muted: #b9cde6;                       /* texto/icone inativo - 5.4:1 */
+  --nav-active: #ffffff;                           /* item ativo (texto/icone) - 7.2:1 sobre o realce */
+  --nav-active-bg: rgba(4, 16, 36, 0.28);          /* realce do item ativo - texto branco a 7.2:1 */
+  --nav-hover: rgba(255, 255, 255, 0.12);          /* fundo em hover */
+  --nav-focus: #8fc0ff;                            /* anel de focus visivel no fundo - 4.6:1 */
+  --nav-border: rgba(255, 255, 255, 0.14);         /* separadores sobre o fundo */
+  --nav-surface: rgba(255, 255, 255, 0.10);        /* pill/chip sobre o fundo */
+  --nav-surface-strong: rgba(255, 255, 255, 0.20); /* pill/chip em hover */
+
   /* Espaçamento (escala) */
   --sp-1: 4px;
   --sp-2: 8px;
@@ -153,8 +168,10 @@ a:hover { color: var(--c-primary-dark); }
   top: 0;
   z-index: 1030;
   height: var(--header-h);
-  background: var(--c-surface);
-  border-bottom: 1px solid var(--c-border);
+  background-color: var(--nav-bg);
+  background-image: var(--nav-bg-image);
+  color: var(--nav-text);
+  border-bottom: 1px solid var(--nav-border);
   display: flex;
   align-items: center;
   gap: var(--sp-3);
@@ -168,14 +185,14 @@ a:hover { color: var(--c-primary-dark); }
   border: none;
   background: transparent;
   border-radius: 50%;
-  color: var(--c-text-muted);
+  color: var(--nav-text-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
-.icon-btn:hover { background: var(--c-surface-2); }
+.icon-btn:hover { background: var(--nav-hover); color: var(--nav-text); }
 
 .condominio-pill {
   display: flex;
@@ -183,12 +200,14 @@ a:hover { color: var(--c-primary-dark); }
   gap: var(--sp-2);
   padding: var(--sp-1) var(--sp-3);
   border-radius: 20px;
-  background: var(--c-surface-2);
-  color: var(--c-text);
+  background: var(--nav-surface);
+  color: var(--nav-text);
   font-weight: 500;
+  border: 1px solid var(--nav-border);
   max-width: 320px;
 }
-.condominio-pill .material-symbols-outlined { color: var(--c-primary); font-size: 18px; }
+.condominio-pill .material-symbols-outlined { color: var(--nav-active); font-size: 18px; }
+.condominio-pill-vazio { color: var(--nav-text-muted); }
 .condominio-pill-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .user-chip {
@@ -201,13 +220,15 @@ a:hover { color: var(--c-primary-dark); }
   border-radius: 20px;
   cursor: pointer;
 }
-.user-chip:hover { background: var(--c-surface-2); }
+.user-chip { color: var(--nav-text); }
+.user-chip:hover { background: var(--nav-hover); }
 .avatar {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: var(--c-primary);
-  color: #fff;
+  background: var(--nav-active);
+  color: var(--nav-bg);
+  box-shadow: inset 0 0 0 1px var(--nav-surface-strong);
   font-weight: 600;
   font-size: 0.85rem;
   display: inline-flex;
@@ -434,6 +455,9 @@ a:hover { color: var(--c-primary-dark); }
 .dropdown-menu { border: 1px solid var(--c-border); border-radius: var(--radius-sm); box-shadow: var(--elev-3); }
 .dropdown-item { border-radius: 6px; }
 .dropdown-item:active { background: var(--c-primary-light); color: var(--c-primary-dark); }
+.app-header .dropdown-menu { color: var(--c-text); }
+.app-header .dropdown-item { color: var(--c-text); }
+.app-header .dropdown-item:hover { background: var(--c-surface-2); color: var(--c-text); }
 .list-group-item { border-color: var(--c-border); }
 
 /* ── Acessibilidade ──────────────────────────────────────────────── */
@@ -968,16 +992,21 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
 
 /* ── Barra inferior móvel (acessos rápidos) ── */
 .mobile-bottom-bar { display: none; }
-.mobile-bottom-bar .mb-item { color: var(--c-text-muted, #6c757d); text-decoration: none; }
+.mobile-bottom-bar .mb-item { color: var(--nav-text-muted); text-decoration: none; }
+.mobile-bottom-bar .mb-item:hover { color: var(--nav-text); background: var(--nav-hover); }
+.mobile-bottom-bar .mb-item.mb-item-ativo { color: var(--nav-active); font-weight: 600; }
+.mobile-bottom-bar .mb-item:focus-visible { outline: 2px solid var(--nav-focus); outline-offset: -3px; }
 @media (max-width: 767.98px) {
   .mobile-bottom-bar {
     display: flex;
     position: fixed;
     z-index: 1050;
     left: 0; right: 0; bottom: 0;
-    background: var(--c-surface, #ffffff);
-    border-top: 1px solid rgba(0,0,0,.08);
-    box-shadow: 0 -2px 10px rgba(0,0,0,.06);
+    background-color: var(--nav-bg);
+    background-image: var(--nav-bg-image);
+    color: var(--nav-text);
+    border-top: 1px solid var(--nav-border);
+    box-shadow: 0 -2px 12px rgba(11, 33, 64, .28);
     justify-content: space-around;
     align-items: stretch;
     padding: .25rem 0 env(safe-area-inset-bottom, 0);
@@ -993,11 +1022,20 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
     padding: .3rem .25rem;
     font-size: .66rem;
     line-height: 1.1;
-    color: var(--c-text-muted, #6c757d);
+    color: var(--nav-text-muted);
     text-align: center;
+    border-radius: 10px;
+    transition: background-color .15s ease, color .15s ease;
   }
   .mobile-bottom-bar .mb-item .material-symbols-outlined { font-size: 1.35rem; }
-  .mobile-bottom-bar .mb-item.mb-item-ativo { color: var(--c-primary, #0d6efd); font-weight: 600; }
+  .mobile-bottom-bar .mb-item.mb-item-ativo {
+    color: var(--nav-active);
+    background: var(--nav-active-bg);
+    font-weight: 600;
+  }
+  .mobile-bottom-bar .mb-item.mb-item-ativo .material-symbols-outlined { color: var(--nav-active); }
+  .mobile-bottom-bar .mb-item:hover { color: var(--nav-text); background: var(--nav-hover); }
+  .mobile-bottom-bar .mb-item.mb-item-ativo:hover { color: var(--nav-active); background: var(--nav-active-bg); }
   .app-content { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0)); }
 }
 
