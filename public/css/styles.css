@@ -237,7 +237,9 @@ a:hover { color: var(--c-primary-dark); }
 .condominio-pill:focus { background: var(--nav-surface-strong); border-color: var(--nav-border); color: var(--nav-text); }
 .condominio-pill:focus-visible { outline: 2px solid var(--nav-focus); outline-offset: 2px; }
 .condominio-pill .material-symbols-outlined { color: var(--nav-active); font-size: 18px; }
-.condominio-pill-vazio { color: var(--nav-text-muted); }
+/* Cor do texto sempre branca: nenhuma regra global de link pode apanhar o texto. */
+.condominio-pill .condominio-pill-text { color: var(--nav-text) !important; }
+.condominio-pill-vazio { color: var(--nav-text-muted) !important; }
 .condominio-pill-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .user-chip {
