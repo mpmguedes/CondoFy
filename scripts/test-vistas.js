@@ -266,7 +266,7 @@ html = layout({ body: 'ok', user: { nome: 'Ana', role: 'admin' }, isAdmin: true,
 assert.ok(!html.includes('/admin/amenidades'), 'nav: Amenidades removida da sidebar');
 assert.ok(html.includes('mobile-bottom-bar'), 'nav: barra inferior móvel presente');
 assert.ok(html.includes('href="/admin/quotas/recibos"'), 'nav: atalho Recibos na barra inferior');
-assert.ok(html.includes('href="/admin/quotas"'), 'nav: atalho Quotas na barra inferior');
+assert.ok(html.includes('href="/admin/quotas/conta-corrente"'), 'nav: atalho Quotas na barra inferior abre a Conta-corrente');
 assert.ok(html.includes('href="/admin/avisos"'), 'nav: atalho Avisos na barra inferior');
 assert.ok(html.includes('mb-item-ativo'), 'nav: item ativo assinalado na barra inferior (recibos)');
 html = layout({ body: 'ok', user: { nome: 'Bruno', role: 'condomino' }, isAdmin: false, condominio: contexto.condominio, currentPath: '/condomino' });

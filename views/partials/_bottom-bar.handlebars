@@ -4,7 +4,7 @@
   <a class="mb-item {{#if (eq currentPath '/admin')}}mb-item-ativo{{/if}}" href="/admin" title="Painel">
     <span class="material-symbols-outlined">dashboard</span><span class="mb-label">Painel</span>
   </a>
-  <a class="mb-item {{#if (and (startsPath currentPath '/admin/quotas') (not (startsPath currentPath '/admin/quotas/recibos')))}}mb-item-ativo{{/if}}" href="/admin/quotas" title="Quotas">
+  <a class="mb-item {{#if (and (startsPath currentPath '/admin/quotas') (not (startsPath currentPath '/admin/quotas/recibos')))}}mb-item-ativo{{/if}}" href="/admin/quotas/conta-corrente" title="Quotas">
     <span class="material-symbols-outlined">receipt_long</span><span class="mb-label">Quotas</span>
   </a>
   <a class="mb-item {{#if (startsPath currentPath '/admin/quotas/recibos')}}mb-item-ativo{{/if}}" href="/admin/quotas/recibos" title="Recibos">
