@@ -18,7 +18,7 @@
 const crypto = require('crypto');
 const sequelize = require('../config/database');
 const { Op } = require('sequelize');
-const { Quota, Recibo, ReciboQuota, ReciboExtraParcela, ExtraQuota, ExtraQuotaParcela, PagamentoExtraParcela, Pagamento, PagamentoQuota, Numeracao, MetodoPagamento } = require('../models');
+const { Quota, Recibo, ReciboQuota, ReciboExtraParcela, ExtraQuota, ExtraQuotaParcela, PagamentoExtraParcela, Pagamento, PagamentoQuota, Numeracao, MetodoPagamento, Fracao } = require('../models');
 const { toCents, fromCents } = require('./money');
 
 const EPS = 1; // 1 cêntimo
@@ -693,6 +693,107 @@ async function emitirReciboDePagamento({ pagamentoId, condominioId, userId, ano 
   }
 }
 
+// Pagamentos CONFIRMADOS sem recibo (disponíveis para emitir UM recibo por
+// pagamento), com a composição de cada pagamento (quotas normais e/ou
+// parcelas de Quotas Extra). Regra: 1 pagamento → 1 recibo; um pagamento só
+// aparece enquanto tiver valor pago ainda NÃO coberto por recibo válido.
+// Isolado por condominio_id (nunca devolve pagamentos de outro condomínio).
+async function pagamentosSemRecibo({ condominioId } = {}) {
+  if (!condominioId) return [];
+  const pagamentos = await Pagamento.findAll({
+    where: { condominio_id: condominioId, estado: 'confirmado' },
+    include: [{ model: Fracao, as: 'fracao', attributes: ['id', 'designacao'] }],
+    order: [['data_pagamento', 'DESC'], ['id', 'DESC']],
+  });
+  if (!pagamentos.length) return [];
+  const idsPag = pagamentos.map((p) => p.id);
+
+  const alq = await PagamentoQuota.findAll({
+    where: { pagamento_id: { [Op.in]: idsPag } },
+    attributes: ['pagamento_id', 'quota_id', 'valor_aplicado'],
+    raw: true,
+  });
+  const alx = await PagamentoExtraParcela.findAll({
+    where: { pagamento_id: { [Op.in]: idsPag } },
+    attributes: ['pagamento_id', 'extra_quota_parcela_id', 'valor_aplicado'],
+    raw: true,
+  });
+
+  const qIds = [...new Set(alq.map((a) => a.quota_id))];
+  const pIds = [...new Set(alx.map((a) => a.extra_quota_parcela_id))];
+
+  const quotas = qIds.length
+    ? await Quota.findAll({ where: { id: { [Op.in]: qIds } }, attributes: ['id', 'fracao_id', 'ano', 'mes', 'numero_documento'], raw: true })
+    : [];
+  const porQuota = new Map(quotas.map((q) => [q.id, q]));
+
+  const parcelas = pIds.length
+    ? await ExtraQuotaParcela.findAll({
+        where: { id: { [Op.in]: pIds } },
+        attributes: ['id', 'extra_quota_id', 'parcela_numero', 'data_vencimento'],
+        raw: true,
+      })
+    : [];
+  const porParcela = new Map(parcelas.map((p) => [p.id, p]));
+  const extraIds = [...new Set(parcelas.map((p) => p.extra_quota_id))];
+  const extras = extraIds.length
+    ? await ExtraQuota.findAll({ where: { id: { [Op.in]: extraIds } }, attributes: ['id', 'designacao'], raw: true })
+    : [];
+  const porExtra = new Map(extras.map((e) => [e.id, e]));
+
+  const [pagoQ, cobQ] = await Promise.all([pagoPorQuota(qIds), cobertoPorQuota(qIds)]);
+  const [pagoP, cobP] = await Promise.all([pagoPorParcela(pIds), cobertoPorParcela(pIds)]);
+
+  const lista = [];
+  for (const pag of pagamentos) {
+    const itens = [];
+    let disponivelC = 0;
+    for (const a of alq) {
+      if (Number(a.pagamento_id) !== Number(pag.id)) continue;
+      const q = porQuota.get(a.quota_id);
+      const aplicadoC = toCents(a.valor_aplicado);
+      const livreC = Math.max(0, (pagoQ.get(a.quota_id) || 0) - (cobQ.get(a.quota_id) || 0));
+      disponivelC += Math.max(0, Math.min(aplicadoC, livreC));
+      if (!q) continue;
+      itens.push({
+        tipo: 'quota',
+        rotulo: `${MESES_CURTO[(q.mes || 1) - 1]} ${q.ano}`,
+        detalhe: q.numero_documento || '',
+        valor: fromCents(aplicadoC),
+      });
+    }
+    for (const a of alx) {
+      if (Number(a.pagamento_id) !== Number(pag.id)) continue;
+      const parcela = porParcela.get(a.extra_quota_parcela_id);
+      if (!parcela) continue;
+      const extra = porExtra.get(parcela.extra_quota_id);
+      const aplicadoC = toCents(a.valor_aplicado);
+      const livreC = Math.max(0, (pagoP.get(a.extra_quota_parcela_id) || 0) - (cobP.get(a.extra_quota_parcela_id) || 0));
+      disponivelC += Math.max(0, Math.min(aplicadoC, livreC));
+      itens.push({
+        tipo: 'extra',
+        rotulo: extra ? extra.designacao : 'Quota extraordinária',
+        detalhe: `Parcela ${parcela.parcela_numero || 1}`,
+        valor: fromCents(aplicadoC),
+      });
+    }
+    if (itens.length && disponivelC > EPS) {
+      lista.push({
+        id: pag.id,
+        numero_documento: pag.numero_documento,
+        data_pagamento: pag.data_pagamento,
+        valor: pag.valor,
+        fracaoDesignacao: pag.fracao ? pag.fracao.designacao : '—',
+        itens,
+        temOrdinarias: itens.some((i) => i.tipo === 'quota'),
+        temExtras: itens.some((i) => i.tipo === 'extra'),
+        disponivel: fromCents(disponivelC),
+      });
+    }
+  }
+  return lista;
+}
+
 module.exports = {
   formatarNumero,
   formatarCodigo,
@@ -707,6 +808,7 @@ module.exports = {
   cobertoPorParcela,
   emitirReciboParcela,
   emitirReciboDePagamento,
+  pagamentosSemRecibo,
   mesesPorEmitir,
   porEmitirPorFracao,
   detalhePorEmitir,

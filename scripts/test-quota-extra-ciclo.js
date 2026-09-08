@@ -10,6 +10,8 @@ const x = require('../helpers/extra-quota-estado');
 const rotaExtra = fs.readFileSync(path.join(__dirname, '..', 'routes', 'extra-quotas.js'), 'utf8');
 const rotaFinanceiro = fs.readFileSync(path.join(__dirname, '..', 'routes', 'financeiro.js'), 'utf8');
 const rotaCondomino = fs.readFileSync(path.join(__dirname, '..', 'routes', 'condomino.js'), 'utf8');
+const rotaQuotasModulo = fs.readFileSync(path.join(__dirname, '..', 'routes', 'quotas-modulo.js'), 'utf8');
+const vistaRecibos = fs.readFileSync(path.join(__dirname, '..', 'views', 'admin', 'quotas', 'recibos.handlebars'), 'utf8');
 const helperPagamentos = fs.readFileSync(path.join(__dirname, '..', 'helpers', 'pagamentos.js'), 'utf8');
 const helperRecibos = fs.readFileSync(path.join(__dirname, '..', 'helpers', 'recibos.js'), 'utf8');
 const pagamentosHelper = require('../helpers/pagamentos');
@@ -119,6 +121,12 @@ function testarFaseC() {
   assert.ok(rotaCondomino.includes("estado: { [Op.in]: ['pendente', 'cobrada'] }"), 'condómino vê parcelas por cobrar');
   assert.ok(rotaCondomino.includes("as: 'parcelasExtra'"), 'condómino inclui parcelas extra nos recibos');
   assert.ok(rotaCondomino.includes("condominio_id: req.condominioId"), 'área do condómino isolada por condomínio');
+
+  // Emissão de recibos a partir de PAGAMENTOS sem recibo (1 pagamento → 1 RCP).
+  assert.strictEqual(typeof recibosHelper.pagamentosSemRecibo, 'function', 'helper pagamentosSemRecibo exportado');
+  assert.ok(rotaQuotasModulo.includes('pagamentosSemRecibo'), 'página de recibos usa pagamentos sem recibo');
+  assert.ok(vistaRecibos.includes('Pagamentos sem recibo'), 'vista lista pagamentos sem recibo');
+  assert.ok(vistaRecibos.includes('/recibo/emitir'), 'vista permite emitir recibo por pagamento');
 }
 
 testarModelo();

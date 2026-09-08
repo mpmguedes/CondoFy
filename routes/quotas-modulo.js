@@ -588,6 +588,11 @@ router.get('/quotas/recibos', async (req, res) => {
 
   const porEmitirJson = porEmitir.map((l) => ({ fracaoId: l.fracaoId, meses: l.meses }));
 
+  // Pagamentos confirmados SEM recibo (composição quotas normais + Quotas
+  // Extra) — permitem emitir UM recibo por pagamento, independentemente das
+  // obrigações que contêm.
+  const pagamentosSemRecibo = await recibosHelper.pagamentosSemRecibo({ condominioId: cid });
+
   res.render('admin/quotas/recibos', {
     titulo: 'Quotas · Recibos',
     secao: 'recibos',
@@ -596,6 +601,7 @@ router.get('/quotas/recibos', async (req, res) => {
     recibos: linhasRecibos,
     resumo: resumoRecibos,
     abrirEmitirFracaoId: emitirFracaoId,
+    pagamentosSemRecibo,
   });
 });
 
