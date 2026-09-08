@@ -122,11 +122,21 @@ function testarFaseC() {
   assert.ok(rotaCondomino.includes("as: 'parcelasExtra'"), 'condómino inclui parcelas extra nos recibos');
   assert.ok(rotaCondomino.includes("condominio_id: req.condominioId"), 'área do condómino isolada por condomínio');
 
-  // Emissão de recibos a partir de PAGAMENTOS sem recibo (1 pagamento → 1 RCP).
-  assert.strictEqual(typeof recibosHelper.pagamentosSemRecibo, 'function', 'helper pagamentosSemRecibo exportado');
-  assert.ok(rotaQuotasModulo.includes('pagamentosSemRecibo'), 'página de recibos usa pagamentos sem recibo');
-  assert.ok(vistaRecibos.includes('Pagamentos sem recibo'), 'vista lista pagamentos sem recibo');
-  assert.ok(vistaRecibos.includes('/recibo/emitir'), 'vista permite emitir recibo por pagamento');
+  // Emissão de recibos centralizada na página Recibos → "Por emitir" (fluxo único):
+  // extras pagas elegíveis entram no MESMO modal por fração (ids negativos = parcelas).
+  assert.strictEqual(typeof recibosHelper.pagamentosSemRecibo, 'undefined', 'helper pagamentosSemRecibo removido (fluxo único)');
+  assert.strictEqual(typeof recibosHelper.extrasPagasPorEmitir, 'function', 'helper extrasPagasPorEmitir exportado');
+  assert.strictEqual(typeof recibosHelper.emitirReciboItens, 'function', 'helper emitirReciboItens exportado (RCP único com quotas+parcelas)');
+  assert.ok(!helperRecibos.includes('pagamentosSemRecibo'), 'helper recibos não referencia pagamentosSemRecibo');
+  assert.ok(!rotaQuotasModulo.includes('pagamentosSemRecibo'), 'rota de recibos não usa pagamentosSemRecibo');
+  assert.ok(!vistaRecibos.includes('Pagamentos sem recibo'), 'vista de recibos sem secção "Pagamentos sem recibo"');
+  assert.ok(rotaQuotasModulo.includes('extrasPagasPorEmitir'), 'rota de recibos integra extras pagas por emitir');
+  assert.ok(rotaQuotasModulo.includes('emitirReciboItens'), 'rota de recibos emite RCP único com quotas+extras');
+  assert.ok(rotaQuotasModulo.includes('parcelaIds'), 'rota de recibos recebe parcelaIds (extras do modal)');
+  assert.ok(rotaQuotasModulo.includes("quotaId: -e.parcelaId") || rotaQuotasModulo.includes('quotaId: -parcelaId'), 'extras entram no modal com id negativo (=-parcelaId)');
+  assert.ok(vistaRecibos.includes('Por emitir'), 'vista mantém secção "Por emitir" (fluxo único)');
+  assert.ok(vistaRecibos.includes('dadosPorEmitir'), 'modal por emitir continua a usar dadosPorEmitir');
+  assert.ok(vistaRecibos.includes('modalEmitir'), 'modal de emissão por fração mantém-se');
 }
 
 testarModelo();

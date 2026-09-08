@@ -571,27 +571,69 @@ router.get('/quotas/recibos', async (req, res) => {
     pode: m.pode,
   });
 
-  const porEmitir = (await recibosHelper.porEmitirPorFracao({ condominioId: cid }))
+  // Quotas Extra PAGAS e ainda não cobertas, elegíveis no mesmo modal por
+  // fração (a emissão de recibo continua a ser o fluxo único por fração).
+  const extrasGrupos = await recibosHelper.extrasPagasPorEmitir({ condominioId: cid });
+  const extrasPorFracao = new Map(extrasGrupos.map((g) => [g.fracaoId, g.extras]));
+
+  const enriquecerExtra = (e) => ({
+    quotaId: -e.parcelaId, // id negativo identifica parcela de Quota Extra
+    mes: null,
+    ano: null,
+    rotulo: `Extra · ${e.designacao}${e.detalhe ? ` · ${e.detalhe}` : ''}`,
+    quota: 0,
+    pago: e.valor,
+    coberto: 0,
+    disponivel: e.disponivel,
+    fcr: 0,
+    pode: true,
+  });
+
+  let porEmitir = (await recibosHelper.porEmitirPorFracao({ condominioId: cid }))
     .map((l) => {
       const f = mapaFracao.get(l.fracaoId);
       const meses = (detalhePorFracao.get(l.fracaoId) || []).map(enriquecerMes);
+      const extrasRaw = extrasPorFracao.get(l.fracaoId) || [];
+      const extras = extrasRaw.map(enriquecerExtra);
+      const extraDispC = extrasRaw.reduce((s, e) => s + (e.dispC || 0), 0);
       return {
         ...l,
         mesesN: l.meses,
         designacao: f ? f.designacao : '—',
         andar: f ? f.andar : null,
         porta: f ? f.porta : null,
-        meses,
+        pago: fromCents(toCents(l.pago) + extraDispC),
+        porEmitir: fromCents(toCents(l.porEmitir) + extraDispC),
+        meses: meses.concat(extras),
+        nExtras: extras.length,
       };
     })
     .sort((a, b) => String(a.designacao).localeCompare(String(b.designacao), 'pt'));
 
-  const porEmitirJson = porEmitir.map((l) => ({ fracaoId: l.fracaoId, meses: l.meses }));
+  // Frações que só têm Quotas Extra elegíveis (sem quotas mensais por emitir)
+  // também aparecem no fluxo por fração.
+  for (const [fracaoId, extras] of extrasPorFracao) {
+    if (porEmitir.some((l) => l.fracaoId === fracaoId)) continue;
+    const f = mapaFracao.get(fracaoId);
+    const extraItens = extras.map(enriquecerExtra);
+    const porExtraC = extras.reduce((s, e) => s + (e.dispC || 0), 0);
+    porEmitir.push({
+      fracaoId,
+      designacao: f ? f.designacao : '—',
+      andar: f ? f.andar : null,
+      porta: f ? f.porta : null,
+      pago: fromCents(porExtraC),
+      coberto: 0,
+      enviado: 0,
+      porEmitir: fromCents(porExtraC),
+      mesesN: 0,
+      meses: extraItens,
+      nExtras: extraItens.length,
+    });
+    porEmitir.sort((a, b) => String(a.designacao).localeCompare(String(b.designacao), 'pt'));
+  }
 
-  // Pagamentos confirmados SEM recibo (composição quotas normais + Quotas
-  // Extra) — permitem emitir UM recibo por pagamento, independentemente das
-  // obrigações que contêm.
-  const pagamentosSemRecibo = await recibosHelper.pagamentosSemRecibo({ condominioId: cid });
+  const porEmitirJson = porEmitir.map((l) => ({ fracaoId: l.fracaoId, meses: l.meses }));
 
   res.render('admin/quotas/recibos', {
     titulo: 'Quotas · Recibos',
@@ -601,7 +643,6 @@ router.get('/quotas/recibos', async (req, res) => {
     recibos: linhasRecibos,
     resumo: resumoRecibos,
     abrirEmitirFracaoId: emitirFracaoId,
-    pagamentosSemRecibo,
   });
 });
 
@@ -612,45 +653,61 @@ router.post('/quotas/recibos/emitir', async (req, res) => {
     const modosValidos = ['plano', 'unico', 'mes', 'selecionar'];
     const modo = String(req.body.modo || 'plano');
     if (!modosValidos.includes(modo)) throw new Error('Modo de distribuição inválido.');
-    const quotaIds = toArray(req.body.meses).map(Number).filter(Boolean);
+    const mesesRaw = toArray(req.body.meses).map(Number).filter(Boolean);
+    // IDs positivos = quotas mensais; negativos = parcelas de Quota Extra.
+    const quotaIds = mesesRaw.filter((x) => x > 0);
+    const parcelaIds = mesesRaw.filter((x) => x < 0).map((x) => -x);
     if (!fracaoId) throw new Error('Fração em falta.');
-    if (!quotaIds.length) throw new Error('Selecione pelo menos um mês.');
+    if (!quotaIds.length && !parcelaIds.length) throw new Error('Selecione pelo menos um item (quota ou Quota Extra).');
 
-    const mesesCompletos = [];
-    const quotas = await Quota.findAll({ where: { id: { [Op.in]: quotaIds }, fracao_id: fracaoId, condominio_id: req.condominioId } });
-    const porId = new Map(quotas.map((q) => [q.id, q]));
-    for (const qid of quotaIds) {
-      const q = porId.get(qid);
-      if (q) {
-        mesesCompletos.push({
-          quotaId: q.id,
-          ano: q.ano,
-          mes: q.mes,
-          valor: q.valor,
-          valor_base: q.valor_base,
-          valor_fcr: q.valor_fcr,
-        });
+    let criados = [];
+    if (parcelaIds.length) {
+      // Itens extraordinários (com ou sem quotas mensais) → UM recibo único
+      // com a discriminação de quotas normais e Quotas Extra.
+      const { recibo } = await recibosHelper.emitirReciboItens({
+        condominioId: req.condominioId,
+        fracaoId,
+        quotaIds,
+        parcelaIds,
+        userId: req.user.id,
+      });
+      criados = [recibo];
+    } else {
+      const mesesCompletos = [];
+      const quotas = await Quota.findAll({ where: { id: { [Op.in]: quotaIds }, fracao_id: fracaoId, condominio_id: req.condominioId } });
+      const porId = new Map(quotas.map((q) => [q.id, q]));
+      for (const qid of quotaIds) {
+        const q = porId.get(qid);
+        if (q) {
+          mesesCompletos.push({
+            quotaId: q.id,
+            ano: q.ano,
+            mes: q.mes,
+            valor: q.valor,
+            valor_base: q.valor_base,
+            valor_fcr: q.valor_fcr,
+          });
+        }
       }
+      if (mesesCompletos.length !== quotaIds.length) {
+        throw new Error('Um dos meses selecionados não pertence a esta fração.');
+      }
+      const valorGlobal = parseFloat(String(req.body.valor_global || '').replace(',', '.'));
+      criados = await recibosHelper.emitirRecibos({
+        condominioId: req.condominioId,
+        fracaoId,
+        meses: mesesCompletos,
+        modo,
+        valorGlobal: Number.isFinite(valorGlobal) ? valorGlobal : 0,
+        tipo: req.body.tipo === 'extraordinario' ? 'extraordinario' : 'ordinario',
+        userId: req.user.id,
+      });
     }
-    if (mesesCompletos.length !== quotaIds.length) {
-      throw new Error('Um dos meses selecionados não pertence a esta fração.');
-    }
-
-    const valorGlobal = parseFloat(String(req.body.valor_global || '').replace(',', '.'));
-    const criados = await recibosHelper.emitirRecibos({
-      condominioId: req.condominioId,
-      fracaoId,
-      meses: mesesCompletos,
-      modo,
-      valorGlobal: Number.isFinite(valorGlobal) ? valorGlobal : 0,
-      tipo: req.body.tipo === 'extraordinario' ? 'extraordinario' : 'ordinario',
-      userId: req.user.id,
-    });
     await audit({
       userId: req.user.id,
       acao: 'emitir_recibo',
       entidade: 'Recibo',
-      detalhes: { codigos: criados.map((r) => r.codigo), modo },
+      detalhes: { codigos: criados.map((r) => r.codigo), modo: parcelaIds.length ? 'unico+extra' : modo },
     }).catch(() => {});
 
     // Regista/atualiza o Documento do recibo na biblioteca (pasta "recibos")

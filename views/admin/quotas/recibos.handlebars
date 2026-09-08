@@ -25,57 +25,8 @@
   </div></div></div>
 </div>
 
-{{!-- Pagamentos sem recibo — 1 pagamento → 1 recibo (qualquer composição) --}}
-<h2 class="section-title">Emitir recibos — Pagamentos sem recibo</h2>
-{{#if pagamentosSemRecibo}}
-<div class="card mb-4">
-  <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
-      <thead class="table-light">
-        <tr>
-          <th>Pagamento</th>
-          <th>Fração</th>
-          <th>Composição</th>
-          <th class="text-end">Total</th>
-          <th class="text-center">Ação</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{#each pagamentosSemRecibo}}
-        <tr>
-          <td>
-            <span class="font-monospace fw-semibold">{{numero_documento}}</span>
-            {{#if data_pagamento}}<div class="small text-muted">{{formatDate data_pagamento}}</div>{{/if}}
-          </td>
-          <td>{{fracaoDesignacao}}</td>
-          <td>
-            <ul class="list-unstyled small mb-0">
-              {{#each itens}}
-              <li class="d-flex align-items-center gap-2">
-                {{#if (eq tipo 'quota')}}<span class="badge text-bg-light border">Quota</span>{{else}}<span class="badge text-bg-light border">Extra</span>{{/if}}
-                <span>{{rotulo}}{{#if detalhe}} <span class="text-muted">· {{detalhe}}</span>{{/if}}</span>
-                <span class="ms-auto text-nowrap">{{eur valor}}</span>
-              </li>
-              {{/each}}
-            </ul>
-          </td>
-          <td class="text-end text-nowrap fw-semibold">{{eur valor}}</td>
-          <td class="text-center text-nowrap">
-            <a href="/admin/pagamentos/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver pagamento"><span class="material-symbols-outlined" style="font-size:1rem">visibility</span></a>
-            <form action="/admin/pagamentos/{{id}}/recibo/emitir" method="POST" class="d-inline" onsubmit="return confirm('Emitir um único recibo (RCP) para este pagamento, com a discriminação de quotas e Quotas Extra?');">
-              <button class="btn btn-sm btn-primary">Emitir recibo</button>
-            </form>
-          </td>
-        </tr>
-        {{/each}}
-      </tbody>
-    </table>
-  </div>
-</div>
-{{else}}
-<div class="alert alert-light border small mb-4">Não há pagamentos sem recibo. Qualquer pagamento registado que ainda não tenha recibo aparece aqui (quotas normais e/ou Quotas Extra) e permite emitir um único RCP.</div>
-{{/if}}
-
+{{!-- Fluxo único de emissão: por fração, com quotas ordinárias e/ou
+     Quotas Extra elegíveis no mesmo modal (Emitir recibo). --}}
 {{!-- 3.1 Recibos por emitir --}}
 <h2 class="section-title">Por emitir</h2>
 {{#if porEmitir}}
@@ -102,7 +53,7 @@
           <td class="text-end text-nowrap">{{eur enviado}}</td>
           <td class="text-end fw-semibold text-nowrap text-primary">
             {{eur porEmitir}}
-            <div class="small text-muted fw-normal">{{mesesN}} mês/meses disponíveis</div>
+            <div class="small text-muted fw-normal">{{#if mesesN}}{{mesesN}} mês/meses disponíveis{{#if nExtras}} · {{nExtras}} extra(s){{/if}}{{else}}{{nExtras}} extra(s){{/if}}</div>
           </td>
           <td class="text-center">
             <button type="button" class="btn btn-sm btn-outline-primary btn-emitir" data-bs-toggle="modal" data-bs-target="#modalEmitir" data-fracao="{{fracaoId}}" data-designacao="{{designacao}}">
@@ -192,6 +143,11 @@
      header/footer do modal permanecem acessíveis (desktop, tablet e mobile). */
   #modalEmitir .modal-dialog-scrollable .modal-content { max-height: calc(100vh - 3rem); }
   #modalEmitir .modal-dialog-scrollable .modal-body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  /* Itens de Quota Extra no seletor: destaque discreto face aos meses. */
+  #modalEmitir .mes-btn-extra { border-color: #a5770f; background: #fdf6e3; }
+  #modalEmitir .mes-btn-extra.selected { background: #a5770f !important; border-color: #a5770f !important; color: #fff; }
+  #modalEmitir .mes-btn-extra.selected .mes-btn-mes,
+  #modalEmitir .mes-btn-extra.selected .mes-btn-valor { color: #fff !important; }
 </style>
 <div class="modal fade" id="modalEmitir" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
@@ -240,16 +196,16 @@
             </div>
             <div class="col-12 col-lg-6">
               <label class="form-label small mb-1">Tipo</label>
-              <select class="form-select form-select-sm" name="tipo">
+              <select class="form-select form-select-sm" name="tipo" id="emitirTipo">
                 <option value="ordinario">Ordinário</option>
                 <option value="extraordinario">Extraordinário</option>
               </select>
             </div>
           </div>
 
-          <label class="form-label small mb-1">Meses disponíveis</label>
+          <label class="form-label small mb-1">Meses e Quotas Extra disponíveis</label>
           <div id="emitirMeses" class="row g-2"></div>
-          <div class="form-text mt-1">Clique num mês para selecionar ou desmarcar. Meses sem valor disponível aparecem desativados. Detalhes (quota/pago/já em recibo) disponíveis no tooltip de cada mês.</div>
+          <div class="form-text mt-1">Clique num item (mês ou Quota Extra paga) para selecionar ou desmarcar. Itens sem valor disponível aparecem desativados. As Quotas Extra são sempre emitidas num único recibo (com os meses escolhidos).</div>
 
           <div class="alert alert-light border small mt-3 mb-0" id="emitirContagem">Selecione os meses a emitir.</div>
           <p class="text-danger small mt-2 mb-0 d-none" id="emitirErro"></p>
@@ -329,6 +285,7 @@
   var selectModo = document.getElementById('emitirModo');
   var contagem = document.getElementById('emitirContagem');
   var erroEl = document.getElementById('emitirErro');
+  var selectTipo = document.getElementById('emitirTipo');
   var disponivelTotal = document.getElementById('emitirDisponivelTotal');
   var maximoEl = document.getElementById('emitirMaximo');
   var fracaoTexto = document.getElementById('emitirFracaoTexto');
@@ -370,18 +327,31 @@
 
   function atualizar() {
     var modo = selectModo.value;
-    var sel = selecionados().length;
+    var sel = selecionados();
+    var temExtra = sel.some(function (m) { return Number(m.quotaId) < 0; });
     var maxC = maxSelecionadoC();
     maximoEl.textContent = eurC(maxC);
-    var textoValor = (maxC / 100).toFixed(2).replace('.', ',');
-    if (modo === 'unico') {
-      campoValor.disabled = false;
-      campoValor.value = textoValor;
-      contagem.textContent = sel > 0 ? 'Vai criar 1 recibo.' : 'Selecione pelo menos um mês.';
-    } else {
+    // Com Quotas Extra selecionadas a emissão é sempre UM recibo único
+    // (quotas normais + extraordinárias discriminadas no mesmo RCP).
+    if (temExtra) {
+      selectModo.disabled = true;
+      selectModo.value = 'unico';
+      selectTipo.disabled = true;
+      selectTipo.value = 'extraordinario';
       campoValor.disabled = true;
-      campoValor.value = textoValor;
-      contagem.textContent = sel > 0 ? 'Vai criar ' + sel + ' recibo(s).' : 'Selecione pelo menos um mês.';
+      campoValor.value = (maxC / 100).toFixed(2).replace('.', ',');
+      contagem.textContent = sel.length > 0 ? 'Vai criar 1 recibo (quotas e/ou Quotas Extra).' : 'Selecione pelo menos um item (quota ou Quota Extra).';
+    } else {
+      selectModo.disabled = false;
+      selectTipo.disabled = false;
+      campoValor.disabled = modo !== 'unico';
+      campoValor.value = (maxC / 100).toFixed(2).replace('.', ',');
+      var haExtrasLista = mesesAtuais.some(function (m) { return Number(m.quotaId) < 0 && m.pode; });
+      if (sel.length > 0) {
+        contagem.textContent = modo === 'unico' ? 'Vai criar 1 recibo.' : 'Vai criar ' + sel.length + ' recibo(s).';
+      } else {
+        contagem.textContent = haExtrasLista ? 'Selecione pelo menos um item (mês ou Quota Extra).' : 'Selecione pelo menos um mês.';
+      }
     }
     mostrarErro(null);
   }
@@ -395,12 +365,13 @@
   }
 
   function criarCartao(m) {
+    var eExtra = Number(m.quotaId) < 0;
     var col = document.createElement('div');
     col.className = 'col-6 col-md-4 col-lg-3';
 
     var botao = document.createElement('button');
     botao.type = 'button';
-    botao.className = 'mes-btn btn btn-sm w-100 text-start p-2';
+    botao.className = 'mes-btn btn btn-sm w-100 text-start p-2' + (eExtra ? ' mes-btn-extra' : '');
     // Identificação completa — a fração correta é sempre a do contexto aberto.
     botao.dataset.quotaId = String(m.quotaId);
     botao.dataset.fracaoId = atualFracaoId == null ? '' : String(atualFracaoId);
@@ -409,11 +380,13 @@
     botao.dataset.disponivel = (m.disponivel || 0).toFixed(2);
     botao.dataset.pode = m.pode ? '1' : '0';
     botao.setAttribute('aria-pressed', m.pode && m.ativo ? 'true' : 'false');
-    botao.title = m.rotulo
-      + ' · Quota ' + eur(m.quota)
-      + ' · Pago ' + eur(m.pago)
-      + ' · Já em recibo ' + eur(m.coberto)
-      + ' · Disponível ' + eur(m.disponivel);
+    botao.title = eExtra
+      ? m.rotulo + ' · Pago ' + eur(m.pago) + ' · Disponível ' + eur(m.disponivel)
+      : m.rotulo
+        + ' · Quota ' + eur(m.quota)
+        + ' · Pago ' + eur(m.pago)
+        + ' · Já em recibo ' + eur(m.coberto)
+        + ' · Disponível ' + eur(m.disponivel);
 
     var mesLinha = document.createElement('div');
     mesLinha.className = 'mes-btn-mes';
@@ -426,7 +399,9 @@
     botao.appendChild(mesLinha);
     botao.appendChild(valorLinha);
 
-    m.ativo = m.pode; // por defeito: todos os disponíveis selecionados
+    // Meses disponíveis entram pré-selecionados (cadência do plano antiga);
+    // Quotas Extra ficam à escolha do administrador dentro do mesmo modal.
+    m.ativo = m.pode && !eExtra;
     m.btn = botao;
     if (!m.pode) {
       botao.disabled = true;
@@ -479,7 +454,7 @@
       return;
     }
     if (!sel.length) {
-      mostrarErro('Selecione pelo menos um mês disponível.');
+      mostrarErro('Selecione pelo menos um item disponível (mês ou Quota Extra).');
       e.preventDefault();
       return;
     }
@@ -519,8 +494,10 @@
   if (selectModo) {
     selectModo.addEventListener('change', function () {
       if (selectModo.value === 'plano') {
+        // "Plano" só re-seleciona meses (quotas mensais); Quotas Extra
+        // permanecem como o utilizador as deixou (escolha explícita).
         mesesAtuais.forEach(function (m) {
-          if (m.pode) {
+          if (m.pode && Number(m.quotaId) >= 0) {
             m.ativo = true;
             atualizarCartao(m);
           }
