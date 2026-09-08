@@ -11,7 +11,7 @@ module.exports = (sequelize) => {
       valor: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
       data_vencimento: { type: DataTypes.DATEONLY, allowNull: true },
       estado: {
-        type: DataTypes.ENUM('pendente', 'paga', 'anulada'),
+        type: DataTypes.ENUM('pendente', 'cobrada', 'paga', 'anulada'),
         allowNull: false,
         defaultValue: 'pendente',
       },

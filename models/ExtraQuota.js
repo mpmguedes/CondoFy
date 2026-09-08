@@ -22,10 +22,15 @@ module.exports = (sequelize) => {
         defaultValue: 'mensal',
       },
       estado: {
-        type: DataTypes.ENUM('ativa', 'anulada'),
+        type: DataTypes.ENUM('pendente', 'aprovada', 'processada', 'anulada'),
         allowNull: false,
-        defaultValue: 'ativa',
+        defaultValue: 'pendente',
       },
+      // Auditoria do ciclo de vida (quem/quando aprovou e processou).
+      aprovado_por: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+      aprovado_em: { type: DataTypes.DATEONLY, allowNull: true },
+      processado_por: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+      processado_em: { type: DataTypes.DATEONLY, allowNull: true },
     },
     { tableName: 'extra_quotas', underscored: true }
   );

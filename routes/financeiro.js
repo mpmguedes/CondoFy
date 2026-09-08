@@ -17,6 +17,8 @@ const {
   Documento,
   Fornecedor,
   EmailFila,
+  ExtraQuota,
+  ExtraQuotaParcela,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
@@ -27,7 +29,9 @@ const { resumoCondominio, resumoFracao, estadoEfetivo } = require('../helpers/sa
 const { getCondominio } = require('../helpers/condominio');
 const { PASTAS_BASE, resolverPastaDocumento } = require('../helpers/documento-pastas');
 const { proximoNumero } = require('../helpers/numeracao');
-const { registarPagamento, anularPagamento } = require('../helpers/pagamentos');
+const { registarPagamento, registarPagamentoComItens, anularPagamento } = require('../helpers/pagamentos');
+const recibos = require('../helpers/recibos');
+const quotaModulo = require('./quotas-modulo');
 const { uploadComprovativo, apagarComprovativo } = require('../helpers/comprovativos');
 const { sincronizarMovimentoDespesa } = require('../helpers/movimentos');
 const { gerarAvisoQuotaPDF, gerarReciboPDF } = require('../helpers/pdf');
@@ -57,6 +61,11 @@ function carregarDespesa(req) {
 }
 function ondeCondominio(req, extra = {}) {
   return { condominio_id: req.condominioId, ...extra };
+}
+
+function toArray(v) {
+  if (v === null || v === undefined || v === '') return [];
+  return Array.isArray(v) ? v : [v];
 }
 
 function parseDecimal(value, fallback = 0) {
@@ -907,7 +916,76 @@ router.get('/pagamentos/nova', async (req, res) => {
     MetodoPagamento.findAll({ where: { ativo: true }, order: [['nome', 'ASC']] }),
     ContaBancaria.findAll({ where: ondeCondominio(req, { ativa: true }), order: [['nome', 'ASC']] }),
   ]);
-  res.render('admin/pagamentos/form', { titulo: 'Registar pagamento', fracoes, metodos, contas });
+
+  // Opcional: ?fracao=ID pré-seleciona e lista as obrigações em aberto
+  // (quotas normais + Quotas Extra elegíveis) para pagamento combinado.
+  let itensFracao = null;
+  const fracaoSelecionada = parseInt(req.query.fracao, 10) || null;
+  if (fracaoSelecionada) {
+    const fracaoValida = await Fracao.findOne({ where: { id: fracaoSelecionada, condominio_id: req.condominioId } });
+    if (fracaoValida) {
+      const quotas = await Quota.findAll({
+        where: { condominio_id: req.condominioId, fracao_id: fracaoValida.id, estado: { [Op.ne]: 'anulada' } },
+        order: [['ano', 'ASC'], ['mes', 'ASC']],
+      });
+      const ids = quotas.map((q) => q.id);
+      const aplicacoes = ids.length
+        ? await PagamentoQuota.findAll({
+            where: { quota_id: { [Op.in]: ids } },
+            include: [{ model: Pagamento, as: 'pagamento', attributes: ['estado'] }],
+            raw: true,
+          })
+        : [];
+      const pagoMap = new Map();
+      for (const a of aplicacoes) {
+        if (a['pagamento.estado'] === 'confirmado') {
+          pagoMap.set(a.quota_id, (pagoMap.get(a.quota_id) || 0) + toCents(a.valor_aplicado));
+        }
+      }
+      const parcelas = await ExtraQuotaParcela.findAll({
+        where: { fracao_id: fracaoValida.id, estado: { [Op.in]: ['pendente', 'cobrada'] } },
+        include: [
+          {
+            model: ExtraQuota,
+            as: 'extra_quota',
+            attributes: ['designacao', 'estado', 'condominio_id'],
+            where: { condominio_id: req.condominioId, estado: 'processada' },
+            required: true,
+          },
+        ],
+        order: [['data_vencimento', 'ASC'], ['id', 'ASC']],
+      });
+      itensFracao = {
+        designacao: fracaoValida.designacao,
+        quotas: quotas.map((q) => {
+          const emAbertoC = toCents(q.valor) - (pagoMap.get(q.id) || 0);
+          return {
+            id: q.id,
+            rotulo: `${monthName(q.mes)} ${q.ano}`,
+            valor: fromCents(toCents(q.valor)),
+            emAberto: fromCents(Math.max(0, emAbertoC)),
+          };
+        }).filter((q) => q.emAberto > 0),
+        parcelas: parcelas.map((p) => ({
+          id: p.id,
+          designacao: p.extra_quota.designacao,
+          detalhe: `Parcela ${p.parcela_numero}`,
+          vencimento: p.data_vencimento ? String(p.data_vencimento).slice(0, 10) : null,
+          valor: p.valor,
+        })),
+      };
+    }
+  }
+
+  res.render('admin/pagamentos/form', {
+    titulo: 'Registar pagamento',
+    fracoes,
+    metodos,
+    contas,
+    itensFracao,
+    fracaoSelecionada,
+    temItens: Boolean(itensFracao && (itensFracao.quotas.length || itensFracao.parcelas.length)),
+  });
 });
 
 // Registo de pagamento — aceita multipart/form-data com um comprovativo
@@ -939,31 +1017,54 @@ router.post('/pagamentos', (req, res, next) => {
       const conta = await ContaBancaria.findOne({ where: { id: contaBancariaId, condominio_id: req.condominioId } });
       contaBancariaId = conta ? conta.id : null;
     }
-    const resultado = await registarPagamento({
-      fracaoId: fracaoValida.id,
-      valor: toNumber(valor),
-      dataPagamento: data_pagamento || new Date(),
-      metodoPagamentoId: metodo_pagamento_id || null,
-      contaBancariaId,
-      referencia,
-      observacoes,
-      userId: req.user.id,
-      comprovativo,
-      condominioId: req.condominioId,
-    });
+
+    // Pagamento COMBINADO: quando o administrador seleciona obrigações
+    // (quotas normais e/ou parcelas extra), regista-se UM único Pagamento
+    // distribuído pelas selecionadas; sem seleção, mantém o fluxo FIFO atual.
+    const quotaIds = toArray(req.body.quota_ids).map(Number).filter(Boolean);
+    const parcelaIds = toArray(req.body.parcela_ids).map(Number).filter(Boolean);
+    const selecao = quotaIds.length || parcelaIds.length;
+
+    const resultado = selecao
+      ? await registarPagamentoComItens({
+          fracaoId: fracaoValida.id,
+          valor: toNumber(valor),
+          quotaIds,
+          parcelaIds,
+          dataPagamento: data_pagamento || new Date(),
+          metodoPagamentoId: metodo_pagamento_id || null,
+          contaBancariaId,
+          referencia,
+          observacoes,
+          userId: req.user.id,
+          comprovativo,
+          condominioId: req.condominioId,
+        })
+      : await registarPagamento({
+          fracaoId: fracaoValida.id,
+          valor: toNumber(valor),
+          dataPagamento: data_pagamento || new Date(),
+          metodoPagamentoId: metodo_pagamento_id || null,
+          contaBancariaId,
+          referencia,
+          observacoes,
+          userId: req.user.id,
+          comprovativo,
+          condominioId: req.condominioId,
+        });
     await audit({
       userId: req.user.id,
       acao: 'registar_pagamento',
       entidade: 'Pagamento',
       entidadeId: resultado.pagamento.id,
-      detalhes: { comComprovativo: Boolean(comprovativo) },
+      detalhes: { comComprovativo: Boolean(comprovativo), combinado: selecao, nQuotas: quotaIds.length, nParcelas: parcelaIds.length },
     });
 
     // Nota: NÃO há envio automático de recibo ao registar o pagamento — o
     // comprovativo e o recibo são conceitos distintos; a emissão de recibos
-    // acontece exclusivamente em Quotas → Recibos (evita recibos duplicados).
+    // acontece em Quotas → Recibos ou por pagamento (evita recibos duplicados).
 
-    const msg = `Pagamento registado.`;
+    const msg = `Pagamento registado${selecao ? ' (seleção combinada)' : ''}.`;
     req.flash('success_msg', resultado.excedente > 0 ? `${msg} Ficou ${resultado.excedente.toFixed(2)} € por aplicar (crédito).` : msg);
   } catch (err) {
     console.error(err);
@@ -1124,7 +1225,7 @@ async function nomeProprietarioPrincipal(fracaoId) {
 }
 
 // Gera o buffer do aviso de quota (partilhado entre ver/descarregar e Drive).
-async function construirAvisoQuota(quotaId, condominioId) {
+async function construirAvisoQuota(quotaId, condominioId, extrasIds = []) {
   const quota = await Quota.findOne({
     where: { id: quotaId, condominio_id: condominioId },
     include: [{ model: Fracao, as: 'fracao' }],
@@ -1145,6 +1246,44 @@ async function construirAvisoQuota(quotaId, condominioId) {
   const emDividaC = toCents(resumo.emDivida);
   const saldoAnterior = fromCents(emDividaC - toCents(quota.valor) + pagoAplicadoC);
 
+  // Quotas Extra incluídas neste aviso (seleção explícita do administrador).
+  // Regras: quota extra 'processada', parcela 'pendente'/'cobrada', vencimento
+  // no mês do aviso, mesma fração e mesmo condomínio. Parcelas pagas/anuladas
+  // nunca entram; parcelas já cobradas só são mostradas se forem exatamente as
+  // escolhidas (o POST de inclusão já as marcou como cobradas).
+  let extras = [];
+  let extrasTotalC = 0;
+  const idsExtras = (Array.isArray(extrasIds) ? extrasIds : String(extrasIds || '').split(',')).map((x) => parseInt(x, 10)).filter(Number.isFinite);
+  if (idsExtras.length) {
+    const inicio = `${quota.ano}-${String(quota.mes).padStart(2, '0')}-01`;
+    const fim = `${quota.ano}-${String(quota.mes).padStart(2, '0')}-31`;
+    const parcelas = await ExtraQuotaParcela.findAll({
+      where: {
+        id: { [Op.in]: idsExtras },
+        fracao_id: quota.fracao_id,
+        estado: { [Op.in]: ['pendente', 'cobrada'] },
+        data_vencimento: { [Op.between]: [inicio, fim] },
+      },
+      include: [
+        {
+          model: ExtraQuota,
+          as: 'extra_quota',
+          attributes: ['designacao', 'estado', 'condominio_id'],
+          where: { condominio_id: condominioId, estado: 'processada' },
+          required: true,
+        },
+      ],
+      order: [['data_vencimento', 'ASC']],
+    });
+    extras = parcelas.map((p) => ({
+      designacao: p.extra_quota.designacao,
+      detalhe: `Parcela ${p.parcela_numero} de ${p.extra_quota.designacao} (venc. ${String(p.data_vencimento).slice(0, 10)})`,
+      valorAplicado: p.valor,
+    }));
+    extrasTotalC = extras.reduce((s, e) => s + toCents(e.valorAplicado), 0);
+  }
+  const totalAPagar = fromCents(toCents(quotaEmAberto) + extrasTotalC);
+
   const buffer = await gerarAvisoQuotaPDF(condominio.toJSON(), {
     numero: quota.numero_documento,
     periodo: `${monthName(quota.mes)} ${quota.ano}`,
@@ -1159,13 +1298,14 @@ async function construirAvisoQuota(quotaId, condominioId) {
     ultimoPagamentoValor: resumo.ultimoPagamento ? resumo.ultimoPagamento.valor : null,
     ultimoPagamentoData: resumo.ultimoPagamento ? resumo.ultimoPagamento.data : null,
     emDivida: resumo.emDivida,
-    totalAPagar: quotaEmAberto,
+    totalAPagar,
+    extras,
     iban: condominio.iban_principal,
     outrosMeiosPagamento: condominio.outros_meios_pagamento,
     referencia: null,
     instrucoesPagamento: condominio.dados_bancarios_adicionais,
   });
-  return { buffer, quota };
+  return { buffer, quota, extras };
 }
 
 // Gera o buffer do recibo (partilhado entre ver/descarregar e Drive).
@@ -1202,9 +1342,94 @@ async function construirRecibo(pagamentoId, condominioId) {
   return { buffer, pagamento };
 }
 
+// ── Aviso com Quotas Extra: seleção explícita de extras elegíveis ──
+// Só aparecem parcelas de quotas extra 'processadas', 'pendentes' (ainda não
+// cobradas), da mesma fração e com vencimento no mês do aviso.
+router.get('/quotas/:id/aviso/extras', async (req, res) => {
+  const quota = await Quota.findOne({
+    where: { id: req.params.id, condominio_id: req.condominioId },
+    include: [{ model: Fracao, as: 'fracao' }],
+  });
+  if (!quota) return res.redirect('/admin/quotas');
+  const inicio = `${quota.ano}-${String(quota.mes).padStart(2, '0')}-01`;
+  const fim = `${quota.ano}-${String(quota.mes).padStart(2, '0')}-31`;
+  const elegiveis = await ExtraQuotaParcela.findAll({
+    where: {
+      fracao_id: quota.fracao_id,
+      estado: 'pendente',
+      data_vencimento: { [Op.between]: [inicio, fim] },
+    },
+    include: [
+      {
+        model: ExtraQuota,
+        as: 'extra_quota',
+        attributes: ['designacao', 'estado', 'condominio_id'],
+        where: { condominio_id: req.condominioId, estado: 'processada' },
+        required: true,
+      },
+    ],
+    order: [['data_vencimento', 'ASC']],
+  });
+  res.render('admin/quotas/aviso-extras', {
+    titulo: `Incluir Quotas Extra no aviso — ${quota.fracao ? quota.fracao.designacao : ''}`,
+    quota,
+    elegiveis,
+    MESES_CURTO_FINANCEIRO: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'],
+  });
+});
+
+// Marca as parcelas escolhidas como 'cobrada' (evita cobrança duplicada) e
+// devolve o aviso PDF já com as linhas extra.
+router.post('/quotas/:id/aviso/extras', async (req, res) => {
+  const quota = await Quota.findOne({
+    where: { id: req.params.id, condominio_id: req.condominioId },
+    include: [{ model: Fracao, as: 'fracao' }],
+  });
+  if (!quota) return res.redirect('/admin/quotas');
+  const ids = toArray(req.body.parcelas).map((x) => parseInt(x, 10)).filter(Number.isFinite);
+
+  const inicio = `${quota.ano}-${String(quota.mes).padStart(2, '0')}-01`;
+  const fim = `${quota.ano}-${String(quota.mes).padStart(2, '0')}-31`;
+  const elegiveis = ids.length
+    ? await ExtraQuotaParcela.findAll({
+        where: {
+          id: { [Op.in]: ids },
+          fracao_id: quota.fracao_id,
+          estado: 'pendente',
+          data_vencimento: { [Op.between]: [inicio, fim] },
+        },
+        include: [
+          {
+            model: ExtraQuota,
+            as: 'extra_quota',
+            attributes: ['id', 'designacao', 'estado', 'condominio_id'],
+            where: { condominio_id: req.condominioId, estado: 'processada' },
+            required: true,
+          },
+        ],
+      })
+    : [];
+  if (!elegiveis.length) {
+    req.flash('error_msg', 'Selecione pelo menos uma Quota Extra elegível para incluir no aviso.');
+    return res.redirect(`/admin/quotas/${quota.id}/aviso/extras`);
+  }
+  const marcadas = elegiveis.map((p) => p.id);
+  await ExtraQuotaParcela.update({ estado: 'cobrada' }, { where: { id: { [Op.in]: marcadas } } });
+  await audit({
+    userId: req.user.id,
+    acao: 'incluir_quota_extra_aviso',
+    entidade: 'Quota',
+    entidadeId: quota.id,
+    detalhes: { parcelas: marcadas },
+  }).catch(() => {});
+  return res.redirect(`/admin/quotas/${quota.id}/aviso?extras=${marcadas.join(',')}&incluido=1`);
+});
+
 router.get('/quotas/:id/aviso', async (req, res) => {
   try {
-    const { buffer, quota } = await construirAvisoQuota(req.params.id, req.condominioId);
+    // ?extras=ids → aviso com linhas de Quotas Extra (escolha explícita).
+    const extras = String(req.query.extras || '').split(',').filter(Boolean);
+    const { buffer, quota } = await construirAvisoQuota(req.params.id, req.condominioId, extras);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="aviso_${quota.numero_documento || quota.id}.pdf"`);
     res.send(buffer);
@@ -1226,6 +1451,41 @@ router.get('/pagamentos/:id/recibo', async (req, res) => {
     req.flash('error_msg', 'Erro ao gerar o recibo.');
     res.redirect('/admin/pagamentos');
   }
+});
+
+// Emite UM recibo RCP para um pagamento (quotas normais e/ou Quotas Extra
+// discriminadas no mesmo recibo) e regista o Documento na biblioteca.
+router.post('/pagamentos/:id/recibo/emitir', async (req, res) => {
+  const pagamento = await Pagamento.findOne({
+    where: { id: req.params.id, condominio_id: req.condominioId, estado: 'confirmado' },
+  });
+  if (!pagamento) {
+    req.flash('error_msg', 'Pagamento não encontrado neste condomínio.');
+    return res.redirect('/admin/pagamentos');
+  }
+  try {
+    const { recibo } = await recibos.emitirReciboDePagamento({
+      pagamentoId: pagamento.id,
+      condominioId: req.condominioId,
+      userId: req.user.id,
+    });
+    // Documento do recibo na biblioteca (apenas quando o Drive está ligado,
+    // exatamente como na emissão atual de recibos).
+    await quotaModulo.garantirDocumentoRecibo(recibo.id, { condominioId: req.condominioId, userId: req.user.id }).catch(() => null);
+    await audit({
+      userId: req.user.id,
+      acao: 'emitir_recibo_pagamento',
+      entidade: 'Recibo',
+      entidadeId: recibo.id,
+      detalhes: { pagamentoId: pagamento.id },
+    }).catch(() => {});
+    req.flash('success_msg', `Recibo ${recibo.codigo} emitido para este pagamento (com discriminação).`);
+    return res.redirect(`/admin/quotas/recibos/${recibo.id}/pdf`);
+  } catch (err) {
+    console.error('[recibo-pagamento]', err.message);
+    req.flash('error_msg', err.message || 'Não foi possível emitir o recibo deste pagamento.');
+  }
+  return res.redirect(`/admin/pagamentos/${pagamento.id}`);
 });
 
 // Guarda no Google Drive um PDF gerado pelo Financeiro (aviso/recibo) e

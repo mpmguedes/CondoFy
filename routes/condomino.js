@@ -72,10 +72,10 @@ router.get('/', async (req, res) => {
     fracoes.map(async (f) => {
       const base = f.toJSON();
       const resumo = await resumoFracao(f.id);
-      // Quotas extraordinárias pendentes da fração.
+      // Quotas extraordinárias por cobrar da fração (disponíveis ou já em aviso).
       const extras = await ExtraQuotaParcela.findAll({
-        where: { fracao_id: f.id, estado: { [Op.in]: ['pendente', 'parcialmente_paga'] } },
-        include: [{ model: ExtraQuota, as: 'extra_quota' }],
+        where: { fracao_id: f.id, estado: { [Op.in]: ['pendente', 'cobrada'] } },
+        include: [{ model: ExtraQuota, as: 'extra_quota', where: { estado: 'processada' }, required: true }],
         order: [['data_vencimento', 'ASC']],
         limit: 5,
       });
@@ -203,12 +203,26 @@ router.get('/quotas', async (req, res) => {
     titulo: 'As minhas quotas',
     pessoa,
     linhas,
-    extras: extras.map((p) => ({
-      ...p.toJSON(),
-      designacao: p.extra_quota ? p.extra_quota.designacao : 'Quota extraordinária',
-      fracaoDesignacao: p.fracao ? p.fracao.designacao : null,
-      vencimento: p.data_vencimento,
-    })),
+    extras: extras.map((p) => {
+      const extra = p.extra_quota || null;
+      const base = p.toJSON();
+      // Linguagem clara para o condómino (não os nomes técnicos da BD).
+      let estadoLabel = base.estado; // pendente|cobrada|paga|anulada
+      if (base.estado === 'paga') estadoLabel = 'Paga';
+      else if (base.estado === 'anulada') estadoLabel = 'Anulada';
+      else if (base.estado === 'cobrada') estadoLabel = 'Em cobrança';
+      else if (extra && extra.estado === 'pendente') estadoLabel = 'Pendente de aprovação';
+      else if (extra && extra.estado === 'aprovada') estadoLabel = 'Aprovada (aguarda cobrança)';
+      else estadoLabel = 'Pendente';
+      return {
+        ...base,
+        designacao: extra ? extra.designacao : 'Quota extraordinária',
+        fracaoDesignacao: p.fracao ? p.fracao.designacao : null,
+        vencimento: p.data_vencimento,
+        estadoLabel,
+        extraEstado: extra ? extra.estado : null,
+      };
+    }),
     filtros: { ano: ano || '', estado: estado || '' },
     anos: anos.map((a) => a.ano),
   });
@@ -249,6 +263,12 @@ router.get('/recibos', async (req, res) => {
     include: [
       { model: Fracao, as: 'fracao' },
       { model: Quota, as: 'quotas', through: { attributes: ['valor'] } },
+      {
+        model: ExtraQuotaParcela,
+        as: 'parcelasExtra',
+        through: { attributes: ['valor'] },
+        include: [{ model: ExtraQuota, as: 'extra_quota', attributes: ['designacao'] }],
+      },
     ],
     order: [['data_emissao', 'DESC'], ['id', 'DESC']],
   });
@@ -256,6 +276,13 @@ router.get('/recibos', async (req, res) => {
     const json = r.toJSON();
     json.fracaoDesignacao = r.fracao ? r.fracao.designacao : null;
     json.periodos = (r.quotas || []).map((q) => `${MESES[q.mes - 1]} ${q.ano}`).join(', ');
+    const extras = r.parcelasExtra || [];
+    if (!json.periodos && extras.length) {
+      json.periodos = extras
+        .map((p) => (p.extra_quota && p.extra_quota.designacao ? p.extra_quota.designacao : 'Quota extraordinária'))
+        .join(' + ');
+    }
+    json.temExtras = extras.length > 0;
     return json;
   });
   res.render('condomino/recibos', { titulo: 'Os meus recibos', pessoa, linhas });
@@ -270,6 +297,12 @@ router.get('/recibos/:id/pdf', async (req, res) => {
     include: [
       { model: Fracao, as: 'fracao' },
       { model: Quota, as: 'quotas', through: { attributes: ['valor', 'valor_base', 'valor_fcr'] } },
+      {
+        model: ExtraQuotaParcela,
+        as: 'parcelasExtra',
+        through: { attributes: ['valor'] },
+        include: [{ model: ExtraQuota, as: 'extra_quota', attributes: ['designacao'] }],
+      },
     ],
   });
   if (!recibo) {
@@ -281,6 +314,11 @@ router.get('/recibos/:id/pdf', async (req, res) => {
   const resumo = await resumoFracao(recibo.fracao_id);
   const quotas = (recibo.quotas || []).slice().sort((a, b) => (a.ano - b.ano) || (a.mes - b.mes));
   const pagamentos = await recibosHelper.pagamentosDasQuotas(quotas.map((q) => q.id));
+  const extras = (recibo.parcelasExtra || []).map((p) => ({
+    designacao: p.extra_quota && p.extra_quota.designacao ? p.extra_quota.designacao : 'Quota extraordinária',
+    detalhe: `Parcela ${p.parcela_numero || 1}${p.data_vencimento ? ` — venc. ${String(p.data_vencimento).slice(0, 10)}` : ''}`,
+    valorAplicado: p.ReciboExtraParcela && p.ReciboExtraParcela.valor != null ? p.ReciboExtraParcela.valor : p.valor,
+  }));
   const cpLocalidade = [condRow.codigo_postal, condRow.localidade].filter(Boolean).join(' ');
   const buffer = await gerarReciboPDF(condRow, {
     numero: recibo.codigo,
@@ -304,6 +342,7 @@ router.get('/recibos/:id/pdf', async (req, res) => {
       periodo: recibosHelper.periodoLabel([{ ano: q.ano, mes: q.mes }]),
       valorAplicado: q.ReciboQuota ? q.ReciboQuota.valor : q.valor,
     })),
+    extras,
   });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="recibo_${recibo.codigo}.pdf"`);

@@ -59,7 +59,12 @@
       <tr>
         <td>{{designacao}}</td><td>{{fracaoDesignacao}}</td><td>{{parcela_numero}}</td>
         <td>{{eur valor}}</td><td class="text-nowrap">{{formatDate vencimento}}</td>
-        <td>{{#if (eq estado 'paga')}}<span class="badge text-bg-success">Paga</span>{{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}</td>
+        <td>{{#if (eq estado 'paga')}}<span class="badge text-bg-success">Paga</span>
+        {{else if (eq estado 'anulada')}}<span class="badge text-bg-dark">Anulada</span>
+        {{else if (eq estado 'cobrada')}}<span class="badge text-bg-info">Em cobrança</span>
+        {{else if (eq extraEstado 'pendente')}}<span class="badge text-bg-warning">Pendente de aprovação</span>
+        {{else if (eq extraEstado 'aprovada')}}<span class="badge text-bg-secondary">Aprovada (aguarda cobrança)</span>
+        {{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}</td>
       </tr>
       {{/each}}
     </tbody>

@@ -1,35 +1,82 @@
 <div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
     <h1>{{titulo}}</h1>
-    <p class="subtitle">Registe um pagamento de quota</p>
+    <p class="subtitle">Registe um pagamento — pode incluir quota normal e/ou Quotas Extra da mesma fração</p>
   </div>
   <a href="/admin/quotas/comprovativos" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Comprovativos</a>
 </div>
 
 <div class="row">
-  <div class="col-12 col-lg-7">
+  <div class="col-12 col-lg-8">
     <div class="card">
       <div class="card-body">
         <form action="/admin/pagamentos" method="POST" enctype="multipart/form-data">
           <div class="mb-3">
             <label class="form-label">Fração *</label>
-            <select class="form-select" name="fracao_id" required>
+            <select class="form-select" name="fracao_id" id="fracaoSel" required>
               <option value="">— Selecionar fração —</option>
               {{#each fracoes}}
-              <option value="{{id}}">{{designacao}}</option>
+              <option value="{{id}}" {{#if (eq id ../fracaoSelecionada)}}selected{{/if}}>{{designacao}}</option>
               {{/each}}
             </select>
+            <div class="form-text">Ao escolher a fração, são carregadas as obrigações em aberto (quotas e Quotas Extra elegíveis).</div>
           </div>
+
+          {{#if temItens}}
+          <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="fw-semibold">Obrigações em aberto — {{itensFracao.designacao}}</span>
+              <span class="small text-muted">marque as que pretende liquidar neste pagamento</span>
+            </div>
+
+            {{#if itensFracao.quotas}}
+            <div class="border rounded p-2 mb-2">
+              <div class="small text-uppercase text-muted mb-1">Quotas mensais</div>
+              {{#each itensFracao.quotas}}
+              <div class="form-check d-flex align-items-center gap-2 mb-1">
+                <input class="form-check-input item-pag" type="checkbox" name="quota_ids" value="{{id}}" id="q{{id}}" data-valor="{{emAberto}}" />
+                <label class="form-check-label flex-grow-1" for="q{{id}}">{{rotulo}} <span class="text-muted small">(em aberto {{eur emAberto}} de {{eur valor}})</span></label>
+                <span class="small text-nowrap">{{eur emAberto}}</span>
+              </div>
+              {{/each}}
+            </div>
+            {{/if}}
+
+            {{#if itensFracao.parcelas}}
+            <div class="border rounded p-2 mb-2">
+              <div class="small text-uppercase text-muted mb-1">Quotas extraordinárias (aprovadas e processadas)</div>
+              {{#each itensFracao.parcelas}}
+              <div class="form-check d-flex align-items-center gap-2 mb-1">
+                <input class="form-check-input item-pag" type="checkbox" name="parcela_ids" value="{{id}}" id="p{{id}}" data-valor="{{valor}}" />
+                <label class="form-check-label flex-grow-1" for="p{{id}}">{{designacao}} <span class="text-muted small">— {{detalhe}}{{#if vencimento}} · venc. {{vencimento}}{{/if}}</span></label>
+                <span class="small text-nowrap">{{eur valor}}</span>
+              </div>
+              {{/each}}
+            </div>
+            {{/if}}
+          </div>
+          {{else}}
+          {{#if fracaoSelecionada}}
+          <div class="alert alert-light border small mb-3">Não há obrigações em aberto para esta fração (quotas não anuladas com saldo ou Quotas Extra elegíveis).</div>
+          {{/if}}
+          {{/if}}
+
           <div class="row">
             <div class="col-md-6 mb-3">
               <label class="form-label">Valor (€) *</label>
-              <input type="text" class="form-control" name="valor" required />
+              <input type="text" class="form-control" name="valor" id="valorInput" required placeholder="ex.: 286,22" />
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label">Data do pagamento</label>
-              <input type="date" class="form-control" name="data_pagamento" value="{{currentYear}}-{{#if currentYear}}01-01{{/if}}" />
+              <input type="date" class="form-control" name="data_pagamento" value="{{currentYear}}-01-01" />
             </div>
           </div>
+          {{#if temItens}}
+          <div class="d-flex gap-3 mb-3 small">
+            <span><strong>Selecionado:</strong> <span id="selecionadoValor">0,00 €</span></span>
+            <span><strong>Total do aviso a liquidar:</strong> <span id="totalItens">0,00 €</span></span>
+          </div>
+          {{/if}}
           <div class="row">
             <div class="col-md-6 mb-3">
               <label class="form-label">Método de pagamento</label>
@@ -61,19 +108,55 @@
           <div class="mb-3">
             <label class="form-label">Comprovativo de pagamento</label>
             <input type="file" class="form-control" name="comprovativo" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,application/pdf,image/jpeg,image/png,image/webp,image/gif" />
-            <div class="form-text">PDF, JPG, PNG, WEBP ou GIF até 12 MB. Se não selecionar nenhum ficheiro, o pagamento é registado sem comprovativo (pode anexá-lo depois em Quotas → Comprovativos).</div>
+            <div class="form-text">PDF, JPG, PNG, WEBP ou GIF até 12 MB.</div>
           </div>
           <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1">save</span>Registar pagamento</button>
         </form>
       </div>
     </div>
   </div>
-  <div class="col-12 col-lg-5">
+  <div class="col-12 col-lg-4">
     <div class="card">
       <div class="card-header"><span class="material-symbols-outlined me-2">info</span>Como funciona</div>
       <div class="card-body text-muted small">
-        <p class="mb-0">O valor é distribuído automaticamente pelas quotas em aberto da fração (da mais antiga para a mais recente). É gerado um recibo com número sequencial.</p>
+        <p class="mb-2">Sem seleção, o valor é distribuído automaticamente pelas quotas em aberto da fração (da mais antiga para a mais recente).</p>
+        <p class="mb-2">Com seleção, é registado <strong>um único pagamento</strong> que liquida as quotas e/ou Quotas Extra assinaladas (as parcelas só são pagas por inteiro; o remanescente fica como crédito).</p>
+        <p class="mb-0">Depois do pagamento pode emitir o recibo correspondente (RCP), com a discriminação entre quotas e Quotas Extra.</p>
       </div>
     </div>
   </div>
 </div>
+
+<script>
+  // Ao mudar a fração, recarrega a página com as obrigações dessa fração.
+  var fracaoSel = document.getElementById('fracaoSel');
+  if (fracaoSel) {
+    fracaoSel.addEventListener('change', function () {
+      if (!this.value) { window.location = '/admin/pagamentos/nova'; return; }
+      window.location = '/admin/pagamentos/nova?fracao=' + encodeURIComponent(this.value);
+    });
+  }
+
+  // Atualiza o valor e os totais com as seleções.
+  function eur(n) { return n.toFixed(2).replace('.', ',') + ' €'; }
+  var valorInput = document.getElementById('valorInput');
+  var selValor = document.getElementById('selecionadoValor');
+  var totItens = document.getElementById('totalItens');
+  function atualizar() {
+    var total = 0;
+    document.querySelectorAll('.item-pag:checked').forEach(function (cb) { total += parseFloat(cb.dataset.valor) || 0; });
+    var somaSel = 0;
+    document.querySelectorAll('.item-pag:checked').forEach(function (cb) { somaSel += parseFloat(cb.dataset.valor) || 0; });
+    if (selValor) selValor.textContent = eur(somaSel);
+    if (totItens) totItens.textContent = eur(total);
+    if (valorInput && !valorInput.dataset.manual) valorInput.value = somaSel > 0 ? somaSel.toFixed(2) : '';
+  }
+  document.querySelectorAll('.item-pag').forEach(function (cb) {
+    cb.addEventListener('change', function () {
+      if (valorInput) valorInput.dataset.manual = '1';
+      atualizar();
+    });
+  });
+  if (valorInput) valorInput.addEventListener('input', function () { this.dataset.manual = '1'; });
+  atualizar();
+</script>

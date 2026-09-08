@@ -1,0 +1,26 @@
+{{> _quotas-tabs ativo='extra'}}
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Editar quota extraordinária</h1>
+    <p class="subtitle">Pode corrigir a designação enquanto a quota está pendente de aprovação</p>
+  </div>
+  <a href="/admin/quotas-extra/{{extra.id}}" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form action="/admin/quotas-extra/{{extra.id}}" method="POST" class="row g-3">
+      <div class="col-12">
+        <label class="form-label">Designação *</label>
+        <input type="text" class="form-control" name="designacao" value="{{extra.designacao}}" required placeholder="Ex.: Obras da fachada" />
+      </div>
+      <div class="col-12 text-muted small">
+        <span class="material-symbols-outlined me-1" style="font-size:.95rem">info</span>
+        Valor, frações e parcelamento só podem ser alterados criando uma nova quota extraordinária enquanto esta não é aprovada.
+      </div>
+      <div class="col-12">
+        <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1">save</span>Guardar alterações</button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,43 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Incluir Quotas Extra no aviso</h1>
+    <p class="subtitle">
+      {{#if quota.fracao}}{{quota.fracao.designacao}} · {{/if}}{{monthName quota.mes}} {{quota.ano}} — aviso da quota normal
+    </p>
+  </div>
+  <a href="/admin/quotas/{{quota.id}}" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
+</div>
+
+{{#if elegiveis}}
+<div class="card">
+  <div class="card-header bg-white">
+    Quotas Extra elegíveis para este mês (aprovadas, processadas e ainda não cobradas)
+  </div>
+  <form action="/admin/quotas/{{quota.id}}/aviso/extras" method="POST">
+    <ul class="list-group list-group-flush">
+      {{#each elegiveis}}
+      <li class="list-group-item d-flex align-items-center gap-3">
+        <input class="form-check-input" type="checkbox" name="parcelas" value="{{id}}" id="extra{{id}}" />
+        <label class="form-check-label flex-grow-1 d-flex justify-content-between align-items-center" for="extra{{id}}">
+          <span>
+            <span class="fw-semibold">{{extra_quota.designacao}}</span>
+            <span class="text-muted small ms-2">Parcela {{parcela_numero}}</span>
+          </span>
+          <span class="text-nowrap">
+            <span class="text-muted small me-3">Venc. {{formatDate data_vencimento}}</span>
+            <span class="fw-semibold">{{eur valor}}</span>
+          </span>
+        </label>
+      </li>
+      {{/each}}
+    </ul>
+    <div class="card-body border-top d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <span class="small text-muted">Ao confirmar, as parcelas selecionadas ficam marcadas como <strong>cobradas</strong> e deixam de voltar a aparecer noutros avisos.</span>
+      <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1">picture_as_pdf</span>Gerar aviso com as selecionadas</button>
+    </div>
+  </form>
+</div>
+{{else}}
+<div class="alert alert-light border small">Não há Quotas Extra elegíveis para este mês (aprovadas, processadas, da mesma fração, ainda não cobradas e com vencimento neste mês).</div>
+<a href="/admin/quotas/{{quota.id}}/aviso" target="_blank" class="btn btn-outline-primary">Aviso apenas com a quota normal</a>
+{{/if}}

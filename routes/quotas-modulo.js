@@ -23,6 +23,8 @@ const {
   PagamentoQuota,
   Recibo,
   ReciboQuota,
+  ExtraQuota,
+  ExtraQuotaParcela,
   Documento,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
@@ -496,6 +498,12 @@ router.get('/quotas/recibos', async (req, res) => {
         as: 'quotas',
         through: { attributes: ['valor', 'valor_base', 'valor_fcr'] },
       },
+      {
+        model: ExtraQuotaParcela,
+        as: 'parcelasExtra',
+        through: { attributes: ['valor'] },
+        include: [{ model: ExtraQuota, as: 'extra_quota', attributes: ['designacao'] }],
+      },
     ],
     order: [['ano', 'DESC'], ['id', 'DESC']],
   });
@@ -506,6 +514,14 @@ router.get('/quotas/recibos', async (req, res) => {
   const linhasRecibos = recibos.map((r) => {
     const meses = (r.quotas || []).map((q) => ({ ano: q.ano, mes: q.mes }));
     const morador = moradores.get(r.fracao_id) || '';
+    // Recibos de Quotas Extra (sem quotas mensais): período = designação das extras.
+    let periodo = recibosHelper.periodoLabel(meses);
+    if (!meses.length && (r.parcelasExtra || []).length) {
+      periodo = (r.parcelasExtra || [])
+        .map((p) => (p.extra_quota && p.extra_quota.designacao ? p.extra_quota.designacao : 'Quota extraordinária'))
+        .filter((v, i, arr) => arr.indexOf(v) === i)
+        .join(' + ');
+    }
     return {
       id: r.id,
       codigo: r.codigo,
@@ -523,7 +539,8 @@ router.get('/quotas/recibos', async (req, res) => {
       andar: r.fracao ? r.fracao.andar : null,
       porta: r.fracao ? r.fracao.porta : null,
       morador,
-      periodo: recibosHelper.periodoLabel(meses),
+      periodo,
+      temExtras: Boolean((r.parcelasExtra || []).length),
     };
   });
 
@@ -707,6 +724,12 @@ async function pdfDeRecibo(recibo, condRow) {
   const fracao = recibo.fracao || null;
   const quotas = (recibo.quotas || []).sort((a, b) => (a.ano - b.ano) || (a.mes - b.mes));
   const pagamentos = await recibosHelper.pagamentosDasQuotas(quotas.map((q) => q.id));
+  // Quotas extraordinárias cobertas pelo recibo (discriminação no PDF).
+  const extras = (recibo.parcelasExtra || []).map((p) => ({
+    designacao: p.extra_quota && p.extra_quota.designacao ? p.extra_quota.designacao : 'Quota extraordinária',
+    detalhe: `Parcela ${p.parcela_numero || 1}${p.data_vencimento ? ` — venc. ${String(p.data_vencimento).slice(0, 10)}` : ''}`,
+    valorAplicado: p.ReciboExtraParcela && p.ReciboExtraParcela.valor != null ? p.ReciboExtraParcela.valor : p.valor,
+  }));
 
   // Zona do destinatário: morador + identificação da fração + morada/CP do
   // edifício (o sistema não guarda morada própria do condómino).
@@ -738,6 +761,7 @@ async function pdfDeRecibo(recibo, condRow) {
       periodo: recibosHelper.periodoLabel([{ ano: q.ano, mes: q.mes }]),
       valorAplicado: q.ReciboQuota ? q.ReciboQuota.valor : q.valor,
     })),
+    extras,
   });
 }
 
@@ -750,6 +774,12 @@ async function garantirDocumentoRecibo(reciboId, { condominioId, userId }) {
     include: [
       { model: Fracao, as: 'fracao' },
       { model: Quota, as: 'quotas', through: { attributes: ['valor', 'valor_base', 'valor_fcr'] } },
+      {
+        model: ExtraQuotaParcela,
+        as: 'parcelasExtra',
+        through: { attributes: ['valor'] },
+        include: [{ model: ExtraQuota, as: 'extra_quota', attributes: ['designacao'] }],
+      },
     ],
   });
   if (!recibo) return null;
@@ -825,6 +855,12 @@ router.get('/quotas/recibos/:id/pdf', async (req, res) => {
           as: 'quotas',
           through: { attributes: ['valor', 'valor_base', 'valor_fcr'] },
         },
+        {
+          model: ExtraQuotaParcela,
+          as: 'parcelasExtra',
+          through: { attributes: ['valor'] },
+          include: [{ model: ExtraQuota, as: 'extra_quota', attributes: ['designacao'] }],
+        },
       ],
     });
     if (!recibo) {
@@ -851,6 +887,12 @@ async function enfileirarReciboPorEmail(reciboId, { protocol, host, userId, cond
     include: [
       { model: Fracao, as: 'fracao' },
       { model: Quota, as: 'quotas', through: { attributes: ['valor'] } },
+      {
+        model: ExtraQuotaParcela,
+        as: 'parcelasExtra',
+        through: { attributes: ['valor'] },
+        include: [{ model: ExtraQuota, as: 'extra_quota', attributes: ['designacao'] }],
+      },
     ],
   });
   if (!recibo) throw new Error('Recibo não encontrado.');
@@ -933,3 +975,7 @@ router.get('/quotas/grelha', (req, res) => res.redirect(`/admin/quotas${req.quer
 module.exports = router;
 // Exposição para testes (parser de valores transitados).
 module.exports.parseTransitado = parseTransitado;
+// Reutilização pela emissão de recibos por pagamento (financeiro): garante o
+// Documento do recibo na biblioteca e o construtor do PDF.
+module.exports.garantirDocumentoRecibo = garantirDocumentoRecibo;
+module.exports.pdfDeRecibo = pdfDeRecibo;

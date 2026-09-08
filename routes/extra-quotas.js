@@ -6,6 +6,8 @@ const {
   ContaBancaria,
   ExtraQuota,
   ExtraQuotaParcela,
+  PagamentoExtraParcela,
+  Pagamento,
   MovimentoBancario,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
@@ -14,7 +16,9 @@ const { audit } = require('../helpers/audit');
 const { toCents, fromCents } = require('../helpers/money');
 const { MESES } = require('../helpers/dates');
 const { distribuicaoExtra, parcelar, periodosVencimento } = require('../helpers/extra-quotas');
-const { criarMovimento } = require('../helpers/movimentos');
+const extraEstado = require('../helpers/extra-quota-estado');
+const pagamentosHelper = require('../helpers/pagamentos');
+const recibosHelper = require('../helpers/recibos');
 
 const router = express.Router();
 
@@ -43,22 +47,42 @@ const PERIODICIDADE_LABEL = {
   anual: 'Anual',
 };
 
+// Guarda uma quota extra do condomínio ativo (bloqueia IDOR).
+function carregarExtra(req) {
+  return ExtraQuota.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
+}
+
+// Guarda uma parcela cuja quota extra pertence ao condomínio ativo.
+async function carregarParcela(req) {
+  const parcela = await ExtraQuotaParcela.findByPk(req.params.id, {
+    include: [{ model: ExtraQuota, as: 'extra_quota', where: { condominio_id: req.condominioId }, required: true }],
+  });
+  return parcela;
+}
+
 // Resumo agregado de uma quota extra (totais e parcelas por estado).
 async function resumoExtra(extra) {
   const parcelas = await ExtraQuotaParcela.findAll({ where: { extra_quota_id: extra.id } });
   const totalC = toCents(extra.valor_total);
   const pagoC = parcelas.filter((p) => p.estado === 'paga').reduce((s, p) => s + toCents(p.valor), 0);
   const pendentes = parcelas.filter((p) => p.estado === 'pendente').length;
+  const cobradas = parcelas.filter((p) => p.estado === 'cobrada').length;
   const pagas = parcelas.filter((p) => p.estado === 'paga').length;
+  const anuladas = parcelas.filter((p) => p.estado === 'anulada').length;
   const nFracoes = new Set(parcelas.map((p) => p.fracao_id)).size;
+  const ativas = parcelas.length - anuladas;
   return {
     total: fromCents(totalC),
     pago: fromCents(pagoC),
     emFalta: fromCents(totalC - pagoC),
     nParcelas: parcelas.length,
     pagas,
+    cobradas,
     pendentes,
+    anuladas,
     nFracoes,
+    // Derivado: "Paga" quando existem parcelas e todas estão pagas.
+    tudoPago: ativas > 0 && pagas === ativas,
   };
 }
 
@@ -70,13 +94,18 @@ router.get('/quotas-extra', async (req, res) => {
   const linhas = [];
   for (const e of extras) {
     const r = await resumoExtra(e);
-    linhas.push({ ...e.toJSON(), ...r });
+    linhas.push({ ...e.toJSON(), ...r, estadoLabel: extraEstado.ESTADOS_EXTRA[e.estado] || e.estado });
   }
-  res.render('admin/quotas-extra/listar', { titulo: 'Quotas Extraordinárias', extras: linhas, periodicidadeLabel: PERIODICIDADE_LABEL });
+  res.render('admin/quotas-extra/listar', {
+    titulo: 'Quotas Extraordinárias',
+    extras: linhas,
+    periodicidadeLabel: PERIODICIDADE_LABEL,
+    estadosLabel: extraEstado.ESTADOS_EXTRA,
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// NOVA
+// NOVA (estado inicial: pendente de aprovação)
 // ═══════════════════════════════════════════════════════════════════
 router.get('/quotas-extra/nova', async (req, res) => {
   const fracoes = await Fracao.findAll({ where: { estado: 'ativo', condominio_id: req.condominioId }, order: [['designacao', 'ASC']] });
@@ -147,7 +176,8 @@ router.post('/quotas-extra', async (req, res) => {
         ano_inicio: anoInicio,
         numero_parcelas: numeroParcelas,
         periodicidade,
-        estado: 'ativa',
+        // Criada → fica PENDENTE de aprovação (nunca cobrável de imediato).
+        estado: 'pendente',
       },
       { transaction: t }
     );
@@ -183,7 +213,7 @@ router.post('/quotas-extra', async (req, res) => {
     });
 
     await t.commit();
-    req.flash('success_msg', 'Quota extraordinária criada com sucesso.');
+    req.flash('success_msg', 'Quota extraordinária criada — fica pendente de aprovação antes de poder ser cobrada.');
     return res.redirect(`/admin/quotas-extra/${extra.id}`);
   } catch (err) {
     await t.rollback();
@@ -196,7 +226,7 @@ router.post('/quotas-extra', async (req, res) => {
 // DETALHE
 // ═══════════════════════════════════════════════════════════════════
 router.get('/quotas-extra/:id', async (req, res) => {
-  const extra = await ExtraQuota.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
+  const extra = await carregarExtra(req);
   if (!extra) return res.redirect('/admin/quotas-extra');
 
   const parcelas = await ExtraQuotaParcela.findAll({
@@ -206,7 +236,6 @@ router.get('/quotas-extra/:id', async (req, res) => {
   });
   const contas = await ContaBancaria.findAll({ where: { ativa: true, condominio_id: req.condominioId }, order: [['nome', 'ASC']] });
 
-  // Agrupa parcelas por fração para a vista.
   const porFracao = new Map();
   for (const p of parcelas) {
     const key = p.fracao_id;
@@ -227,6 +256,7 @@ router.get('/quotas-extra/:id', async (req, res) => {
   }));
 
   const resumo = await resumoExtra(extra);
+  const hoje = new Date().toISOString().slice(0, 10);
 
   res.render('admin/quotas-extra/detalhe', {
     titulo: extra.designacao,
@@ -235,21 +265,115 @@ router.get('/quotas-extra/:id', async (req, res) => {
     contas,
     resumo,
     periodicidadeLabel: PERIODICIDADE_LABEL,
+    estadosLabel: extraEstado.ESTADOS_EXTRA,
+    estadoLabel: extraEstado.ESTADOS_EXTRA[extra.estado] || extra.estado,
+    // Regras de ação (backend/UI) — derivadas do estado atual.
+    acoes: {
+      podeEditar: extraEstado.podeEditar(extra.estado),
+      podeAprovar: extraEstado.podeAprovar(extra.estado),
+      podeProcessar: extraEstado.podeProcessar(extra.estado),
+      podeAnular: extraEstado.podeAnular(extra.estado),
+    },
+    hoje,
   });
 });
 
-// Anula a quota extra e todas as suas parcelas (não apaga dados).
-router.post('/quotas-extra/:id/anular', async (req, res) => {
-  const extra = await ExtraQuota.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
+// ═══════════════════════════════════════════════════════════════════
+// EDITAR (apenas pendente — sem relevância financeira ainda)
+// ═══════════════════════════════════════════════════════════════════
+router.get('/quotas-extra/:id/editar', async (req, res) => {
+  const extra = await carregarExtra(req);
   if (!extra) return res.redirect('/admin/quotas-extra');
+  if (!extraEstado.podeEditar(extra.estado)) {
+    req.flash('error_msg', 'Apenas quotas extraordinárias pendentes de aprovação podem ser editadas.');
+    return res.redirect(`/admin/quotas-extra/${extra.id}`);
+  }
+  res.render('admin/quotas-extra/editar', {
+    titulo: 'Editar quota extraordinária',
+    extra,
+    periodicidadeLabel: PERIODICIDADE_LABEL,
+  });
+});
+
+router.post('/quotas-extra/:id', async (req, res) => {
+  const extra = await carregarExtra(req);
+  if (!extra) return res.redirect('/admin/quotas-extra');
+  if (!extraEstado.podeEditar(extra.estado)) {
+    req.flash('error_msg', 'Apenas quotas extraordinárias pendentes de aprovação podem ser editadas.');
+    return res.redirect(`/admin/quotas-extra/${extra.id}`);
+  }
+  const designacao = String(req.body.designacao || '').trim();
+  if (!designacao) {
+    req.flash('error_msg', 'Indique a designação da quota extraordinária.');
+    return res.redirect(`/admin/quotas-extra/${extra.id}/editar`);
+  }
+  await extra.update({ designacao });
+  await audit({ userId: req.user.id, acao: 'editar_quota_extra', entidade: 'ExtraQuota', entidadeId: extra.id });
+  req.flash('success_msg', 'Quota extraordinária atualizada.');
+  return res.redirect(`/admin/quotas-extra/${extra.id}`);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// APROVAR (pendente → aprovada) — registo de quem/quando
+// ═══════════════════════════════════════════════════════════════════
+router.post('/quotas-extra/:id/aprovar', async (req, res) => {
+  const extra = await carregarExtra(req);
+  if (!extra) return res.redirect('/admin/quotas-extra');
+  if (!extraEstado.podeAprovar(extra.estado)) {
+    req.flash('error_msg', 'Apenas quotas extraordinárias pendentes de aprovação podem ser aprovadas.');
+    return res.redirect(`/admin/quotas-extra/${extra.id}`);
+  }
+  await extra.update({
+    estado: 'aprovada',
+    aprovado_por: req.user.id,
+    aprovado_em: new Date().toISOString().slice(0, 10),
+  });
+  await audit({ userId: req.user.id, acao: 'aprovar_quota_extra', entidade: 'ExtraQuota', entidadeId: extra.id });
+  req.flash('success_msg', 'Quota extraordinária aprovada — agora pode ser processada para cobrança.');
+  return res.redirect(`/admin/quotas-extra/${extra.id}`);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// PROCESSAR (aprovada → processada) — disponível para cobrança
+// ═══════════════════════════════════════════════════════════════════
+router.post('/quotas-extra/:id/processar', async (req, res) => {
+  const extra = await carregarExtra(req);
+  if (!extra) return res.redirect('/admin/quotas-extra');
+  if (!extraEstado.podeProcessar(extra.estado)) {
+    req.flash('error_msg', 'Apenas quotas extraordinárias aprovadas podem ser processadas.');
+    return res.redirect(`/admin/quotas-extra/${extra.id}`);
+  }
+  await extra.update({
+    estado: 'processada',
+    processado_por: req.user.id,
+    processado_em: new Date().toISOString().slice(0, 10),
+  });
+  await audit({ userId: req.user.id, acao: 'processar_quota_extra', entidade: 'ExtraQuota', entidadeId: extra.id });
+  req.flash('success_msg', 'Quota extraordinária processada — parcelas disponíveis para inclusão em avisos/pagamento.');
+  return res.redirect(`/admin/quotas-extra/${extra.id}`);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// ANULAR — guardas: não anula o que já está anulado; parcelas pagas mantêm-se.
+// ═══════════════════════════════════════════════════════════════════
+router.post('/quotas-extra/:id/anular', async (req, res) => {
+  const extra = await carregarExtra(req);
+  if (!extra) return res.redirect('/admin/quotas-extra');
+  if (!extraEstado.podeAnular(extra.estado)) {
+    req.flash('error_msg', 'Esta quota extraordinária já está anulada.');
+    return res.redirect(`/admin/quotas-extra/${extra.id}`);
+  }
 
   const t = await sequelize.transaction();
   try {
-    await ExtraQuotaParcela.update({ estado: 'anulada' }, { where: { extra_quota_id: extra.id, estado: { [Op.ne]: 'paga' } }, transaction: t });
+    await ExtraQuotaParcela.update(
+      { estado: 'anulada' },
+      { where: { extra_quota_id: extra.id, estado: { [Op.ne]: 'paga' } }, transaction: t }
+    );
     await extra.update({ estado: 'anulada' }, { transaction: t });
     await audit({ userId: req.user.id, acao: 'anular_quota_extra', entidade: 'ExtraQuota', entidadeId: extra.id });
     await t.commit();
-    req.flash('success_msg', 'Quota extraordinária anulada.');
+    req.flash('success_msg', 'Quota extraordinária anulada (parcelas pagas permanecem no histórico).');
   } catch (err) {
     await t.rollback();
     req.flash('error_msg', 'Erro ao anular a quota extraordinária.');
@@ -257,13 +381,25 @@ router.post('/quotas-extra/:id/anular', async (req, res) => {
   return res.redirect(`/admin/quotas-extra/${extra.id}`);
 });
 
-// Marca uma parcela como paga e cria o movimento bancário de entrada.
+// ═══════════════════════════════════════════════════════════════════
+// PAGAR PARCELA — pagamento REAL (Pagamento + PagamentoExtraParcela)
+// Regra: quota extra 'processada' e parcela 'pendente'/'cobrada'.
+// ═══════════════════════════════════════════════════════════════════
 router.post('/quotas-extra/parcelas/:id/pagar', async (req, res) => {
-  const parcela = await ExtraQuotaParcela.findByPk(req.params.id, {
-    include: [{ model: ExtraQuota, as: 'extra_quota', where: { condominio_id: req.condominioId } }],
-  });
+  const parcela = await carregarParcela(req);
   if (!parcela || !parcela.extra_quota) return res.redirect('/admin/quotas-extra');
-  // Conta bancária tem de pertencer ao condomínio ativo (guarda IDOR).
+  const extra = parcela.extra_quota;
+
+  if (extra.estado !== 'processada') {
+    req.flash('error_msg', 'A quota extra tem de estar aprovada e processada para poder ser paga.');
+    return res.redirect(`/admin/quotas-extra/${extra.id}`);
+  }
+  if (!['pendente', 'cobrada'].includes(parcela.estado)) {
+    req.flash('error_msg', parcela.estado === 'paga' ? 'Parcela já está paga.' : 'Parcela anulada não pode ser paga.');
+    return res.redirect(`/admin/quotas-extra/${extra.id}`);
+  }
+
+  // Conta bancária tem de pertencer ao condomínio ativo (IDOR).
   const contaIdRaw = parseInt(req.body.conta_bancaria_id, 10) || null;
   let contaId = null;
   if (contaIdRaw) {
@@ -271,66 +407,104 @@ router.post('/quotas-extra/parcelas/:id/pagar', async (req, res) => {
     contaId = conta ? conta.id : null;
   }
 
-  if (parcela.estado === 'anulada') {
-    req.flash('error_msg', 'Parcela anulada não pode ser paga.');
-    return res.redirect(`/admin/quotas-extra/${parcela.extra_quota_id}`);
-  }
-  if (parcela.estado === 'paga') {
-    req.flash('error_msg', 'Parcela já está paga.');
-    return res.redirect(`/admin/quotas-extra/${parcela.extra_quota_id}`);
-  }
-
-  const t = await sequelize.transaction();
   try {
-    await parcela.update({ estado: 'paga', valor_pago: parcela.valor }, { transaction: t });
-    if (contaId) {
-      await criarMovimento({
-        contaBancariaId: contaId,
-        data: new Date(),
-        tipo: 'entrada',
-        valor: parcela.valor,
-        descricao: `Quota extra "${parcela.extra_quota.designacao}" — parcela ${parcela.parcela_numero}`,
-        referencia: `QE-${parcela.extra_quota_id}`,
-        extraQuotaParcelaId: parcela.id,
-        userId: req.user.id,
-        transaction: t,
-      });
-    }
-    await audit({ userId: req.user.id, acao: 'pagar_parcela_quota_extra', entidade: 'ExtraQuotaParcela', entidadeId: parcela.id });
-    await t.commit();
-    req.flash('success_msg', 'Parcela marcada como paga.');
+    const { pagamento } = await pagamentosHelper.registarPagamentoExtraParcela({
+      parcelaId: parcela.id,
+      dataPagamento: new Date(),
+      metodoPagamentoId: null,
+      contaBancariaId: contaId,
+      referencia: null,
+      observacoes: null,
+      userId: req.user.id,
+      condominioId: req.condominioId,
+    });
+    await audit({
+      userId: req.user.id,
+      acao: 'pagar_parcela_quota_extra',
+      entidade: 'PagamentoExtraParcela',
+      entidadeId: pagamento.id,
+      detalhes: { parcelaId: parcela.id },
+    });
+    req.flash('success_msg', 'Parcela paga (pagamento registado no sistema de pagamentos).');
   } catch (err) {
-    await t.rollback();
-    req.flash('error_msg', 'Erro ao registar o pagamento.');
+    console.error('[pagar-parcela-extra]', err.message);
+    req.flash('error_msg', err.message || 'Erro ao registar o pagamento.');
   }
-  return res.redirect(`/admin/quotas-extra/${parcela.extra_quota_id}`);
+  return res.redirect(`/admin/quotas-extra/${extra.id}`);
 });
 
-// Reverte o pagamento de uma parcela e anula o movimento associado.
+// ═══════════════════════════════════════════════════════════════════
+// DESFAZER PAGAMENTO — anula o Pagamento real e restaura o estado anterior
+// ═══════════════════════════════════════════════════════════════════
 router.post('/quotas-extra/parcelas/:id/desfazer', async (req, res) => {
-  const parcela = await ExtraQuotaParcela.findByPk(req.params.id, {
-    include: [{ model: ExtraQuota, as: 'extra_quota', where: { condominio_id: req.condominioId } }],
-  });
+  const parcela = await carregarParcela(req);
   if (!parcela || !parcela.extra_quota) return res.redirect('/admin/quotas-extra');
+  const extra = parcela.extra_quota;
   if (parcela.estado !== 'paga') {
-    return res.redirect(`/admin/quotas-extra/${parcela.extra_quota_id}`);
+    return res.redirect(`/admin/quotas-extra/${extra.id}`);
   }
 
-  const t = await sequelize.transaction();
+  // Novo fluxo: encontra o Pagamento real associado à parcela e anula-o
+  // (a reposição do estado anterior é feita pelo helper).
+  const link = await PagamentoExtraParcela.findOne({
+    where: { extra_quota_parcela_id: parcela.id },
+    include: [{ model: Pagamento, as: 'pagamento', where: { estado: 'confirmado' }, required: true }],
+    order: [['id', 'DESC']],
+  });
+
   try {
-    await parcela.update({ estado: 'pendente', valor_pago: 0 }, { transaction: t });
-    await MovimentoBancario.update(
-      { estado: 'anulado' },
-      { where: { extra_quota_parcela_id: parcela.id, estado: 'confirmado' }, transaction: t }
-    );
+    if (link) {
+      await pagamentosHelper.anularPagamento(link.pagamento.id);
+      req.flash('success_msg', 'Pagamento revertido — a parcela voltou ao estado anterior.');
+    } else {
+      // Fluxo legado (parcelas pagas antes da migração 069): reverter apenas o
+      // movimento direto e repor 'pendente'.
+      const t = await sequelize.transaction();
+      try {
+        await parcela.update({ estado: 'pendente', valor_pago: 0 }, { transaction: t });
+        await MovimentoBancario.update(
+          { estado: 'anulado' },
+          { where: { extra_quota_parcela_id: parcela.id, estado: 'confirmado' }, transaction: t }
+        );
+        await t.commit();
+        req.flash('success_msg', 'Pagamento revertido (fluxo legado).');
+      } catch (err2) {
+        await t.rollback();
+        throw err2;
+      }
+    }
     await audit({ userId: req.user.id, acao: 'desfazer_parcela_quota_extra', entidade: 'ExtraQuotaParcela', entidadeId: parcela.id });
-    await t.commit();
-    req.flash('success_msg', 'Pagamento revertido.');
   } catch (err) {
-    await t.rollback();
+    console.error('[desfazer-parcela-extra]', err.message);
     req.flash('error_msg', 'Erro ao reverter o pagamento.');
   }
-  return res.redirect(`/admin/quotas-extra/${parcela.extra_quota_id}`);
+  return res.redirect(`/admin/quotas-extra/${extra.id}`);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// RECIBO POR PARCELA — parcela paga → RCP (ReciboExtraParcela)
+// ═══════════════════════════════════════════════════════════════════
+router.post('/quotas-extra/parcelas/:id/recibo', async (req, res) => {
+  const parcela = await carregarParcela(req);
+  if (!parcela || !parcela.extra_quota) return res.redirect('/admin/quotas-extra');
+  const extra = parcela.extra_quota;
+  try {
+    if (parcela.estado !== 'paga') {
+      throw new Error('A parcela tem de estar paga para emitir o recibo.');
+    }
+    const { recibo } = await recibosHelper.emitirReciboParcela({
+      parcelaId: parcela.id,
+      condominioId: req.condominioId,
+      userId: req.user.id,
+    });
+    await audit({ userId: req.user.id, acao: 'emitir_recibo_quota_extra', entidade: 'Recibo', entidadeId: recibo.id });
+    req.flash('success_msg', `Recibo ${recibo.codigo} emitido para a parcela.`);
+    return res.redirect(`/admin/quotas/recibos/${recibo.id}/pdf`);
+  } catch (err) {
+    console.error('[recibo-parcela-extra]', err.message);
+    req.flash('error_msg', err.message || 'Erro ao emitir o recibo.');
+  }
+  return res.redirect(`/admin/quotas-extra/${extra.id}`);
 });
 
 module.exports = router;

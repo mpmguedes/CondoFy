@@ -341,6 +341,25 @@ async function gerarAvisoQuotaPDF(condominio, d) {
     C.linha('Valor da quota', formatEUR(d.valor));
   });
 
+  // Quotas extraordinárias incluídas neste aviso (linhas discriminadas).
+  if (d.extras && d.extras.length) {
+    L.caixa(
+      'Quotas extraordinárias incluídas',
+      (C) => {
+        C.tabela(
+          [
+            { titulo: 'Designação', x: 0, width: 190 },
+            { titulo: 'Parcela', x: 200, width: 150 },
+            { titulo: 'Valor', x: 360, width: 100, align: 'right' },
+          ],
+          d.extras.map((e) => [e.designacao || 'Quota extraordinária', e.detalhe || '—', formatEUR(e.valorAplicado)])
+        );
+      },
+      T.COR_ALERTA,
+      '#fff7ed'
+    );
+  }
+
   L.caixa(
     'Situação financeira',
     (C) => {
@@ -504,6 +523,25 @@ async function gerarReciboPDF(condominio, d) {
       },
       T.COR_SUCESSO,
       T.COR_FUNDO_VERDE
+    );
+  }
+
+  // ── Bloco 2.1 — Quotas extraordinárias (parcelas) discriminadas ─────
+  if (d.extras && d.extras.length) {
+    L.caixa(
+      'Quotas extraordinárias',
+      (C) => {
+        C.tabela(
+          [
+            { titulo: 'Designação', x: 0, width: 210 },
+            { titulo: 'Parcela', x: 220, width: 120 },
+            { titulo: 'Valor aplicado', x: 350, width: 110, align: 'right' },
+          ],
+          d.extras.map((e) => [e.designacao || 'Quota extraordinária', e.detalhe || '—', formatEUR(e.valorAplicado)])
+        );
+      },
+      T.COR_ALERTA,
+      '#fff7ed'
     );
   }
 

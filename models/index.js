@@ -37,8 +37,10 @@ const {
   Quota,
   Pagamento,
   PagamentoQuota,
+  PagamentoExtraParcela,
   Recibo,
   ReciboQuota,
+  ReciboExtraParcela,
   Despesa,
   Fornecedor,
   PagamentoFornecedor,
@@ -162,6 +164,38 @@ Quota.belongsToMany(Pagamento, {
 });
 PagamentoQuota.belongsTo(Pagamento, { foreignKey: 'pagamento_id', as: 'pagamento' });
 PagamentoQuota.belongsTo(Quota, { foreignKey: 'quota_id', as: 'quota' });
+
+// Pagamentos ↔ Parcelas de Quota Extra (pagamentos reais de Quotas Extra)
+Pagamento.belongsToMany(ExtraQuotaParcela, {
+  through: PagamentoExtraParcela,
+  foreignKey: 'pagamento_id',
+  otherKey: 'extra_quota_parcela_id',
+  as: 'parcelasExtra',
+});
+ExtraQuotaParcela.belongsToMany(Pagamento, {
+  through: PagamentoExtraParcela,
+  foreignKey: 'extra_quota_parcela_id',
+  otherKey: 'pagamento_id',
+  as: 'pagamentosExtra',
+});
+PagamentoExtraParcela.belongsTo(Pagamento, { foreignKey: 'pagamento_id', as: 'pagamento' });
+PagamentoExtraParcela.belongsTo(ExtraQuotaParcela, { foreignKey: 'extra_quota_parcela_id', as: 'parcela' });
+
+// Recibos ↔ Parcelas de Quota Extra (discriminação de Quotas Extra no recibo)
+Recibo.belongsToMany(ExtraQuotaParcela, {
+  through: ReciboExtraParcela,
+  foreignKey: 'recibo_id',
+  otherKey: 'extra_quota_parcela_id',
+  as: 'parcelasExtra',
+});
+ExtraQuotaParcela.belongsToMany(Recibo, {
+  through: ReciboExtraParcela,
+  foreignKey: 'extra_quota_parcela_id',
+  otherKey: 'recibo_id',
+  as: 'recibosExtra',
+});
+ReciboExtraParcela.belongsTo(Recibo, { foreignKey: 'recibo_id', as: 'recibo' });
+ReciboExtraParcela.belongsTo(ExtraQuotaParcela, { foreignKey: 'extra_quota_parcela_id', as: 'parcela' });
 
 // Despesas
 Despesa.belongsTo(Categoria, { foreignKey: 'categoria_id', as: 'categoria' });

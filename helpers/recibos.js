@@ -18,7 +18,7 @@
 const crypto = require('crypto');
 const sequelize = require('../config/database');
 const { Op } = require('sequelize');
-const { Quota, Recibo, ReciboQuota, Numeracao, PagamentoQuota, Pagamento, MetodoPagamento } = require('../models');
+const { Quota, Recibo, ReciboQuota, ReciboExtraParcela, ExtraQuota, ExtraQuotaParcela, PagamentoExtraParcela, Pagamento, PagamentoQuota, Numeracao, MetodoPagamento } = require('../models');
 const { toCents, fromCents } = require('./money');
 
 const EPS = 1; // 1 cêntimo
@@ -187,6 +187,93 @@ async function coberturaPorQuota(quotaIds, { apenasEnviados = false } = {}) {
 // Valor coberto por recibos válidos (export público).
 async function cobertoPorQuota(quotaIds) {
   return coberturaPorQuota(quotaIds);
+}
+
+// ── Parcelas de Quota Extra (pagas → recibo) ────────────────────────
+
+// Valor confirmado pago por parcela (PagamentoExtraParcela → Pagamento confirmado).
+async function pagoPorParcela(parcelaIds) {
+  const { pagoParcela } = require('./pagamentos');
+  return pagoParcela(parcelaIds);
+}
+
+// Valor coberto por recibos VÁLIDOS por parcela (anulados não contam).
+async function cobertoPorParcela(parcelaIds) {
+  const mapa = new Map();
+  if (!parcelaIds || !parcelaIds.length) return mapa;
+  const coberturas = await ReciboExtraParcela.findAll({
+    where: { extra_quota_parcela_id: { [Op.in]: parcelaIds } },
+    include: [{ model: Recibo, as: 'recibo', attributes: ['estado'], where: { estado: 'emitido' }, required: true }],
+    raw: true,
+  });
+  for (const c of coberturas) {
+    mapa.set(c.extra_quota_parcela_id, (mapa.get(c.extra_quota_parcela_id) || 0) + toCents(c.valor));
+  }
+  return mapa;
+}
+
+// Emite UM recibo (RCP) para uma parcela de Quota Extra já paga e ainda não
+// coberta por outro recibo. Devolve o Recibo criado (com a cobertura).
+// Guardas: parcela 'paga', quota extra do condomínio ativo e não anulada,
+// sem cobertura prévia — nunca duplica.
+async function emitirReciboParcela({ parcelaId, condominioId, userId, ano } = {}) {
+  if (!condominioId) {
+    throw new Error('condominioId é obrigatório para emitir recibos.');
+  }
+  const t = await sequelize.transaction();
+  try {
+    const parcela = await ExtraQuotaParcela.findByPk(parcelaId, {
+      lock: t.LOCK.UPDATE,
+      transaction: t,
+    });
+    if (!parcela) throw new Error('Parcela não encontrada.');
+    const extra = await ExtraQuota.findOne({
+      where: { id: parcela.extra_quota_id, condominio_id: condominioId },
+      transaction: t,
+    });
+    if (!extra) throw new Error('Quota extra não encontrada neste condomínio.');
+    if (extra.estado === 'anulada') throw new Error('Quota extra anulada não gera recibo.');
+    if (parcela.estado !== 'paga') {
+      throw new Error('A parcela tem de estar paga para emitir o recibo.');
+    }
+
+    const cobertoMap = await cobertoPorParcela([parcela.id]);
+    if ((cobertoMap.get(parcela.id) || 0) >= toCents(parcela.valor)) {
+      throw new Error('Esta parcela já está coberta por um recibo.');
+    }
+
+    const anoNum = ano || new Date().getFullYear();
+    const { codigo, numero } = await proximoReciboNumero({ ano: anoNum, transaction: t });
+    const recibo = await Recibo.create(
+      {
+        condominio_id: condominioId,
+        fracao_id: parcela.fracao_id,
+        codigo,
+        codigo_verificacao: gerarCodigoVerificacao(anoNum, codigo),
+        numero,
+        ano: anoNum,
+        tipo: 'extraordinario',
+        valor: parcela.valor,
+        data_emissao: new Date().toISOString().slice(0, 10),
+        estado: 'emitido',
+        created_by: userId || null,
+      },
+      { transaction: t }
+    );
+    await ReciboExtraParcela.create(
+      {
+        recibo_id: recibo.id,
+        extra_quota_parcela_id: parcela.id,
+        valor: parcela.valor,
+      },
+      { transaction: t }
+    );
+    await t.commit();
+    return { recibo, parcela, extra };
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
 }
 
 // Pagamentos CONFIRMADOS que aplicaram valor às quotas indicadas — para o
@@ -496,6 +583,116 @@ async function anularRecibo(reciboId, { motivo, userId } = {}) {
   }
 }
 
+// ── Recibo COMBINADO por pagamento ──────────────────────────────────
+// Emite UM único recibo (RCP) para um Pagamento que cobriu quotas normais
+// e/ou parcelas de Quotas Extra. As linhas são criadas em ReciboQuota e
+// ReciboExtraParcela, respeitando a cobertura real (pago − já coberto) para
+// nunca duplicar a mesma parcela/quota num segundo recibo.
+async function emitirReciboDePagamento({ pagamentoId, condominioId, userId, ano } = {}) {
+  if (!condominioId) throw new Error('condominioId é obrigatório para emitir recibos.');
+  const t = await sequelize.transaction();
+  try {
+    const pagamento = await Pagamento.findOne({
+      where: { id: pagamentoId, condominio_id: condominioId, estado: 'confirmado' },
+      lock: t.LOCK.UPDATE,
+      transaction: t,
+    });
+    if (!pagamento) throw new Error('Pagamento não encontrado neste condomínio.');
+
+    const alq = await PagamentoQuota.findAll({ where: { pagamento_id: pagamento.id }, transaction: t });
+    const alx = await PagamentoExtraParcela.findAll({ where: { pagamento_id: pagamento.id }, transaction: t });
+    if (!alq.length && !alx.length) throw new Error('Este pagamento não tem quotas/parcelas aplicadas.');
+
+    const qids = alq.map((a) => a.quota_id);
+    const pids = alx.map((a) => a.extra_quota_parcela_id);
+    const [pagoMap, cobMap] = await Promise.all([pagoPorQuota(qids), cobertoPorQuota(qids)]);
+    const [pagoParcMap, cobParcMap] = await Promise.all([pagoPorParcela(pids), cobertoPorParcela(pids)]);
+
+    const quotas = qids.length
+      ? await Quota.findAll({ where: { id: { [Op.in]: qids } }, transaction: t })
+      : [];
+    const porQuota = new Map(quotas.map((q) => [q.id, q]));
+
+    const linhasQuota = [];
+    for (const a of alq) {
+      const q = porQuota.get(a.quota_id);
+      if (!q) continue;
+      const disponivelC = Math.max(0, (pagoMap.get(q.id) || 0) - (cobMap.get(q.id) || 0));
+      const aplicarC = Math.min(toCents(a.valor_aplicado), disponivelC);
+      if (aplicarC > 0) linhasQuota.push({ quota: q, valorC: aplicarC });
+    }
+
+    const linhasExtra = [];
+    for (const a of alx) {
+      const parcela = await ExtraQuotaParcela.findByPk(a.extra_quota_parcela_id, { transaction: t });
+      if (!parcela) continue;
+      const extra = await ExtraQuota.findOne({ where: { id: parcela.extra_quota_id, condominio_id: condominioId }, transaction: t });
+      if (!extra) continue;
+      const disponivelC = Math.max(0, (pagoParcMap.get(parcela.id) || 0) - (cobParcMap.get(parcela.id) || 0));
+      const aplicarC = Math.min(toCents(a.valor_aplicado), toCents(parcela.valor), disponivelC);
+      if (aplicarC > 0) {
+        linhasExtra.push({ parcela, extra, valorC: aplicarC });
+      }
+    }
+
+    const totalC = linhasQuota.reduce((s, l) => s + l.valorC, 0) + linhasExtra.reduce((s, l) => s + l.valorC, 0);
+    if (totalC <= 0) throw new Error('Não há valor disponível para emitir o recibo deste pagamento (já coberto ou sem aplicações confirmadas).');
+
+    const anoNum = ano || new Date().getFullYear();
+    const { codigo, numero } = await proximoReciboNumero({ ano: anoNum, transaction: t });
+    const tipo = linhasExtra.length ? 'extraordinario' : 'ordinario';
+    const recibo = await Recibo.create(
+      {
+        condominio_id: condominioId,
+        fracao_id: pagamento.fracao_id,
+        codigo,
+        codigo_verificacao: gerarCodigoVerificacao(anoNum, codigo),
+        numero,
+        ano: anoNum,
+        tipo,
+        valor: fromCents(totalC),
+        data_emissao: new Date().toISOString().slice(0, 10),
+        estado: 'emitido',
+        created_by: userId || null,
+      },
+      { transaction: t }
+    );
+
+    for (const l of linhasQuota) {
+      const { baseC, fcrC } = partilharValor(
+        { valor: l.quota.valor, valor_base: l.quota.valor_base, valor_fcr: l.quota.valor_fcr },
+        l.valorC
+      );
+      await ReciboQuota.create(
+        {
+          recibo_id: recibo.id,
+          quota_id: l.quota.id,
+          valor: fromCents(l.valorC),
+          valor_base: fromCents(baseC),
+          valor_fcr: fromCents(fcrC),
+        },
+        { transaction: t }
+      );
+    }
+    for (const l of linhasExtra) {
+      await ReciboExtraParcela.create(
+        {
+          recibo_id: recibo.id,
+          extra_quota_parcela_id: l.parcela.id,
+          valor: fromCents(l.valorC),
+        },
+        { transaction: t }
+      );
+    }
+
+    await t.commit();
+    return { recibo, linhasQuota: linhasQuota.length, linhasExtra: linhasExtra.length };
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
+}
+
 module.exports = {
   formatarNumero,
   formatarCodigo,
@@ -506,6 +703,10 @@ module.exports = {
   pagoPorQuota,
   cobertoPorQuota,
   pagamentosDasQuotas,
+  pagoPorParcela,
+  cobertoPorParcela,
+  emitirReciboParcela,
+  emitirReciboDePagamento,
   mesesPorEmitir,
   porEmitirPorFracao,
   detalhePorEmitir,
