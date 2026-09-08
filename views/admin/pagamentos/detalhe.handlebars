@@ -4,13 +4,8 @@
     <p class="subtitle">{{#if (eq pagamento.estado 'confirmado')}}Recebimento confirmado{{else}}Pagamento anulado{{/if}}</p>
   </div>
   <div class="d-flex gap-2 align-items-center flex-wrap">
-    {{#if (eq pagamento.estado 'confirmado')}}
-    <form action="/admin/pagamentos/{{pagamento.id}}/recibo/emitir" method="POST" onsubmit="return confirm('Emitir um recibo único (RCP) para este pagamento, com a discriminação de quotas e Quotas Extra?');">
-      <button class="btn btn-sm btn-primary"><i class="bi bi-receipt me-1"></i>Emitir recibo deste pagamento</button>
-    </form>
-    {{/if}}
-    <a href="/admin/quotas/recibos" class="btn btn-sm btn-outline-primary"><i class="bi bi-receipt me-1"></i>Emitir recibo</a>
-    <a href="/admin/quotas/comprovativos" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1" style="font-size:1rem">arrow_back</span>Comprovativos</a>
+    <a href="/admin/quotas/recibos" class="btn btn-sm btn-outline-primary"><i class="bi bi-receipt me-1"></i>Recibos</a>
+    <a href="/admin/quotas/comprovativos" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1" style="font-size:1rem">arrow_back</span>Pagamentos</a>
   </div>
 </div>
 
@@ -79,12 +74,39 @@
   </div>
 
   <div class="col-12 col-lg-7">
+    {{!-- Recibo deste pagamento (documento emitido posteriormente) --}}
+    <div class="card mb-4">
+      <div class="card-header bg-white"><i class="bi bi-receipt me-1"></i>Recibo</div>
+      <div class="card-body">
+        {{#if temRecibo}}
+        {{#each recibosPagamento}}
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+          <span class="d-flex align-items-center gap-2">
+            <span class="fw-semibold font-monospace">{{codigo}}</span>
+            <span class="badge text-bg-success">Emitido</span>
+          </span>
+          <a href="/admin/quotas/recibos/{{id}}/pdf" target="_blank" class="btn btn-sm btn-outline-primary"><i class="bi bi-file-earmark-pdf me-1"></i>Ver PDF</a>
+        </div>
+        {{/each}}
+        {{else}}
+          {{#if (eq pagamento.estado 'confirmado')}}
+          <p class="text-muted small mb-3">Recibo ainda não emitido para este pagamento. A emissão cria um único RCP com a discriminação das quotas e Quotas Extra.</p>
+          <form action="/admin/pagamentos/{{pagamento.id}}/recibo/emitir" method="POST" onsubmit="return confirm('Emitir um recibo único (RCP) para este pagamento?');">
+            <button class="btn btn-primary"><i class="bi bi-receipt me-1"></i>Emitir recibo</button>
+          </form>
+          {{else}}
+          <p class="text-muted small mb-0">Pagamento anulado — sem recibo emitível.</p>
+          {{/if}}
+        {{/if}}
+      </div>
+    </div>
+
     <div class="card">
-      <div class="card-header bg-white"><i class="bi bi-receipt me-1"></i>Distribuição pelas quotas</div>
+      <div class="card-header bg-white"><i class="bi bi-list-check me-1"></i>Composição do pagamento</div>
       <div class="table-responsive">
         <table class="table align-middle mb-0">
           <thead class="table-light">
-            <tr><th>Quota</th><th>Período</th><th class="text-end">Valor aplicado</th></tr>
+            <tr><th>Obrigação</th><th>Período / Parcela</th><th class="text-end">Valor aplicado</th></tr>
           </thead>
           <tbody>
             {{#each pagamento.quotas}}
@@ -93,9 +115,17 @@
               <td>{{monthName mes}} {{ano}}</td>
               <td class="text-end">{{eur this.PagamentoQuota.valor_aplicado}}</td>
             </tr>
-            {{else}}
-            <tr><td colspan="3" class="text-center text-muted py-4">Sem distribuição.</td></tr>
             {{/each}}
+            {{#each pagamento.parcelasExtra}}
+            <tr>
+              <td>Quota Extra — {{extra_quota.designacao}}</td>
+              <td>Parcela {{parcela_numero}}</td>
+              <td class="text-end">{{eur this.PagamentoExtraParcela.valor_aplicado}}</td>
+            </tr>
+            {{/each}}
+            {{#unless (or pagamento.quotas.length pagamento.parcelasExtra.length)}}
+            <tr><td colspan="3" class="text-center text-muted py-4">Sem distribuição.</td></tr>
+            {{/unless}}
           </tbody>
         </table>
       </div>

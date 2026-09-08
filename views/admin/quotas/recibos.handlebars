@@ -136,6 +136,12 @@
 <script type="application/json" id="dadosPorEmitir">{{{json porEmitirJson}}}</script>
 
 {{!-- Modal Emitir recibo --}}
+<style>
+  /* Emissão de recibos: conteúdo com scroll vertical dentro do viewport;
+     header/footer do modal permanecem acessíveis (desktop, tablet e mobile). */
+  #modalEmitir .modal-dialog-scrollable .modal-content { max-height: calc(100vh - 3rem); }
+  #modalEmitir .modal-dialog-scrollable .modal-body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+</style>
 <div class="modal fade" id="modalEmitir" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">

@@ -125,7 +125,7 @@ function testVistaMapa() {
   });
 
   assert.ok(html.includes('Mapa de Quotas'), 'título do mapa');
-  assert.ok(html.includes('Mapa de Quotas') && html.includes('Comprovativos') && html.includes('Recibos'), 'tabs presentes');
+  assert.ok(html.includes('Mapa de Quotas') && html.includes('Pagamentos') && html.includes('Recibos'), 'tabs presentes');
   assert.ok(html.includes('q-ind q-paga') && html.includes('✓'), 'indicador de pago');
   assert.ok(html.includes('q-ind q-incumprimento') && html.includes('✗'), 'indicador de incumprimento');
   assert.ok(html.includes('Jan') && html.includes('Dez'), 'meses abreviados');
@@ -170,12 +170,12 @@ function testVistaComprovativos() {
     },
   ];
   const html = tpl({
-    titulo: 'Quotas · Comprovativos',
+    titulo: 'Quotas · Pagamentos',
     secao: 'comprovativos',
     pagamentos,
     contagem: { pendentes: 1, validados: 1, rejeitados: 0 },
   });
-  assert.ok(html.includes('Comprovativos'), 'título');
+  assert.ok(html.includes('Pagamentos'), 'título');
   assert.ok(html.includes('Pendentes') && html.includes('Validados') && html.includes('Rejeitados'), 'cartões de resumo');
   assert.ok(html.includes('João Silva'), 'condómino visível');
   assert.ok(html.includes('/admin/pagamentos/1/comprovativo'), 'visualizar comprovativo');

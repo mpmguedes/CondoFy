@@ -93,12 +93,16 @@
             {{else if (eq estado 'cobrada')}}<span class="badge text-bg-info">Cobrada</span>
             {{else if (eq estado 'anulada')}}<span class="badge text-bg-dark">Anulada</span>
             {{else}}<span class="badge text-bg-warning">Disponível</span>{{/if}}
+            {{#if (eq estado 'paga')}}
+            <div class="small text-muted mt-1">
+              {{#if pagamentoNumero}}<span class="d-block"><a href="/admin/pagamentos/{{pagamentoId}}" title="Ver pagamento">Pagamento: {{pagamentoNumero}}</a></span>{{/if}}
+              {{#if reciboId}}<span class="d-block"><a href="/admin/quotas/recibos/{{reciboId}}/pdf" target="_blank" title="Ver recibo">Recibo: {{reciboCodigo}}</a></span>
+              {{else}}<span class="d-block text-muted">Recibo não emitido</span>{{/if}}
+            </div>
+            {{/if}}
           </td>
           <td class="text-end text-nowrap">
             {{#if (eq estado 'paga')}}
-            <form action="/admin/quotas-extra/parcelas/{{id}}/recibo" method="POST" class="d-inline" title="Emitir recibo (RCP)">
-              <button class="btn btn-sm btn-outline-primary"><span class="material-symbols-outlined">receipt_long</span></button>
-            </form>
             <form action="/admin/quotas-extra/parcelas/{{id}}/desfazer" method="POST" class="d-inline" onsubmit="return confirm('Reverter este pagamento? A parcela volta ao estado anterior.');">
               <button class="btn btn-sm btn-outline-secondary" title="Desfazer pagamento"><span class="material-symbols-outlined">undo</span></button>
             </form>

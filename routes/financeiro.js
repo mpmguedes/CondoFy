@@ -19,6 +19,10 @@ const {
   EmailFila,
   ExtraQuota,
   ExtraQuotaParcela,
+  PagamentoExtraParcela,
+  Recibo,
+  ReciboQuota,
+  ReciboExtraParcela,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
@@ -1191,10 +1195,44 @@ router.get('/pagamentos/:id', async (req, res) => {
       { model: MetodoPagamento, as: 'metodo_pagamento' },
       { model: ContaBancaria, as: 'conta_bancaria' },
       { model: Quota, as: 'quotas', through: { attributes: ['valor_aplicado'] } },
+      {
+        model: ExtraQuotaParcela,
+        as: 'parcelasExtra',
+        through: { attributes: ['valor_aplicado'] },
+        include: [{ model: ExtraQuota, as: 'extra_quota', attributes: ['designacao'] }],
+      },
     ],
   });
   if (!pagamento) return res.redirect('/admin/pagamentos');
-  res.render('admin/pagamentos/detalhe', { titulo: `Recibo ${pagamento.numero_documento || ''}`, pagamento, driveLigado: drive.isConfigured() });
+
+  // Recibos existentes que cobrem itens deste pagamento (anti-duplicação na UI):
+  // recibo é o documento emitido a partir do pagamento — se já existir, apenas
+  // se consulta/abre; nunca se cria outro.
+  const idsQuotas = (pagamento.quotas || []).map((q) => q.id);
+  const idsParcelas = (pagamento.parcelasExtra || []).map((p) => p.id);
+  const reciboIds = new Set();
+  if (idsQuotas.length) {
+    const linhas = await ReciboQuota.findAll({ where: { quota_id: { [Op.in]: idsQuotas } }, attributes: ['recibo_id'], raw: true });
+    linhas.forEach((l) => reciboIds.add(Number(l.recibo_id)));
+  }
+  if (idsParcelas.length) {
+    const linhas = await ReciboExtraParcela.findAll({ where: { extra_quota_parcela_id: { [Op.in]: idsParcelas } }, attributes: ['recibo_id'], raw: true });
+    linhas.forEach((l) => reciboIds.add(Number(l.recibo_id)));
+  }
+  const recibosPagamento = reciboIds.size
+    ? await Recibo.findAll({
+        where: { id: { [Op.in]: [...reciboIds] }, condominio_id: req.condominioId, estado: 'emitido' },
+        order: [['data_emissao', 'DESC'], ['id', 'DESC']],
+      })
+    : [];
+
+  res.render('admin/pagamentos/detalhe', {
+    titulo: `Pagamento ${pagamento.numero_documento || ''}`,
+    pagamento,
+    driveLigado: drive.isConfigured(),
+    recibosPagamento,
+    temRecibo: recibosPagamento.length > 0,
+  });
 });
 
 router.post('/pagamentos/:id/anular', async (req, res) => {

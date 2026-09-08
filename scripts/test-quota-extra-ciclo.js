@@ -86,7 +86,7 @@ function testarRotas() {
   assert.ok(rotaExtra.includes('condominio_id: req.condominioId'), 'rotas isoladas por condomínio');
   assert.ok(rotaExtra.includes('pagamentosHelper.registarPagamentoExtraParcela'), 'pagamento real por parcela');
   assert.ok(rotaExtra.includes("estado: 'processada'"), 'só processada pode ser paga/incluída');
-  assert.ok(rotaExtra.includes('recibosHelper.emitirReciboParcela'), 'recibo por parcela');
+  assert.ok(!rotaExtra.includes("'/quotas-extra/parcelas/:id/recibo'"), 'sem emissão individual de recibo na área de Quotas Extra (emissão via Pagamento)');
   assert.ok(!rotaExtra.includes("estado: 'ativa'"), 'sem estado legado ativa na criação');
   assert.ok(rotaFinanceiro.includes("'/quotas/:id/aviso/extras'"), 'seleção de extras no aviso existe');
   assert.ok(rotaFinanceiro.includes("estado: 'pendente'"), 'aviso só lista parcelas ainda não cobradas');

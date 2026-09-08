@@ -9,6 +9,8 @@ const {
   PagamentoExtraParcela,
   Pagamento,
   MovimentoBancario,
+  Recibo,
+  ReciboExtraParcela,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
@@ -237,13 +239,52 @@ router.get('/quotas-extra/:id', async (req, res) => {
   const contas = await ContaBancaria.findAll({ where: { ativa: true, condominio_id: req.condominioId }, order: [['nome', 'ASC']] });
 
   const porFracao = new Map();
+
+  // Contexto Pagamento/Recibo por parcela paga (só informação — a emissão do
+  // recibo faz-se a partir do Pagamento, nunca por parcela individual).
+  const idsParcelas = parcelas.map((p) => p.id);
+  const pagMeta = new Map();
+  const recMeta = new Map();
+  if (idsParcelas.length) {
+    const pagLinks = await PagamentoExtraParcela.findAll({
+      where: { extra_quota_parcela_id: { [Op.in]: idsParcelas } },
+      include: [{ model: Pagamento, as: 'pagamento', attributes: ['id', 'numero_documento', 'estado'] }],
+      order: [['id', 'DESC']],
+    });
+    for (const link of pagLinks) {
+      const p = link.pagamento;
+      if (p && p.estado === 'confirmado' && !pagMeta.has(link.extra_quota_parcela_id)) {
+        pagMeta.set(link.extra_quota_parcela_id, { id: p.id, numero: p.numero_documento });
+      }
+    }
+    const recLinks = await ReciboExtraParcela.findAll({
+      where: { extra_quota_parcela_id: { [Op.in]: idsParcelas } },
+      include: [{ model: Recibo, as: 'recibo', attributes: ['id', 'codigo', 'estado'] }],
+      order: [['id', 'DESC']],
+    });
+    for (const link of recLinks) {
+      const r = link.recibo;
+      if (r && r.estado === 'emitido' && !recMeta.has(link.extra_quota_parcela_id)) {
+        recMeta.set(link.extra_quota_parcela_id, { id: r.id, codigo: r.codigo });
+      }
+    }
+  }
+
   for (const p of parcelas) {
     const key = p.fracao_id;
     if (!porFracao.has(key)) {
       porFracao.set(key, { fracao: p.fracao, parcelas: [], total: 0, pago: 0 });
     }
     const grupo = porFracao.get(key);
-    grupo.parcelas.push(p);
+    const pg = pagMeta.get(p.id) || null;
+    const rc = recMeta.get(p.id) || null;
+    grupo.parcelas.push({
+      ...p.toJSON(),
+      pagamentoNumero: pg ? pg.numero : null,
+      pagamentoId: pg ? pg.id : null,
+      reciboCodigo: rc ? rc.codigo : null,
+      reciboId: rc ? rc.id : null,
+    });
     grupo.total += toCents(p.valor);
     grupo.pago += p.estado === 'paga' ? toCents(p.valor) : 0;
   }
@@ -482,29 +523,8 @@ router.post('/quotas-extra/parcelas/:id/desfazer', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// RECIBO POR PARCELA — parcela paga → RCP (ReciboExtraParcela)
+// RECIBO — a emissão é feita a partir do PAGAMENTO (detalhe do pagamento →
+// "Emitir recibo"), nunca por parcela individual nesta área.
 // ═══════════════════════════════════════════════════════════════════
-router.post('/quotas-extra/parcelas/:id/recibo', async (req, res) => {
-  const parcela = await carregarParcela(req);
-  if (!parcela || !parcela.extra_quota) return res.redirect('/admin/quotas-extra');
-  const extra = parcela.extra_quota;
-  try {
-    if (parcela.estado !== 'paga') {
-      throw new Error('A parcela tem de estar paga para emitir o recibo.');
-    }
-    const { recibo } = await recibosHelper.emitirReciboParcela({
-      parcelaId: parcela.id,
-      condominioId: req.condominioId,
-      userId: req.user.id,
-    });
-    await audit({ userId: req.user.id, acao: 'emitir_recibo_quota_extra', entidade: 'Recibo', entidadeId: recibo.id });
-    req.flash('success_msg', `Recibo ${recibo.codigo} emitido para a parcela.`);
-    return res.redirect(`/admin/quotas/recibos/${recibo.id}/pdf`);
-  } catch (err) {
-    console.error('[recibo-parcela-extra]', err.message);
-    req.flash('error_msg', err.message || 'Erro ao emitir o recibo.');
-  }
-  return res.redirect(`/admin/quotas-extra/${extra.id}`);
-});
 
 module.exports = router;
