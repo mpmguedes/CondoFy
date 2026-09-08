@@ -356,4 +356,12 @@ assert.ok(html.includes('Ver PDF'), 'recibos lista: Ver PDF');
 assert.ok(!html.includes('<th>Pasta</th>') && !html.includes('<th>Drive</th>'), 'recibos lista: sem colunas técnicas');
 assert.ok(html.includes('Voltar aos anos'), 'recibos lista: voltar aos anos');
 
+// 20. Login — acesso por código de convite antes de autenticar (sem registo próprio)
+html = handlebars.compile(ler('auth/login.handlebars'))({});
+assert.ok(html.includes('id="btnConviteLogin"') && html.includes('id="loginConvite"'), 'login: aceitar convite por código');
+assert.ok(html.includes('/aceitar-convite/'), 'login: usa o fluxo de convite existente');
+assert.ok(html.includes('Esqueci-me da palavra-passe'), 'login: recuperação mantida');
+assert.ok(html.includes('name="email"') && html.includes('name="password"') && html.includes('action="/login"'), 'login: autenticação intacta');
+assert.ok(!html.includes('Criar conta') && !html.includes('Registar-se') && !html.includes('Ainda não tem conta?'), 'login: sem registo de conta');
+
 console.log('✓ Todas as vistas da convocatória renderizam corretamente.');

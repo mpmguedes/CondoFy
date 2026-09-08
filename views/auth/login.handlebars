@@ -41,6 +41,29 @@
           <div class="text-center auth-recuperar">
             <a href="/recuperar">Esqueci-me da palavra-passe</a>
           </div>
+
+          <div class="auth-divisor">Tem um código de convite?</div>
+          <div class="auth-opcoes">
+            <button type="button" class="auth-opcao" data-bs-toggle="collapse" data-bs-target="#loginConvite"
+                    aria-expanded="false" aria-controls="loginConvite">
+              <span class="material-symbols-outlined">key</span>
+              <span>
+                <span class="d-block fw-semibold">Entrar com um código</span>
+                <span class="small text-muted">Aceitar convite de condomínio</span>
+              </span>
+              <span class="material-symbols-outlined ms-auto text-muted">expand_more</span>
+            </button>
+            <div class="collapse" id="loginConvite">
+              <div class="auth-colapso">
+                <label class="form-label" for="codigoConviteLogin">Código de convite</label>
+                <div class="input-group">
+                  <input type="text" id="codigoConviteLogin" class="form-control" placeholder="Cole aqui o código/link de convite" autocomplete="off" />
+                  <button type="button" class="btn btn-outline-primary" id="btnConviteLogin">Aceitar</button>
+                </div>
+                <small class="text-muted d-block mt-2">Utilize o código do convite que recebeu por email (link <code>/aceitar-convite/…</code>).</small>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -48,3 +71,20 @@
 
   <footer class="auth-foot">© 2026 GesCondu. Todos os direitos reservados.</footer>
 </div>
+
+<script>
+  // "Com um código": o convite usa o fluxo existente (/aceitar-convite/:token),
+  // disponível antes de autenticar (não existe registo próprio na aplicação).
+  var btnConviteLogin = document.getElementById('btnConviteLogin');
+  if (btnConviteLogin) {
+    btnConviteLogin.addEventListener('click', function () {
+      var campo = document.getElementById('codigoConviteLogin');
+      var codigo = campo ? campo.value.trim() : '';
+      if (!codigo) return;
+      // Aceita também colar o link completo de convite.
+      var m = codigo.match(/\/aceitar-convite\/([A-Za-z0-9_-]+)/);
+      var token = m ? m[1] : codigo;
+      window.location.href = '/aceitar-convite/' + encodeURIComponent(token);
+    });
+  }
+</script>
