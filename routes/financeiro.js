@@ -1,6 +1,7 @@
 const express = require('express');
 const sequelize = require('../config/database');
 const { Op } = require('sequelize');
+const { toDateInput } = require('../helpers/dates');
 const {
   ContaBancaria,
   Categoria,
@@ -983,6 +984,7 @@ router.get('/pagamentos/nova', async (req, res) => {
 
   res.render('admin/pagamentos/form', {
     titulo: 'Registar pagamento',
+    dataHoje: toDateInput(new Date()), // data sugerida: hoje (antes sugeria 01-01 do ano corrente)
     fracoes,
     metodos,
     contas,
