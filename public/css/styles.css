@@ -45,6 +45,9 @@
   --sidebar-active-icon: #0b2140;                   /* icone ativo (paragem escura do login) - 14.0:1 */
   --sidebar-active-accent: var(--c-primary);        /* barra lateral do item ativo - 4.5:1 */
   --sidebar-focus: var(--c-primary);                /* focus visivel no fundo claro */
+  --sidebar-top-bg: var(--nav-bg);                  /* troco esquerdo da barra superior */
+  --sidebar-top-bg-image: var(--nav-bg-image);      /* mesma banda do header (fundo do login) */
+  --sidebar-top-text: var(--nav-text);              /* 8.7:1 sobre a banda */
 
   /* Espaçamento (escala) */
   --sp-1: 4px;
@@ -129,10 +132,14 @@ a:hover { color: var(--c-primary-dark); }
   gap: var(--sp-2);
   height: var(--header-h);
   padding: 0 var(--sp-4);
-  border-bottom: 1px solid var(--c-border);
+  background-color: var(--sidebar-top-bg);
+  background-image: var(--sidebar-top-bg-image);
+  background-attachment: fixed; /* gradiente alinhado com o header: banda continua */
+  color: var(--sidebar-top-text);
+  border-bottom: 1px solid var(--nav-border);
   flex-shrink: 0;
 }
-.sidebar-logo { height: 30px; width: auto; max-width: 180px; object-fit: contain; border-radius: 6px; }
+.sidebar-logo { height: 26px; width: auto; max-width: 180px; object-fit: contain; }
 .sidebar-brand-text { font-weight: 700; font-size: 1.05rem; white-space: nowrap; }
 
 .sidebar-nav { flex: 1; overflow-y: auto; padding: var(--sp-3) var(--sp-2); }
