@@ -1095,7 +1095,7 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
   align-items: center;
   padding: clamp(10px, 2.5vh, 24px) var(--auth-px) clamp(20px, 4vh, 44px);
 }
-.auth-message { max-width: 34rem; }
+.auth-message { max-width: 40rem; }
 .auth-message h2 {
   margin: 0;
   font-size: clamp(2rem, 1.1rem + 1.9vw, 2.75rem); /* ~36-44px desktop */
@@ -1103,7 +1103,7 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
 }
 .auth-message-apoio { margin: 1.1rem 0 0; font-size: 1rem; color: rgba(255, 255, 255, 0.82); max-width: 40ch; }
 
-.auth-panel-col { display: flex; align-items: center; justify-content: flex-end; }
+.auth-panel-col { display: flex; align-items: center; justify-content: center; }
 .auth-panel {
   width: 100%; max-width: var(--auth-panel-w, 480px);
   background: #ffffff; color: #1f2937;
@@ -1129,7 +1129,7 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
 .auth-foot { padding: .9rem 1rem 1.1rem; text-align: center; font-size: .78rem; color: rgba(255, 255, 255, 0.72); }
 
 @media (min-width: 992px) {
-  .auth-stage { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+  .auth-stage { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
 }
 
 @media (max-width: 991.98px) {
