@@ -145,7 +145,7 @@
                     <span class="fw-semibold">{{designacao}}</span>
                     {{#if andar}}<span class="small text-muted ms-1">{{andar}}{{#if porta}} · {{porta}}{{/if}}</span>{{/if}}
                   </td>
-                  <td><input type="text" class="form-control form-control-sm text-end" name="transitados[{{id}}]" value="{{transitadoTxt}}" inputmode="decimal" placeholder="0,00" /></td>
+                  <td><input type="text" class="form-control form-control-sm text-end" name="transitado_{{id}}" value="{{transitadoTxt}}" inputmode="decimal" placeholder="0,00" /></td>
                 </tr>
                 {{else}}
                 <tr><td colspan="2" class="text-center text-muted py-3">Sem frações registadas.</td></tr>

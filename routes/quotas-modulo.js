@@ -294,8 +294,39 @@ function parseTransitado(value) {
   return Math.round(num * 100) / 100;
 }
 
+// Campos por fração no formulário: "transitado_<idFracao>" (nome plano).
+// Não usar "transitados[<id>]": o qs (express.urlencoded extended) converte
+// chaves numéricas contíguas (1,2,3…) num ARRAY e os índices passam a 0-based,
+// o que desalinhava os valores por uma fração (o valor da 1.ª ia para a 2.ª e a
+// última nunca era atualizada).
+const CAMPO_TRANSITADO = /^transitado_(\d+)$/;
+
+function valoresTransitados(body) {
+  const pares = [];
+  if (!body || typeof body !== 'object') return pares;
+
+  for (const [campo, valor] of Object.entries(body)) {
+    const m = CAMPO_TRANSITADO.exec(campo);
+    if (!m) continue;
+    const id = parseInt(m[1], 10);
+    if (!Number.isFinite(id) || id <= 0) continue;
+    pares.push({ id, valor });
+  }
+
+  // Compatibilidade com submissões antigas ("transitados" como objeto id→valor).
+  const legado = body.transitados;
+  if (legado && typeof legado === 'object' && !Array.isArray(legado)) {
+    for (const [id, valor] of Object.entries(legado)) {
+      const numId = parseInt(id, 10);
+      if (!Number.isFinite(numId) || numId <= 0) continue;
+      pares.push({ id: numId, valor });
+    }
+  }
+  return pares;
+}
+
 router.post('/quotas/transitados', async (req, res) => {
-  const { transitados, importar } = req.body;
+  const { importar } = req.body;
   let atualizados = 0;
   try {
     // Apenas frações do condomínio ativo (nunca de outro condomínio).
@@ -319,17 +350,13 @@ router.post('/quotas/transitados', async (req, res) => {
       }
     }
 
-    if (transitados && typeof transitados === 'object') {
-      for (const [id, valor] of Object.entries(transitados)) {
-        const numId = parseInt(id, 10);
-        if (!Number.isFinite(numId)) continue;
-        const fracao = await Fracao.findOne({ where: { id: numId, condominio_id: req.condominioId } });
-        if (!fracao) continue;
-        const num = parseTransitado(valor);
-        if (num === null) continue; // vazio/inválido → não toca no valor guardado
-        await fracao.update({ transitado: num });
-        atualizados++;
-      }
+    for (const { id, valor } of valoresTransitados(req.body)) {
+      const fracao = await Fracao.findOne({ where: { id, condominio_id: req.condominioId } });
+      if (!fracao) continue;
+      const num = parseTransitado(valor);
+      if (num === null) continue; // vazio/inválido → não toca no valor guardado
+      await fracao.update({ transitado: num });
+      atualizados++;
     }
 
     await audit({ userId: req.user.id, acao: 'definir_transitados', entidade: 'Fracao', detalhes: { atualizados } }).catch(() => {});
@@ -1105,6 +1132,8 @@ router.get('/quotas/grelha', (req, res) => res.redirect(`/admin/quotas${req.quer
 module.exports = router;
 // Exposição para testes (parser de valores transitados).
 module.exports.parseTransitado = parseTransitado;
+// Exposição para testes (leitura dos campos por fração do formulário).
+module.exports.valoresTransitados = valoresTransitados;
 // Reutilização pela emissão de recibos por pagamento (financeiro): garante o
 // Documento do recibo na biblioteca e o construtor do PDF.
 module.exports.garantirDocumentoRecibo = garantirDocumentoRecibo;

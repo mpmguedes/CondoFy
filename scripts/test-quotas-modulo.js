@@ -341,6 +341,47 @@ function testTransitadosParser() {
   assert.strictEqual(parseTransitado('abc'), null, 'inválido → não altera');
 }
 
+// ── 3b. Valores transitados — leitura dos campos por fração ──────────
+// Regressão: com nomes "transitados[<id>]" o qs convertia ids contíguos
+// (1,2,3…) num array 0-based e os valores ficavam desalinhados uma fração
+// (o valor da 1.ª ia para a 2.ª e a última nunca era atualizada).
+function testTransitadosCampos() {
+  const { valoresTransitados } = require('../routes/quotas-modulo');
+  const qs = require('qs');
+
+  // Cenário exato do bug: ids contíguos 1, 2, 3.
+  const corpo = qs.parse('transitado_1=10,00&transitado_2=20,00&transitado_3=30,00');
+  assert.deepStrictEqual(
+    valoresTransitados(corpo),
+    [{ id: 1, valor: '10,00' }, { id: 2, valor: '20,00' }, { id: 3, valor: '30,00' }],
+    'ids contíguos mantêm o alinhamento (1→10, 2→20, 3→30)'
+  );
+
+  // O mesmo corpo com os nomes antigos seria interpretado como array 0-based.
+  const antigo = qs.parse('transitados[1]=10,00&transitados[2]=20,00&transitados[3]=30,00');
+  assert.ok(Array.isArray(antigo.transitados), 'qs converte chaves contíguas num array (motivo da correção)');
+  assert.deepStrictEqual(Object.entries(antigo.transitados).map(([k]) => k), ['0', '1', '2'], 'índices do array antigo ficavam 0-based');
+
+  // Ids não contíguos e valores decimais/negativos.
+  assert.deepStrictEqual(
+    valoresTransitados({ transitado_11: '1.500,00', transitado_22: '-25,50' }),
+    [{ id: 11, valor: '1.500,00' }, { id: 22, valor: '-25,50' }],
+    'ids não contíguos com decimais PT'
+  );
+
+  // Campos inválidos são ignorados.
+  assert.deepStrictEqual(valoresTransitados({ transitado_0: '1', transitado_abc: '2', outra_coisa: '3', importar: 'x' }), [], 'campos inválidos ignorados');
+  assert.deepStrictEqual(valoresTransitados(null), [], 'corpo ausente não rebenta');
+
+  // Compatibilidade: submissões antigas em objeto (ids não contíguos) continuam a funcionar.
+  assert.deepStrictEqual(valoresTransitados({ transitados: { 11: '5,00' } }), [{ id: 11, valor: '5,00' }], 'formato antigo (objeto) aceite');
+
+  // A vista usa nomes planos (imunes à conversão em array).
+  const vista = ler('admin/quotas/mapa.handlebars');
+  assert.ok(vista.includes('name="transitado_{{id}}"'), 'modal usa nome plano transitado_<id>');
+  assert.ok(!vista.includes('name="transitados['), 'modal já não usa nomes com índice entre parênteses retos');
+}
+
 function testVistaFormPagamento() {
   const tpl = handlebars.compile(ler('admin/pagamentos/form.handlebars'));
   const html = tpl({ titulo: 'Registar pagamento', fracoes: [], metodos: [], contas: [] });
@@ -658,6 +699,7 @@ async function testAnularRecibo() {
 async function main() {
   testRegras();
   testTransitadosParser();
+  testTransitadosCampos();
   testFIFOPagamentos();
   testVistaMapa();
   testVistaComprovativos();
