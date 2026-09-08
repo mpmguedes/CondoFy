@@ -780,7 +780,7 @@ router.post('/quotas/recibos/:id/anular', async (req, res) => {
 // conta-corrente a partir das obrigações e pagamentos reais da fração.
 router.get('/quotas/conta-corrente', async (req, res) => {
   const cid = req.condominioId;
-  const fracaoId = parseInt(req.query.fracao, 10) || null;
+  let fracaoId = parseInt(req.query.fracao, 10) || null;
   const anoPedido = parseInt(req.query.ano, 10) || null;
 
   let fracoes = [];

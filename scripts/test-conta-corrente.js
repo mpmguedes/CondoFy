@@ -235,10 +235,18 @@ function cenarioIsolamento() {
   assert.ok(!vistaCC.includes('Adicionar crédito'), 'sem ação "Adicionar crédito" nesta fase');
   assert.ok(!vistaCC.includes('Plano de pagamento'), 'sem planos de pagamento nesta fase');
 
-  // Separador Conta-corrente depois de Recibos.
-  const iRecibos = tabs.indexOf('Recibos');
-  const iCC = tabs.indexOf('Conta-corrente');
-  assert.ok(iRecibos !== -1 && iCC !== -1 && iCC > iRecibos, 'Conta-corrente fica depois de Recibos');
+  // Ordem visual dos separadores: Conta-corrente | Recibos | Pagamentos |
+  // Quotas Extra | Quotas (o tab ativo continua por página, sem URL novo).
+  const pCC = tabs.indexOf('Conta-corrente');
+  const pRec = tabs.indexOf('Recibos');
+  const pPag = tabs.indexOf('Pagamentos');
+  const pExtra = tabs.indexOf('Quotas Extra');
+  const pQuotas = tabs.indexOf('grid_view');
+  const asc = [pCC, pRec, pPag, pExtra, pQuotas];
+  assert.ok(asc.every((x) => x !== -1), 'separadores presentes no partial');
+  for (let i = 1; i < asc.length; i++) {
+    assert.ok(asc[i - 1] < asc[i], `separador ${i} na ordem correta`);
+  }
 }
 
 cenarioQuotaSemPagamento();
