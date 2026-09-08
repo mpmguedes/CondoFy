@@ -23,8 +23,6 @@
         <img src="/img/gescondu_pb_hor.svg" alt="GesCondu" class="sidebar-logo" />
       </div>
 
-      {{> _condominio-seletor}}
-
       <nav class="sidebar-nav" aria-label="Navegação principal">
         {{#if isAdmin}}
         <div class="sidebar-group">
@@ -212,14 +210,14 @@
         <button class="icon-btn sidebar-toggle" id="sidebarToggle" type="button" aria-label="Alternar menu">
           <span class="material-symbols-outlined">menu</span>
         </button>
-        <div class="condominio-pill">
+        <a class="condominio-pill" href="/condominios" title="Trocar de condomínio">
+          <span class="material-symbols-outlined">sync</span>
           {{#if condominioAtivo}}
-          <span class="material-symbols-outlined">apartment</span>
           <span class="condominio-pill-text">{{condominioAtivo.designacao}}</span>
           {{else}}
           <span class="condominio-pill-text condominio-pill-vazio">Sem condomínio selecionado</span>
           {{/if}}
-        </div>
+        </a>
         <div class="app-header-spacer"></div>
         <button class="icon-btn" type="button" title="Notificações">
           <span class="material-symbols-outlined">notifications</span>
