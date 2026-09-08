@@ -34,6 +34,7 @@ async function listarCondominios(utilizadorId) {
     id: l.condominio.id,
     designacao: l.condominio.designacao,
     morada: l.condominio.morada,
+    codigo_postal: l.condominio.codigo_postal,
     localidade: l.condominio.localidade,
     role: l.role,
   }));

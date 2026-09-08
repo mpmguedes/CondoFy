@@ -1,78 +1,140 @@
-<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
-  <div>
-    <h1>Os meus condomínios</h1>
-    <p class="subtitle">Escolha o condomínio onde pretende trabalhar</p>
+<div class="condominios-selecao">
+  <div class="text-center mb-4">
+    <h1 class="h2 mb-1 fw-bold">Os seus condomínios</h1>
+    <p class="text-muted mb-0">Onde quer estar hoje? Escolha um condomínio para continuar.</p>
   </div>
-</div>
 
-{{#if lista}}
-<div class="row g-4">
-  {{#each lista}}
-  <div class="col-12 col-md-6 col-xl-4">
-    <div class="card condominio-card h-100">
-      <form action="/condominios/{{id}}/entrar" method="POST" class="condominio-card-link">
-        <div class="card-body d-flex flex-column">
-          <div class="d-flex align-items-start gap-2 mb-2">
-            <span class="material-symbols-outlined condominio-card-icone">apartment</span>
-            <span class="badge condominio-card-papel ms-auto">{{papelLabel}}</span>
+  {{#if lista}}
+  <div class="row g-4 justify-content-center">
+    {{#each lista}}
+    <div class="col-12 col-md-6 col-lg-4">
+      <div class="card cond-card h-100">
+        <form action="/condominios/{{id}}/entrar" method="POST" class="cond-card-form h-100">
+          <div class="card-body p-4 d-flex flex-column">
+            <div class="d-flex align-items-center gap-3 mb-3">
+              <span class="cond-card-icone">
+                <span class="material-symbols-outlined" style="font-size:1.4rem">apartment</span>
+              </span>
+              <span class="cond-papel ms-auto">{{papelLabel}}</span>
+            </div>
+            <h2 class="h5 fw-semibold mb-2">{{designacao}}</h2>
+            {{#if local}}
+            <p class="text-muted small mb-2 d-flex align-items-start gap-1">
+              <span class="material-symbols-outlined" style="font-size:.95rem;margin-top:2px">location_on</span>
+              {{local}}
+            </p>
+            {{else}}
+            <p class="text-muted small mb-2">Sem morada registada</p>
+            {{/if}}
+            <p class="text-muted small mb-4 d-flex align-items-center gap-1">
+              <span class="material-symbols-outlined" style="font-size:.95rem">domain</span>
+              {{fracoes}} {{#if (eq fracoes 1)}}fração{{else}}frações{{/if}}
+            </p>
+            <button type="submit" class="btn btn-primary w-100 mt-auto d-flex align-items-center justify-content-center gap-2">
+              Entrar
+              <span class="material-symbols-outlined" style="font-size:1.05rem">arrow_forward</span>
+            </button>
           </div>
-          <h2 class="h6 mb-1">{{designacao}}</h2>
-          {{#if local}}<p class="text-muted small mb-2"><span class="material-symbols-outlined" style="font-size:.9rem">location_on</span> {{local}}</p>
-          {{else}}<p class="text-muted small mb-2">Sem morada registada</p>{{/if}}
-          <div class="text-muted small mb-3">
-            <span class="material-symbols-outlined" style="font-size:.9rem">domain</span>
-            {{fracoes}} {{#if (eq fracoes 1)}}fração{{else}}frações{{/if}}
+        </form>
+      </div>
+    </div>
+    {{/each}}
+  </div>
+  {{else}}
+  <div class="text-center py-5">
+    <span class="material-symbols-outlined text-muted" style="font-size:3rem">apartment</span>
+    <p class="text-muted mb-4">Ainda não está associado a nenhum condomínio.</p>
+  </div>
+  {{/if}}
+
+  {{#if podeCriar}}
+  <div class="mt-5">
+    <div class="cond-section-label mb-3">Adicionar outro condomínio</div>
+    <div class="row g-3">
+      <div class="col-12 col-md-6">
+        <button type="button" class="card cond-option w-100 text-start p-3 d-flex align-items-center gap-3"
+                data-bs-toggle="collapse" data-bs-target="#addCondominio" aria-expanded="false" aria-controls="addCondominio">
+          <span class="cond-card-icone"><span class="material-symbols-outlined" style="font-size:1.3rem">add_business</span></span>
+          <span>
+            <span class="d-block fw-semibold">+ Criar novo</span>
+            <span class="small text-muted">Registar um novo condomínio</span>
+          </span>
+          <span class="material-symbols-outlined ms-auto text-muted">expand_more</span>
+        </button>
+        <div class="collapse mt-2" id="addCondominio">
+          <div class="card card-body">
+            <form action="/condominios" method="POST" class="row g-3 align-items-end">
+              <div class="col-12">
+                <label class="form-label">Nome do condomínio *</label>
+                <input type="text" class="form-control" name="designacao" required placeholder="Ex: Condomínio Jardim das Flores" />
+              </div>
+              <div class="col-12">
+                <label class="form-label">Morada</label>
+                <input type="text" class="form-control" name="morada" placeholder="Ex: Rua das Flores, 25, 2.º Esq." />
+              </div>
+              <div class="col-6 col-md-4">
+                <label class="form-label">Código postal</label>
+                <input type="text" class="form-control" name="codigo_postal" placeholder="Ex: 1000-000" />
+              </div>
+              <div class="col-6 col-md-8">
+                <label class="form-label">Localidade</label>
+                <input type="text" class="form-control" name="localidade" placeholder="Ex: Lisboa" />
+              </div>
+              <div class="col-12">
+                <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1" style="font-size:1.1rem">add</span>Criar condomínio</button>
+              </div>
+            </form>
           </div>
-          <button type="submit" class="btn btn-primary w-100 mt-auto">
-            <span class="material-symbols-outlined me-1" style="font-size:1.1rem">login</span>Entrar
-            <span class="material-symbols-outlined condominio-card-arrow ms-1">arrow_forward</span>
-          </button>
         </div>
-      </form>
+      </div>
+
+      <div class="col-12 col-md-6">
+        <button type="button" class="card cond-option w-100 text-start p-3 d-flex align-items-center gap-3"
+                data-bs-toggle="collapse" data-bs-target="#addCodigo" aria-expanded="false" aria-controls="addCodigo">
+          <span class="cond-card-icone"><span class="material-symbols-outlined" style="font-size:1.3rem">key</span></span>
+          <span>
+            <span class="d-block fw-semibold">Com um código</span>
+            <span class="small text-muted">Entrar num condomínio com convite</span>
+          </span>
+          <span class="material-symbols-outlined ms-auto text-muted">expand_more</span>
+        </button>
+        <div class="collapse mt-2" id="addCodigo">
+          <div class="card card-body">
+            <label class="form-label">Código de convite</label>
+            <div class="input-group">
+              <input type="text" id="codigoConvite" class="form-control" placeholder="Cole aqui o código/link de convite" autocomplete="off" />
+              <button type="button" class="btn btn-outline-primary" id="btnAceitarConvite">Aceitar convite</button>
+            </div>
+            <small class="text-muted d-block mt-2">Utilize o código do convite que recebeu por email (link <code>/aceitar-convite/…</code>).</small>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
-  {{/each}}
+  {{/if}}
 </div>
-{{else}}
-<div class="alert alert-light border small">Ainda não está associado a nenhum condomínio.</div>
-{{/if}}
-
-{{#if podeCriar}}
-<div class="card mt-4">
-  <div class="card-body">
-    <h2 class="h6 mb-3"><span class="material-symbols-outlined me-1" style="font-size:1.1rem;color:#1a73e8">add_business</span>Criar novo condomínio</h2>
-    <form action="/condominios" method="POST" class="row g-3 align-items-end">
-      <div class="col-12 col-md-4">
-        <label class="form-label">Nome do condomínio *</label>
-        <input type="text" class="form-control" name="designacao" required placeholder="Ex: Condomínio Jardim das Flores" />
-      </div>
-      <div class="col-12 col-md-4">
-        <label class="form-label">Morada</label>
-        <input type="text" class="form-control" name="morada" placeholder="Ex: Rua das Flores, 25, 2.º Esq." />
-      </div>
-      <div class="col-6 col-md-2">
-        <label class="form-label">Código postal</label>
-        <input type="text" class="form-control" name="codigo_postal" placeholder="Ex: 1000-000" />
-      </div>
-      <div class="col-6 col-md-2">
-        <label class="form-label">Localidade</label>
-        <input type="text" class="form-control" name="localidade" placeholder="Ex: Lisboa" />
-      </div>
-      <div class="col-12">
-        <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1" style="font-size:1.1rem">add</span>Criar condomínio</button>
-      </div>
-    </form>
-  </div>
-</div>
-{{/if}}
 
 <script>
   // O cartão é totalmente clicável (clique fora do botão também entra).
-  document.querySelectorAll('.condominio-card-link').forEach(function (form) {
+  document.querySelectorAll('.cond-card-form').forEach(function (form) {
     form.addEventListener('click', function (event) {
       if (event.target.closest('button, a, input, select, textarea, label')) return;
       if (typeof form.requestSubmit === 'function') form.requestSubmit();
       else form.submit();
     });
   });
+
+  // "Com um código": reencaminha para o fluxo de convite existente (o token do
+  // convite é o código). Nenhum endpoint novo é criado.
+  var btnConvite = document.getElementById('btnAceitarConvite');
+  if (btnConvite) {
+    btnConvite.addEventListener('click', function () {
+      var codigo = document.getElementById('codigoConvite').value.trim();
+      if (!codigo) return;
+      // Aceita também colar o link completo de convite.
+      var m = codigo.match(/\/aceitar-convite\/([A-Za-z0-9_-]+)/);
+      var token = m ? m[1] : codigo;
+      window.location.href = '/aceitar-convite/' + encodeURIComponent(token);
+    });
+  }
 </script>

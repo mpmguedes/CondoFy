@@ -35,19 +35,21 @@ router.get('/condominios', eAutenticado, async (req, res) => {
       })
     : [];
   const nFracoes = new Map(contagens.map((r) => [r.condominio_id, Number(r.total)]));
-  const ROTULOS_PAPEL = { admin: 'Administrador', gestor: 'Gestor', leitura: 'Leitura' };
+  const ROTULOS_PAPEL = { admin: 'Administrador de Condomínio', gestor: 'Gestor', leitura: 'Leitura' };
   const lista = meus.map((c) => ({
     ...c,
     fracoes: nFracoes.get(c.id) || 0,
     papelLabel: ROTULOS_PAPEL[c.role] || c.role,
-    local: [c.morada, c.localidade].filter(Boolean).join(' · ') || null,
+    local: [c.morada, c.codigo_postal, c.localidade].filter(Boolean).join(' · ') || null,
   }));
 
+  // Página independente (layout "blank"): sem sidebar nem seletor — o utilizador
+  // ainda não escolheu o condomínio onde quer trabalhar.
   res.render('condominios/meus', {
     titulo: 'Os meus condomínios',
     lista,
     podeCriar: await podeCriar(req),
-    naoSeparado: true,
+    layout: 'blank',
   });
 });
 

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{#if titulo}}{{titulo}} · {{/if}}GesCondu</title>
+  <link rel="icon" type="image/png" href="/img/logo_gescondu.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0,0" rel="stylesheet" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    /* ── Página independente (sem sidebar / sem seletor de condomínio) ── */
+    html, body { height: 100%; }
+    body.blank-page {
+      font-family: 'Roboto', system-ui, -apple-system, sans-serif;
+      background: linear-gradient(160deg, #eef3fb 0%, #ffffff 55%, #f6f1ea 100%);
+      min-height: 100vh;
+    }
+    .blank-shell { min-height: 100vh; display: flex; flex-direction: column; }
+    .blank-topbar {
+      background: #ffffff;
+      border-bottom: 1px solid #e6eaf0;
+      box-shadow: 0 1px 3px rgba(16, 24, 40, .04);
+    }
+    .blank-main { flex: 1 0 auto; }
+    .blank-sessao {
+      display: inline-flex; align-items: center; gap: .35rem;
+      font-size: .8rem; color: #1c2733;
+      background: #eef4ff; border: 1px solid #d4e2ff;
+      border-radius: 999px; padding: .3rem .7rem;
+    }
+    .blank-footer {
+      border-top: 1px solid #e6eaf0;
+      background: #ffffff;
+      font-size: .8rem; color: #6a7380;
+    }
+    /* Cartões de condomínio */
+    .cond-card {
+      border: 1px solid #e6eaf0;
+      border-radius: 1rem;
+      box-shadow: 0 6px 18px rgba(16, 24, 40, .06);
+      transition: box-shadow .15s ease, transform .15s ease;
+    }
+    .cond-card:hover { box-shadow: 0 12px 26px rgba(16, 24, 40, .12); transform: translateY(-2px); }
+    .cond-card-icone {
+      width: 44px; height: 44px; border-radius: .75rem;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: #eaf1ff; color: #1a73e8;
+    }
+    .cond-papel {
+      font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+      color: #5b6472; background: #f1f3f7; border: 1px solid #e2e6ee;
+      border-radius: 999px; padding: .25rem .6rem; white-space: nowrap;
+    }
+    .cond-option {
+      border: 1px dashed #c9d4e4; border-radius: .9rem;
+      background: #ffffff; color: #1c2733;
+      transition: border-color .15s ease, background .15s ease;
+    }
+    .cond-option:hover { border-color: #1a73e8; background: #f6f9ff; }
+    .cond-section-label {
+      font-size: .72rem; font-weight: 700; letter-spacing: .14em;
+      text-transform: uppercase; color: #8a93a0;
+    }
+  </style>
+</head>
+<body class="blank-page">
+  <div class="blank-shell">
+    <header class="blank-topbar py-3">
+      <div class="container d-flex align-items-center justify-content-between gap-3 flex-wrap">
+        <a href="/" class="d-flex align-items-center gap-2 text-decoration-none text-dark">
+          <img src="/img/logo_gescondu.png" alt="GesCondu" height="34" />
+          <span class="fw-bold fs-5">GesCondu</span>
+        </a>
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+          {{#if user}}
+          <span class="blank-sessao">
+            <span class="material-symbols-outlined" style="font-size:1rem">lock</span>
+            Sessão iniciada
+          </span>
+          <span class="fw-semibold small text-dark">{{user.nome}}</span>
+          <a href="/logout" class="btn btn-sm btn-outline-secondary">Sair</a>
+          {{/if}}
+        </div>
+      </div>
+    </header>
+
+    <main class="blank-main d-flex align-items-center py-5" id="conteudo">
+      <div class="container">
+        <div class="blank-flash">
+          {{> _flash}}
+        </div>
+        {{{body}}}
+      </div>
+    </main>
+
+    <footer class="blank-footer py-3 text-center">
+      © 2026 GesCondu. Todos os direitos reservados.
+    </footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
