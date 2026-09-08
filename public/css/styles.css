@@ -234,12 +234,13 @@ a:hover { color: var(--c-primary-dark); }
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 .condominio-pill:hover,
-.condominio-pill:focus { background: var(--nav-surface-strong); border-color: var(--nav-border); color: var(--nav-text); }
+.condominio-pill:focus { background: var(--nav-surface-strong); border-color: var(--nav-border); }
 .condominio-pill:focus-visible { outline: 2px solid var(--nav-focus); outline-offset: 2px; }
 .condominio-pill .material-symbols-outlined { color: var(--nav-active); font-size: 18px; }
-/* Cor do texto sempre branca: nenhuma regra global de link pode apanhar o texto. */
-.condominio-pill .condominio-pill-text { color: var(--nav-text) !important; }
-.condominio-pill-vazio { color: var(--nav-text-muted) !important; }
+/* Nome do condominio: mesma regra que funciona no nome do utilizador (cor fixa,
+   sem depender de heranca nem de regras globais de link). */
+.condominio-pill-text,
+.condominio-pill-vazio { color: #ffffff !important; }
 .condominio-pill-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .user-chip {
