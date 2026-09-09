@@ -1390,6 +1390,21 @@ hr { border-color: var(--c-border); opacity: 1; }
 .dropdown-divider { border-color: var(--c-border); }
 
 .modal-content { background: var(--c-surface); color: var(--c-text); border: 1px solid var(--c-border); }
+
+/* Modal com scroll: o <form> tem de ser o contentor flex para o corpo poder
+   rolar e o rodape (botoes) ficar sempre acessivel, incluindo em mobile. */
+.modal-dialog-scrollable .modal-content > form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+}
+.modal-dialog-scrollable .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .modal-header, .modal-footer { border-color: var(--c-border); }
 .list-group-item { background: var(--c-surface); color: var(--c-text); border-color: var(--c-border); }
 .progress { background: var(--c-surface-2); }

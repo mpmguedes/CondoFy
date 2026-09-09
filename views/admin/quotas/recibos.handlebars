@@ -140,8 +140,9 @@
 {{!-- Modal Emitir recibo --}}
 <style>
   /* Emissão de recibos: conteúdo com scroll vertical dentro do viewport;
-     header/footer do modal permanecem acessíveis (desktop, tablet e mobile). */
-  #modalEmitir .modal-dialog-scrollable .modal-content { max-height: calc(100vh - 3rem); }
+     header/footer do modal permanecem acessíveis (desktop, tablet e mobile).
+     dvh acompanha a barra do browser em mobile (fallback vh). */
+  #modalEmitir .modal-dialog-scrollable .modal-content { max-height: calc(100vh - 3rem); max-height: calc(100dvh - 3rem); }
   #modalEmitir .modal-dialog-scrollable .modal-body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
   /* Itens de Quota Extra no seletor: destaque discreto face aos meses. */
   #modalEmitir .mes-btn-extra { border-color: #a5770f; background: #fdf6e3; }
