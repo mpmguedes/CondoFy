@@ -359,7 +359,6 @@ router.get('/logout', (req, res, next) => {
     if (userId) {
       audit({ userId, acao: 'terminar_sessao', entidade: 'User', entidadeId: userId, detalhes: { email } }).catch(() => {});
     }
-    req.flash('success_msg', 'Sessão terminada com sucesso.');
     res.redirect('/login');
   });
 });
