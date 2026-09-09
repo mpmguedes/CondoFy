@@ -22,6 +22,7 @@ const parciais = {
   '_convocatoria-editor': ler('partials/_convocatoria-editor.handlebars'),
   '_condominio-seletor': ler('partials/_condominio-seletor.handlebars'),
   '_bottom-bar': ler('partials/_bottom-bar.handlebars'),
+  '_tema-toggle': ler('partials/_tema-toggle.handlebars'),
   '_quotas-tabs': ler('partials/_quotas-tabs.handlebars'),
   '_assembleias-tabs': ler('partials/_assembleias-tabs.handlebars'),
 };
