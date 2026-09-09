@@ -4,6 +4,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{#if titulo}}{{titulo}} · {{/if}}GesCondu</title>
+  <script>
+    // Tema (claro/escuro) antes do CSS: evita flash de tema errado.
+    (function () {
+      try {
+        var t = localStorage.getItem('gescondu-tema');
+        if (t !== 'claro' && t !== 'escuro') {
+          t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro';
+        }
+        document.documentElement.setAttribute('data-theme', t === 'escuro' ? 'dark' : 'light');
+      } catch (e) {}
+    })();
+  </script>
   <link rel="icon" type="image/png" href="/img/favicon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -18,7 +30,7 @@
     body.blank-page {
       background: var(--auth-bg);
       background-attachment: fixed;
-      color: #ffffff;
+      color: var(--nav-text);
       margin: 0;
     }
     .blank-flash { width: 100%; max-width: 640px; margin: 0 auto; padding: 1rem 1rem 0; }
@@ -31,5 +43,6 @@
   {{{body}}}
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/js/tema.js?v=20260209a" defer></script>
 </body>
 </html>
