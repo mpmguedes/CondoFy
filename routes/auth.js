@@ -9,6 +9,7 @@ const { createLimiter } = require('../helpers/seguranca');
 const convites = require('../helpers/convites');
 const doisFatores = require('../helpers/doisfatores');
 const { eAutenticado } = require('../helpers/eAdmin');
+const sessao = require('../helpers/sessao');
 
 const router = express.Router();
 
@@ -43,7 +44,31 @@ router.get('/login', (req, res) => {
   if (req.isAuthenticated()) {
     return res.redirect('/');
   }
-  res.render('auth/login');
+  res.render('auth/login', { expirada: req.query.expirada === '1' });
+});
+
+// ── Estado da sessão (cliente: verificação ao acordar de hibernação) ──
+// Nunca renova a sessão; apenas informa se continua válida e quando expira.
+router.get('/sessao/estado', (req, res) => {
+  const autenticado = req.isAuthenticated();
+  if (!autenticado) {
+    return res.json({ autenticado: false, expirada: false, expiraEm: null });
+  }
+  if (sessao.expirada(req.session)) {
+    return sessao.encerrarPorInatividade(req, res);
+  }
+  return res.json({ autenticado: true, expirada: false, expiraEm: sessao.expiraEm(req.session) });
+});
+
+// ── Renovação da sessão ("Continuar sessão") ───────────────────────
+// Só renova se ainda estiver dentro do limite (o middleware já bloqueia as
+// expiradas). Marca a atividade e devolve o novo instante de expiração.
+router.post('/sessao/renovar', (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ autenticado: false, expirada: false, expiraEm: null });
+  }
+  sessao.marcarAtividade(req.session);
+  res.json({ autenticado: true, expirada: false, expiraEm: sessao.expiraEm(req.session) });
 });
 
 // Envia o código 2FA por email (best-effort). Devolve { ok, erro? }.

@@ -294,6 +294,20 @@
   <script src="/js/validacao-fiscal.js?v=20260208a" defer></script>
   {{#if user}}
   <script>
+    // Bloqueio automático da sessão (inatividade). O servidor é a fonte de verdade.
+    window.__SESSAO__ = {
+      expiraEm: {{#if sessaoExpiraEm}}{{sessaoExpiraEm}}{{else}}0{{/if}},
+      avisoMs: {{sessaoAvisoMs}},
+      idleMs: {{sessaoIdleMs}},
+      renovar: '/sessao/renovar',
+      estado: '/sessao/estado',
+      login: '/login?expirada=1'
+    };
+  </script>
+  <script src="/js/sessao.js?v=20260208a" defer></script>
+  {{/if}}
+  {{#if user}}
+  <script>
     // Pill do condomínio: pede confirmação antes de sair para a escolha de condomínio.
     // Sem Bootstrap disponível, o link funciona normalmente (sem modal).
     (function () {

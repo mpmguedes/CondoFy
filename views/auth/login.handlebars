@@ -26,6 +26,12 @@
           <p class="auth-sub">ao seu serviço de condomínio</p>
           <p class="auth-hint">Autentique-se para aceder ao serviço</p>
 
+          {{#if expirada}}
+          <div class="alert alert-warning py-2 px-3 small mb-3" role="status">
+            A sua sessão expirou por inatividade. Inicie sessão novamente.
+          </div>
+          {{/if}}
+
           <form action="/login" method="POST" class="auth-form">
             <div class="mb-3">
               <label for="email" class="form-label">Email</label>

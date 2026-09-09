@@ -355,6 +355,30 @@ a:hover { color: var(--c-primary-dark); }
 .campo-validacao-erro { color: var(--c-error); }
 .form-control.is-valid { border-color: var(--c-success); }
 .form-control.is-invalid { border-color: var(--c-error); }
+
+/* Aviso de expiracao da sessao (canto inferior direito, acima da barra mobile) */
+.sessao-aviso {
+  position: fixed;
+  right: var(--sp-4);
+  bottom: var(--sp-4);
+  z-index: 1080;
+  max-width: 340px;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  box-shadow: var(--elev-3);
+}
+.sessao-aviso-texto { font-size: 0.85rem; color: var(--c-text); }
+.sessao-aviso-acoes { display: flex; gap: var(--sp-2); margin-top: var(--sp-2); flex-wrap: wrap; }
+@media (max-width: 575.98px) {
+  .sessao-aviso {
+    left: var(--sp-3);
+    right: var(--sp-3);
+    bottom: calc(64px + var(--sp-3) + env(safe-area-inset-bottom, 0));
+    max-width: none;
+  }
+}
 .form-check-input:checked { background-color: var(--c-primary); border-color: var(--c-primary); }
 .mb-3 { margin-bottom: var(--sp-4) !important; }
 

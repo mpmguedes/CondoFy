@@ -15,6 +15,7 @@ const tenant = require('./helpers/tenant');
 const drive = require('./helpers/drive');
 const mailer = require('./helpers/mailer');
 const background = require('./helpers/background-jobs');
+const sessao = require('./helpers/sessao');
 const { protegerOrigem } = require('./helpers/seguranca');
 require('./config/passport')(passport);
 
@@ -40,15 +41,19 @@ app.set('view engine', 'handlebars');
 app.set('views', path.join(__dirname, 'views'));
 
 // ── Sessão ─────────────────────────────────────────────────────────
+// Cookie com a mesma duração da inatividade permitida e renovação a cada
+// pedido (rolling): a sessão acompanha a atividade do utilizador e expira
+// sozinha ao fim de SESSION_IDLE_MINUTOS sem pedidos (defeito 2 h).
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'condofy-dev-secret',
     resave: false,
     saveUninitialized: false,
+    rolling: true,
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 dias
+      maxAge: sessao.IDLE_MS,
     },
   })
 );
@@ -66,6 +71,11 @@ app.use(protegerOrigem);
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(flash());
+
+// ── Bloqueio automático por inatividade ────────────────────────────
+// Encerra a sessão (e obriga a novo login) quando passam SESSION_IDLE_MINUTOS
+// sem atividade. Corre antes das rotas e dos ficheiros estáticos não conta.
+app.use(sessao.middlewareSessao);
 
 // ── Variáveis globais nas views ────────────────────────────────────
 app.use(async (req, res, next) => {
@@ -122,6 +132,10 @@ app.use(async (req, res, next) => {
   res.locals.currentYear = new Date().getFullYear();
   res.locals.currentPath = req.path || '';
   res.locals.tarefas = background.resumo();
+  // Dados para o aviso de expiração da sessão no cliente (só quando autenticado).
+  res.locals.sessaoExpiraEm = req.user ? sessao.expiraEm(req.session) : null;
+  res.locals.sessaoAvisoMs = sessao.AVISO_MS;
+  res.locals.sessaoIdleMs = sessao.IDLE_MS;
   next();
 });
 
