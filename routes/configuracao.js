@@ -155,7 +155,8 @@ router.get('/config/armazenamento/:provedor/callback', async (req, res) => {
       redirectUri: redirectUriDe(req, provedor),
       // Âmbito guardado na sessão: 'condominio' liga a conta ao condomínio ativo,
       // 'plataforma' cria a ligação da instalação (usada pelos backups).
-      condominioId: guardado.ambito === 'plataforma' ? undefined : guardado.condominioId,
+      condominioId: guardado.ambito === 'plataforma' ? null : guardado.condominioId,
+      plataforma: guardado.ambito === 'plataforma',
     });
     await storage.inicializar();
     await audit({

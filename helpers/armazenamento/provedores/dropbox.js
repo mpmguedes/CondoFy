@@ -208,9 +208,11 @@ function erroRede(err) {
 
 // ── Tokens: renovação e chamadas autenticadas ───────────────────────
 // Limpa a ligação do condomínio (nunca a chave global do Google Drive).
-async function esquecerLigacao(condominioId) {
+async function esquecerLigacao(condominioId, opcoes = {}) {
+  // Sem condomínio só se limpa quando é explicitamente a ligação da
+  // plataforma (backups): nunca se apaga a ligação de um condomínio por engano.
   const cid = normalizarId(condominioId);
-  if (!cid) return;
+  if (!cid && !opcoes.plataforma) return;
   await ligacoes.limparTokens(PROVEDOR, cid).catch(() => {});
 }
 
@@ -330,10 +332,13 @@ async function identificarConta(accessToken) {
   return null;
 }
 
-// Troca o código de autorização pelos tokens e guarda-os (por condomínio).
-async function trocarCodigo({ code, redirectUri, condominioId }) {
-  const cid = normalizarId(condominioId);
-  if (!cid) throw new Error('condominioId é obrigatório para guardar a ligação ao Dropbox.');
+// Troca o código de autorização pelos tokens e guarda-os.
+// Âmbito: `condominioId` (documentos do condomínio) ou `plataforma: true`
+// (ligação da instalação, usada pelos backups — o dump contém dados de todos
+// os condomínios, por isso nunca usa a conta de um condomínio).
+async function trocarCodigo({ code, redirectUri, condominioId, plataforma = false }) {
+  const cid = plataforma ? null : normalizarId(condominioId);
+  if (!plataforma && !cid) throw new Error('condominioId é obrigatório para guardar a ligação ao Dropbox.');
   if (!code) throw new Error('Código de autorização do Dropbox em falta.');
 
   const c = credenciaisOAuth();
@@ -383,9 +388,10 @@ async function testarLigacao(condominioId) {
 // Desliga o condomínio: revoga o token na Dropbox (melhor esforço) e limpa
 // os tokens guardados. Os ficheiros já existentes na conta Dropbox NÃO são
 // apagados — continuam privados e acessíveis se a conta for ligada de novo.
-async function desligar(condominioId) {
+async function desligar(condominioId, opcoes = {}) {
+  const plataforma = Boolean(opcoes && opcoes.plataforma);
   const cid = normalizarId(condominioId);
-  if (cid) {
+  if (cid || plataforma) {
     try {
       const tokens = await renovarToken(cid).catch(() => null);
       const acesso = tokens && tokens.access_token;
@@ -402,7 +408,7 @@ async function desligar(condominioId) {
       // Sem ligação utilizável: segue para a limpeza dos tokens locais.
     }
   }
-  await esquecerLigacao(cid);
+  await esquecerLigacao(cid, { plataforma });
 }
 
 // ── Pastas (caminhos) ───────────────────────────────────────────────
