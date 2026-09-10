@@ -92,7 +92,7 @@
     {{#if (gt nVencidas 0)}}<div><span class="text-danger">🔴 {{nVencidas}} quotas em atraso</span> · <a href="/admin/quotas">Ver quotas</a></div>{{/if}}
     {{#if (gt sistema.filaErros 0)}}<div><span class="text-warning">🟠 {{sistema.filaErros}} emails com erro</span> · <a href="/admin/emails?estado=erros">Ver emails</a></div>{{/if}}
     {{#if (gt nPagFornecedorPendentes 0)}}<div><span class="text-warning">🟠 {{nPagFornecedorPendentes}} pagamentos a fornecedores pendentes</span> · <a href="/admin/fornecedores">Ver</a></div>{{/if}}
-    {{#unless sistema.driveLigado}}<div><span class="text-muted">⚪ Google Drive desligado</span> · <a href="/admin/config#google-drive">Ligar</a></div>{{/unless}}
+    {{#unless sistema.driveLigado}}<div><span class="text-muted">⚪ Google Drive desligado</span> · <a href="/admin/config/armazenamento#google-drive">Ligar</a></div>{{/unless}}
     {{#unless sistema.smtp}}<div><span class="text-muted">⚪ Email/SMTP não configurado</span> · <a href="/admin/emails#smtp">Configurar</a></div>{{/unless}}
   </div>
 </div></div>

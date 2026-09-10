@@ -23,8 +23,9 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
 });
 
-router.get('/config', async (req, res) => {
-  const condominio = await getCondominio({ force: true, id: req.condominioId });
+// Dados de armazenamento/backups (Google Drive, pasta de destino, último backup),
+// usados pelo separador "Armazenamento e Backups".
+async function dadosArmazenamento() {
   const driveEstado = await drive.estadoLigacao();
 
   const [ultimoBackup, raizDbRaw, backupsDb] = await Promise.all([
@@ -37,13 +38,29 @@ router.get('/config', async (req, res) => {
   const raizDb = String(raizDbRaw || '').trim();
   const raizEfetiva = raizDb || (process.env.GOOGLE_DRIVE_ROOT_FOLDER || '').trim() || 'GesCondu';
 
-  res.render('admin/configuracao/index', {
-    titulo: 'Configuração do condomínio',
-    condominio: condominio ? condominio.toJSON() : null,
+  return {
     driveLigado: driveEstado.ligado,
     driveEstado,
     driveOpcoes: { pastaRaiz: raizEfetiva, backupsDrive: String(backupsDb) !== '0' },
     ultimoBackup: ultimoBackup ? ultimoBackup.toJSON() : null,
+  };
+}
+
+// ── Separador 1: Configuração do Condomínio ────────────────────────
+router.get('/config', async (req, res) => {
+  const condominio = await getCondominio({ force: true, id: req.condominioId });
+
+  res.render('admin/configuracao/index', {
+    titulo: 'Configuração do Condomínio',
+    condominio: condominio ? condominio.toJSON() : null,
+  });
+});
+
+// ── Separador 2: Armazenamento e Backups ───────────────────────────
+router.get('/config/armazenamento', async (req, res) => {
+  res.render('admin/configuracao/armazenamento', {
+    titulo: 'Armazenamento e Backups',
+    ...(await dadosArmazenamento()),
   });
 });
 
@@ -136,11 +153,11 @@ router.get('/config/drive/ligar', async (req, res) => {
   const estado = await drive.estadoLigacao();
   if (!estado.ativo) {
     req.flash('error_msg', 'A integração Google Drive está desativada. Ative GOOGLE_DRIVE_ENABLED=true no .env.');
-    return res.redirect('/admin/config#google-drive');
+    return res.redirect('/admin/config/armazenamento#google-drive');
   }
   if (!estado.credenciais || !estado.redirectUriDefinido) {
     req.flash('error_msg', 'Faltam as credenciais do Google (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e GOOGLE_REDIRECT_URI) no .env.');
-    return res.redirect('/admin/config#google-drive');
+    return res.redirect('/admin/config/armazenamento#google-drive');
   }
 
   const redirectUri = drive.obterRedirectUri(req);
@@ -159,15 +176,15 @@ router.get('/config/drive/callback', async (req, res) => {
 
   if (error) {
     req.flash('error_msg', 'Autorização no Google não concluída. Se recusou o acesso, pode voltar a tentar.');
-    return res.redirect('/admin/config#google-drive');
+    return res.redirect('/admin/config/armazenamento#google-drive');
   }
   if (!code) {
     req.flash('error_msg', 'Não foi recebido o código de autorização do Google.');
-    return res.redirect('/admin/config#google-drive');
+    return res.redirect('/admin/config/armazenamento#google-drive');
   }
   if (esperado && state !== esperado) {
     req.flash('error_msg', 'Pedido de autorização inválido (estado não confere). Tente novamente.');
-    return res.redirect('/admin/config#google-drive');
+    return res.redirect('/admin/config/armazenamento#google-drive');
   }
 
   const redirectUri = drive.obterRedirectUri(req);
@@ -180,7 +197,7 @@ router.get('/config/drive/callback', async (req, res) => {
     console.error('[drive] erro no callback OAuth:', err.message);
     req.flash('error_msg', `Não foi possível ligar o Google Drive: ${err.message}`);
   }
-  res.redirect('/admin/config#google-drive');
+  res.redirect('/admin/config/armazenamento#google-drive');
 });
 
 // Passo Desligar — remove a conta e os tokens (os ficheiros no Drive não
@@ -194,7 +211,7 @@ router.post('/config/drive/desligar', async (req, res) => {
     console.error('[drive] erro ao desligar:', err.message);
     req.flash('error_msg', `Não foi possível desligar o Google Drive: ${err.message}`);
   }
-  res.redirect('/admin/config#google-drive');
+  res.redirect('/admin/config/armazenamento#google-drive');
 });
 
 // Guarda opções de armazenamento: pasta raiz do Drive e backups automáticos.
@@ -210,7 +227,7 @@ router.post('/config/drive/opcoes', async (req, res) => {
     console.error('[drive] opções:', err.message);
     req.flash('error_msg', 'Não foi possível guardar as opções de armazenamento.');
   }
-  res.redirect('/admin/config#google-drive');
+  res.redirect('/admin/config/armazenamento#google-drive');
 });
 
 // Testa a ligação atual ao Google Drive (sem criar pastas nem enviar nada).
@@ -222,14 +239,14 @@ router.post('/config/drive/testar', async (req, res) => {
   } else {
     req.flash('error_msg', `✕ Não foi possível testar o Google Drive: ${r.erro}`);
   }
-  res.redirect('/admin/config#google-drive');
+  res.redirect('/admin/config/armazenamento#google-drive');
 });
 
 // Cria a estrutura de pastas no Google Drive (do condomínio ativo).
 router.post('/config/drive/estrutura', async (req, res) => {
   if (!drive.isConfigured()) {
     req.flash('error_msg', 'Google Drive não está ligado — ligue a conta Google primeiro.');
-    return res.redirect('/admin/config#google-drive');
+    return res.redirect('/admin/config/armazenamento#google-drive');
   }
   try {
     // Multi-condomínio: a árvore é <raiz>/<Condomínio>/<ano>/{tipos}; a pasta
@@ -242,7 +259,7 @@ router.post('/config/drive/estrutura', async (req, res) => {
     console.error(err);
     req.flash('error_msg', err.message);
   }
-  res.redirect('/admin/config#google-drive');
+  res.redirect('/admin/config/armazenamento#google-drive');
 });
 
 module.exports = router;

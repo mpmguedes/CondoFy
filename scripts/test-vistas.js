@@ -25,6 +25,7 @@ const parciais = {
   '_tema-toggle': ler('partials/_tema-toggle.handlebars'),
   '_quotas-tabs': ler('partials/_quotas-tabs.handlebars'),
   '_assembleias-tabs': ler('partials/_assembleias-tabs.handlebars'),
+  '_config-tabs': ler('partials/_config-tabs.handlebars'),
 };
 Object.keys(parciais).forEach((k) => handlebars.registerPartial(k, parciais[k]));
 
@@ -110,8 +111,11 @@ html = layout({ body: 'ok', user: contexto.user, isAdmin: true, condominio: cont
 assert.ok(!html.includes('title="Nova Convocatória"'), 'sidebar: Convocatórias já não é entrada independente (tab em Assembleias)');
 assert.ok(html.includes('href="/admin/assembleias"'), 'sidebar: Assembleias presente');
 
-// 6. Página de Configuração — estados do Google Drive
+// 6. Configurações — separadores: Configuração do Condomínio | Armazenamento e Backups | Documentos e Automações
 const config = handlebars.compile(ler('admin/configuracao/index.handlebars'));
+const armazenamento = handlebars.compile(ler('admin/configuracao/armazenamento.handlebars'));
+const automacoesVista = handlebars.compile(ler('admin/configuracao/automacoes.handlebars'));
+
 const condConfig = {
   designacao: 'Condomínio Teste',
   administracao_nome: 'Gestão, Lda.',
@@ -128,25 +132,67 @@ const condConfig = {
   identidade_visual: 'designacao',
   logotipo: null,
 };
-const ctxConfig = { titulo: 'Configuração do condomínio', condominio: condConfig };
+const ctxConfig = { titulo: 'Configuração do Condomínio', condominio: condConfig };
 
-html = config({ ...ctxConfig, driveLigado: false, driveEstado: { ativo: true, credenciais: true, ligado: false, viaEnv: false, conta: null, redirectUriDefinido: true }, driveOpcoes: { pastaRaiz: 'CondoFy', backupsDrive: true }, ultimoBackup: null });
-assert.ok(html.includes('Ligar Google Drive'), 'config: botão ligar quando não ligado');
-assert.ok(html.includes('Desligado'), 'config: estado desligado');
+// 6.1 Separador 1 — Configuração do Condomínio (campos intactos, sem conteúdo de outras áreas)
+html = config(ctxConfig);
+assert.ok(html.includes('class="config-tabs"'), 'config: barra de separadores presente');
+assert.ok(html.includes('class="config-tab active" href="/admin/config"'), 'config: separador 1 ativo por defeito');
+assert.ok(html.includes('aria-current="page"'), 'config: estado ativo assinalado');
+assert.ok(html.includes('href="/admin/config/armazenamento"'), 'config: separador de armazenamento presente');
+assert.ok(html.includes('href="/admin/config/automacoes"'), 'config: separador de automações presente');
+assert.ok(html.includes('name="designacao"') && html.includes('name="iban_principal"'), 'config: campos do condomínio mantidos');
+assert.ok(html.includes('data-validar="nif"') && html.includes('data-validar="iban"'), 'config: validação fiscal mantida');
+assert.ok(html.includes('enctype="multipart/form-data"'), 'config: upload de logótipo mantido');
+assert.ok(!html.includes('Ligar Google Drive'), 'config: Google Drive saiu do separador 1');
+assert.ok(!html.includes('Pasta de destino no Google Drive'), 'config: opções de armazenamento saíram do separador 1');
+assert.ok(!html.includes('modalDesligarDrive'), 'config: modal do Drive saiu do separador 1');
+assert.ok(!html.includes('Configurar automações'), 'config: botão antigo das automações removido');
+assert.ok(!html.includes('href="/admin/emails"'), 'config: atalho de emails acompanhou as automações');
 
-html = config({ ...ctxConfig, driveLigado: true, driveEstado: { ativo: true, credenciais: true, ligado: true, viaEnv: false, conta: 'admin@gmail.com', redirectUriDefinido: true }, driveOpcoes: { pastaRaiz: 'CondoFy', backupsDrive: true }, ultimoBackup: null });
-assert.ok(html.includes('admin@gmail.com'), 'config: conta ligada visível');
-assert.ok(html.includes('Desligar'), 'config: botão desligar');
-assert.ok(html.includes('Abrir Google Drive'), 'config: abrir drive');
-assert.ok(html.includes('Testar ligação'), 'config: testar ligação');
-assert.ok(html.includes('Pasta de destino no Google Drive'), 'config: opções de armazenamento');
+// 6.2 Separador 2 — Armazenamento e Backups (mesmos estados do Drive, sem duplicação)
+const ctxArm = { titulo: 'Armazenamento e Backups' };
+const driveBase = { ativo: true, credenciais: true, ligado: false, viaEnv: false, conta: null, redirectUriDefinido: true };
+const opcoesBase = { pastaRaiz: 'CondoFy', backupsDrive: true };
 
-html = config({ ...ctxConfig, driveLigado: true, driveEstado: { ativo: true, credenciais: true, ligado: true, viaEnv: true, conta: null, redirectUriDefinido: true }, driveOpcoes: { pastaRaiz: 'CondoFy', backupsDrive: true }, ultimoBackup: { data: new Date(), tipo: 'diario', estado: 'concluido', erro: null } });
-assert.ok(html.includes('via .env'), 'config: estado legado via .env');
-assert.ok(html.includes('Último backup'), 'config: último backup visível');
+html = armazenamento({ ...ctxArm, driveLigado: false, driveEstado: driveBase, driveOpcoes: opcoesBase, ultimoBackup: null });
+assert.ok(html.includes('class="config-tab active" href="/admin/config/armazenamento"'), 'armazenamento: separador 2 ativo');
+assert.ok(html.includes('Ligar Google Drive'), 'armazenamento: botão ligar quando não ligado');
+assert.ok(html.includes('Desligado'), 'armazenamento: estado desligado');
+assert.ok(html.includes('id="google-drive"'), 'armazenamento: âncora google-drive preservada');
 
-html = config({ ...ctxConfig, driveLigado: false, driveEstado: { ativo: false, credenciais: false, ligado: false, viaEnv: false, conta: null, redirectUriDefinido: false }, driveOpcoes: { pastaRaiz: 'CondoFy', backupsDrive: true }, ultimoBackup: null });
-assert.ok(html.includes('Desativado'), 'config: integração desativada');
+html = armazenamento({ ...ctxArm, driveLigado: true, driveEstado: { ...driveBase, ligado: true, conta: 'admin@gmail.com' }, driveOpcoes: opcoesBase, ultimoBackup: null });
+assert.ok(html.includes('admin@gmail.com'), 'armazenamento: conta ligada visível');
+assert.ok(html.includes('Desligar'), 'armazenamento: botão desligar');
+assert.ok(html.includes('Abrir Google Drive'), 'armazenamento: abrir drive');
+assert.ok(html.includes('Testar ligação'), 'armazenamento: testar ligação');
+assert.ok(html.includes('Pasta de destino no Google Drive'), 'armazenamento: opções de armazenamento');
+assert.ok(html.includes('name="pasta_raiz"') && html.includes('name="backups_drive"'), 'armazenamento: campos de pasta e backups');
+assert.ok(html.includes('action="/admin/config/drive/opcoes"'), 'armazenamento: rota de gravação das opções');
+assert.ok(html.includes('modalDesligarDrive'), 'armazenamento: modal de confirmação');
+
+html = armazenamento({ ...ctxArm, driveLigado: true, driveEstado: { ...driveBase, ligado: true, viaEnv: true }, driveOpcoes: opcoesBase, ultimoBackup: { data: new Date(), tipo: 'diario', estado: 'concluido', erro: null } });
+assert.ok(html.includes('via .env'), 'armazenamento: estado legado via .env');
+assert.ok(html.includes('Último backup'), 'armazenamento: último backup visível');
+
+html = armazenamento({ ...ctxArm, driveLigado: false, driveEstado: { ativo: false, credenciais: false, ligado: false, viaEnv: false, conta: null, redirectUriDefinido: false }, driveOpcoes: opcoesBase, ultimoBackup: null });
+assert.ok(html.includes('Desativado'), 'armazenamento: integração desativada');
+
+// 6.3 Separador 3 — Documentos e Automações (área antes escondida atrás de um botão)
+const gruposAuto = [{
+  rotulo: 'Assembleias',
+  tipos: [{ tipo: 'convocatoria', rotulo: 'Convocatória de assembleia', drive: false, email: true, automatico: false }],
+}];
+html = automacoesVista({ titulo: 'Documentos e Automações', grupos: gruposAuto });
+assert.ok(html.includes('class="config-tab active" href="/admin/config/automacoes"'), 'automações: separador 3 ativo');
+assert.ok(html.includes('name="auto_convocatoria_drive"'), 'automações: interruptor Drive mantido');
+assert.ok(html.includes('name="auto_convocatoria_email"'), 'automações: interruptor Email mantido');
+assert.ok(html.includes('name="auto_convocatoria_automatico"'), 'automações: interruptor automático mantido');
+assert.ok(html.includes('action="/admin/config/automacoes"'), 'automações: rota de gravação mantida');
+assert.ok(html.includes('Convocatória de assembleia'), 'automações: tipos de documento listados');
+assert.ok(!html.includes('arrow_back'), 'automações: botão antigo de retrocesso removido');
+assert.ok(html.includes('href="/admin/emails"'), 'automações: atalho para a central de emails');
+
 
 // 7. Central de Emails (vista)
 const emailsView = handlebars.compile(ler('admin/emails/index.handlebars'));

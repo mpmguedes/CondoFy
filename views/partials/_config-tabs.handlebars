@@ -1,0 +1,14 @@
+{{!-- Tabs superiores do módulo Configuração — SEMPRE no topo da página (antes do título).
+     Ordem visual: Configuração do Condomínio | Armazenamento e Backups | Documentos e Automações.
+     Recebe "ativo": condominio | armazenamento | automacoes. --}}
+<nav class="config-tabs" aria-label="Secções das configurações">
+  <a class="config-tab {{#if (eq ativo 'condominio')}}active{{/if}}" href="/admin/config" {{#if (eq ativo 'condominio')}}aria-current="page"{{/if}}>
+    <span class="material-symbols-outlined" aria-hidden="true">apartment</span>Configuração do Condomínio
+  </a>
+  <a class="config-tab {{#if (eq ativo 'armazenamento')}}active{{/if}}" href="/admin/config/armazenamento" {{#if (eq ativo 'armazenamento')}}aria-current="page"{{/if}}>
+    <span class="material-symbols-outlined" aria-hidden="true">cloud_upload</span>Armazenamento e Backups
+  </a>
+  <a class="config-tab {{#if (eq ativo 'automacoes')}}active{{/if}}" href="/admin/config/automacoes" {{#if (eq ativo 'automacoes')}}aria-current="page"{{/if}}>
+    <span class="material-symbols-outlined" aria-hidden="true">description</span>Documentos e Automações
+  </a>
+</nav>
