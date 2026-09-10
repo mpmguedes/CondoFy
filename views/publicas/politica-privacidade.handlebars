@@ -1,0 +1,273 @@
+{{#> _pagina-legal tituloPagina="Política de Privacidade" descricaoPagina="Como o GesCondu trata os dados pessoais dos condomínios, dos condóminos e de quem utiliza a plataforma."}}
+
+<p>
+  Esta Política de Privacidade explica que dados pessoais são tratados na aplicação <strong>GesCondu</strong>,
+  para que finalidades, com que fundamentos, durante quanto tempo e que direitos podem ser exercidos.
+  Aplica-se a todas as pessoas que utilizam a plataforma ou cujos dados sejam nela tratados, designadamente
+  administradores e gestores de condomínios, condóminos, fornecedores e destinatários de comunicações.
+</p>
+
+<h2>1. Âmbito e identificação da aplicação</h2>
+<p>
+  O GesCondu é uma aplicação de gestão de condomínios, disponível em
+  {{#if legal.dominio}}<strong>{{legal.dominio}}</strong>{{else}}<strong>[CONFIGURAR DOMÍNIO DA APLICAÇÃO]</strong>{{/if}},
+  com funcionalidades de gestão de frações e condóminos, finanças (quotas, pagamentos, recibos e despesas),
+  orçamento, assembleias e deliberações, gestão documental, comunicações e gestão de fornecedores.
+</p>
+
+<h2>2. Responsável pelo tratamento</h2>
+<p>
+  {{#if legal.entidade}}
+    O responsável pelo tratamento dos dados pessoais tratados na aplicação é <strong>{{legal.entidade}}</strong>{{#if legal.nif}}, com o NIF/NIPC {{legal.nif}}{{/if}}{{#if legal.morada}}, com o endereço {{legal.morada}}{{/if}}.
+  {{else}}
+    O responsável pelo tratamento é <strong>[CONFIGURAR IDENTIFICAÇÃO DO RESPONSÁVEL PELO TRATAMENTO]</strong>.
+  {{/if}}
+</p>
+<p>
+  As administrações de condomínios que utilizam a plataforma são responsáveis pelos dados que introduzem e gerem
+  no âmbito do respetivo condomínio (condóminos, frações, quotas, pagamentos, documentos e comunicações desse
+  condomínio). O GesCondu trata esses dados por conta e segundo as instruções de quem os introduz, prestando o
+  serviço de gestão e disponibilizando as funcionalidades da aplicação.
+</p>
+
+<h2>3. Dados pessoais tratados</h2>
+<p>
+  Dependendo das funcionalidades utilizadas em cada condomínio e das permissões de cada utilizador, o GesCondu pode
+  tratar as seguintes categorias de dados pessoais e dados relacionados com a gestão do condomínio:
+</p>
+<ul>
+  <li><strong>Identificação e contacto:</strong> nome, endereço de email, número de telefone e, quando aplicável, outros contactos.</li>
+  <li><strong>Conta e segurança:</strong> identificadores de conta, palavras-passe (guardadas apenas em forma irreversível, cifrada por função de derivação), códigos de dois fatores, registos de sessão e registos de auditoria das ações na aplicação.</li>
+  <li><strong>Dados das frações e do condomínio:</strong> frações, permilagens, propriedade, arrendamento, ocupação e outros dados necessários à gestão.</li>
+  <li><strong>Dados financeiros do condomínio:</strong> quotas, pagamentos, recibos, despesas, orçamento, saldos e comprovativos.</li>
+  <li><strong>Assembleias e deliberações:</strong> convocatórias, atas, agenda, presenças, representações, deliberações e votações.</li>
+  <li><strong>Documentos:</strong> ficheiros associados ao condomínio, respetivos metadados e registos de acesso.</li>
+  <li><strong>Fornecedores:</strong> identificação, contactos, serviços prestados, faturas e comprovativos de pagamento.</li>
+  <li><strong>Comunicações:</strong> mensagens enviadas pela aplicação (por exemplo avisos de quota, convocatórias e recibos), estado de entrega e histórico associado.</li>
+  <li><strong>Dados técnicos:</strong> endereço IP, data e hora de acesso, registo de ações na aplicação e informação necessária ao funcionamento, à segurança e à resolução de problemas.</li>
+</ul>
+<p>
+  O GesCondu não tem como finalidade tratar categorias especiais de dados pessoais. Se informações dessa natureza
+  forem introduzidas em documentos ou em campos livres, o tratamento dessa informação é da responsabilidade de quem
+  a introduz.
+</p>
+
+<h2>4. Contas, autenticação e segurança de acesso</h2>
+<ul>
+  <li>O acesso à aplicação é feito com <strong>conta própria</strong> (email e palavra-passe). A autenticação é processada pelo próprio GesCondu; não é utilizada autenticação de terceiros para iniciar sessão.</li>
+  <li>O GesCondu disponibiliza <strong>verificação em dois passos (2FA)</strong> por aplicação de códigos temporários, podendo ser utilizada pelas contas que a ativarem.</li>
+  <li>As contas são criadas por convite ou por administradores autenticados. Há funcionalidades de recuperação e alteração de palavra-passe, com recurso a email.</li>
+  <li>As sessões são encerradas ao fim de um período de inatividade configurável (por omissão, 2 horas) e as ações relevantes ficam registadas em auditoria.</li>
+  <li>Em nenhum momento o GesCondu tem acesso a palavras-passe de outros serviços do utilizador.</li>
+</ul>
+
+<h2>5. Integração com o Google Drive</h2>
+<p>
+  O GesCondu pode ser ligado a uma conta Google para armazenar e gerir os documentos dos condomínios e para guardar
+  cópias de segurança. Esta integração funciona apenas depois de uma <strong>autorização explícita</strong> dada por
+  quem administra a instalação, através do processo de autorização da Google.
+</p>
+<h3>5.1 Permissões utilizadas</h3>
+<ul>
+  <li>O GesCondu pede apenas a permissão <code>https://www.googleapis.com/auth/drive.file</code> — acesso aos ficheiros criados ou abertos pela própria aplicação.</li>
+  <li>Não são solicitadas permissões de acesso a todo o Google Drive nem permissões para além das necessárias às funcionalidades documentais descritas nesta política.</li>
+</ul>
+<h3>5.2 Utilização dos dados</h3>
+<ul>
+  <li>Os dados acedidos através do Google Drive são utilizados <strong>exclusivamente</strong> para fornecer e melhorar as funcionalidades de armazenamento, organização e gestão documental, e para a criação de cópias de segurança da instalação.</li>
+  <li>Os documentos ficam associados ao condomínio a que pertencem e o acesso é feito pela própria aplicação, depois de verificar a sessão, o condomínio ativo e as permissões do utilizador.</li>
+  <li>O GesCondu <strong>não</strong> utiliza dados do Google Drive para publicidade, criação de perfis de comportamento, venda ou cedência a terceiros.</li>
+  <li>O GesCondu <strong>não</strong> permite que pessoas leiam os conteúdos do Google Drive, exceto se o utilizador o pedir expressamente, se for necessário por motivos de segurança ou para cumprir obrigações legais, ou no âmbito da utilização das funcionalidades pedidas.</li>
+  <li>Nenhum dado do Google Drive é transferido para terceiros, exceto quando necessário para prestar o serviço, para cumprir a lei, ou com o consentimento do titular.</li>
+  <li>O uso que o GesCondu faz de informação recebida das APIs da Google está em conformidade com a
+    <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Política de Dados de Utilizador dos Serviços API da Google</a>,
+    incluindo os requisitos de utilização limitada (<em>Limited Use</em>).</li>
+</ul>
+<h3>5.3 Revogação do acesso</h3>
+<ul>
+  <li>A autorização pode ser retirada a qualquer momento na conta Google, em
+    <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">Acesso de terceiros com acesso à conta</a>,
+    ou desligada na aplicação, em Configurações → Armazenamento e Backups.</li>
+  <li>Se a autorização for revogada, as funcionalidades que dependem do Google Drive (consulta de documentos
+    guardados no Drive, novos carregamentos e cópias de segurança para o Drive) deixam de funcionar até a conta ser
+    autorizada novamente.</li>
+  <li>A revogação do acesso na Google <strong>não apaga</strong> os documentos existentes na conta Google: os
+    ficheiros permanecem na conta do utilizador e continuam a poder ser consultados diretamente no Google Drive.</li>
+</ul>
+
+<h2>6. Outras integrações de armazenamento</h2>
+<p>
+  Além do Google Drive, a instalação pode ser ligada, de forma opcional e individual, a outros serviços de
+  armazenamento — <strong>Dropbox</strong> ou <strong>Microsoft OneDrive</strong> — para guardar os documentos dos
+  condomínios. Também aqui:
+</p>
+<ul>
+  <li>a ligação só é criada depois de autorizada explicitamente por quem administra a instalação;</li>
+  <li>são usadas apenas as permissões necessárias ao armazenamento documental (para o OneDrive, <code>offline_access</code> e <code>Files.ReadWrite</code>);</li>
+  <li>os ficheiros ficam em conta controlada pela entidade que utiliza a aplicação, associados ao respetivo condomínio;</li>
+  <li>o acesso pode ser retirado a qualquer momento na conta do serviço ou na aplicação;</li>
+  <li>os dados obtidos por esta via não são utilizados para publicidade nem vendidos a terceiros.</li>
+</ul>
+
+<h2>7. Finalidades do tratamento</h2>
+<ul>
+  <li>Gestão de condomínios, de frações e de condóminos.</li>
+  <li>Gestão financeira: quotas, avisos, pagamentos, comprovativos, recibos, despesas, orçamento e conta-corrente.</li>
+  <li>Emissão, registo e envio de documentos e comunicações aos condóminos e a fornecedores.</li>
+  <li>Gestão documental: guardar, organizar, consultar e disponibilizar documentos do condomínio, com registo de acessos.</li>
+  <li>Convocatórias, assembleias, deliberações e votações.</li>
+  <li>Gestão de fornecedores, despesas e comprovativos associados.</li>
+  <li>Autenticação, controlo de acessos, segurança da informação e prevenção de utilizações indevidas.</li>
+  <li>Funcionamento, manutenção, diagnóstico de erros e melhoria da plataforma.</li>
+  <li>Cumprimento de obrigações legais aplicáveis à gestão dos condomínios e à atividade da entidade que a utiliza.</li>
+</ul>
+
+<h2>8. Fundamentos de licitude</h2>
+<p>Consoante o caso, o tratamento dos dados assenta em:</p>
+<ul>
+  <li><strong>execução de contrato</strong> ou de diligências prévias, para a prestação do serviço de gestão do condomínio;</li>
+  <li><strong>cumprimento de obrigações legais</strong> a que a entidade que utiliza a aplicação esteja sujeita (por exemplo, obrigações fiscais e de conservação de documentos);</li>
+  <li><strong>interesses legítimos</strong> na segurança da aplicação, na prevenção de abusos e na correta gestão documental e financeira;</li>
+  <li><strong>consentimento</strong> quando exigido, por exemplo para a autorização de integrações com serviços externos ou para determinadas comunicações — revogável a qualquer momento, sem afetar os tratamentos já efetuados.</li>
+</ul>
+
+<h2>9. Partilha de dados e prestadores de serviços</h2>
+<p>
+  O GesCondu não vende dados pessoais nem os disponibiliza para publicidade. Os dados podem ser tratados por
+  prestadores de serviços estritamente necessários ao funcionamento da plataforma:
+</p>
+<ul>
+  <li><strong>Google</strong> — Google Drive, quando essa integração é autorizada, e serviço de tipografia web (<em>webfonts</em>) utilizado na apresentação das páginas;</li>
+  <li><strong>Dropbox</strong> e <strong>Microsoft</strong> (OneDrive) — apenas quando a instalação é ligada a esses serviços;</li>
+  <li><strong>Servidor de correio eletrónico (SMTP)</strong> configurado pela entidade que utiliza a aplicação, para envio de comunicações, avisos e recuperação de palavra-passe;</li>
+  <li><strong>Cloudflare</strong> — proteção e encaminhamento do tráfego de rede do sítio;</li>
+  <li><strong>jsDelivr</strong> — rede de distribuição de conteúdos utilizada para servir bibliotecas de interface.</li>
+</ul>
+<p>
+  A informação de acesso (por exemplo o registo de abertura de um documento) pode ser disponibilizada às pessoas
+  com permissões de gestão do condomínio respetivo, no âmbito das suas funções, e às autoridades quando
+  legalmente exigido.
+</p>
+
+<h2>10. Transferências para fora do Espaço Económico Europeu</h2>
+<p>
+  Alguns dos serviços externos referidos (por exemplo Google, Dropbox, Microsoft ou Cloudflare) podem tratar dados
+  fora do Espaço Económico Europeu. Nesses casos, o tratamento é enquadrado pelas garantias e mecanismos de
+  transferência adotados por esses fornecedores, nos termos das respetivas políticas e das condições contratuais
+  aplicáveis.
+</p>
+
+<h2>11. Prazo de conservação</h2>
+<ul>
+  <li>Os dados são conservados enquanto a conta e o condomínio estiverem ativos e pelo período necessário à
+    prestação do serviço de gestão.</li>
+  <li>Após o fim da utilização, os dados podem ser conservados pelo período exigido para cumprimento de obrigações
+    legais (designadamente fiscais, contabilísticas e de conservação de documentos) e para o exercício de direitos.</li>
+  <li>As cópias de segurança da instalação são conservadas de acordo com o ciclo definido na configuração
+    (por omissão: cópias diárias 30 dias, semanais 90 dias e mensais 365 dias).</li>
+  <li>Os registos de auditoria e de segurança são conservados pelo período necessário às finalidades de segurança,
+    prevenção de abusos e cumprimento de obrigações legais.</li>
+</ul>
+
+<h2>12. Segurança da informação</h2>
+<p>
+  O GesCondu adota medidas técnicas e organizativas adequadas para proteger os dados pessoais, entre as quais:
+</p>
+<ul>
+  <li>autenticação com palavra-passe guardada de forma irreversível e possibilidade de verificação em dois passos;</li>
+  <li>controlo de acessos por perfil e isolamento dos dados entre condomínios — cada utilizador acede apenas aos
+    dados do condomínio em que tem permissões;</li>
+  <li>acesso aos documentos exclusivamente através da aplicação, depois de verificada a sessão, o condomínio ativo e
+    as permissões do utilizador, sem criação de ligações públicas;</li>
+  <li>proteção das comunicações por HTTPS e proteção técnica das credenciais de acesso aos serviços externos,
+    guardadas de forma cifrada;</li>
+  <li>encerramento automático das sessões inativas, registo de auditoria das ações relevantes e cópias de segurança
+    periódicas;</li>
+  <li>procedimentos de atualização e correção da aplicação que incluem testes automáticos.</li>
+</ul>
+<p>
+  Nenhum sistema é totalmente imune a incidentes. Em caso de violação de dados pessoais suscetível de implicar um
+  risco elevado para os titulares, serão adotadas as medidas de notificação e comunicação exigidas pela legislação
+  aplicável.
+</p>
+
+<h2>13. Direitos dos titulares dos dados</h2>
+<p>Nos termos do Regulamento Geral sobre a Proteção de Dados, pode exercer os seguintes direitos:</p>
+<ul>
+  <li><strong>acesso</strong> aos dados pessoais que lhe digam respeito e às informações sobre o tratamento;</li>
+  <li><strong>retificação</strong> de dados inexatos ou incompletos;</li>
+  <li><strong>apagamento</strong> dos dados, quando aplicável;</li>
+  <li><strong>limitação</strong> do tratamento;</li>
+  <li><strong>oposição</strong> ao tratamento, quando aplicável;</li>
+  <li><strong>portabilidade</strong> dos dados, quando aplicável;</li>
+  <li><strong>retirada do consentimento</strong> a qualquer momento, quando o tratamento se baseie no consentimento;</li>
+  <li>não ficar sujeito a decisões individuais automatizadas com efeitos significativos — o GesCondu não realiza
+    decisões dessa natureza.</li>
+</ul>
+<p>
+  Os pedidos devem ser dirigidos ao responsável pelo tratamento identificado na secção 2, através dos contactos
+  indicados na secção 16. Se considerar que o tratamento não cumpre a lei, pode apresentar reclamação à autoridade
+  de controlo competente em Portugal, a
+  <a href="https://www.cnpd.pt" target="_blank" rel="noopener noreferrer">Comissão Nacional de Proteção de Dados (CNPD)</a>.
+</p>
+
+<h2>14. Cookies e armazenamento local do navegador</h2>
+<p>
+  O GesCondu utiliza apenas os mecanismos necessários ao seu funcionamento. <strong>Não são utilizados cookies de
+  publicidade, de redes sociais ou de análise de tráfego</strong>.
+</p>
+<ul>
+  <li><strong>Cookie de sessão:</strong> identifica a sessão autenticada, com as marcas <code>HttpOnly</code> e
+    <code>SameSite=Lax</code>, e expira ao fim do período de inatividade configurado (2 horas por omissão). Sem ele
+    não é possível manter a sessão iniciada.</li>
+  <li><strong>Preferência de tema (Claro/Escuro):</strong> guardada no armazenamento local do navegador
+    (<code>gescondu-tema</code>).</li>
+  <li><strong>Preferência de tamanho de texto:</strong> guardada no armazenamento local do navegador
+    (<code>gescondu-fonte</code>) como funcionalidade de acessibilidade.</li>
+  <li><strong>Estado da interface:</strong> informação temporária necessária ao funcionamento das páginas (por
+    exemplo, avisos de sucesso ou erro da operação anterior).</li>
+</ul>
+<p>
+  Estas preferências existem apenas no navegador do utilizador, não são utilizadas para o identificar ou perfilhar e
+  podem ser apagadas nas definições do próprio navegador (o que repõe as opções predefinidas).
+</p>
+
+<h2>15. Serviços externos e respetivas políticas</h2>
+<p>
+  Quando a aplicação interage com serviços externos, esses serviços podem tratar dados de acordo com as suas
+  próprias políticas de privacidade, que recomendamos a consulta:
+</p>
+<ul>
+  <li><a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Política de Privacidade da Google</a>
+    e <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Política de Dados de Utilizador dos Serviços API</a>;</li>
+  <li><a href="https://www.dropbox.com/privacy" target="_blank" rel="noopener noreferrer">Política de Privacidade da Dropbox</a>;</li>
+  <li><a href="https://privacy.microsoft.com/privacystatement" target="_blank" rel="noopener noreferrer">Declaração de Privacidade da Microsoft</a>;</li>
+  <li><a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">Política de Privacidade da Cloudflare</a>.</li>
+</ul>
+<p>
+  As ligações externas são disponibilizadas apenas para consulta. A informação aí disponível é da responsabilidade
+  dos respetivos prestadores.
+</p>
+
+<h2>16. Alterações a esta política</h2>
+<p>
+  Esta política pode ser atualizada para refletir alterações na aplicação, nas funcionalidades utilizadas ou nas
+  obrigações legais aplicáveis. A versão em vigor é sempre a que estiver publicada nesta página, com indicação da
+  versão e da data de atualização no topo. Recomenda-se a consulta periódica desta página.
+</p>
+
+<h2>17. Contacto</h2>
+<p>
+  Para exercer os seus direitos, colocar questões sobre privacidade ou apresentar uma reclamação sobre o tratamento
+  de dados pessoais, utilize os seguintes contactos:
+</p>
+<ul>
+  <li><strong>Responsável pelo tratamento:</strong>
+    {{#if legal.entidade}}{{legal.entidade}}{{else}}[CONFIGURAR IDENTIFICAÇÃO DO RESPONSÁVEL PELO TRATAMENTO]{{/if}}</li>
+  <li><strong>Email:</strong>
+    {{#if legal.email}}<a href="mailto:{{legal.email}}">{{legal.email}}</a>{{else}}[CONFIGURAR EMAIL DE CONTACTO]{{/if}}</li>
+  {{#if legal.telefone}}<li><strong>Telefone:</strong> {{legal.telefone}}</li>{{/if}}
+  {{#if legal.morada}}<li><strong>Endereço:</strong> {{legal.morada}}</li>{{/if}}
+</ul>
+
+{{/_pagina-legal}}

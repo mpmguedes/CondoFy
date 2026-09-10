@@ -163,6 +163,9 @@ app.use((req, res, next) => {
 app.use('/', require('./routes'));
 app.use('/', require('./routes/condominios'));
 app.use('/', require('./routes/auth'));
+// Páginas legais públicas (Política de Privacidade e Termos de Utilização):
+// sem sessão, sem condomínio ativo e sem permissões — ver routes/publicas.js.
+app.use('/', require('./routes/publicas'));
 app.use('/admin', require('./routes/global-admin'));
 app.use('/admin', require('./routes/admin'));
 const rotasQuotasModulo = require('./routes/quotas-modulo');

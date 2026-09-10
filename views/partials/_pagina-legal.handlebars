@@ -1,0 +1,80 @@
+{{!-- Casca das páginas legais públicas (Política de Privacidade e Termos de
+     Utilização), usada com o layout `blank`. Reaproveita as classes .auth-* já
+     existentes (mesma estrutura da entrada e da escolha de condomínio) e usa
+     apenas os tokens do tema, pelo que funciona no tema Claro/Escuro e
+     acompanha a escala de texto definida em Configurações → aparência.
+
+     O conteúdo de cada página é passado como bloco:
+       {{#> _pagina-legal tituloPagina="…" descricaoPagina="…"}} … {{/_pagina-legal}}
+     O bloco é opcional (o teste de vistas renderiza o parcial isolado). --}}
+<style>
+  /* Estilos próprios destas páginas (não alteram o CSS global): só a largura de
+     leitura, o ritmo dos títulos e o aspeto dos parágrafos. */
+  .pagina-legal .auth-panel { max-width: 900px; }
+  .pagina-legal .auth-panel-inner { min-height: 0; }
+  .pagina-legal h1 { font-size: 1.6rem; font-weight: 700; color: var(--c-text); margin: 0 0 .3rem; }
+  .pagina-legal .legal-meta { font-size: .8rem; color: var(--c-text-muted); margin: 0 0 1.4rem; }
+  .pagina-legal h2 { font-size: 1.05rem; font-weight: 600; color: var(--c-text); margin: 1.7rem 0 .55rem; }
+  .pagina-legal h3 { font-size: .95rem; font-weight: 600; color: var(--c-text); margin: 1.1rem 0 .35rem; }
+  .pagina-legal p, .pagina-legal li { font-size: .93rem; line-height: 1.65; color: var(--c-text); }
+  .pagina-legal ul, .pagina-legal ol { padding-left: 1.2rem; margin: 0 0 .8rem; }
+  .pagina-legal li { margin-bottom: .3rem; }
+  .pagina-legal a { color: var(--c-link); }
+  .pagina-legal a:hover { color: var(--c-link-hover); text-decoration: underline; }
+  .pagina-legal code { font-size: .85em; }
+  .pagina-legal .legal-nota { background: var(--c-surface-2); border: 1px solid var(--c-border); border-radius: 10px; padding: .8rem .9rem; margin: 0 0 1rem; }
+  .pagina-legal .legal-nota p { margin: 0; font-size: .88rem; }
+  .pagina-legal .legal-aviso { font-weight: 600; }
+  .pagina-legal .legal-voltar { white-space: nowrap; }
+  .pagina-legal .legal-rodape-ligacoes a { color: inherit; text-decoration: underline; }
+  .pagina-legal .legal-rodape-ligacoes a:hover { color: var(--nav-text); }
+</style>
+
+<div class="auth-page pagina-legal">
+  <header class="auth-head">
+    <a class="auth-logo" href="/" title="GesCondu">
+      <img src="/img/gescondu-icon-invertido-escuro.png" alt="GesCondu" />
+    </a>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      {{> _tema-toggle}}
+      <a href="/" class="btn btn-sm btn-outline-light legal-voltar">
+        <span class="material-symbols-outlined" style="font-size:1rem" aria-hidden="true">arrow_back</span>
+        Voltar ao GesCondu
+      </a>
+    </div>
+  </header>
+
+  <div class="auth-stage">
+    <div class="auth-panel">
+      <div class="auth-panel-inner">
+        <h1>{{tituloPagina}}</h1>
+        {{#if descricaoPagina}}<p class="legal-meta">{{descricaoPagina}}</p>{{/if}}
+        <p class="legal-meta">
+          Versão {{legal.versao}}{{#if legal.atualizado}} · Última atualização: {{legal.atualizado}}{{/if}}
+          {{#if legal.dominio}} · {{legal.dominio}}{{/if}}
+        </p>
+
+        {{#if legal.emFalta.length}}
+        <div class="alert alert-warning" role="status">
+          <span class="legal-aviso">Elementos por configurar nesta instalação.</span>
+          Os campos abaixo aparecem identificados com marcadores até serem definidos no ambiente
+          (ficheiro <code>.env</code> do servidor). Não foi inventada nenhuma informação legal.
+          <ul class="mb-0 mt-2">
+            {{#each legal.emFalta}}
+            <li>{{this.rotulo}} — variável <code>{{this.variavel}}</code></li>
+            {{/each}}
+          </ul>
+        </div>
+        {{/if}}
+
+        {{#if @partial-block}}{{> @partial-block}}{{/if}}
+      </div>
+    </div>
+  </div>
+
+  <footer class="auth-foot legal-rodape-ligacoes">
+    © 2026 GesCondu. Todos os direitos reservados. ·
+    <a href="/politica-privacidade">Política de Privacidade</a> ·
+    <a href="/termos">Termos de Utilização</a>
+  </footer>
+</div>
