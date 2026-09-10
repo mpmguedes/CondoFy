@@ -41,11 +41,44 @@ services:
       SMTP_TLS: ${SMTP_TLS:-true}
       SMTP_FROM: ${SMTP_FROM:-noreply@condominio.pt}
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Condomínio}
+      # ── Cifragem das credenciais de armazenamento (OBRIGATÓRIA) ──
+      # Sem esta variável o processo não lê nem guarda tokens OAuth e a
+      # interface mostra "Credenciais de armazenamento indisponíveis".
+      # O valor tem de ser o MESMO que cifrou os tokens já guardados; numa
+      # primeira configuração, gere um com:
+      #   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+      # Defina-a no .env que acompanha ESTE ficheiro: o .env da aplicação não
+      # entra no contentor (está no .dockerignore).
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      ENCRYPTION_KEY_OLD: ${ENCRYPTION_KEY_OLD:-}
+      # ── Serviço de armazenamento por omissão ──
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-google_drive}
+      # ── Google Drive ──
       GOOGLE_DRIVE_ENABLED: ${GOOGLE_DRIVE_ENABLED:-false}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      # Exatamente o Redirect URI registado na consola Google, terminado em
+      # /admin/config/drive/callback
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
       GOOGLE_REFRESH_TOKEN: ${GOOGLE_REFRESH_TOKEN:-}
       GOOGLE_DRIVE_ROOT_FOLDER: ${GOOGLE_DRIVE_ROOT_FOLDER:-}
+      # ── Dropbox (opcional) ──
+      DROPBOX_ENABLED: ${DROPBOX_ENABLED:-false}
+      DROPBOX_APP_KEY: ${DROPBOX_APP_KEY:-}
+      DROPBOX_APP_SECRET: ${DROPBOX_APP_SECRET:-}
+      DROPBOX_REDIRECT_URI: ${DROPBOX_REDIRECT_URI:-}
+      DROPBOX_ROOT_FOLDER: ${DROPBOX_ROOT_FOLDER:-}
+      # ── Microsoft OneDrive (opcional) ──
+      ONEDRIVE_ENABLED: ${ONEDRIVE_ENABLED:-false}
+      ONEDRIVE_CLIENT_ID: ${ONEDRIVE_CLIENT_ID:-}
+      ONEDRIVE_CLIENT_SECRET: ${ONEDRIVE_CLIENT_SECRET:-}
+      ONEDRIVE_TENANT: ${ONEDRIVE_TENANT:-common}
+      ONEDRIVE_REDIRECT_URI: ${ONEDRIVE_REDIRECT_URI:-}
+      ONEDRIVE_ROOT_FOLDER: ${ONEDRIVE_ROOT_FOLDER:-}
+      # ── Links temporários de documentos (emails a quem não tem conta) ──
+      DOC_LINK_SECRET: ${DOC_LINK_SECRET:-}
+      DOC_LINK_TTL_HOURS: ${DOC_LINK_TTL_HOURS:-168}
+      DOC_LINK_TEMPORARIO: ${DOC_LINK_TEMPORARIO:-1}
     ports:
       - "${APP_PORT:-3000}:3000"
     volumes:

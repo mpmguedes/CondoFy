@@ -174,8 +174,56 @@ condomínios), por isso:
 * a arquitetura não impede vários destinos no futuro (basta permitir uma lista
   em `storage:backup`).
 
-## 2.2 Configuração: o `.env` é só técnico
+## 2.2 Recuperação em produção: a chave não chega ao processo
 
+**Sintoma:** em Configurações → Armazenamento e Backups aparece
+“Credenciais de armazenamento indisponíveis. A chave de cifragem das
+credenciais (ENCRYPTION_KEY) não está configurada nesta instalação.”, e os
+serviços aparecem como não ligados.
+
+**O que aconteceu (e o que NÃO aconteceu):** nada foi apagado. A aplicação está a
+recusar-se a usar credenciais não cifradas — é a proteção, não perda de dados.
+Os tokens continuam na tabela `configuracoes`; só deixam de ser utilizados
+enquanto o processo Node não tiver `ENCRYPTION_KEY`.
+
+**Onde a variável tem de estar (depende de como o serviço corre):**
+
+* **Docker Compose** — o contentor **não recebe o `.env` da aplicação**
+  (está no `.dockerignore`) e o serviço só recebe as variáveis listadas em
+  `environment:`. Ponha `ENCRYPTION_KEY` no `.env` que acompanha o
+  `docker-compose.yml` (o Compose usa-o para substituir `${ENCRYPTION_KEY}`) e
+  confirme que a variável está na lista do serviço no `docker-compose.yml`
+  (já lá está nas versões atuais). Depois: `docker compose up -d app`.
+* **systemd** — a variável tem de chegar ao processo pelo próprio unit:
+  `Environment=ENCRYPTION_KEY=…` ou `EnvironmentFile=/etc/gescondu.env`
+  (com `ENCRYPTION_KEY=…` nesse ficheiro). Rodar a aplicação com
+  `node app.js` a partir de outra pasta ou com outro `WorkingDirectory` também
+  impede o `dotenv` de encontrar o `.env` (o `app.js` carrega `./.env`).
+  Depois: `sudo systemctl daemon-reload && sudo systemctl restart gescondu`.
+
+**Diagnóstico (somente leitura, nunca mostra segredos):**
+
+```
+node scripts/diagnostico-credenciais.js
+# ou, em Docker:
+docker compose exec app node scripts/diagnostico-credenciais.js
+```
+
+Diz se o processo vê a chave (e a impressão `kid` dela), em que formato estão os
+tokens guardados (texto simples / `enc:v1` com o `kid`) e o que fazer:
+
+* **tokens em texto simples** → definir uma chave agora é seguro (serve só para
+  os cifrar); a ligação é recuperada no arranque, **sem voltar a autorizar**;
+* **tokens já cifrados** → é obrigatório usar a **mesma** chave que os cifrou.
+  Se a antiga existir, coloque-a em `ENCRYPTION_KEY_OLD` e corra
+  `node scripts/migrar-tokens-cifrados.js` (recifra com a chave atual). Nunca
+  gere uma chave nova neste caso, e nunca apague nem religue contas.
+
+**Verificação final:** abrir Configurações → Armazenamento e Backups e confirmar
+que o Google Drive volta a “Ligado”; se necessário, `[Testar ligação]`. Nenhuma
+ligação é criada, alterada ou removida por este processo.
+
+## 2.3 Configuração: o `.env` é só técnico
 As credenciais dos fornecedores (client id/secret da aplicação GesCondu,
 redirect URIs e chaves técnicas) pertencem à **instalação** e vivem no `.env`
 (variáveis documentadas em `.env.example`): `GOOGLE_*`, `DROPBOX_*`,
