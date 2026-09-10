@@ -16,6 +16,7 @@ const P = {
   CIANO: '#00D0F8',
   VERDE: '#20C83F',
   FUNDO: '#F5F9FC', // fundo muito claro (blocos)
+  SUPERFICIE: '#FFFFFF', // página e cartões (branco)
   ZEBRA: '#F7FAFC', // linhas alternadas
   BORDA: '#D7E4ED',
   BORDA_FORTE: '#B9CEDD',

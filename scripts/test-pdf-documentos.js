@@ -113,7 +113,16 @@ function perto(hex, alvo) {
 
 function guardar(nome, buffer) {
   fs.mkdirSync(SAIDA, { recursive: true });
-  fs.writeFileSync(path.join(SAIDA, nome), buffer);
+  const destino = path.join(SAIDA, nome);
+  try {
+    fs.writeFileSync(destino, buffer);
+  } catch (e) {
+    // Ficheiro aberto noutro programa (visualizador de PDF): grava ao lado para
+    // não fazer falhar a suite de testes.
+    const alternativa = destino.replace(/\.pdf$/i, '-novo.pdf');
+    fs.writeFileSync(alternativa, buffer);
+    console.warn('aviso: ' + nome + ' está aberto noutro programa; gravado em ' + path.basename(alternativa));
+  }
 }
 
 const CONDOMINIO = {
@@ -199,6 +208,10 @@ async function testes() {
   assert.ok(cores.some((c) => perto(c, '#D7E4ED')), 'usa a borda #D7E4ED');
   assert.ok(!cores.some((c) => perto(c, '#2563eb')), 'não usa o azul antigo #2563eb');
   assert.ok(!cores.some((c) => perto(c, '#16a34a')), 'não usa o verde antigo #16a34a');
+  // Regressão: nenhum fundo preto (o preto da página tornava o documento ilegível).
+  assert.ok(!cores.some((c) => perto(c, '#000000')), 'não pinta fundos pretos (documento claro e legível)');
+  // A página é pintada de branco (primeiro preenchimento de cada página).
+  assert.ok(cores.some((c) => perto(c, '#FFFFFF')), 'página/cartões em branco');
   guardar('recibo-RCP-2026-0046.pdf', pdf);
 
   // ── 2. Recibo com quotas extraordinárias ───────────────────────────
