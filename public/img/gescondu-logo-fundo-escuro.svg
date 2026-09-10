@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">GesCondu</title>
+  <desc id="desc">Logótipo GesCondu para fundos escuros, com símbolo de gestão digital e escudo de segurança.</desc>
+  <defs>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#28D5F2"/>
+      <stop offset="1" stop-color="#079BCB"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#61F36B"/>
+      <stop offset="1" stop-color="#19C957"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Symbol: transparent background, designed for navy/black surfaces -->
+  <g transform="translate(34 34)">
+    <!-- open house / app frame -->
+    <path d="M40 122 144 42a38 38 0 0 1 47 0l104 80v139a31 31 0 0 1-31 31H71a31 31 0 0 1-31-31Z" fill="none" stroke="url(#cyan)" stroke-width="25" stroke-linejoin="round"/>
+    <!-- green connection accent -->
+    <path d="M252 106c49-42 88-41 117-5 26 33 13 74-36 108" fill="none" stroke="url(#green)" stroke-width="24" stroke-linecap="round"/>
+    <!-- document card -->
+    <rect x="79" y="128" width="177" height="137" rx="18" fill="#fff" stroke="#BCEFFF" stroke-width="5"/>
+    <circle cx="108" cy="164" r="10" fill="#27DB62"/>
+    <circle cx="108" cy="196" r="10" fill="#16B9E3"/>
+    <circle cx="108" cy="228" r="10" fill="#16B9E3"/>
+    <rect x="128" y="158" width="93" height="12" rx="6" fill="#16B9E3"/>
+    <rect x="128" y="190" width="78" height="12" rx="6" fill="#B8EAF4"/>
+    <rect x="128" y="222" width="61" height="12" rx="6" fill="#B8EAF4"/>
+    <!-- security shield -->
+    <path d="M224 209 286 184l62 25v47c0 45-28 72-62 88-34-16-62-43-62-88Z" fill="url(#cyan)" stroke="#fff" stroke-width="8" stroke-linejoin="round"/>
+    <path d="m252 253 21 20 42-45" fill="none" stroke="#fff" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Exact wordmark, white for dark backgrounds -->
+  <g transform="translate(410 126)">
+    <text x="0" y="92" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="92" font-weight="750" letter-spacing="-3" fill="#FFFFFF">Ges<tspan fill="#21C8EC">Condu</tspan></text>
+    <rect x="4" y="116" width="500" height="7" rx="3.5" fill="url(#green)"/>
+    <text x="0" y="159" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" letter-spacing="0.2" fill="#C8E8F1">Gestão simples, organizada e transparente.</text>
+  </g>
+</svg>
