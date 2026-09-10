@@ -14,7 +14,7 @@ const { compor: comporEmail, nomeFicheiro: nomeFicheiroEmail } = require('../hel
 const { getCondominio, clearCondominioCache } = require('../helpers/condominio');
 const { PASTAS_BASE: PASTAS, mapaPastas, pastasPersonalizadas, novaKey, resolverPastaDocumento } = require('../helpers/documento-pastas');
 // Acesso autorizado a documentos (Utilizador → Condomínio → Documento).
-const { autorizarAcessoDocumento, servirDocumento, responderRecusa, urlParaEmail, urlInterna } = require('../helpers/documentos-acesso');
+const { autorizarAcessoDocumento, servirDocumento, verificarDocumento, responderRecusa, urlParaEmail, urlInterna } = require('../helpers/documentos-acesso');
 
 const router = express.Router();
 // Isolamento: todas as operações usam o condomínio ativo (sessão validada).
@@ -548,6 +548,13 @@ router.get('/documentos/:id/ficheiro', async (req, res) => {
   if (!autorizacao.ok) {
     // 401 sem sessão / 403 de outro condomínio ou sem permissão / 404 inexistente.
     return responderRecusa(res, autorizacao);
+  }
+  // Verificação prévia (a interface pergunta antes de abrir): não entrega o
+  // ficheiro, só confirma que está acessível — permite avisar dentro da
+  // aplicação, em vez de abrir uma janela com a mensagem de erro.
+  if (req.query.verificacao === '1') {
+    const r = await verificarDocumento({ documento: autorizacao.documento, req });
+    return res.json({ ok: r.ok, mensagem: r.ok ? null : r.mensagem, motivo: r.ok ? null : r.motivo });
   }
   const disposicao = req.query.descarregar === '1' ? 'attachment' : 'inline';
   const servido = await servirDocumento({ documento: autorizacao.documento, req, res, disposicao, via: 'sessao' });

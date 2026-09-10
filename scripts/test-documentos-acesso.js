@@ -454,10 +454,55 @@ async function testarNomeComCaracteresEspeciais() {
   }
 }
 
+// ── 6.3 Verificação prévia do documento (aviso na aplicação) ─────────
+// A interface pergunta antes de abrir (?verificacao=1) para poder mostrar a
+// explicação numa caixa da aplicação, em vez de abrir uma janela com texto
+// simples que obrigava o utilizador a voltar atrás. A verificação NÃO pode
+// descarregar o ficheiro nem ter regras de acesso diferentes das do serviço.
+async function testarVerificacaoPrevia() {
+  const reqAdminCtx = { user: { id: 1 }, isAuthenticated: () => true, condominioId: 1, papelCondominio: 'admin' };
+  const reqCondominoCtx = { user: { id: 3 }, isAuthenticated: () => true, condominioId: 1, papelCondominio: 'condomino' };
+  const doc = documentos.get(10);
+  const abrirReal = storage.abrirFluxo;
+  try {
+    let destruido = false;
+    storage.abrirFluxo = async () => ({
+      fluxo: { destroy: () => { destruido = true; }, on() {}, pipe() {} },
+      tamanho: 10,
+      nome: 'x.pdf',
+    });
+    const ok = await acesso.verificarDocumento({ documento: doc, req: reqAdminCtx });
+    assert.strictEqual(ok.ok, true, 'verificação confirma que o documento está acessível');
+    assert.strictEqual(destruido, true, 'o fluxo é fechado logo após a verificação (não entrega o ficheiro)');
+
+    storage.abrirFluxo = async () => { throw new Error('invalid_grant: Token has been expired or revoked.'); };
+    const falha = await acesso.verificarDocumento({ documento: doc, req: reqAdminCtx });
+    assert.strictEqual(falha.ok, false, 'verificação falha quando o fornecedor não entrega');
+    assert.strictEqual(acesso.HTTP[falha.motivo], 502, 'mesma classificação de erro do serviço (502)');
+    assert.match(falha.mensagem, /autorização da conta foi revogada/i, 'mensagem útil para quem gere');
+
+    const paraCondomino = await acesso.verificarDocumento({ documento: doc, req: reqCondominoCtx });
+    assert.strictEqual(paraCondomino.mensagem, acesso.MENSAGENS[acesso.MOTIVO.LIGACAO_INVALIDA], 'condómino recebe a mensagem genérica');
+
+    const semFicheiro = await acesso.verificarDocumento({ documento: { id: 999, condominio_id: 1, drive_file_id: null }, req: reqAdminCtx });
+    assert.strictEqual(semFicheiro.motivo, acesso.MOTIVO.SEM_FICHEIRO, 'documento sem ficheiro não é verificável');
+
+    storage.abrirFluxo = async () => { throw new Error('File not found: 1AbC.'); };
+    const ligadoAntes = storage.isConfiguredPara;
+    storage.isConfiguredPara = async () => false;
+    const desligado = await acesso.verificarDocumento({ documento: doc, req: reqAdminCtx });
+    assert.strictEqual(acesso.HTTP[desligado.motivo], 503, 'serviço desligado → 503 (aviso "Contacte o administrador")');
+    storage.isConfiguredPara = ligadoAntes;
+  } finally {
+    storage.abrirFluxo = abrirReal;
+  }
+}
+
 (async () => {
   await testarAutorizacao();
   await testarServicoDeFicheiro();
   await testarNomeComCaracteresEspeciais();
+  await testarVerificacaoPrevia();
   testarLinks();
   testarLinksTemporarios();
   testarCodigosHttp();

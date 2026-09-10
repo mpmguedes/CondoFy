@@ -106,13 +106,17 @@ document.querySelectorAll('.alert-dismissible').forEach((a) => {
   var titulo = document.getElementById('modalConfirmarTitulo');
   var mensagem = document.getElementById('modalConfirmarMensagem');
   var botaoAcao = document.getElementById('modalConfirmarAcao');
+  var botaoCancelar = document.getElementById('modalConfirmarCancelar');
   var cabecalho = document.getElementById('modalConfirmarCabecalho');
 
+  // `modo`: 'confirmar' (Cancelar + Confirmar) ou 'aviso' (só Fechar).
   function mostrar(opcoes) {
-    if (titulo) titulo.textContent = opcoes.titulo || 'Confirmar';
-    if (mensagem) mensagem.textContent = opcoes.mensagem || 'Tem a certeza?';
+    var aviso = opcoes.modo === 'aviso';
+    if (titulo) titulo.textContent = opcoes.titulo || (aviso ? 'Aviso' : 'Confirmar');
+    if (mensagem) mensagem.textContent = opcoes.mensagem || (aviso ? '' : 'Tem a certeza?');
+    if (botaoCancelar) botaoCancelar.classList.toggle('d-none', aviso);
     if (botaoAcao) {
-      botaoAcao.textContent = opcoes.acao || 'Confirmar';
+      botaoAcao.textContent = opcoes.acao || (aviso ? 'Fechar' : 'Confirmar');
       botaoAcao.className = 'btn ' + (opcoes.perigo ? 'btn-danger' : 'btn-primary');
     }
     if (cabecalho) cabecalho.className = 'modal-header text-white ' + (opcoes.perigo ? 'bg-danger' : 'bg-primary');
@@ -161,4 +165,95 @@ document.querySelectorAll('.alert-dismissible').forEach((a) => {
       mostrar({ mensagem: mensagemTexto, titulo: opcoes.titulo, acao: opcoes.acao, perigo: opcoes.perigo });
     });
   };
+
+  // Aviso simples (só "Fechar"), na mesma caixa da aplicação:
+  //   GesConduAviso('O armazenamento do condomínio não está ligado.');
+  window.GesConduAviso = function (mensagemTexto, opcoes) {
+    opcoes = opcoes || {};
+    respostaPendente = null;
+    formPendente = null;
+    mostrar({
+      modo: 'aviso',
+      mensagem: mensagemTexto,
+      titulo: opcoes.titulo,
+      acao: opcoes.acao,
+      perigo: Boolean(opcoes.perigo),
+    });
+  };
+})();
+
+// ── Abrir documentos: aviso na aplicação em vez de janela nova ───────
+// Ver/Descarregar de um documento passa primeiro por ?verificacao=1 (resposta
+// JSON, sem entregar o ficheiro). Se o documento não estiver acessível — serviço
+// de armazenamento desligado, ficheiro apagado, conta revogada — a explicação
+// aparece na caixa da aplicação, em vez de abrir uma janela com texto simples
+// que obrigava o utilizador a voltar atrás. Se estiver acessível, abre como
+// sempre (nova janela ou no mesmo separador, conforme o link original).
+(function () {
+  var seletor = 'a[href*="/documentos/"][href*="/ficheiro"]';
+
+  function abrirComoAntes(a, href) {
+    if (a.getAttribute('target') === '_blank') {
+      var nova = window.open(href, '_blank', 'noopener');
+      if (nova) nova.opener = null;
+      return;
+    }
+    window.location.href = href;
+  }
+
+  function avisar(mensagemTexto) {
+    if (typeof window.GesConduAviso === 'function') {
+      window.GesConduAviso(mensagemTexto, { titulo: 'Não foi possível abrir o documento' });
+      return;
+    }
+    window.alert(mensagemTexto);
+  }
+
+  document.addEventListener(
+    'click',
+    function (ev) {
+      if (ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+      var alvo = ev.target && ev.target.closest ? ev.target.closest(seletor) : null;
+      if (!alvo || alvo.dataset.semVerificacao === '1') return;
+      var href = alvo.getAttribute('href') || '';
+      // Só o ficheiro de um documento com id (a rota de link temporário, sem
+      // sessão, mantém o comportamento antigo).
+      if (!/\/documentos\/\d+\/ficheiro/.test(href)) return;
+      ev.preventDefault();
+
+      var url = href + (href.indexOf('?') === -1 ? '?' : '&') + 'verificacao=1';
+      var pedido = window.fetch
+        ? window.fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+        : Promise.reject(new Error('sem fetch'));
+
+      pedido
+        .then(function (r) {
+          return r
+            .json()
+            .then(function (dados) {
+              return { ok: r.ok, dados: dados || {} };
+            })
+            .catch(function () {
+              return { ok: false, dados: {} };
+            });
+        })
+        .then(function (res) {
+          if (res.ok && res.dados.ok) {
+            abrirComoAntes(alvo, href);
+            return;
+          }
+          if (res.dados && res.dados.mensagem) {
+            avisar(res.dados.mensagem);
+            return;
+          }
+          // Sem resposta da verificação (sessão expirada, rede): tenta abrir
+          // como antes, para não bloquear o acesso legítimo.
+          abrirComoAntes(alvo, href);
+        })
+        .catch(function () {
+          abrirComoAntes(alvo, href);
+        });
+    },
+    true
+  );
 })();

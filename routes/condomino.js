@@ -28,7 +28,7 @@ const cabecalhos = require('../helpers/cabecalhos-ficheiro');
 const recibosHelper = require('../helpers/recibos');
 const { mapaPastas } = require('../helpers/documento-pastas');
 // Acesso autorizado a documentos (neste módulo: só os disponibilizados).
-const { autorizarAcessoDocumento, servirDocumento, responderRecusa } = require('../helpers/documentos-acesso');
+const { autorizarAcessoDocumento, servirDocumento, verificarDocumento, responderRecusa } = require('../helpers/documentos-acesso');
 
 const router = express.Router();
 
@@ -466,6 +466,11 @@ router.get('/documentos/:id/ficheiro', async (req, res) => {
     // 401 sem sessão / 403 de outro condomínio ou não disponibilizado ao
     // condomínio / 404 inexistente. Nunca devolve o documento.
     return responderRecusa(res, autorizacao);
+  }
+  // Verificação prévia: ver o comentário em routes/documentos.js.
+  if (req.query.verificacao === '1') {
+    const r = await verificarDocumento({ documento: autorizacao.documento, req });
+    return res.json({ ok: r.ok, mensagem: r.ok ? null : r.mensagem, motivo: r.ok ? null : r.motivo });
   }
   const disposicao = req.query.descarregar === '1' ? 'attachment' : 'inline';
   const servido = await servirDocumento({ documento: autorizacao.documento, req, res, disposicao, via: 'sessao_condomino' });

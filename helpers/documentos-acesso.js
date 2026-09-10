@@ -206,6 +206,54 @@ function definirEstado(res, codigo) {
   else res.statusCode = codigo;
 }
 
+// Recusa normalizada quando o fornecedor não entrega o ficheiro. É usada ao
+// servir o documento e na verificação prévia (a interface mostra a mesma
+// mensagem na caixa da aplicação, em vez de abrir uma janela com o erro).
+async function recusaDeFalhaDoFornecedor({ err, req, condominioId }) {
+  // Mensagem sanitizada no registo: nunca pode conter credenciais.
+  console.error('[documentos-acesso] falha ao abrir o documento:', http.sanitizar(err && err.message));
+  // Distingue "ligação em baixo" de "erro do fornecedor" para dar uma mensagem
+  // útil sem revelar detalhes internos.
+  let ligado = false;
+  try {
+    ligado = await storage.isConfiguredPara(condominioId);
+  } catch (e) {
+    ligado = false;
+  }
+  if (!ligado) {
+    return { ok: false, motivo: MOTIVO.PROVEDOR_INDISPONIVEL, mensagem: MENSAGENS[MOTIVO.PROVEDOR_INDISPONIVEL] };
+  }
+  // Quem gere o condomínio precisa de saber PORQUE falhou (autorização
+  // revogada? ficheiro apagado? conta trocada?); o condómino recebe a mensagem
+  // genérica. A explicação não expõe ids, tokens nem URLs.
+  const explicacao = explicarFalhaDoFornecedor(err && err.message);
+  const detalhe = podeVerTudo(req) && explicacao ? ` Causa provável: ${explicacao}.` : '';
+  return {
+    ok: false,
+    motivo: MOTIVO.LIGACAO_INVALIDA,
+    mensagem: `${MENSAGENS[MOTIVO.LIGACAO_INVALIDA]}${detalhe}`,
+    causa: explicacao || null,
+  };
+}
+
+// Verifica se o ficheiro está acessível SEM o entregar: abre o fluxo no
+// fornecedor e fecha-o imediatamente. A interface usa isto antes de abrir o
+// documento, para poder avisar dentro da aplicação (o utilizador deixa de ficar
+// preso numa janela com a mensagem de erro e a ter de voltar atrás).
+async function verificarDocumento({ documento, req }) {
+  if (!documento || !documento.drive_file_id) {
+    return { ok: false, motivo: MOTIVO.SEM_FICHEIRO, mensagem: MENSAGENS[MOTIVO.SEM_FICHEIRO] };
+  }
+  const condominioId = Number(documento.condominio_id);
+  try {
+    const abertura = await storage.abrirFluxo(documento.drive_file_id, condominioId);
+    if (abertura && abertura.fluxo && typeof abertura.fluxo.destroy === 'function') abertura.fluxo.destroy();
+    return { ok: true };
+  } catch (err) {
+    return recusaDeFalhaDoFornecedor({ err, req, condominioId });
+  }
+}
+
 // Envia o documento para a resposta HTTP, em streaming, a partir do provedor.
 // `disposicao`: 'inline' (ver no browser) ou 'attachment' (descarregar).
 // NUNCA rejeita: todas as falhas são devolvidas como recusa (uma rejeição aqui
@@ -219,30 +267,7 @@ async function servirDocumento({ documento, res, req, disposicao = 'inline', via
   try {
     abertura = await storage.abrirFluxo(documento.drive_file_id, condominioId);
   } catch (err) {
-    // Mensagem sanitizada no registo: nunca pode conter credenciais.
-    console.error('[documentos-acesso] falha ao abrir o documento:', http.sanitizar(err && err.message));
-    // Distingue "ligação em baixo" de "erro do fornecedor" para dar uma
-    // mensagem útil sem revelar detalhes internos.
-    let ligado = false;
-    try {
-      ligado = await storage.isConfiguredPara(condominioId);
-    } catch (e) {
-      ligado = false;
-    }
-    if (!ligado) {
-      return { ok: false, motivo: MOTIVO.PROVEDOR_INDISPONIVEL, mensagem: MENSAGENS[MOTIVO.PROVEDOR_INDISPONIVEL] };
-    }
-    // Quem gere o condomínio precisa de saber PORQUE falhou (autorização
-    // revogada? ficheiro apagado? conta trocada?); o condómino recebe a
-    // mensagem genérica. A explicação não expõe ids, tokens nem URLs.
-    const explicacao = explicarFalhaDoFornecedor(err && err.message);
-    const detalhe = podeVerTudo(req) && explicacao ? ` Causa provável: ${explicacao}.` : '';
-    return {
-      ok: false,
-      motivo: MOTIVO.LIGACAO_INVALIDA,
-      mensagem: `${MENSAGENS[MOTIVO.LIGACAO_INVALIDA]}${detalhe}`,
-      causa: explicacao || null,
-    };
+    return recusaDeFalhaDoFornecedor({ err, req, condominioId });
   }
 
   const tamanho = abertura.tamanho || (documento.tamanho ? Number(documento.tamanho) : null);
@@ -437,6 +462,7 @@ module.exports = {
   TTL_PADRAO_SEGUNDOS,
   autorizarAcessoDocumento,
   servirDocumento,
+  verificarDocumento,
   responderRecusa,
   urlInterna,
   urlInternaAbsoluta,

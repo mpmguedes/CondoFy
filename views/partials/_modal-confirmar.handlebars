@@ -1,7 +1,10 @@
-{{!-- Modal única de confirmação (layout da aplicação).
-     Qualquer <form data-confirmar="mensagem"> abre esta caixa em vez do
-     confirm() nativo do browser; atributos opcionais:
-       data-confirmar-titulo="…"  data-confirmar-acao="…"  data-confirmar-perigo="1" --}}
+{{!-- Modal única do GesCondu (confirmação e aviso), no layout da aplicação.
+     · Qualquer <form data-confirmar="mensagem"> abre esta caixa em vez do
+       confirm() nativo do browser; atributos opcionais:
+         data-confirmar-titulo="…"  data-confirmar-acao="…"  data-confirmar-perigo="1"
+     · window.GesConduAviso(mensagem, { titulo }) mostra um aviso (só "Fechar"):
+       usado, por exemplo, quando um documento não pode ser aberto — assim o
+       utilizador vê a explicação na própria página, sem abrir uma janela nova. --}}
 <div class="modal fade" id="modalConfirmarGesCondu" tabindex="-1" aria-labelledby="modalConfirmarTitulo" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -13,7 +16,7 @@
         <p class="mb-0" id="modalConfirmarMensagem">Tem a certeza?</p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="modalConfirmarCancelar">Cancelar</button>
         <button type="button" class="btn btn-primary" id="modalConfirmarAcao">Confirmar</button>
       </div>
     </div>
