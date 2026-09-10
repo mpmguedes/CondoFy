@@ -332,7 +332,39 @@ async function testarEstadoInterface() {
   delete process.env.GOOGLE_DRIVE_ENABLED;
 }
 
-// ── 7. Leitura pelo localizador (nunca pelo provedor "atual") ───────
+// ── 8. URL de autorização: pede sempre a escolha da conta ───────────
+function testarUrlAutorizacao() {
+  const envAntes = {
+    DROPBOX_APP_KEY: process.env.DROPBOX_APP_KEY,
+    DROPBOX_APP_SECRET: process.env.DROPBOX_APP_SECRET,
+    ONEDRIVE_CLIENT_ID: process.env.ONEDRIVE_CLIENT_ID,
+    ONEDRIVE_CLIENT_SECRET: process.env.ONEDRIVE_CLIENT_SECRET,
+  };
+  process.env.DROPBOX_APP_KEY = 'chave-teste';
+  process.env.DROPBOX_APP_SECRET = 'segredo-teste';
+  process.env.ONEDRIVE_CLIENT_ID = 'cliente-teste';
+  process.env.ONEDRIVE_CLIENT_SECRET = 'segredo-teste';
+  try {
+    const dropbox = storage.obterProvedor('dropbox');
+    const urlDropbox = dropbox.urlAutorizacao({ redirectUri: 'https://exemplo.pt/cb', state: 'abc', condominioId: 1 });
+    assert.ok(urlDropbox.includes('force_reauthenticate=true'), 'Dropbox pede reautenticação/escolha da conta');
+    assert.ok(urlDropbox.includes('token_access_type=offline'), 'Dropbox mantém o refresh token (offline)');
+    assert.ok(urlDropbox.includes('state=abc'), 'Dropbox mantém o state');
+
+    const onedrive = storage.obterProvedor('onedrive');
+    const urlOneDrive = onedrive.urlAutorizacao({ redirectUri: 'https://exemplo.pt/cb', state: 'abc', condominioId: 1 });
+    assert.ok(urlOneDrive.includes('prompt=select_account'), 'OneDrive pede a escolha da conta');
+    assert.ok(urlOneDrive.includes('scope=offline_access%20Files.ReadWrite'), 'OneDrive mantém os scopes (espaço como %20)');
+    assert.ok(urlOneDrive.includes('response_mode=query'), 'OneDrive mantém response_mode=query');
+  } finally {
+    for (const [k, v] of Object.entries(envAntes)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+
+// ── 9. Leitura pelo localizador (nunca pelo provedor "atual") ───────
 async function testarLeituraPorLocalizador() {
   const chamadas = [];
   // Substitui temporariamente os métodos dos provedores para observar o encaminhamento.
@@ -399,6 +431,7 @@ function testarFachada() {
   await testarPrincipal();
   await testarBackups();
   await testarEstadoInterface();
+  testarUrlAutorizacao();
   await testarLeituraPorLocalizador();
   testarFachada();
   console.log('✓ Testes da arquitetura de armazenamento (multi-provedor) passaram.');

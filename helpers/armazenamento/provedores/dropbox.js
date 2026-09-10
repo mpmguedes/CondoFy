@@ -308,6 +308,10 @@ function urlAutorizacao({ redirectUri, state, condominioId } = {}) {
     token_access_type: 'offline',
     redirect_uri: redirectUri || c.redirectUri,
     state: state || (condominioId ? `c${normalizarId(condominioId) || ''}` : undefined),
+    // Pede SEMPRE a autenticação/escolha da conta: sem isto, o Dropbox reutiliza
+    // a sessão já aberta no browser e pode ligar uma conta que não é a pretendida
+    // (relevante para quem tem várias contas no mesmo navegador).
+    force_reauthenticate: 'true',
   });
 }
 

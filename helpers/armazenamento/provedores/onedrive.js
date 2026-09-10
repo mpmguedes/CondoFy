@@ -470,7 +470,9 @@ function urlAutorizacao({ redirectUri, state, condominioId } = {}) {
     response_mode: 'query',
     scope: SCOPE,
     state: state || '',
-    prompt: 'consent',
+    // Pede SEMPRE a escolha da conta (e o consentimento, quando necessário):
+    // evita ligar automaticamente a sessão Microsoft já aberta no browser.
+    prompt: 'select_account',
   });
   return `${LOGIN}/${tenant()}/oauth2/v2.0/authorize?${query}`;
 }
