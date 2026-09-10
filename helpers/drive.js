@@ -279,11 +279,11 @@ function erroDriveParaMensagem(err) {
 async function limparLigacaoUsada(condominioId) {
   const { origem } = ligacoes.tokensSync(PROVEDOR, condominioId);
   if (origem === 'condominio') {
-    await limparTokens(condominioId).catch(() => {});
+    await limparTokens(condominioId, { motivo: 'revogada' }).catch(() => {});
     return 'condominio';
   }
   if (origem === 'plataforma' || origem === 'plataforma_fallback') {
-    await limparTokens(null).catch(() => {});
+    await limparTokens(null, { motivo: 'revogada' }).catch(() => {});
     return 'plataforma';
   }
   return null;

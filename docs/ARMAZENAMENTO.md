@@ -185,6 +185,7 @@ Chaves da tabela `configuracoes` (sem migração de esquema; a coluna `chave` é
 | `storage:raiz:<provedor>:c<id>` | pasta raiz opcional (por provedor/condomínio) |
 | `storage:backup` | destino dos backups da instalação |
 | `storage:tokens:<provedor>:plataforma` | contas autorizadas da plataforma (backups) |
+| `storage:ligacao-invalida:<provedor>:<âmbito>` | ligação removida por revogação no fornecedor: `{conta, motivo, quando}` — **sem tokens** (é o que permite dizer qual conta voltar a ligar) |
 
 Compatibilidade: a chave antiga `storage:provedor:c<id>` continua a ser lida e
 mantida em escrita; a ligação global antiga do Google Drive
@@ -217,6 +218,16 @@ obrigatório…`): a ligação de plataforma nunca é removida por engano a part
 cartão de um condomínio. Se a conta for revogada no fornecedor, o botão de
 testar deteta-o, remove os tokens inválidos e a página passa a mostrar
 “Não ligado”, com a indicação de que é preciso voltar a ligar a conta.
+
+**Revogação não apaga a identidade da ligação.** Quando é o fornecedor a
+revogar a autorização (não o utilizador), além de remover os tokens inválidos
+guarda-se um registo mínimo — conta, motivo e data — em
+`storage:ligacao-invalida:<provedor>:<âmbito>` (texto simples, **sem tokens nem
+segredos**). O cartão do serviço aparece então com o estado **“Ligação
+inválida”**, a conta que deixou de ter acesso, a data e o botão **“Ligar de
+novo”** (no âmbito certo), em vez de ficar um simples “Não ligado” sem
+explicação. O registo é apagado assim que a conta é ligada de novo (ou quando o
+utilizador desliga o serviço de propósito).
 
 ## 2.1 Credenciais cifradas em repouso
 

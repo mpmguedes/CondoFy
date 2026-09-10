@@ -228,19 +228,24 @@ function erroRede(err) {
 // condomínio — a da plataforma (a mesma usada pelos backups). Sem o âmbito
 // explícito, um token revogado na ligação de plataforma nunca era removido e o
 // serviço continuava a aparecer como "Ligado ✓" sem funcionar.
-function esquecerLigacaoDoAmbito(condominioId) {
+// `motivo` marca a remoção como NÃO pedida pelo utilizador (revogação no
+// fornecedor): guarda-se a identidade da ligação para a página dizer qual conta
+// voltar a ligar.
+function esquecerLigacaoDoAmbito(condominioId, motivo = 'revogada') {
   const cid = normalizarId(condominioId);
-  return esquecerLigacao(cid, { plataforma: !cid });
+  return esquecerLigacao(cid, { plataforma: !cid, motivo });
 }
 
 // ── Tokens: renovação e chamadas autenticadas ───────────────────────
 // Limpa a ligação do condomínio (nunca a chave global do Google Drive).
+// `opcoes.motivo` (revogação) guarda o registo da ligação; a desligação pedida
+// pelo utilizador apaga-o.
 async function esquecerLigacao(condominioId, opcoes = {}) {
   // Sem condomínio só se limpa quando é explicitamente a ligação da
   // plataforma (backups): nunca se apaga a ligação de um condomínio por engano.
   const cid = normalizarId(condominioId);
   if (!cid && !opcoes.plataforma) return;
-  await ligacoes.limparTokens(PROVEDOR, cid).catch(() => {});
+  await ligacoes.limparTokens(PROVEDOR, cid, { motivo: opcoes.motivo }).catch(() => {});
 }
 
 // O access token da Dropbox dura ~4 h. Sem data de expiração conhecida

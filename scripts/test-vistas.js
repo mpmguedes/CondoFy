@@ -239,6 +239,36 @@ html = armazenamento({
 assert.ok(html.includes('todos os condomínios'), 'armazenamento: avisa que os backups contêm todos os condomínios');
 assert.ok(html.includes('gestao@exemplo.pt'), 'armazenamento: identifica a conta que recebe os backups');
 
+// Ligação revogada no fornecedor (removida): a página diz QUAL conta deixou de
+// ter acesso e quando, e dá o botão para a ligar de novo — em vez de mostrar
+// apenas "Não ligado" e deixar o administrador sem saber o que fazer.
+html = armazenamento({
+  ...ctxArm,
+  driveLigado: false,
+  driveOpcoes: opcoesBase,
+  ultimoBackup: null,
+  armazenamento: comDrive({ ligado: false, conta: null, contaPlataforma: false, documentos: 70, ligacaoInvalida: { conta: 'jo@gmail.com', motivo: 'revogada', quando: '2026-09-10T17:26:00.000Z', plataforma: false } }),
+});
+assert.ok(html.includes('Ligação inválida'), 'armazenamento: estado "ligação inválida" assinalado');
+assert.ok(/A conta <strong>jo@gmail.com<\/strong>\s*deixou de ter acesso a este serviço/.test(html), 'armazenamento: identifica a conta que deixou de ter acesso');
+assert.ok(html.includes('10/09/2026'), 'armazenamento: mostra quando deixou de ter acesso');
+assert.ok(html.includes('Ligar Google Drive de novo'), 'armazenamento: botão para ligar de novo');
+assert.ok(html.includes('href="/admin/config/armazenamento/google_drive/ligar"'), 'armazenamento: religar no âmbito do condomínio');
+assert.ok(/70 documentos guardados neste serviço/.test(html), 'armazenamento: conta os documentos do serviço com ligação inválida');
+const cartaoDriveInvalido = html.slice(html.indexOf('id="google_drive"'), html.indexOf('id="dropbox"'));
+assert.ok(!cartaoDriveInvalido.includes('Associe uma conta para guardar documentos neste serviço.'), 'armazenamento: ligação inválida substitui o texto genérico');
+
+// Âmbito de plataforma (conta usada pelos backups): o religar tem de manter o âmbito.
+html = armazenamento({
+  ...ctxArm,
+  driveLigado: false,
+  driveOpcoes: opcoesBase,
+  ultimoBackup: null,
+  armazenamento: comDrive({ ligado: false, conta: null, contaPlataforma: false, ligacaoInvalida: { conta: 'plataforma@gmail.com', motivo: 'revogada', quando: '2026-09-10T17:26:00.000Z', plataforma: true } }),
+});
+assert.ok(html.includes('href="/admin/config/armazenamento/google_drive/ligar?ambito=plataforma"'), 'armazenamento: religar mantém o âmbito da plataforma');
+assert.ok(html.includes('plataforma@gmail.com'), 'armazenamento: identifica a conta da plataforma');
+
 // Sem nenhuma ligação: as escolhas explicam que é preciso ligar um serviço.
 html = armazenamento({
   ...ctxArm,

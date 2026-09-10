@@ -33,7 +33,9 @@
       <div class="card-body d-flex flex-column">
         <div class="d-flex align-items-center justify-content-between mb-2">
           <span class="fw-semibold"><i class="{{icone}} me-2" aria-hidden="true"></i>{{rotulo}}</span>
-          {{#if ligado}}<span class="badge text-bg-success">Ligado ✓</span>{{else}}<span class="badge text-bg-secondary">Não ligado</span>{{/if}}
+          {{#if ligado}}<span class="badge text-bg-success">Ligado ✓</span>
+          {{else if ligacaoInvalida}}<span class="badge text-bg-warning">Ligação inválida</span>
+          {{else}}<span class="badge text-bg-secondary">Não ligado</span>{{/if}}
         </div>
         {{#if ligado}}
           <p class="small mb-3 text-truncate" title="{{conta}}">
@@ -71,22 +73,39 @@
           </p>
           {{/if}}
         {{else}}
-          {{#if disponivel}}
-            <p class="text-muted small">Associe uma conta para guardar documentos neste serviço.</p>
-            {{#if documentos}}
-            <div class="alert alert-warning small">
-              <span class="material-symbols-outlined me-1" aria-hidden="true">warning</span>
-              Há <strong>{{documentos}} documento{{#unless (eq documentos 1)}}s{{/unless}}</strong> deste condomínio
-              guardado{{#unless (eq documentos 1)}}s{{/unless}} neste serviço e a conta <strong>não está ligada</strong>:
-              {{#unless (eq documentos 1)}}esses documentos não abrem{{else}}esse documento não abre{{/unless}} até
-              voltar a ligar <strong>a mesma conta</strong> que os criou (os ficheiros continuam no serviço e não são apagados).
-            </div>
-            {{/if}}
-            <a href="/admin/config/armazenamento/{{nome}}/ligar" class="btn btn-primary w-100 mt-auto">
-              <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>Ligar {{rotulo}}
+          {{#if ligacaoInvalida}}
+            <p class="text-muted small mb-2">
+              <i class="bi bi-exclamation-triangle text-warning me-1" aria-hidden="true"></i>
+              {{#if ligacaoInvalida.conta}}A conta <strong>{{ligacaoInvalida.conta}}</strong>{{else}}A conta{{/if}}
+              deixou de ter acesso a este serviço{{#if ligacaoInvalida.quando}} em {{formatDateTime ligacaoInvalida.quando}}{{/if}}.
+              Os documentos já guardados continuam no serviço: ligue a mesma conta para os voltar a abrir.
+            </p>
+            <a href="/admin/config/armazenamento/{{nome}}/ligar{{#if ligacaoInvalida.plataforma}}?ambito=plataforma{{/if}}" class="btn btn-primary w-100 mt-auto">
+              <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Ligar {{rotulo}} de novo
             </a>
+            {{#if documentos}}
+            <p class="text-muted small mb-0 mt-2">
+              <i class="bi bi-file-earmark-text me-1" aria-hidden="true"></i>{{documentos}} documento{{#unless (eq documentos 1)}}s{{/unless}} guardado{{#unless (eq documentos 1)}}s{{/unless}} neste serviço.
+            </p>
+            {{/if}}
           {{else}}
-            <p class="text-muted small mb-0 mt-auto">Disponível após configuração pelo administrador do GesCondu.</p>
+            {{#if disponivel}}
+              <p class="text-muted small">Associe uma conta para guardar documentos neste serviço.</p>
+              {{#if documentos}}
+              <div class="alert alert-warning small">
+                <span class="material-symbols-outlined me-1" aria-hidden="true">warning</span>
+                Há <strong>{{documentos}} documento{{#unless (eq documentos 1)}}s{{/unless}}</strong> deste condomínio
+                guardado{{#unless (eq documentos 1)}}s{{/unless}} neste serviço e a conta <strong>não está ligada</strong>:
+                {{#unless (eq documentos 1)}}esses documentos não abrem{{else}}esse documento não abre{{/unless}} até
+                voltar a ligar <strong>a mesma conta</strong> que os criou (os ficheiros continuam no serviço e não são apagados).
+              </div>
+              {{/if}}
+              <a href="/admin/config/armazenamento/{{nome}}/ligar" class="btn btn-primary w-100 mt-auto">
+                <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>Ligar {{rotulo}}
+              </a>
+            {{else}}
+              <p class="text-muted small mb-0 mt-auto">Disponível após configuração pelo administrador do GesCondu.</p>
+            {{/if}}
           {{/if}}
         {{/if}}
       </div>

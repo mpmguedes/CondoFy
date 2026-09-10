@@ -270,10 +270,11 @@ async function renovarToken(condominioId) {
     );
   } catch (err) {
     // invalid_grant / 401: a autorização foi revogada pelo utilizador ou
-    // expirou → limpa os tokens e aponta para Configuração.
+    // expirou → limpa os tokens (guardando a conta, para a página poder dizer
+    // qual voltar a ligar) e aponta para Configuração.
     const revogado = err.status === 401 || err.status === 400 || /invalid_grant|expired|revoked/i.test(err.message || '');
     if (revogado) {
-      await ligacoes.limparTokens(NOME, condominioId).catch(() => {});
+      await ligacoes.limparTokens(NOME, condominioId, { motivo: 'revogada' }).catch(() => {});
       throw erroLigacao();
     }
     throw err;
@@ -315,7 +316,7 @@ async function operacaoGraph(condominioId, contexto, fn) {
   }
   if (!resposta.ok) {
     if (resposta.status === 401) {
-      await ligacoes.limparTokens(NOME, condominioId).catch(() => {});
+      await ligacoes.limparTokens(NOME, condominioId, { motivo: 'revogada' }).catch(() => {});
       throw erroLigacao();
     }
     if (resposta.status === 403) {
@@ -830,7 +831,7 @@ async function abrirFluxo(fileId, condominioId) {
   }
   if (!resposta.ok) {
     if (resposta.status === 401) {
-      await ligacoes.limparTokens(NOME, condominioId).catch(() => {});
+      await ligacoes.limparTokens(NOME, condominioId, { motivo: 'revogada' }).catch(() => {});
       throw erroLigacao();
     }
     if (resposta.status === 403) {

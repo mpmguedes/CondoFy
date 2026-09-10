@@ -218,6 +218,14 @@ async function main() {
         .filter(Boolean)
         .join(' · ');
       console.log(`      ${p.ligado ? '✓' : '·'} ${p.rotulo}: ${marca}${detalhe ? ` — ${detalhe}` : ''}`);
+      if (p.ligacaoInvalida) {
+        const quando = p.ligacaoInvalida.quando ? ` em ${String(p.ligacaoInvalida.quando).slice(0, 10)}` : '';
+        const conta = p.ligacaoInvalida.conta ? ` (conta ${mascarar(p.ligacaoInvalida.conta)})` : '';
+        console.log(
+          `      ! ligação revogada pelo serviço${conta}${quando}${p.ligacaoInvalida.plataforma ? ', âmbito da instalação' : ''}` +
+            ' — ligue a MESMA conta para voltar a abrir os documentos'
+        );
+      }
     }
     console.log(`      pasta da conta registada: ${c.drive_folder_id ? 'sim' : 'não'}`);
   }

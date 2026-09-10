@@ -507,6 +507,61 @@ async function testarDocumentosPorServico() {
   assert.deepStrictEqual(await documentosPorServico.contarPorServico(null), { google_drive: 0, dropbox: 0, onedrive: 0 }, 'sem condomínio → zeros');
 }
 
+// ── 8.4 Ligação revogada: guardar a IDENTIDADE (sem segredos) ───────
+// Regressão de usabilidade: quando o fornecedor revoga a autorização, os
+// tokens são removidos e — antes — a identidade da ligação desaparecia com
+// eles: a página ficava sem saber (e sem mostrar) QUAL conta voltar a ligar, e
+// o administrador só via o serviço "Não ligado", sem explicação.
+async function testarLigacaoRevogada() {
+  loja.clear();
+  ligacoes.limparCache();
+  const provedor = 'dropbox';
+  const chaveInvalida = ligacoes.chaveLigacaoInvalida(provedor, 7);
+
+  await ligacoes.guardarTokens(provedor, 7, { refresh_token: 'tok-c7', conta: 'jo@gmail.com' });
+
+  // Revogação no fornecedor (não pedida pelo utilizador).
+  await ligacoes.limparTokens(provedor, 7, { motivo: 'revogada' });
+  assert.strictEqual(await ligacoes.lerTokens(provedor, 7).then((r) => r.tokens), null, 'tokens removidos');
+  const registo = await ligacoes.lerLigacaoInvalida(provedor, 7);
+  assert.ok(registo, 'registo da ligação inválida guardado');
+  assert.strictEqual(registo.conta, 'jo@gmail.com', 'conta preservada (é o que permite voltar a ligar)');
+  assert.strictEqual(registo.motivo, 'revogada', 'motivo registado');
+  assert.ok(!Number.isNaN(Date.parse(registo.quando)), 'data registada');
+
+  // O registo NUNCA contém segredos (é texto simples, ao contrário dos tokens).
+  const bruto = String(loja.get(chaveInvalida) || '');
+  assert.ok(!/refresh_token|access_token|enc:v1|Bearer/i.test(bruto), 'registo sem tokens nem ciphertext');
+  assert.strictEqual(ligacoes.ehChaveDeCredenciais(chaveInvalida), false, 'não é tratada como credencial');
+
+  // A página passa a poder mostrar a ligação inválida (conta e âmbito).
+  const estado = await storage.estadoDoCondominio(7);
+  const cartao = estado.provedores.find((p) => p.nome === provedor);
+  assert.strictEqual(cartao.ligado, false, 'serviço não ligado');
+  assert.strictEqual(cartao.ligacaoInvalida.conta, 'jo@gmail.com', 'a vista recebe a conta a religar');
+  assert.strictEqual(cartao.ligacaoInvalida.plataforma, false, 'âmbito do condomínio');
+
+  // Ligar de novo limpa o registo (a ligação voltou a ser válida).
+  await ligacoes.guardarTokens(provedor, 7, { refresh_token: 'tok-novo', conta: 'jo@gmail.com' });
+  assert.strictEqual(await ligacoes.lerLigacaoInvalida(provedor, 7), null, 'registo apagado ao ligar de novo');
+  const estadoLigado = await storage.estadoDoCondominio(7);
+  assert.strictEqual(estadoLigado.provedores.find((p) => p.nome === provedor).ligacaoInvalida, null, 'sem registo com o serviço ligado');
+
+  // Desligar a pedido do utilizador apaga o registo (não há nada a reconectar).
+  await ligacoes.limparTokens(provedor, 7, { motivo: 'revogada' });
+  assert.ok(await ligacoes.lerLigacaoInvalida(provedor, 7), 'registo presente após nova revogação');
+  await ligacoes.limparTokens(provedor, 7);
+  assert.strictEqual(await ligacoes.lerLigacaoInvalida(provedor, 7), null, 'desligar a pedido apaga o registo');
+
+  // Âmbito de plataforma (backups) tem chave própria.
+  await ligacoes.guardarTokens(provedor, null, { refresh_token: 'tok-plat', conta: 'backups@exemplo.pt' });
+  await ligacoes.limparTokens(provedor, null, { motivo: 'revogada' });
+  const plataforma = await ligacoes.lerLigacaoInvalida(provedor, null);
+  assert.strictEqual(plataforma.conta, 'backups@exemplo.pt', 'conta da plataforma preservada');
+  const estadoPlat = await storage.estadoDoCondominio(7);
+  assert.strictEqual(estadoPlat.provedores.find((p) => p.nome === provedor).ligacaoInvalida.plataforma, true, 'âmbito de plataforma assinalado');
+}
+
 // ── 9. URL de autorização: pede sempre a escolha da conta ───────────
 function testarUrlAutorizacao() {
   const envAntes = {
@@ -610,6 +665,7 @@ function testarFachada() {
   await testarAmbitoPlataformaDrive();
   testarEtiquetasDropbox();
   await testarDocumentosPorServico();
+  await testarLigacaoRevogada();
   testarUrlAutorizacao();
   await testarLeituraPorLocalizador();
   testarFachada();

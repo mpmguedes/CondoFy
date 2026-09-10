@@ -55,6 +55,14 @@ const chaveTokens = (provedor, condominioId) => `${PREFIXO_CHAVES}tokens:${prove
 const chaveRaiz = (provedor, condominioId) => `${PREFIXO_CHAVES}raiz:${provedor}:c${condominioId}`;
 const CHAVE_BACKUP = `${PREFIXO_CHAVES}backup`;
 
+// Registo de uma ligação que foi REMOVIDA porque o fornecedor revogou a
+// autorização (o utilizador não pediu para desligar). Guarda apenas a
+// IDENTIDADE da ligação — conta, motivo e data — para a página poder dizer
+// qual conta voltar a ligar. Não contém tokens nem segredos (por isso é texto
+// simples e nunca é tratado como credencial).
+const chaveLigacaoInvalida = (provedor, condominioId) =>
+  `${PREFIXO_CHAVES}ligacao-invalida:${provedor}:${condominioId ? `c${condominioId}` : SUFIXO_PLATAFORMA}`;
+
 // Tokens da plataforma: o Google Drive mantém a chave histórica.
 function chaveTokensPlataforma(provedor) {
   return String(provedor) === 'google_drive'
@@ -401,6 +409,44 @@ function tokensSync(provedor, condominioId, opcoes = {}) {
   return { tokens: null, origem: null };
 }
 
+// ── Ligação removida pelo fornecedor (revogação) ────────────────────
+// Quando o fornecedor revoga a autorização, os tokens deixam de servir e são
+// removidos. Perder também a IDENTIDADE da ligação deixava o administrador sem
+// saber que conta voltar a ligar (e na interface o serviço simplesmente
+// desaparecia). Guarda-se então um registo mínimo — conta, motivo e data, sem
+// nenhum segredo — até a conta ser ligada de novo.
+async function marcarLigacaoInvalida(provedor, condominioId, dados = {}) {
+  const cid = normalizarCondominio(condominioId);
+  const chave = chaveLigacaoInvalida(provedor, cid);
+  const anterior = (await lerLigacaoInvalida(provedor, cid)) || {};
+  const registo = {
+    conta: dados.conta || anterior.conta || null,
+    motivo: dados.motivo || anterior.motivo || null,
+    // Mantém a data da PRIMEIRA falha: é a informação útil para o diagnóstico.
+    quando: anterior.quando || new Date().toISOString(),
+  };
+  await setConfig(chave, JSON.stringify(registo));
+  return registo;
+}
+
+async function lerLigacaoInvalida(provedor, condominioId) {
+  const cid = normalizarCondominio(condominioId);
+  try {
+    const bruto = await getConfig(chaveLigacaoInvalida(provedor, cid), null);
+    if (!bruto) return null;
+    const dados = typeof bruto === 'string' ? JSON.parse(bruto) : bruto;
+    if (!dados || typeof dados !== 'object') return null;
+    return { conta: dados.conta || null, motivo: dados.motivo || null, quando: dados.quando || null };
+  } catch (err) {
+    return null;
+  }
+}
+
+async function limparLigacaoInvalida(provedor, condominioId) {
+  const cid = normalizarCondominio(condominioId);
+  await setConfig(chaveLigacaoInvalida(provedor, cid), null).catch(() => {});
+}
+
 // Guarda os tokens SEMPRE cifrados. Sem ENCRYPTION_KEY lança ErroCifra com
 // mensagem administrativa (nada é escrito em texto simples).
 async function guardarTokens(provedor, condominioId, dados) {
@@ -421,12 +467,29 @@ async function guardarTokens(provedor, condominioId, dados) {
   await gravarCredenciais(chave, novos);
   _cache.tokens.set(chaveCacheTokens(provedor, cid), novos);
   _cache.cifraErro = null;
+  // Ligação nova: o registo de "ligação inválida" deixa de fazer sentido.
+  await limparLigacaoInvalida(provedor, cid);
   return novos;
 }
 
-async function limparTokens(provedor, condominioId) {
+// Remove as credenciais do âmbito indicado.
+//  · `opcoes.motivo` identifica uma remoção NÃO pedida pelo utilizador (o
+//    fornecedor revogou a autorização): guarda-se o registo da ligação (conta e
+//    data, sem tokens) para a página poder dizer QUAL conta voltar a ligar;
+//  · sem motivo (desligar a pedido do utilizador) o registo é apagado — a
+//    ligação foi removida de propósito e não há nada a reconectar.
+async function limparTokens(provedor, condominioId, opcoes = {}) {
   const cid = normalizarCondominio(condominioId);
   const chave = cid ? chaveTokens(provedor, cid) : chaveTokensPlataforma(provedor);
+  if (opcoes.motivo) {
+    const atuais = await carregarCredenciais(chave).catch(() => null);
+    await marcarLigacaoInvalida(provedor, cid, {
+      conta: atuais && atuais.conta ? atuais.conta : null,
+      motivo: opcoes.motivo,
+    }).catch(() => {});
+  } else {
+    await limparLigacaoInvalida(provedor, cid);
+  }
   await setConfig(chave, null);
   _cache.tokens.set(chaveCacheTokens(provedor, cid), false);
 }
@@ -538,6 +601,7 @@ module.exports = {
   chaveTokens,
   chaveTokensPlataforma,
   chaveRaiz,
+  chaveLigacaoInvalida,
   ehChaveDeCredenciais,
   provedorPadrao,
   principalSync,
@@ -553,6 +617,9 @@ module.exports = {
   tokensSync,
   guardarTokens,
   limparTokens,
+  marcarLigacaoInvalida,
+  lerLigacaoInvalida,
+  limparLigacaoInvalida,
   lerDestinoBackup,
   definirDestinoBackup,
   ligacaoParaBackup,

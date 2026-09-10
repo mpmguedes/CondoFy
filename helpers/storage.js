@@ -128,6 +128,13 @@ async function estadoDoCondominio(condominioId) {
     const ligado = Boolean(estado && estado.ligado);
     const plataforma = Boolean(p.isConfigured && p.isConfigured(null));
     const origem = ligacoes.tokensSync(chave, condominioId).origem;
+    // Ligação removida porque o fornecedor revogou a autorização: guarda-se a
+    // identidade (conta+data) para a página poder dizer QUAL conta voltar a
+    // ligar. Só se mostra quando o serviço não está ligado (se estiver, a
+    // ligação nova já substituiu o registo).
+    const invalidaPropria = await ligacoes.lerLigacaoInvalida(chave, condominioId);
+    const invalidaPlataforma = invalidaPropria ? null : await ligacoes.lerLigacaoInvalida(chave, null);
+    const invalida = invalidaPropria || invalidaPlataforma;
     provedores.push({
       nome: chave,
       rotulo: p.rotulo(),
@@ -142,6 +149,16 @@ async function estadoDoCondominio(condominioId) {
       ligadoPlataforma: plataforma,
       principal: chave === principal,
       conta: (estado && estado.conta) || null,
+      // Ligação revogada no fornecedor (removida): { conta, motivo, quando } e
+      // o âmbito a reconectar. Null quando nunca aconteceu (ou já foi refeita).
+      ligacaoInvalida: ligado || !invalida
+        ? null
+        : {
+            conta: invalida.conta,
+            motivo: invalida.motivo,
+            quando: invalida.quando,
+            plataforma: Boolean(invalidaPlataforma),
+          },
       erro,
       estado: estado || null,
     });
