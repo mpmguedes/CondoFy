@@ -162,6 +162,8 @@ const estadoArm = (over = {}) => ({
     { nome: 'onedrive', rotulo: 'Microsoft OneDrive', disponivel: true, ligado: false, contaPlataforma: false, ligadoPlataforma: false, principal: false, conta: null, estado: {} },
   ],
   backup: { destino: 'dropbox', rotulo: 'Dropbox', ligadoPlataforma: true },
+  // Estado da cifragem das credenciais (chave da instalação configurada).
+  cifra: { configurada: true, kid: 'abc123', formato: 'enc:v1', algoritmo: 'AES-256-GCM', anteriores: 0, erro: null, mensagem: null, erroOperacional: null },
   plataforma: [
     { nome: 'google_drive', rotulo: 'Google Drive', disponivel: true, ligado: true },
     { nome: 'dropbox', rotulo: 'Dropbox', disponivel: true, ligado: true },
@@ -213,6 +215,31 @@ html = armazenamento({
 assert.ok(html.includes('Disponível após configuração pelo administrador do GesCondu.'), 'armazenamento: mensagem amigável sem credenciais');
 assert.ok(html.includes('Não ligado'), 'armazenamento: serviços não ligados');
 assert.ok(!html.includes('.env'), 'armazenamento: sem .env mesmo sem credenciais');
+
+// Sem chave de cifragem na instalação: aviso administrativo claro, sem
+// detalhes técnicos nem segredos.
+html = armazenamento({
+  ...ctxArm,
+  driveLigado: true,
+  driveOpcoes: opcoesBase,
+  ultimoBackup: null,
+  armazenamento: estadoArm({
+    cifra: {
+      configurada: false,
+      kid: null,
+      formato: 'enc:v1',
+      algoritmo: 'AES-256-GCM',
+      anteriores: 0,
+      erro: null,
+      mensagem: 'A chave de cifragem das credenciais (ENCRYPTION_KEY) não está configurada nesta instalação.',
+      erroOperacional: 'A chave de cifragem das credenciais (ENCRYPTION_KEY) não está configurada nesta instalação. As ligações de armazenamento ficam indisponíveis até o administrador do GesCondu a configurar.',
+    },
+  }),
+});
+assert.ok(html.includes('Credenciais de armazenamento indisponíveis.'), 'armazenamento: aviso de chave em falta');
+assert.ok(html.includes('administrador do GesCondu'), 'armazenamento: aviso aponta para o administrador da instalação');
+assert.ok(!html.includes('.env'), 'armazenamento: aviso sem mencionar .env');
+assert.ok(!/enc:v1:/.test(html), 'armazenamento: página sem ciphertext nem chaves');
 
 // Serviço disponível mas sem ligação de plataforma: permite ligar para backups.
 html = armazenamento({

@@ -127,8 +127,42 @@ por outro — e, fora do Google Drive (que tem conta de plataforma desde o
 início), não existe fallback para a conta da plataforma (testado em
 `scripts/test-storage-provedores.js`).
 
-## 2.1 Backups (conceito separado)
+## 2.1 Credenciais cifradas em repouso
 
+Os tokens OAuth de armazenamento **nunca são guardados em texto simples** na
+tabela `configuracoes`. A cifragem está centralizada num único sítio —
+`helpers/armazenamento/cifra.js`, usado exclusivamente por
+`helpers/armazenamento/ligacoes.js` — pelo que nenhuma outra camada precisa de
+saber se um valor está cifrado.
+
+* **Algoritmo:** AES-256-GCM (authenticated encryption), nonce novo e aleatório
+  por cada valor, com o nome da chave de configuração como dados autenticados
+  adicionais (AAD). Copiar um token de um condomínio para outro na base de
+  dados deixa de decifrar — reforça o isolamento multi-tenant.
+* **Formato gravado (versionado):** `enc:v1:<kid>:<iv>:<tag>:<ciphertext>`
+  (`kid` = impressão curta da chave usada, o que permite rotação futura). Valores
+  antigos em texto simples continuam legíveis e são reconhecidos pelo formato.
+* **Chave da instalação:** `ENCRYPTION_KEY` (32 bytes em base64 ou hex, gerada
+  aleatoriamente; nunca vai para o Git). Geração:
+  `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
+* **Sem chave:** nenhuma credencial é lida nem escrita (as operações falham de
+  forma segura, com uma mensagem administrativa visível em Configurações →
+  Armazenamento e Backups); a aplicação não guarda nada em texto simples.
+* **Migração transparente:** ao ler uma credencial ainda em texto simples, ela é
+  imediatamente substituída pela versão cifrada — sem obrigar a voltar a
+  autorizar contas. Para converter tudo de uma vez:
+  `node scripts/migrar-tokens-cifrados.js` (e `--verificar` para só confirmar).
+* **Rotação de chave:** `ENCRYPTION_KEY_OLD` (uma ou várias, separadas por
+  vírgula) permitem decifrar valores antigos; depois de trocar a chave em
+  `ENCRYPTION_KEY`, o script de migração recifra tudo com a chave nova.
+* **Nunca expostos:** a chave e os tokens não são registados em log, não são
+  enviados para o browser, não aparecem em mensagens de erro nem em URLs (a
+  cache em memória só contém tokens já decifrados, para uso interno).
+
+Fora do âmbito desta cifragem (registado para tarefa separada): a password SMTP
+(`smtp_pass` em `configuracoes`).
+
+## 2.2 Backups (conceito separado)
 Os backups são da **instalação** (o dump contém dados de todos os
 condomínios), por isso:
 

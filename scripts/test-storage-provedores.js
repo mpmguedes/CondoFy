@@ -12,6 +12,9 @@
 const assert = require('assert');
 const path = require('path');
 
+// Chave de cifragem de teste (as credenciais passaram a ser cifradas em repouso):
+// gerada aleatoriamente em cada execução — nunca é uma credencial real.
+process.env.ENCRYPTION_KEY = require('crypto').randomBytes(32).toString('base64');
 // ── Duplos de teste: BD e configurações em memória ──────────────────
 const modelsPath = require.resolve('../models');
 require.cache[modelsPath] = {

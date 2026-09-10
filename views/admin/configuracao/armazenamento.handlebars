@@ -14,6 +14,16 @@
   links públicos (“qualquer pessoa com o link”) nem envia links do serviço por email.
 </div>
 
+{{#unless armazenamento.cifra.configurada}}
+<div class="alert alert-warning small">
+  <span class="material-symbols-outlined me-1" aria-hidden="true">key</span>
+  <strong>Credenciais de armazenamento indisponíveis.</strong>
+  {{#if armazenamento.cifra.erroOperacional}}{{armazenamento.cifra.erroOperacional}}{{else}}A chave de cifragem das credenciais não está configurada nesta instalação.{{/if}}
+  Esta é uma configuração da instalação (administrador do GesCondu): os serviços voltam a ficar ligados
+  assim que a chave estiver configurada, sem ser preciso autorizar novamente as contas.
+</div>
+{{/unless}}
+
 {{!-- ── Serviços de armazenamento do condomínio ─────────────────────── --}}
 <h2 class="h6 mt-3 mb-2">Serviços de armazenamento</h2>
 <div class="row g-3">

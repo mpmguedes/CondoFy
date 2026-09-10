@@ -116,6 +116,9 @@ async function estadoDoCondominio(condominioId) {
 
   return {
     principal: REGISTO[principal] ? principal : locator.PROVEDOR_PADRAO,
+    // Estado da cifragem das credenciais (mensagem administrativa quando a
+    // chave da instalação não está configurada). Nunca inclui chaves/tokens.
+    cifra: ligacoes.estadoCifra(),
     provedores,
     backup: {
       destino: destinoBackup,
