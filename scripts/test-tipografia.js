@@ -28,7 +28,13 @@ const lerCss = () => fs.readFileSync(path.join(RAIZ, 'public/css/styles.css')).t
 // ── 1. Escala de texto no CSS ───────────────────────────────────────
 function testarEscalaNoCss() {
   const css = lerCss();
-  assert.ok(/--font-scale:\s*1;/.test(css), 'token --font-scale definido (Normal = 1)');
+  // O nível por omissão é Grande (+8%): quem nunca escolheu fica já com a
+  // leitura mais confortável, e o atributo continua a mandar quando existe.
+  assert.ok(/--font-scale:\s*1\.08;/.test(css), 'valor por omissão = Grande (+8%)');
+  assert.ok(
+    /html\[data-font="normal"\]\s*\{\s*--font-scale:\s*1;\s*\}/.test(css),
+    'Normal = 1 (tamanho de referência, sem aumento)'
+  );
   assert.ok(
     /html\[data-font="large"\]\s*\{\s*--font-scale:\s*1\.08;\s*\}/.test(css),
     'Grande = +8% (1.08)'
@@ -102,8 +108,17 @@ function testarTipografiaGlobal() {
     assert.ok(html.includes('family=Inter:wght@400;500;600;700'), `${ficheiro}: Inter com os pesos usados no CSS`);
     assert.ok(!html.includes('family=Roboto'), `${ficheiro}: Roboto substituído (sem pedido duplicado)`);
     assert.ok(html.includes('Material+Symbols+Outlined'), `${ficheiro}: ícones mantidos`);
-    assert.ok(html.includes('/css/styles.css?v=20260910a'), `${ficheiro}: cache da folha de estilos renovado`);
+    // Cache renovado sempre que a folha ou o script de aparência mudam: o
+    // utilizador não pode ficar com a versão anterior em cache.
+    assert.match(html, /\/css\/styles\.css\?v=\d{8}[a-z]/, `${ficheiro}: folha de estilos com versão`);
+    assert.match(html, /\/js\/tema\.js\?v=\d{8}[a-z]/, `${ficheiro}: script de aparência com versão`);
   }
+  const versoes = (f) => (ler(f).match(/styles\.css\?v=(\d{8}[a-z])/) || [])[1];
+  assert.strictEqual(
+    versoes('views/layouts/main.handlebars'),
+    versoes('views/layouts/blank.handlebars'),
+    'a mesma versão da folha de estilos nos dois layouts'
+  );
 }
 
 // ── 4. Preferência aplicada antes do CSS (sem flash) ────────────────
@@ -113,8 +128,8 @@ function testarAplicacaoAntecipada() {
     const script = html.slice(html.indexOf('<head>'), html.indexOf('</head>'));
     assert.ok(script.includes("localStorage.getItem('gescondu-fonte')"), `${ficheiro}: lê a preferência de tamanho no <head>`);
     assert.ok(
-      /setAttribute\('data-font', f === 'large' \|\| f === 'xlarge' \? f : 'normal'\)/.test(script),
-      `${ficheiro}: aplica data-font antes do CSS (evita flash)`
+      /setAttribute\('data-font', f === 'normal' \|\| f === 'xlarge' \? f : 'large'\)/.test(script),
+      `${ficheiro}: aplica data-font antes do CSS (por omissão Grande, evita flash)`
     );
     assert.ok(script.includes("localStorage.getItem('gescondu-tema')"), `${ficheiro}: mantém a aplicação do tema`);
     assert.ok(
@@ -186,9 +201,13 @@ function testarComportamentoDaFonte() {
   delete require.cache[require.resolve('../public/js/tema.js')];
   require('../public/js/tema.js');
 
-  // Estado inicial: Normal + tema claro (o sistema não prefere escuro).
-  assert.strictEqual(raiz.getAttribute('data-font'), 'normal', 'arranca em Normal');
+  // Estado inicial: nível Grande (por omissão) + tema claro (o sistema não
+  // prefere escuro). É o que a aplicação assume para quem nunca escolheu.
+  assert.strictEqual(raiz.getAttribute('data-font'), 'large', 'arranca em Grande');
   assert.strictEqual(raiz.getAttribute('data-theme'), 'light', 'tema claro por omissão');
+  assert.strictEqual(opcoes[1].getAttribute('aria-checked'), 'true', 'Grande assinalado no arranque');
+  assert.strictEqual(botaoFonte.getAttribute('aria-label'), 'Tamanho do texto: Grande', 'o botão anuncia o nível por omissão');
+  assert.strictEqual(guardado.has('gescondu-fonte'), false, 'o nível por omissão não é escrito no browser sem escolha do utilizador');
 
   // Escolha do tamanho: guardada e aplicada; marca/aria-checked coerentes.
   assert.strictEqual(window.GesConduFonte.definir('xlarge'), 'xlarge', 'define Muito grande');
@@ -208,9 +227,9 @@ function testarComportamentoDaFonte() {
   assert.strictEqual(raiz.getAttribute('data-theme'), 'dark', 'tamanho não altera o tema');
   assert.strictEqual(raiz.getAttribute('data-font'), 'large', 'nível Grande aplicado');
 
-  // Preferência inválida (localStorage adulterado) cai em Normal.
+  // Preferência inválida (localStorage adulterado) cai no nível por omissão.
   window.GesConduFonte.definir('gigante');
-  assert.strictEqual(raiz.getAttribute('data-font'), 'normal', 'nível desconhecido → Normal');
+  assert.strictEqual(raiz.getAttribute('data-font'), 'large', 'nível desconhecido → nível por omissão (Grande)');
   assert.deepStrictEqual(
     window.GesConduFonte.OPCOES.map((o) => o.rotulo),
     ['Normal', 'Grande', 'Muito grande'],
@@ -248,8 +267,23 @@ function testarControloNaInterface() {
   assert.strictEqual((html.match(/aria-checked=/g) || []).length, 3, 'estado selecionado exposto em aria-checked');
   assert.strictEqual((html.match(/data-fonte-marca/g) || []).length, 3, 'marca visual por opção (não depende da cor)');
   assert.ok(html.includes('invisible'), 'marcas não escolhidas ficam invisíveis (não removidas: sem saltos de layout)');
-  assert.ok(html.includes('aria-label="Tamanho do texto: Normal"'), 'estado inicial anunciado no botão');
+  assert.ok(html.includes('aria-label="Tamanho do texto: Grande"'), 'o botão anuncia o nível por omissão (Grande)');
   assert.ok(!/\sstyle=/.test(html), 'sem estilos em linha (a escala vem do CSS global)');
+  // Estado inicial do menu coerente com o nível por omissão: Grande marcado.
+  const trecho = (nivel) => {
+    const i = html.indexOf(`data-fonte-opcao="${nivel}"`);
+    return html.slice(Math.max(0, i - 130), html.indexOf('</button>', i));
+  };
+  assert.ok(
+    /aria-checked="true"/.test(trecho('large')) && !/invisible/.test(trecho('large')),
+    'Grande vem marcado e visível (nível por omissão)'
+  );
+  for (const outro of ['normal', 'xlarge']) {
+    assert.ok(
+      /aria-checked="false"/.test(trecho(outro)) && /invisible/.test(trecho(outro)),
+      `${outro}: não marcado no estado inicial`
+    );
+  }
 
   // O controlo aparece onde já existia o de claro/escuro (cabeçalho, login e
   // seleção de condomínios) — sem criar páginas nem painéis novos.
@@ -279,6 +313,22 @@ function testarAvisoDeDocumento() {
   const modal = ler('views/partials/_modal-confirmar.handlebars');
   assert.ok(modal.includes('id="modalConfirmarCancelar"'), 'a modal identifica o botão Cancelar');
   assert.ok(modal.includes('GesConduAviso'), 'a modal documenta o modo aviso');
+
+  // O aviso diz sempre a quem pedir ajuda: quem não pode abrir o documento tem
+  // de saber que deve contactar o administrador.
+  const acessoMsg = ler('helpers/documentos-acesso.js');
+  assert.ok(
+    acessoMsg.includes("const CONTACTAR_ADMIN = 'Contacte o administrador do GesCondu.'"),
+    'frase de contacto definida uma só vez'
+  );
+  for (const motivo of ['SEM_FICHEIRO', 'PROVEDOR_INDISPONIVEL', 'LIGACAO_INVALIDA']) {
+    const linha = acessoMsg.match(new RegExp(`\\[MOTIVO\\.${motivo}\\]:[^\\n]+`))[0];
+    assert.ok(linha.includes('CONTACTAR_ADMIN'), `${motivo}: mensagem termina com o contacto do administrador`);
+  }
+  assert.ok(
+    /mensagem: `\$\{BASE_LIGACAO_INVALIDA\}\$\{detalhe\} \$\{CONTACTAR_ADMIN\}`/.test(acessoMsg),
+    'a causa provável (para quem gere) fica antes da indicação de contactar o administrador'
+  );
 
   // Rotas: verificação responde JSON e não entrega o ficheiro.
   for (const ficheiro of ['routes/documentos.js', 'routes/condomino.js']) {

@@ -8,7 +8,8 @@
  *
  * TEXTO — o atributo <html data-font="normal|large|xlarge"> define a escala
  * tipográfica global (Normal · Grande · Muito grande), aplicada em styles.css
- * pela variável --font-scale. A escolha fica em localStorage
+ * pela variável --font-scale. **O nível por omissão é Grande (+8%)** — é o que
+ * a aplicação assume para quem nunca escolheu. A escolha fica em localStorage
  * ('gescondu-fonte'), como o tema, e é uma preferência de acessibilidade do
  * utilizador: não é guardada na base de dados e sobrevive a logout/login.
  *
@@ -34,6 +35,9 @@
   var CHAVE = 'gescondu-tema';
   var CHAVE_FONTE = 'gescondu-fonte';
   var FONTES = ['normal', 'large', 'xlarge'];
+  // Nível por omissão (sem preferência guardada): Grande (+8%). O styles.css
+  // assume o mesmo valor quando o atributo não existe.
+  var FONTE_PADRAO = 'large';
   var RAIZ = document.documentElement;
 
   function guardado() {
@@ -106,11 +110,11 @@
   }
 
   function fonteAtual() {
-    return fonteGuardada() || 'normal';
+    return fonteGuardada() || FONTE_PADRAO;
   }
 
   function aplicarFonte(nivel) {
-    var escolhido = FONTES.indexOf(nivel) >= 0 ? nivel : 'normal';
+    var escolhido = FONTES.indexOf(nivel) >= 0 ? nivel : FONTE_PADRAO;
     RAIZ.setAttribute('data-font', escolhido);
     sincronizarOpcoesDeFonte(escolhido);
     return escolhido;
@@ -130,7 +134,7 @@
     }
     var botao = document.querySelector('[data-fonte-toggle]');
     if (botao) {
-      var rotulo = { normal: 'Normal', large: 'Grande', xlarge: 'Muito grande' }[nivel] || 'Normal';
+      var rotulo = { normal: 'Normal', large: 'Grande', xlarge: 'Muito grande' }[nivel] || 'Grande';
       botao.setAttribute('aria-label', 'Tamanho do texto: ' + rotulo);
       botao.setAttribute('title', 'Tamanho do texto: ' + rotulo);
     }
@@ -152,7 +156,7 @@
   }
 
   function definirFonte(nivel) {
-    var escolhido = FONTES.indexOf(nivel) >= 0 ? nivel : 'normal';
+    var escolhido = FONTES.indexOf(nivel) >= 0 ? nivel : FONTE_PADRAO;
     try { localStorage.setItem(CHAVE_FONTE, escolhido); } catch (e) {}
     return aplicarFonte(escolhido);
   }

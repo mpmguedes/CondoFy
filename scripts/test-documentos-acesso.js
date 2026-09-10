@@ -334,6 +334,9 @@ async function testarFalhaDoFornecedor() {
       assert.ok(f.esperado.test(admin.resultado.mensagem), `${f.erro}: explicação útil para o admin (${admin.resultado.mensagem})`);
       assert.ok(!/1AbC-xyz|invalid_grant|Rate Limit/i.test(admin.resultado.mensagem), `${f.erro}: sem detalhes técnicos crus`);
       assert.ok(!/drive\.google|dropbox|onedrive|access_token/i.test(admin.resultado.mensagem), `${f.erro}: sem fornecedor nem credenciais na mensagem`);
+      // O aviso tem de dizer a quem pedir ajuda (aparece numa caixa da
+      // aplicação, sem texto adicional à volta).
+      assert.ok(/Contacte o administrador do GesCondu\.$/.test(admin.resultado.mensagem), `${f.erro}: termina com o contacto do administrador`);
 
       // Condómino (área do condómino): mensagem genérica, sem diagnóstico.
       const cond = await servirCom(doc, reqCondominoCtx);

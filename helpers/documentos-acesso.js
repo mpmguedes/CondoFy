@@ -61,6 +61,12 @@ const MOTIVO = {
   LIGACAO_INVALIDA: 'ligacao_invalida',
 };
 
+// Frase final das mensagens de falha ao obter o ficheiro: o utilizador tem de
+// saber a quem pedir ajuda (o aviso aparece numa caixa da aplicação, por isso
+// não pode ficar só com a descrição do erro).
+const CONTACTAR_ADMIN = 'Contacte o administrador do GesCondu.';
+const BASE_LIGACAO_INVALIDA = 'Não foi possível obter o documento no serviço de armazenamento.';
+
 const MENSAGENS = {
   [MOTIVO.SEM_SESSAO]: 'Inicie sessão para aceder aos documentos.',
   [MOTIVO.SEM_CONDOMINIO]: 'Selecione um condomínio para aceder aos documentos.',
@@ -69,9 +75,9 @@ const MENSAGENS = {
   [MOTIVO.NAO_ENCONTRADO]: 'Documento não encontrado.',
   [MOTIVO.OUTRO_CONDOMINIO]: 'Documento não encontrado.',
   [MOTIVO.SEM_PERMISSAO]: 'Não tem permissões para aceder a este documento.',
-  [MOTIVO.SEM_FICHEIRO]: 'Este documento não tem ficheiro associado (apenas referência externa).',
-  [MOTIVO.PROVEDOR_INDISPONIVEL]: 'O armazenamento do condomínio não está ligado. Contacte o administrador.',
-  [MOTIVO.LIGACAO_INVALIDA]: 'Não foi possível obter o documento no serviço de armazenamento.',
+  [MOTIVO.SEM_FICHEIRO]: `Este documento não tem ficheiro associado (apenas referência externa). ${CONTACTAR_ADMIN}`,
+  [MOTIVO.PROVEDOR_INDISPONIVEL]: `O armazenamento do condomínio não está ligado. ${CONTACTAR_ADMIN}`,
+  [MOTIVO.LIGACAO_INVALIDA]: `${BASE_LIGACAO_INVALIDA} ${CONTACTAR_ADMIN}`,
 };
 
 // Falha do fornecedor ao entregar o ficheiro (502): causa provável, em
@@ -226,12 +232,13 @@ async function recusaDeFalhaDoFornecedor({ err, req, condominioId }) {
   // Quem gere o condomínio precisa de saber PORQUE falhou (autorização
   // revogada? ficheiro apagado? conta trocada?); o condómino recebe a mensagem
   // genérica. A explicação não expõe ids, tokens nem URLs.
+  // Ordem da mensagem: o que aconteceu → causa provável → a quem pedir ajuda.
   const explicacao = explicarFalhaDoFornecedor(err && err.message);
   const detalhe = podeVerTudo(req) && explicacao ? ` Causa provável: ${explicacao}.` : '';
   return {
     ok: false,
     motivo: MOTIVO.LIGACAO_INVALIDA,
-    mensagem: `${MENSAGENS[MOTIVO.LIGACAO_INVALIDA]}${detalhe}`,
+    mensagem: `${BASE_LIGACAO_INVALIDA}${detalhe} ${CONTACTAR_ADMIN}`,
     causa: explicacao || null,
   };
 }

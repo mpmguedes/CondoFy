@@ -97,9 +97,10 @@
   --font-size-xl: 1.25rem;   /* 20px - titulo principal e valores destacados */
 
   /* Escala de texto (acessibilidade): multiplica TODA a tipografia da
-     aplicação. Normal = 1; Grande/Muito grande são definidos em <html
-     data-font> (ver regras abaixo), tal como o tema segue <html data-theme>. */
-  --font-scale: 1;
+     aplicação. Os níveis são definidos em <html data-font> (ver regras abaixo),
+     tal como o tema segue <html data-theme>. O valor por omissão é o nível
+     Grande (+8%), o mesmo que o controlo de aparência assume. */
+  --font-scale: 1.08;
 
   --sp-1: 4px;
   --sp-2: 8px;
@@ -183,6 +184,7 @@ html, body { min-height: 100%; }
    As dimensões de layout (sidebar, cabeçalho, espaçamentos em px) não
    mudam: só a tipografia cresce. */
 html { font-size: calc(100% * var(--font-scale)); }
+html[data-font="normal"] { --font-scale: 1; }
 html[data-font="large"] { --font-scale: 1.08; }
 html[data-font="xlarge"] { --font-scale: 1.16; }
 
