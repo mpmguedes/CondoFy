@@ -49,9 +49,9 @@
         </p>
         <p class="small text-muted mb-3">{{pagamento.comprovativo.nome}} — {{formatDateTime pagamento.comprovativo.drive_uploaded_at}}</p>
         <div class="d-grid gap-2">
-          {{#if pagamento.comprovativo.url}}
-          <a href="{{pagamento.comprovativo.url}}" target="_blank" rel="noopener" class="btn btn-outline-primary"><i class="bi bi-eye me-1"></i>Ver comprovativo</a>
-          {{/if}}
+        {{#if (urlDocumento pagamento.comprovativo 'gestao')}}
+          <a href="{{urlDocumento pagamento.comprovativo 'gestao'}}" target="_blank" rel="noopener" class="btn btn-outline-primary"><i class="bi bi-eye me-1"></i>Ver comprovativo</a>
+        {{/if}}
           <a href="/admin/fornecedores/{{fornecedorId}}/pagamentos/{{pagamento.id}}/comprovativo/enviar" class="btn btn-primary"><i class="bi bi-send me-1"></i>Enviar comprovativo ao fornecedor</a>
         </div>
         {{else}}

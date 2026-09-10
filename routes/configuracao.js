@@ -11,6 +11,8 @@ const { getCondominio, clearCondominioCache } = require('../helpers/condominio')
 const { getConfig, setConfig } = require('../helpers/config');
 const { listarAutomacoes, guardarAutomacoes } = require('../helpers/automacoes');
 const drive = require('../helpers/drive');
+// Fachada de armazenamento multi-provedor (Google Drive | Dropbox | OneDrive).
+const storage = require('../helpers/storage');
 const { validarNif, validarIban } = require('../public/js/validacao-fiscal');
 
 const router = express.Router();
@@ -18,20 +20,47 @@ const router = express.Router();
 router.use(tenant.comCondominioAtivo);
 router.use(tenant.comPapel('admin'));
 
+// Provedores ligados pelo fluxo OAuth genérico (o Google Drive mantém as
+// rotas históricas /admin/config/drive/*, sem alterações).
+const PROVEDORES_OAUTH = new Set(['dropbox', 'onedrive']);
+
+const VAR_REDIRECT = {
+  dropbox: 'DROPBOX_REDIRECT_URI',
+  onedrive: 'ONEDRIVE_REDIRECT_URI',
+};
+
+// Redirect URI do provedor: .env (quando definido) ou derivado do pedido.
+function redirectUriDe(req, provedor) {
+  const daEnv = String(process.env[VAR_REDIRECT[provedor]] || '').trim();
+  if (daEnv) return daEnv;
+  return `${req.protocol}://${req.get('host')}/admin/config/armazenamento/${provedor}/callback`;
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  // O logótipo é guardado em public/uploads (servido como imagem estática):
+  // o tipo é validado no SERVIDOR (não basta o accept do formulário) para não
+  // permitir gravar HTML/SVG executável na origem da aplicação.
+  fileFilter: (req, file, cb) => {
+    const permitidos = new Set(['image/png', 'image/jpeg']);
+    if (!permitidos.has(String(file.mimetype || '').toLowerCase())) {
+      return cb(new Error('Formato de logótipo não suportado (use PNG ou JPG).'));
+    }
+    return cb(null, true);
+  },
 });
 
 // Dados de armazenamento/backups (Google Drive, pasta de destino, último backup),
 // usados pelo separador "Armazenamento e Backups".
-async function dadosArmazenamento() {
+async function dadosArmazenamento(condominioId) {
   const driveEstado = await drive.estadoLigacao();
 
-  const [ultimoBackup, raizDbRaw, backupsDb] = await Promise.all([
+  const [ultimoBackup, raizDbRaw, backupsDb, estados] = await Promise.all([
     BackupLog.findOne({ order: [['id', 'DESC']] }).catch(() => null),
     getConfig('google_drive_root_folder', '').catch(() => ''),
     getConfig('drive_auto_backups', '1').catch(() => '1'),
+    storage.estadoDoCondominio(condominioId).catch(() => ({ escolhido: 'google_drive', provedores: [] })),
   ]);
 
   // Fonte única de verdade: BD → .env → pasta inicial "GesCondu".
@@ -43,6 +72,7 @@ async function dadosArmazenamento() {
     driveEstado,
     driveOpcoes: { pastaRaiz: raizEfetiva, backupsDrive: String(backupsDb) !== '0' },
     ultimoBackup: ultimoBackup ? ultimoBackup.toJSON() : null,
+    armazenamento: estados,
   };
 }
 
@@ -60,11 +90,162 @@ router.get('/config', async (req, res) => {
 router.get('/config/armazenamento', async (req, res) => {
   res.render('admin/configuracao/armazenamento', {
     titulo: 'Armazenamento e Backups',
-    ...(await dadosArmazenamento()),
+    ...(await dadosArmazenamento(req.condominioId)),
   });
 });
 
-router.post('/config', upload.single('logotipo'), async (req, res) => {
+// ── Serviço de armazenamento do condomínio ─────────────────────────
+// Cada condomínio escolhe o provedor onde os seus documentos são guardados
+// (isolamento multi-tenant: storage:provedor:c<id>). Os documentos já
+// guardados continuam legíveis: a leitura usa o localizador do ficheiro.
+router.post('/config/armazenamento/provedor', async (req, res) => {
+  try {
+    const escolhido = await storage.definirProvedorDoCondominio(req.condominioId, req.body.provedor);
+    await audit({
+      userId: req.user.id,
+      acao: 'definir_provedor_armazenamento',
+      entidade: 'Condominio',
+      entidadeId: req.condominioId,
+      detalhes: { provedor: escolhido },
+    }).catch(() => {});
+    req.flash('success_msg', `Serviço de armazenamento do condomínio: ${escolhido}.`);
+  } catch (err) {
+    req.flash('error_msg', `Não foi possível guardar o serviço de armazenamento: ${err.message}`);
+  }
+  res.redirect('/admin/config/armazenamento');
+});
+
+// Ligar (passo 1): envia o administrador para o fornecedor escolhido.
+router.get('/config/armazenamento/:provedor/ligar', async (req, res) => {
+  const provedor = String(req.params.provedor || '').toLowerCase();
+  if (!PROVEDORES_OAUTH.has(provedor)) {
+    return res.redirect('/admin/config/armazenamento');
+  }
+  const p = storage.obterProvedor(provedor);
+  const estado = await p.estadoLigacao(req.condominioId);
+  if (!estado.ativo) {
+    req.flash('error_msg', `A integração ${p.rotulo()} está desativada (defina ${provedor.toUpperCase()}_ENABLED=true no .env).`);
+    return res.redirect('/admin/config/armazenamento');
+  }
+  if (!estado.credenciais) {
+    req.flash('error_msg', `Faltam as credenciais de ${p.rotulo()} no .env.`);
+    return res.redirect('/admin/config/armazenamento');
+  }
+
+  const forcarNome = VAR_REDIRECT[provedor];
+  const redirectUri = redirectUriDe(req, provedor);
+  if (!process.env[forcarNome]) {
+    console.warn(`[armazenamento] ${forcarNome} não definido — a usar ${redirectUri}`);
+  }
+  const state = crypto.randomBytes(18).toString('hex');
+  // O estado fica na sessão e inclui o condomínio: o callback nunca aceita um
+  // condominioId vindo do browser.
+  req.session.storageOauthState = { provedor, state, condominioId: req.condominioId };
+  const url = p.urlAutorizacao({ redirectUri, state, condominioId: req.condominioId });
+  return res.redirect(url);
+});
+
+// Ligar (passo 2): o fornecedor devolve o código de autorização.
+router.get('/config/armazenamento/:provedor/callback', async (req, res) => {
+  const provedor = String(req.params.provedor || '').toLowerCase();
+  if (!PROVEDORES_OAUTH.has(provedor)) {
+    return res.redirect('/admin/config/armazenamento');
+  }
+  const guardado = req.session.storageOauthState || null;
+  delete req.session.storageOauthState;
+
+  const { code, state, error } = req.query;
+  if (error) {
+    req.flash('error_msg', 'Autorização não concluída no fornecedor. Pode voltar a tentar.');
+    return res.redirect('/admin/config/armazenamento');
+  }
+  if (!code) {
+    req.flash('error_msg', 'Não foi recebido o código de autorização.');
+    return res.redirect('/admin/config/armazenamento');
+  }
+  if (!guardado || guardado.provedor !== provedor || guardado.state !== state) {
+    req.flash('error_msg', 'Pedido de autorização inválido (estado não confere). Tente novamente.');
+    return res.redirect('/admin/config/armazenamento');
+  }
+
+  const p = storage.obterProvedor(provedor);
+  try {
+    const tokens = await p.trocarCodigo({
+      code,
+      redirectUri: redirectUriDe(req, provedor),
+      condominioId: guardado.condominioId,
+    });
+    await storage.inicializar();
+    await audit({
+      userId: req.user.id,
+      acao: 'ligar_armazenamento',
+      entidade: p.rotulo(),
+      entidadeId: guardado.condominioId,
+      detalhes: { provedor, conta: tokens && tokens.conta ? tokens.conta : null },
+    }).catch(() => {});
+    req.flash('success_msg', `${p.rotulo()} ligado com sucesso${tokens && tokens.conta ? ` (${tokens.conta})` : ''}.`);
+  } catch (err) {
+    console.error(`[armazenamento] callback ${provedor}:`, err.message);
+    req.flash('error_msg', `Não foi possível ligar ${p.rotulo()}: ${err.message}`);
+  }
+  return res.redirect('/admin/config/armazenamento');
+});
+
+// Desligar: remove os tokens da ligação do condomínio (os ficheiros no
+// fornecedor NÃO são apagados nem despartilhados).
+router.post('/config/armazenamento/:provedor/desligar', async (req, res) => {
+  const provedor = String(req.params.provedor || '').toLowerCase();
+  if (!PROVEDORES_OAUTH.has(provedor)) {
+    return res.redirect('/admin/config/armazenamento');
+  }
+  const p = storage.obterProvedor(provedor);
+  try {
+    await p.desligar(req.condominioId);
+    await storage.inicializar();
+    await audit({
+      userId: req.user.id,
+      acao: 'desligar_armazenamento',
+      entidade: p.rotulo(),
+      entidadeId: req.condominioId,
+      detalhes: { provedor },
+    }).catch(() => {});
+    req.flash('success_msg', `${p.rotulo()} desligado. Os ficheiros já guardados não foram apagados.`);
+  } catch (err) {
+    req.flash('error_msg', `Não foi possível desligar ${p.rotulo()}: ${err.message}`);
+  }
+  return res.redirect('/admin/config/armazenamento');
+});
+
+// Testar a ligação (sem criar pastas nem enviar ficheiros).
+router.post('/config/armazenamento/:provedor/testar', async (req, res) => {
+  const provedor = String(req.params.provedor || '').toLowerCase();
+  if (!PROVEDORES_OAUTH.has(provedor)) {
+    return res.redirect('/admin/config/armazenamento');
+  }
+  const p = storage.obterProvedor(provedor);
+  const r = await p.testarLigacao(req.condominioId);
+  if (r.ok) {
+    await audit({ userId: req.user.id, acao: 'testar_armazenamento', entidade: p.rotulo(), detalhes: { ok: true } }).catch(() => {});
+    req.flash('success_msg', r.conta ? `✓ Ligação a ${p.rotulo()} estabelecida (${r.conta}).` : `✓ Ligação a ${p.rotulo()} estabelecida.`);
+  } else {
+    req.flash('error_msg', `✕ Não foi possível testar ${p.rotulo()}: ${r.erro}`);
+  }
+  return res.redirect('/admin/config/armazenamento');
+});
+
+// Upload do logótipo com tratamento de erro amigável (formato inválido não
+// deve rebentar a página de Configuração).
+function uploadLogotipo(req, res, next) {
+  upload.single('logotipo')(req, res, (err) => {
+    if (err) {
+      req.flash('error_msg', err.message || 'Não foi possível carregar o logótipo.');
+      return res.redirect('/admin/config');
+    }
+    return next();
+  });
+}
+
+router.post('/config', uploadLogotipo, async (req, res) => {
   try {
     // NIF e IBAN: normalizar e validar antes de guardar (nunca confiar no browser).
     const nifValidado = validarNif(req.body.nif);
@@ -101,9 +282,10 @@ router.post('/config', upload.single('logotipo'), async (req, res) => {
     }
     await condominio.update(dados);
 
-    // Logótipo
+    // Logótipo: a extensão do ficheiro gravado vem do TIPO validado no
+    // servidor (nunca do nome enviado pelo browser).
     if (req.file) {
-      const ext = path.extname(req.file.originalname).toLowerCase() || '.png';
+      const ext = String(req.file.mimetype || '').toLowerCase() === 'image/jpeg' ? '.jpg' : '.png';
       const nome = `logo_${Date.now()}${ext}`;
       const destino = path.join(__dirname, '..', 'public', 'uploads', nome);
       fs.writeFileSync(destino, req.file.buffer);

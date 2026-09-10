@@ -2,9 +2,13 @@ node_modules/
 .npm-cache/
 .env
 *.log
+# Artefactos de verificação local (harnesses, imagens, rasters) — não versionar
+.verify/
 public/uploads/*
 !public/uploads/.gitkeep
 backups/local/
 storage/tmp/
 storage/email_anexos/
+# Comprovativos de pagamento (ficheiros privados: nunca entram no repositório)
+storage/comprovativos/
 .DS_Store

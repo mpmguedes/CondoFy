@@ -25,6 +25,23 @@ module.exports = {
   checked: (a) => (a ? 'checked' : ''),
   // isActive(path, prefix) → 'active' se o path atual pertence a esse item
   isActive: (path, prefix) => (path === prefix || (path && path.startsWith(prefix + '/'))) ? 'active' : '',
+  // urlDocumento(doc, area) → rota INTERNA de acesso ao ficheiro do documento.
+  // Os documentos nunca são servidos por links do fornecedor (Drive/Dropbox/
+  // OneDrive): o ficheiro passa sempre pelo backend, que verifica sessão,
+  // condomínio e permissões (helpers/documentos-acesso.js).
+  // Devolve null quando o documento não tem ficheiro guardado (nesse caso a
+  // vista pode mostrar o link externo indicado pelo administrador, se existir).
+  urlDocumento: (doc, area) => {
+    if (!doc || !doc.id || !doc.drive_file_id) return null;
+    const base = area === 'condomino' ? '/condomino/documentos' : '/admin/documentos';
+    return `${base}/${doc.id}/ficheiro`;
+  },
+  // urlDocumentoExterno(doc) → link externo introduzido pelo administrador
+  // (apenas quando NÃO há ficheiro guardado no armazenamento do condomínio).
+  urlDocumentoExterno: (doc) => {
+    if (!doc || doc.drive_file_id) return null;
+    return doc.url || null;
+  },
   // startsPath(path, prefix) → true se o path é igual ou está dentro do prefixo
   startsPath: (path, prefix) => Boolean(path && (path === prefix || path.startsWith(prefix + '/'))),
   // saudacao() → cumprimento conforme a hora do dia

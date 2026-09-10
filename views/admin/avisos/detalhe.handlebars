@@ -14,7 +14,11 @@
           {{#if aviso.data_programada}}<span class="ms-2">envio em {{formatDate aviso.data_programada}}</span>{{/if}}
         </p>
         <p class="mb-0">{{aviso.mensagem}}</p>
-        {{#if aviso.documento}}<p class="mt-2 mb-0 small">Documento: <a href="{{aviso.documento.url}}" target="_blank">{{aviso.documento.nome}}</a></p>{{/if}}
+        {{#if aviso.documento}}<p class="mt-2 mb-0 small">Documento:
+          {{#if (urlDocumento aviso.documento 'gestao')}}<a href="{{urlDocumento aviso.documento 'gestao'}}">{{aviso.documento.nome}}</a>
+          {{else if (urlDocumentoExterno aviso.documento)}}<a href="{{urlDocumentoExterno aviso.documento}}" target="_blank" rel="noopener noreferrer">{{aviso.documento.nome}} (link externo)</a>
+          {{else}}{{aviso.documento.nome}}{{/if}}
+        </p>{{/if}}
       </div>
     </div>
 

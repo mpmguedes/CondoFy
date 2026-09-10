@@ -137,8 +137,31 @@ const TAB4 = 'href="/admin/config/auditoria"';
   assert.ok(r.corpo.includes('action="/admin/config/drive/testar"'), 'armazenamento: testar ligação');
   assert.ok(r.corpo.includes('action="/admin/config/drive/estrutura"'), 'armazenamento: estrutura de pastas');
   assert.ok(r.corpo.includes('modalDesligarDrive'), 'armazenamento: modal de desligar');
+  // Escolha do serviço de armazenamento do condomínio (multi-provedor)
+  assert.ok(r.corpo.includes('action="/admin/config/armazenamento/provedor"'), 'armazenamento: formulário do serviço');
+  assert.ok(r.corpo.includes('name="provedor"'), 'armazenamento: campo provedor');
+  for (const nome of ['google_drive', 'dropbox', 'onedrive']) {
+    assert.ok(r.corpo.includes(`value="${nome}"`), `armazenamento: provedor ${nome} disponível`);
+  }
+  assert.ok(r.corpo.includes('privados'), 'armazenamento: explica que os documentos ficam privados');
   assert.ok(!r.corpo.includes('name="designacao"'), 'armazenamento: sem campos do condomínio');
   assert.ok(!r.corpo.includes('auto_convocatoria_drive'), 'armazenamento: sem automações');
+
+  // 2.1 Provedor alternativo configurado mas ainda não ligado: a página mostra
+  // a ação de ligar (o fluxo OAuth é sempre iniciado pelo backend).
+  process.env.DROPBOX_ENABLED = 'true';
+  process.env.DROPBOX_APP_KEY = 'chave-de-teste';
+  process.env.DROPBOX_APP_SECRET = 'segredo-de-teste';
+  try {
+    const rDropbox = await pedir('/admin/config/armazenamento');
+    assert.ok(rDropbox.corpo.includes('href="/admin/config/armazenamento/dropbox/ligar"'), 'armazenamento: ligar Dropbox disponível');
+    assert.ok(rDropbox.corpo.includes('Ligar Dropbox'), 'armazenamento: texto do botão de ligar');
+    assert.ok(!rDropbox.corpo.includes('href="/admin/config/armazenamento/onedrive/ligar"'), 'armazenamento: OneDrive desativado não mostra ligação');
+  } finally {
+    delete process.env.DROPBOX_ENABLED;
+    delete process.env.DROPBOX_APP_KEY;
+    delete process.env.DROPBOX_APP_SECRET;
+  }
 
   // 3. Separador 3 — Documentos e Automações (área antes atrás de um botão)
   r = await pedir('/admin/config/automacoes');
@@ -185,7 +208,7 @@ const TAB4 = 'href="/admin/config/auditoria"';
   // 6. Rotas de gravação existentes mantêm-se
   const rotas = router.stack.filter((l) => l.route)
     .map((l) => Object.keys(l.route.methods).join(',').toUpperCase() + ' ' + l.route.path);
-  for (const esperada of ['GET /config', 'POST /config', 'GET /config/armazenamento', 'GET /config/automacoes', 'POST /config/automacoes', 'GET /config/auditoria', 'GET /auditoria', 'POST /config/drive/opcoes', 'POST /config/drive/testar', 'POST /config/drive/estrutura', 'POST /config/drive/desligar', 'GET /config/drive/ligar', 'GET /config/drive/callback']) {
+  for (const esperada of ['GET /config', 'POST /config', 'GET /config/armazenamento', 'GET /config/automacoes', 'POST /config/automacoes', 'GET /config/auditoria', 'GET /auditoria', 'POST /config/armazenamento/provedor', 'GET /config/armazenamento/:provedor/ligar', 'GET /config/armazenamento/:provedor/callback', 'POST /config/armazenamento/:provedor/desligar', 'POST /config/armazenamento/:provedor/testar', 'POST /config/drive/opcoes', 'POST /config/drive/testar', 'POST /config/drive/estrutura', 'POST /config/drive/desligar', 'GET /config/drive/ligar', 'GET /config/drive/callback']) {
     assert.ok(rotas.includes(esperada), `rota preservada: ${esperada}`);
   }
   // Isolamento por condomínio/papel continua aplicado a nível do router.

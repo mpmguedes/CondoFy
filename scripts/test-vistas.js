@@ -250,12 +250,27 @@ assert.ok(html.includes('/admin/documentos/5/email'), 'documentos: ação enviar
 const docsEmail = handlebars.compile(ler('admin/documentos/email.handlebars'));
 html = docsEmail({
   titulo: 'Enviar documento por email',
-  documento: { id: 5, nome: 'Ata 10/01', pasta: 'atas', data: new Date('2026-01-10'), url: 'https://drive.google.com/x', drive_status: 'guardado' },
+  documento: { id: 5, nome: 'Ata 10/01', pasta: 'atas', data: new Date('2026-01-10'), url: 'https://drive.google.com/x', drive_file_id: 'gd-5', drive_status: 'guardado' },
   pessoas: [{ id: 1, nome: 'João Silva', email: 'joao@exemplo.pt' }],
   driveLigado: true,
 });
 assert.ok(html.includes('joao@exemplo.pt'), 'email doc: destinatários');
-assert.ok(html.includes('Abrir no Google Drive'), 'email doc: link do documento');
+// O documento com ficheiro guardado é aberto pela rota interna do GesCondu —
+// nunca pelo link do fornecedor de armazenamento.
+assert.ok(html.includes('href="/admin/documentos/5/ficheiro"'), 'email doc: link interno do documento');
+assert.ok(html.includes('Ver documento (pelo GesCondu)'), 'email doc: ação de ver documento');
+assert.ok(!html.includes('drive.google.com'), 'email doc: sem link do fornecedor de armazenamento');
+
+// Documento apenas com referência externa (sem ficheiro guardado): mantém o
+// link indicado pelo administrador, identificado como externo.
+html = docsEmail({
+  titulo: 'Enviar documento por email',
+  documento: { id: 6, nome: 'Ficha de fornecedor', pasta: 'outros', data: new Date('2026-01-10'), url: 'https://exemplo.pt/ficha.pdf', drive_status: 'nao_guardado' },
+  pessoas: [],
+  driveLigado: true,
+});
+assert.ok(html.includes('href="https://exemplo.pt/ficha.pdf"'), 'email doc: referência externa preservada');
+assert.ok(!html.includes('/admin/documentos/6/ficheiro'), 'email doc: sem rota interna para documento sem ficheiro');
 
 // 11. Administração global (Super Admin) — vistas + navegação
 const globalIndex = handlebars.compile(ler('admin/global/index.handlebars'));

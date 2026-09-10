@@ -101,7 +101,8 @@
             </form>
           </td>
           <td class="text-end text-nowrap">
-            {{#if url}}<a href="{{url}}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" title="Ver/Descarregar"><span class="material-symbols-outlined">download</span></a>{{/if}}
+            {{#if (urlDocumento this 'gestao')}}<a href="{{urlDocumento this 'gestao'}}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" title="Ver/Descarregar"><span class="material-symbols-outlined">download</span></a>{{/if}}
+            {{#if (urlDocumentoExterno this)}}<a href="{{urlDocumentoExterno this}}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary" title="Link externo indicado pela administração"><span class="material-symbols-outlined">link</span></a>{{/if}}
             <a href="/admin/documentos/{{id}}/email" class="btn btn-sm btn-outline-secondary" title="Enviar por email"><span class="material-symbols-outlined">mail</span></a>
             <form action="/admin/documentos/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar este documento?');">
               <button class="btn btn-sm btn-outline-danger" title="Eliminar"><span class="material-symbols-outlined">delete</span></button>

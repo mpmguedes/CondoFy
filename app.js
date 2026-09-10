@@ -174,6 +174,10 @@ app.use('/admin', require('./routes/sistema'));
 app.use('/admin', require('./routes/fornecedores'));
 app.use('/admin', require('./routes/placeholders'));
 app.use('/condomino', require('./routes/condomino'));
+// Link temporário de documento (destinatários sem conta) — rota pública
+// protegida por token assinado e com validade limitada; ver o cabeçalho de
+// routes/documentos-link.js. Nunca serve documentos sem token válido.
+app.use('/', require('./routes/documentos-link'));
 
 // ── Tratamento de erros ────────────────────────────────────────────
 app.use((req, res) => {

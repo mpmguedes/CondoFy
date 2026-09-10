@@ -18,6 +18,9 @@ const { enfileirarEmail: enfileirarEmailFila } = require('../helpers/email-fila'
 const { compor: comporEmail } = require('../helpers/email-templates');
 const { getCondominio } = require('../helpers/condominio');
 const drive = require('../helpers/drive');
+// Link do documento para email: sempre uma rota do GesCondu (nunca o link do
+// fornecedor de armazenamento).
+const { urlParaEmail } = require('../helpers/documentos-acesso');
 
 const router = express.Router();
 // Isolamento: condomínio ativo (sessão validada) em todas as operações.
@@ -154,10 +157,25 @@ router.post('/avisos/:id/enviar', async (req, res) => {
   const cond = await getCondominio({ id: req.condominioId });
   const condNome = (cond && String(cond.designacao || '').trim()) || '';
   const adminNome = (cond && String(cond.administracao_nome || '').trim()) || '';
-  const urlOnline = doc && doc.url ? doc.url : null;
+  // Link do aviso: NUNCA o link do fornecedor de armazenamento — passa sempre
+  // pelo GesCondu (rota autenticada ou link temporário com validade limitada).
+  const baseUrlAviso = `${req.protocol}://${req.get('host')}`;
+  const emailsCondominos = new Set(
+    (await Pessoa.findAll({
+      where: { condominio_id: req.condominioId, email: { [Op.ne]: null } },
+      attributes: ['email'],
+    }).catch(() => [])).map((p) => String(p.email).trim().toLowerCase())
+  );
 
   let enfileirados = 0;
   for (const dest of lista) {
+    const urlOnline = doc
+      ? urlParaEmail({
+          documento: doc,
+          baseUrl: baseUrlAviso,
+          destinatarioInterno: emailsCondominos.has(String(dest.email).trim().toLowerCase()),
+        })
+      : null;
     const tpl = mensagem
       ? comporEmail('generico', {
           destinatarioNome: dest.nome,

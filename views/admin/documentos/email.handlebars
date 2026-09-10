@@ -61,9 +61,14 @@
             {{else}}<span class="badge text-bg-secondary">Não guardado</span>{{/if}}
           </dd>
         </dl>
-        {{#if documento.url}}
-        <a href="{{documento.url}}" target="_blank" rel="noopener" class="btn btn-outline-primary w-100 mt-3">
-          <i class="bi bi-box-arrow-up-right me-1"></i>Abrir no Google Drive
+        {{#if (urlDocumento documento 'gestao')}}
+        <a href="{{urlDocumento documento 'gestao'}}" target="_blank" rel="noopener" class="btn btn-outline-primary w-100 mt-3">
+          <i class="bi bi-file-earmark-arrow-down me-1"></i>Ver documento (pelo GesCondu)
+        </a>
+        {{/if}}
+        {{#if (urlDocumentoExterno documento)}}
+        <a href="{{urlDocumentoExterno documento}}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary w-100 mt-3">
+          <i class="bi bi-box-arrow-up-right me-1"></i>Abrir referência externa
         </a>
         {{/if}}
       </div>

@@ -24,7 +24,10 @@
         <tr>
           <td class="fw-semibold">{{nome}}</td>
           <td class="text-nowrap">{{formatDate data}}</td>
-          <td class="text-end">{{#if url}}<a href="{{url}}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">Ver/Descarregar</a>{{/if}}</td>
+          <td class="text-end">
+            {{#if (urlDocumento this 'condomino')}}<a href="{{urlDocumento this 'condomino'}}" class="btn btn-sm btn-outline-primary">Ver/Descarregar</a>{{/if}}
+            {{#if (urlDocumentoExterno this)}}<a href="{{urlDocumentoExterno this}}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary" title="Link externo indicado pela administração">Link externo</a>{{/if}}
+          </td>
         </tr>
         {{/each}}
       </tbody>
@@ -44,7 +47,10 @@
           <tr>
             <td class="fw-semibold">{{nome}}</td>
             <td class="text-nowrap">{{formatDate data}}</td>
-            <td class="text-end">{{#if url}}<a href="{{url}}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">Ver</a>{{/if}}</td>
+            <td class="text-end">
+              {{#if (urlDocumento this 'condomino')}}<a href="{{urlDocumento this 'condomino'}}" class="btn btn-sm btn-outline-primary">Ver</a>{{/if}}
+              {{#if (urlDocumentoExterno this)}}<a href="{{urlDocumentoExterno this}}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary" title="Link externo indicado pela administração">Link externo</a>{{/if}}
+            </td>
           </tr>
           {{/each}}
         </tbody>

@@ -22,17 +22,17 @@
 <h2 class="h6 mt-3 mb-2">Documentos disponíveis</h2>
 <div class="card"><div class="list-group list-group-flush">
   {{#if convocatoriaDisponivel}}
-  <a class="list-group-item d-flex justify-content-between align-items-center" href="{{assembleia.convocatoria.url}}" target="_blank" rel="noopener">
+  <a class="list-group-item d-flex justify-content-between align-items-center" href="{{urlDocumento assembleia.convocatoria 'condomino'}}">
     Convocatória <span class="material-symbols-outlined">picture_as_pdf</span>
   </a>
   {{/if}}
   {{#if ataDisponivel}}
-  <a class="list-group-item d-flex justify-content-between align-items-center" href="{{assembleia.ata.url}}" target="_blank" rel="noopener">
+  <a class="list-group-item d-flex justify-content-between align-items-center" href="{{urlDocumento assembleia.ata 'condomino'}}">
     Ata <span class="material-symbols-outlined">picture_as_pdf</span>
   </a>
   {{/if}}
   {{#each anexos}}
-  <a class="list-group-item d-flex justify-content-between align-items-center" href="{{url}}" target="_blank" rel="noopener">{{nome}}</a>
+  <a class="list-group-item d-flex justify-content-between align-items-center" href="{{urlDocumento this 'condomino'}}">{{nome}}</a>
   {{else}}
   {{#unless convocatoriaDisponivel}}{{#unless ataDisponivel}}
   <div class="list-group-item text-muted small">Sem documentos disponibilizados para esta assembleia.</div>

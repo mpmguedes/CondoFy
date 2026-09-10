@@ -25,6 +25,8 @@ const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const drive = require('../helpers/drive');
+// Links de documento para email: sempre uma rota do GesCondu.
+const { urlParaEmail } = require('../helpers/documentos-acesso');
 const mailer = require('../helpers/mailer');
 const { compor: comporEmail } = require('../helpers/email-templates');
 const { getCondominio } = require('../helpers/condominio');
@@ -440,7 +442,15 @@ router.post('/fornecedores/:id/pagamentos/:pid/comprovativo/enviar', async (req,
       condominio: condNome,
       administracao: adminNome,
       referencia: pagamento.referencia,
-      urlOnline: pagamento.comprovativo.url || null,
+      // Destinatário externo (fornecedor, sem conta no GesCondu): o link é
+      // temporário, assinado e com validade limitada, emitido aqui depois de
+      // o administrador autenticado pedir o envio. O comprovativo segue
+      // também em anexo, pelo que o email funciona mesmo sem link.
+      urlOnline: urlParaEmail({
+        documento: pagamento.comprovativo,
+        baseUrl: `${req.protocol}://${req.get('host')}`,
+        destinatarioInterno: false,
+      }),
     });
     const assunto = String(req.body.assunto || '').trim() || tpl.assunto;
     const custom = String(req.body.mensagem || '').trim();

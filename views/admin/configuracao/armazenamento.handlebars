@@ -7,6 +7,46 @@
   </div>
 </div>
 
+<div class="alert alert-info small">
+  <span class="material-symbols-outlined me-1" aria-hidden="true">lock</span>
+  Os documentos ficam <strong>privados</strong> no serviço de armazenamento escolhido e são sempre
+  entregues pelo GesCondu, depois de verificar a sessão, o condomínio e as permissões do utilizador.
+  O GesCondu não cria links públicos (“qualquer pessoa com o link”) nem envia links do serviço por email.
+</div>
+
+<div class="card mb-4" id="servico-armazenamento">
+  <div class="card-header bg-white"><i class="bi bi-hdd-network me-1"></i>Serviço de armazenamento do condomínio</div>
+  <div class="card-body">
+    <p class="text-muted small">
+      Escolha onde ficam guardados os documentos <strong>deste condomínio</strong>. Cada condomínio tem o
+      seu próprio serviço e a sua própria ligação (isolamento entre condomínios). Mudar de serviço não
+      esconde documentos antigos: o GesCondu sabe em que serviço ficou cada ficheiro e continua a
+      servi-lo.
+    </p>
+    <form action="/admin/config/armazenamento/provedor" method="POST">
+      <div class="row g-3">
+        {{#each armazenamento.provedores}}
+        <div class="col-12 col-md-4">
+          <div class="border rounded p-3 h-100 {{#if escolhido}}border-primary{{/if}}">
+            <div class="form-check mb-0">
+              <input class="form-check-input" type="radio" name="provedor" id="prov_{{nome}}" value="{{nome}}" {{#if escolhido}}checked{{/if}} />
+              <label class="form-check-label" for="prov_{{nome}}">
+                <span class="fw-semibold d-block">{{rotulo}}</span>
+              </label>
+            </div>
+            <div class="mt-2 d-flex flex-wrap gap-1">
+              {{#if ligado}}<span class="badge text-bg-success">Ligado</span>{{else}}<span class="badge text-bg-secondary">Não ligado</span>{{/if}}
+              {{#if escolhido}}<span class="badge text-bg-primary">Em uso</span>{{/if}}
+            </div>
+          </div>
+        </div>
+        {{/each}}
+      </div>
+      <button type="submit" class="btn btn-primary mt-3"><i class="bi bi-check2 me-1"></i>Guardar serviço</button>
+    </form>
+  </div>
+</div>
+
 <div class="row g-4">
   <div class="col-12 col-lg-6">
     <div class="card" id="google-drive">
@@ -142,6 +182,53 @@
     </div>
     {{/if}}
   </div>
+</div>
+
+{{!-- Outros serviços (Dropbox, OneDrive, …): ligação por condomínio. --}}
+<div class="row g-4 mt-1">
+  {{#each armazenamento.provedores}}
+  {{#if (ne nome 'google_drive')}}
+  <div class="col-12 col-lg-6">
+    <div class="card" id="{{nome}}">
+      <div class="card-header bg-white"><i class="bi bi-cloud-arrow-up me-1"></i>{{rotulo}}</div>
+      <div class="card-body">
+        {{#if estado.ligado}}
+          <p class="mb-2">
+            <span class="badge text-bg-success">🟢 Ligado</span>
+            {{#if estado.conta}}<span class="fw-semibold small ms-1">{{estado.conta}}</span>{{/if}}
+            {{#if escolhido}}<span class="badge text-bg-primary ms-1">Em uso</span>{{/if}}
+          </p>
+          <p class="text-muted small">Os documentos deste condomínio são guardados nesta conta e servidos pelo GesCondu.</p>
+          <div class="d-grid gap-2">
+            <form action="/admin/config/armazenamento/{{nome}}/testar" method="POST">
+              <button type="submit" class="btn btn-outline-secondary w-100"><i class="bi bi-plug me-1"></i>Testar ligação</button>
+            </form>
+            <form action="/admin/config/armazenamento/{{nome}}/desligar" method="POST" onsubmit="return confirm('Desligar {{rotulo}}? Os ficheiros já guardados não são apagados.');">
+              <button type="submit" class="btn btn-outline-danger w-100"><i class="bi bi-x-circle me-1"></i>Desligar</button>
+            </form>
+          </div>
+        {{else if estado.ativo}}
+          {{#if estado.credenciais}}
+            <p class="mb-2"><span class="badge text-bg-danger">🔴 Desligado</span></p>
+            <p class="text-muted small">Ligue uma conta {{rotulo}} para guardar os documentos deste condomínio neste serviço.</p>
+            <a href="/admin/config/armazenamento/{{nome}}/ligar" class="btn btn-primary w-100">
+              <i class="bi bi-box-arrow-in-right me-1"></i>Ligar {{rotulo}}
+            </a>
+          {{else}}
+            <p class="mb-2"><span class="badge text-bg-secondary">⚪ Não configurado</span></p>
+            <p class="text-muted small mb-0">
+              Adicione as credenciais de {{rotulo}} ao <code>.env</code> para poder ligar este serviço.
+            </p>
+          {{/if}}
+        {{else}}
+          <p class="mb-2"><span class="badge text-bg-secondary">Desativado</span></p>
+          <p class="text-muted small mb-0">A integração {{rotulo}} está desativada no <code>.env</code>.</p>
+        {{/if}}
+      </div>
+    </div>
+  </div>
+  {{/if}}
+  {{/each}}
 </div>
 
 {{!-- Modal de confirmação dupla — Desligar Google Drive --}}

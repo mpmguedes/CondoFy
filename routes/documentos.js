@@ -13,6 +13,8 @@ const { enfileirarEmail: enfileirarEmailFila } = require('../helpers/email-fila'
 const { compor: comporEmail, nomeFicheiro: nomeFicheiroEmail } = require('../helpers/email-templates');
 const { getCondominio, clearCondominioCache } = require('../helpers/condominio');
 const { PASTAS_BASE: PASTAS, mapaPastas, pastasPersonalizadas, novaKey, resolverPastaDocumento } = require('../helpers/documento-pastas');
+// Acesso autorizado a documentos (Utilizador → Condomínio → Documento).
+const { autorizarAcessoDocumento, servirDocumento, urlParaEmail, urlInterna } = require('../helpers/documentos-acesso');
 
 const router = express.Router();
 // Isolamento: todas as operações usam o condomínio ativo (sessão validada).
@@ -22,6 +24,21 @@ router.use(tenant.comPapel('gestor'));
 function toArray(v) {
   if (!v) return [];
   return Array.isArray(v) ? v : [v];
+}
+
+// Referência externa introduzida pelo administrador (documento sem ficheiro
+// guardado no armazenamento do condomínio). Só http/https: evita
+// javascript:/data: no href das vistas e no corpo dos emails.
+function urlExternaSegura(valor) {
+  const texto = String(valor || '').trim();
+  if (!texto) return null;
+  let u;
+  try {
+    u = new URL(texto);
+  } catch (err) {
+    return null;
+  }
+  return u.protocol === 'http:' || u.protocol === 'https:' ? u.toString() : null;
 }
 
 const upload = multer({
@@ -153,6 +170,11 @@ router.get('/documentos', async (req, res) => {
       return {
         id: doc.id,
         url: doc.url,
+        // O ficheiro é sempre servido pelo GesCondu (ver documentos-acesso).
+        // `url` fica apenas como referência externa de documentos sem ficheiro
+        // guardado no armazenamento do condomínio.
+        ficheiroInterno: urlInterna(doc, { area: 'gestao' }),
+        urlExterna: doc.drive_file_id ? null : doc.url || null,
         drive_status: doc.drive_status,
         codigo: rec ? rec.codigo : doc.numero_documento || doc.nome,
         fracao: rec && rec.fracao ? rec.fracao.designacao : null,
@@ -280,6 +302,8 @@ router.get('/documentos/nova', async (req, res) => {
 router.post('/documentos', upload.single('ficheiro'), async (req, res) => {
   try {
     const { nome, tipo, data, url, pasta } = req.body;
+    // Referência externa validada (só http/https) — nunca é aceite tal e qual.
+    const urlExterna = urlExternaSegura(url);
     const cond = await getCondominio({ id: req.condominioId });
     const mapa = mapaPastas(cond);
     // Classificação central: respeita uma escolha válida/compatível; corrige
@@ -293,7 +317,7 @@ router.post('/documentos', upload.single('ficheiro'), async (req, res) => {
     const ano = data ? new Date(data).getFullYear() : new Date().getFullYear();
 
     let driveFileId = null;
-    let driveUrl = url || null;
+    let driveUrl = urlExterna;
     let drivePastaId = null;
     let mimeType = null;
     let tamanho = null;
@@ -420,9 +444,16 @@ router.post('/documentos/:id/email', async (req, res) => {
   for (const email of manual) destinatarios.push({ email, nome: null });
   // condóminos selecionados (apenas do condomínio ativo)
   const ids = toArray(req.body.pessoas).map(Number);
+  // Emails de condóminos do condomínio ativo: servem para decidir que link
+  // segue no email (rota autenticada para quem tem conta; link temporário,
+  // assinado e com validade limitada, para os restantes).
+  const emailsCondominos = new Set();
   if (ids.length) {
     const pessoas = await Pessoa.findAll({ where: { id: { [Op.in]: ids }, email: { [Op.ne]: null }, condominio_id: req.condominioId } });
-    for (const p of pessoas) destinatarios.push({ email: p.email, nome: p.nome });
+    for (const p of pessoas) {
+      destinatarios.push({ email: p.email, nome: p.nome });
+      emailsCondominos.add(String(p.email).trim().toLowerCase());
+    }
   }
 
   // Anexo (cópia independente): descarrega o ficheiro do Drive quando disponível.
@@ -443,11 +474,19 @@ router.post('/documentos/:id/email', async (req, res) => {
   const condNome = (cond && String(cond.designacao || '').trim()) || '';
   const adminNome = (cond && String(cond.administracao_nome || '').trim()) || '';
   const tipoDoc = ['convocatoria', 'recibo'].includes(documento.tipo) ? documento.tipo : 'documento';
-  const urlOnline = documento.url || null;
+  // Link do documento no email: NUNCA o link do fornecedor de armazenamento.
+  // O acesso passa sempre pelo GesCondu (rota autenticada ou link temporário
+  // emitido aqui, depois de o administrador autenticado pedir o envio).
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
 
   const notaManual = String(req.body.mensagem || '').trim();
   let enfileirados = 0;
   for (const dest of destinatarios) {
+    const urlOnline = urlParaEmail({
+      documento,
+      baseUrl,
+      destinatarioInterno: emailsCondominos.has(String(dest.email).trim().toLowerCase()),
+    });
     const tpl = notaManual
       ? comporEmail('generico', {
           destinatarioNome: dest.nome || undefined,
@@ -491,6 +530,27 @@ router.post('/documentos/:id/email', async (req, res) => {
   }).catch(() => {});
   req.flash('success_msg', `Documento enfileirado para envio a ${enfileirados} destinatário(s).${comAnexo ? ' (com PDF em anexo)' : ' (link online; sem anexo — configure o Drive para anexar)'}`);
   res.redirect('/admin/documentos');
+});
+
+// ── Ficheiro do documento (acesso autorizado) ───────────────────────
+// ÚNICO caminho para ver/descarregar o ficheiro de um documento. A verificação
+// (sessão → utilizador → condomínio ativo → permissão sobre ESTE documento) é
+// feita em helpers/documentos-acesso.js e o ficheiro é servido em streaming
+// pelo backend, a partir do provedor de armazenamento do condomínio. Nenhum
+// link do fornecedor (Drive/Dropbox/OneDrive) chega ao browser.
+router.get('/documentos/:id/ficheiro', async (req, res) => {
+  const autorizacao = await autorizarAcessoDocumento({ documentoId: req.params.id, req, area: 'gestao' });
+  if (!autorizacao.ok) {
+    req.flash('error_msg', autorizacao.mensagem);
+    return res.redirect('/admin/documentos');
+  }
+  const disposicao = req.query.descarregar === '1' ? 'attachment' : 'inline';
+  const servido = await servirDocumento({ documento: autorizacao.documento, req, res, disposicao, via: 'sessao' });
+  if (!servido.ok && !res.headersSent) {
+    req.flash('error_msg', servido.mensagem);
+    return res.redirect('/admin/documentos');
+  }
+  return undefined;
 });
 
 module.exports = router;

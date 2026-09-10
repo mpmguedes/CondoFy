@@ -5,16 +5,21 @@
 //  · guardarDocumentoNoDrive(...)  → Google Drive (estado no model Documento)
 //  · enviarDocumentoPorEmail(...)  → fila normal ou envio imediato
 //  · guardarEEnviarDocumento(...)  → as duas, com resultado independente
-//  · obterLinkDrive(...)           → link público do ficheiro no Drive
+//  · obterLinkDrive(...)           → link INTERNO do documento no GesCondu
 //
 // Nenhuma destas operações é obrigatória para gerar/utilizar um PDF
 // localmente; falhas de Drive/email nunca bloqueiam a aplicação.
+//
+// Segurança: os documentos nunca são partilhados por links do fornecedor de
+// armazenamento. O acesso passa sempre pelo backend do GesCondu, que verifica
+// Utilizador → Condomínio → Documento (helpers/documentos-acesso.js).
 // ─────────────────────────────────────────────────────────────────────
 const { Documento, EmailFila } = require('../models');
 const drive = require('./drive');
 const mailer = require('./mailer');
 const { enfileirarEmail } = require('./email-fila');
 const { audit } = require('./audit');
+const { urlParaEmail, urlInternaAbsoluta } = require('./documentos-acesso');
 
 function anoAtual(data) {
   const d = data ? new Date(data) : new Date();
@@ -26,7 +31,7 @@ function auditSafe(params) {
   return audit(params).catch(() => {});
 }
 
-// Aceita: 'a@x.pt,b@y.pt', 'a@x.pt; b@y.pt', ['a@x.pt'], [{email,nome}]
+// Aceita: 'a@x.pt,b@y.pt', 'a@x.pt; b@y.pt', ['a@x.pt'], [{email,nome,interno}]
 function normalizarDestinatarios(input) {
   const lista = Array.isArray(input) ? input : [input];
   const unicos = new Map();
@@ -40,7 +45,14 @@ function normalizarDestinatarios(input) {
         .forEach((email) => unicos.set(email.toLowerCase(), { email, nome: null }));
     } else if (item.email) {
       const email = String(item.email).trim();
-      if (email) unicos.set(email.toLowerCase(), { email, nome: item.nome || null });
+      if (email) {
+        const dest = { email, nome: item.nome || null };
+        // `interno`: destinatário com conta no GesCondu (condómino). Serve para
+        // decidir se o email leva a rota autenticada ou um link temporário.
+        // Só aparece quando é verdadeiro, para não alterar a forma devolvida.
+        if (item.interno) dest.interno = true;
+        unicos.set(email.toLowerCase(), dest);
+      }
     }
   }
   return [...unicos.values()];
@@ -157,13 +169,25 @@ async function enviarDocumentoPorEmail({
   imediato = false,
   anexos = [],
   corpoHtml,
+  baseUrl = '',
 }) {
   const lista = normalizarDestinatarios(destinatarios);
   if (!lista.length) return { ok: false, erro: 'Nenhum destinatário com email válido.', resultados: [] };
 
   let documento = null;
   if (documentoId) documento = await Documento.findByPk(documentoId).catch(() => null);
-  const linkDoc = documento && documento.url ? documento.url : null;
+  // Link do documento no email: NUNCA o link do fornecedor (Drive/Dropbox/
+  // OneDrive). Para quem tem conta usa-se a rota autenticada; para
+  // destinatários externos, um link temporário assinado e com validade
+  // limitada (helpers/documentos-acesso.js). Sem links disponíveis, o email
+  // segue sem link (o documento vai em anexo quando aplicável).
+  const linkDoc = documento
+    ? urlParaEmail({
+        documento,
+        baseUrl,
+        destinatarioInterno: lista.some((d) => Boolean(d.interno)),
+      })
+    : null;
   const corpo = [mensagem || '', linkDoc ? `\n\nDocumento: ${linkDoc}` : ''].filter(Boolean).join('');
   // Condomínio do envio: explícito ou o do documento (relação segura); nunca
   // deduzido de nomes/primeiro registo. Persistido na EmailFila quando criada.
@@ -242,8 +266,11 @@ async function guardarEEnviarDocumento(opcoesDrive, opcoesEmail) {
 }
 
 // ── Links / estado ──────────────────────────────────────────────────
-function obterLinkDrive(documento) {
-  return documento && (documento.url || null);
+// Link do documento para uso interno (emails/páginas) — passa sempre pelo
+// GesCondu: rota autenticada da área de gestão. Mantém o nome histórico.
+function obterLinkDrive(documento, { baseUrl = '', area = 'gestao' } = {}) {
+  if (!documento) return null;
+  return urlInternaAbsoluta(documento, { baseUrl, area });
 }
 
 async function estadoDriveDoDocumento(documentoId) {

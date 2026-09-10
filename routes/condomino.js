@@ -26,6 +26,8 @@ const { getCondominio } = require('../helpers/condominio');
 const { gerarReciboPDF } = require('../helpers/pdf');
 const recibosHelper = require('../helpers/recibos');
 const { mapaPastas } = require('../helpers/documento-pastas');
+// Acesso autorizado a documentos (neste módulo: só os disponibilizados).
+const { autorizarAcessoDocumento, servirDocumento } = require('../helpers/documentos-acesso');
 
 const router = express.Router();
 
@@ -451,6 +453,25 @@ router.get('/documentos', async (req, res) => {
     documentos: pasta ? documentos : null,
     agrupados: pasta ? null : agrupados,
   });
+});
+
+// ── Ficheiro de um documento disponibilizado ao condomínio ──────────
+// Área do condómino: além do condomínio ativo (helpers/tenant), só são
+// servidos documentos com disponivel_condominos = true. O ficheiro vem do
+// provedor de armazenamento através do backend — nunca por link do fornecedor.
+router.get('/documentos/:id/ficheiro', async (req, res) => {
+  const autorizacao = await autorizarAcessoDocumento({ documentoId: req.params.id, req, area: 'condomino' });
+  if (!autorizacao.ok) {
+    req.flash('error_msg', autorizacao.mensagem);
+    return res.redirect('/condomino/documentos');
+  }
+  const disposicao = req.query.descarregar === '1' ? 'attachment' : 'inline';
+  const servido = await servirDocumento({ documento: autorizacao.documento, req, res, disposicao, via: 'sessao_condomino' });
+  if (!servido.ok && !res.headersSent) {
+    req.flash('error_msg', servido.mensagem);
+    return res.redirect('/condomino/documentos');
+  }
+  return undefined;
 });
 
 // ── Orçamento (consulta; agregação por rubrica/categoria) ──────────

@@ -109,7 +109,7 @@
         {{#each documentosRecentes}}
         <li class="list-group-item d-flex justify-content-between align-items-center">
           <span>{{nome}}</span>
-          {{#if url}}<a href="{{url}}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">Ver</a>{{/if}}
+          {{#if (urlDocumento this 'condomino')}}<a href="{{urlDocumento this 'condomino'}}" class="btn btn-sm btn-outline-primary">Ver</a>{{/if}}
         </li>
         {{/each}}
       </ul>
