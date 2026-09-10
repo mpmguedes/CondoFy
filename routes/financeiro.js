@@ -41,6 +41,7 @@ const quotaModulo = require('./quotas-modulo');
 const { uploadComprovativo, apagarComprovativo } = require('../helpers/comprovativos');
 const { sincronizarMovimentoDespesa } = require('../helpers/movimentos');
 const { gerarAvisoQuotaPDF, gerarReciboPDF } = require('../helpers/pdf');
+const cabecalhos = require('../helpers/cabecalhos-ficheiro');
 const { compor: comporEmail, nomeFicheiro: nomeFicheiroEmail } = require('../helpers/email-templates');
 const { resolverDestinatarios } = require('../helpers/avisos');
 const { enfileirarEmail } = require('../helpers/email-fila');
@@ -1484,7 +1485,7 @@ router.get('/quotas/:id/aviso', async (req, res) => {
     const extras = String(req.query.extras || '').split(',').filter(Boolean);
     const { buffer, quota } = await construirAvisoQuota(req.params.id, req.condominioId, extras);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="aviso_${quota.numero_documento || quota.id}.pdf"`);
+    res.setHeader('Content-Disposition', cabecalhos.disposicao(`aviso_${quota.numero_documento || quota.id}.pdf`, 'inline', 'aviso.pdf'));
     res.send(buffer);
   } catch (err) {
     console.error(err);
@@ -1497,7 +1498,7 @@ router.get('/pagamentos/:id/recibo', async (req, res) => {
   try {
     const { buffer, pagamento } = await construirRecibo(req.params.id, req.condominioId);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="recibo_${pagamento.numero_documento || pagamento.id}.pdf"`);
+    res.setHeader('Content-Disposition', cabecalhos.disposicao(`recibo_${pagamento.numero_documento || pagamento.id}.pdf`, 'inline', 'recibo.pdf'));
     res.send(buffer);
   } catch (err) {
     console.error(err);

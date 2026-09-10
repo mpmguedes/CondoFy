@@ -9,6 +9,7 @@ const tenant = require('../helpers/tenant');
 const { getCondominio } = require('../helpers/condominio');
 const { audit } = require('../helpers/audit');
 const storage = require('../helpers/storage');
+const cabecalhos = require('../helpers/cabecalhos-ficheiro');
 const {
   construirDocumento,
   normalizarPontos,
@@ -237,7 +238,7 @@ router.post('/convocatorias', async (req, res) => {
     }
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${nomeFicheiro}.pdf"`);
+    res.setHeader('Content-Disposition', cabecalhos.disposicao(`${nomeFicheiro}.pdf`, 'attachment', 'convocatoria.pdf'));
     return res.send(buffer);
   }
 

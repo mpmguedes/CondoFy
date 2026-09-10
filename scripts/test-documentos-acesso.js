@@ -357,9 +357,107 @@ async function testarFalhaDoFornecedor() {
   }
 }
 
+// ── 6.2 Nome com caracteres fora de Latin-1 no Content-Disposition ───
+// Regressão grave: o cabeçalho era montado com o nome em bruto; um travessão
+// "–" (ou um emoji, ou escrita não latina) fazia o Node lançar ERR_INVALID_CHAR
+// em `res.setHeader`. A exceção subia fora de qualquer try/catch e derrubava o
+// processo do servidor (o cliente recebia a resposta cortada). Usa-se um
+// servidor HTTP real: só assim se prova que o cabeçalho é aceite pelo Node.
+async function testarNomeComCaracteresEspeciais() {
+  const http = require('http');
+  const reqAdminCtx = { user: { id: 1 }, isAuthenticated: () => true, condominioId: 1, papelCondominio: 'admin' };
+  const casos = [
+    { nome: 'Ata da Assembleia – 2026 ✅.pdf', mime: 'application/pdf' },
+    { nome: 'Convocatória «ordinária».pdf', mime: 'application/pdf' },
+    { nome: 'не-латиница.pdf', mime: 'application/pdf\r\nX-Injetado: sim' },
+    { nome: '', mime: null },
+  ];
+
+  const servidor = http.createServer(async (pedido, resposta) => {
+    const qual = Number(new URL(pedido.url, 'http://localhost').searchParams.get('c') || 0);
+    const c = casos[qual] || casos[0];
+    const doc = {
+      id: 40 + qual,
+      condominio_id: 1,
+      nome: c.nome,
+      drive_file_id: `gd-${40 + qual}`,
+      mime_type: c.mime,
+      tamanho: 20,
+    };
+    try {
+      const r = await acesso.servirDocumento({ documento: doc, res: resposta, req: reqAdminCtx, disposicao: qual === 2 ? 'attachment' : 'inline', via: 'teste' });
+      if (!r.ok && !resposta.headersSent) {
+        resposta.statusCode = 599;
+        resposta.end('RECUSOU: ' + r.mensagem);
+      }
+    } catch (err) {
+      // É exactamente isto que não pode acontecer: nenhuma exceção pode sair.
+      if (!resposta.headersSent) resposta.statusCode = 598;
+      resposta.end('REJEITOU: ' + err.message);
+    }
+  });
+
+  await new Promise((resolve) => servidor.listen(0, '127.0.0.1', resolve));
+  const porta = servidor.address().port;
+  try {
+    for (let i = 0; i < casos.length; i += 1) {
+      const resposta = await new Promise((resolve, reject) => {
+        const pedido = http.get(`http://127.0.0.1:${porta}/?c=${i}`, (r) => {
+          const pedacos = [];
+          r.on('data', (d) => pedacos.push(d));
+          r.on('end', () => resolve({ status: r.statusCode, headers: r.headers, corpo: Buffer.concat(pedacos).toString() }));
+        });
+        pedido.on('error', reject);
+      });
+      const cabecalho = String(resposta.headers['content-disposition'] || '');
+      assert.strictEqual(resposta.status, 200, `caso ${i}: documento servido (status ${resposta.status} ${resposta.corpo.slice(0, 60)})`);
+      assert.ok(/^inline|^attachment/.test(cabecalho), `caso ${i}: disposição presente`);
+      assert.ok(/filename\*=UTF-8''/.test(cabecalho), `caso ${i}: nome completo em UTF-8 (RFC 5987)`);
+      assert.ok(!/[^\x20-\x7e]/.test(cabecalho), `caso ${i}: cabeçalho só com caracteres válidos (Latin-1/ASCII)`);
+      assert.ok(!/[\r\n]/.test(cabecalho), `caso ${i}: sem CR/LF no cabeçalho`);
+      assert.ok(!/X-Injetado/i.test(cabecalho), `caso ${i}: tipo de conteúdo inválido não injeta cabeçalhos`);
+      assert.ok(resposta.corpo.startsWith('%PDF'), `caso ${i}: conteúdo entregue`);
+    }
+    // O tipo inválido é substituído pelo genérico (nunca vai em bruto).
+    assert.strictEqual(acesso.tipoSeguro('application/pdf\r\nX-Injetado: sim'), 'application/octet-stream', 'mime inválido → genérico');
+    assert.strictEqual(acesso.tipoSeguro('image/png'), 'image/png', 'mime válido preservado');
+    // O nome mostrado ao browser continua legível (só o cabeçalho é limitado).
+    assert.strictEqual(acesso.nomeSeguro('Ata – 2026.pdf'), 'Ata – 2026.pdf', 'nome legível preservado');
+    assert.strictEqual(acesso.nomeAscii('Ata – 2026.pdf'), 'Ata _ 2026.pdf', 'nome ASCII para browsers antigos');
+
+    // Construtor partilhado de cabeçalhos (helpers/cabecalhos-ficheiro.js).
+    const cab = require('../helpers/cabecalhos-ficheiro');
+    const disp = cab.disposicao('Ata – 2026 ✅.pdf', 'attachment');
+    assert.ok(/^attachment; filename="Ata _ 2026 _.pdf"; filename\*=UTF-8''/.test(disp), `cabeçalho bem formado (${disp})`);
+    assert.ok(disp.includes('%E2%80%93') && disp.includes('%E2%9C%85'), 'nome completo preservado em filename* (UTF-8)');
+    assert.ok(!/[^\x20-\x7e]/.test(disp), 'cabeçalho só com caracteres válidos');
+    assert.strictEqual(cab.disposicao('', 'inline'), 'inline; filename="documento"; filename*=UTF-8\'\'documento', 'sem nome → valor genérico');
+    assert.strictEqual(cab.tipoSeguro(null), 'application/octet-stream', 'sem mime → genérico');
+
+    // Todas as rotas que enviam PDFs/ficheiros usam este construtor: nenhuma
+    // volta a montar o Content-Disposition com o nome em bruto.
+    const fontes = [
+      'routes/assembleias.js',
+      'routes/convocatorias.js',
+      'routes/financeiro.js',
+      'routes/condomino.js',
+      'routes/quotas-modulo.js',
+      'helpers/documentos-acesso.js',
+    ];
+    for (const f of fontes) {
+      const src = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+      assert.ok(!/filename="\$\{|filename="' \+/.test(src), `${f}: Content-Disposition não é montado em bruto`);
+      assert.ok(/cabecalhos\.disposicao\(|cabecalhoDisposicao\(/.test(src), `${f}: usa o construtor seguro de cabeçalhos`);
+    }
+  } finally {
+    await new Promise((resolve) => servidor.close(resolve));
+  }
+}
+
 (async () => {
   await testarAutorizacao();
   await testarServicoDeFicheiro();
+  await testarNomeComCaracteresEspeciais();
   testarLinks();
   testarLinksTemporarios();
   testarCodigosHttp();

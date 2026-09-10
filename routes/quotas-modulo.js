@@ -36,6 +36,7 @@ const { calcularQuota } = require('../helpers/quotas-calc');
 const { validarPermilagem } = require('../helpers/permilagem');
 const { getCondominio } = require('../helpers/condominio');
 const { gerarReciboPDF } = require('../helpers/pdf');
+const cabecalhos = require('../helpers/cabecalhos-ficheiro');
 const { compor: comporEmail, nomeFicheiro: nomeFicheiroEmail } = require('../helpers/email-templates');
 const { resolverDestinatarios } = require('../helpers/avisos');
 const { enfileirarEmail } = require('../helpers/email-fila');
@@ -504,7 +505,7 @@ router.get('/pagamentos/:id/comprovativo', async (req, res) => {
   res.setHeader('Content-Type', pagamento.comprovativo_mime || 'application/octet-stream');
   res.setHeader(
     'Content-Disposition',
-    `${descarregar ? 'attachment' : 'inline'}; filename="${comprovativos.nomeSeguro(pagamento.comprovativo_nome || 'comprovativo.pdf')}"`
+    cabecalhos.disposicao(pagamento.comprovativo_nome || 'comprovativo.pdf', descarregar ? 'attachment' : 'inline', 'comprovativo.pdf')
   );
   return res.sendFile(caminho);
 });
@@ -1029,7 +1030,7 @@ router.get('/quotas/recibos/:id/pdf', async (req, res) => {
     const condRow = condominio && condominio.toJSON ? condominio.toJSON() : condominio || {};
     const buffer = await pdfDeRecibo(recibo, condRow);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="recibo_${recibo.codigo}.pdf"`);
+    res.setHeader('Content-Disposition', cabecalhos.disposicao(`recibo_${recibo.codigo}.pdf`, 'inline', 'recibo.pdf'));
     return res.send(buffer);
   } catch (err) {
     console.error('[recibo-pdf]', err.message);

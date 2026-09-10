@@ -24,6 +24,7 @@ const tenant = require('../helpers/tenant');
 const { resumoFracao, resumoCondominio, resumoOrcamento, estadoEfetivo } = require('../helpers/saldos');
 const { getCondominio } = require('../helpers/condominio');
 const { gerarReciboPDF } = require('../helpers/pdf');
+const cabecalhos = require('../helpers/cabecalhos-ficheiro');
 const recibosHelper = require('../helpers/recibos');
 const { mapaPastas } = require('../helpers/documento-pastas');
 // Acesso autorizado a documentos (neste módulo: só os disponibilizados).
@@ -347,7 +348,7 @@ router.get('/recibos/:id/pdf', async (req, res) => {
     extras,
   });
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="recibo_${recibo.codigo}.pdf"`);
+  res.setHeader('Content-Disposition', cabecalhos.disposicao(`recibo_${recibo.codigo}.pdf`, 'inline', 'recibo.pdf'));
   return res.send(buffer);
 });
 

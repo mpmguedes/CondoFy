@@ -35,6 +35,15 @@ const { Documento } = require('../models');
 const { audit } = require('./audit');
 const storage = require('./storage');
 const http = require('./armazenamento/http');
+// Cabeçalhos de ficheiro (nome/tipo) num ponto único e à prova de caracteres
+// fora de Latin-1 — ver o cabeçalho de helpers/cabecalhos-ficheiro.js.
+const {
+  nomeSeguro,
+  nomeAscii,
+  nomeCodificado,
+  disposicao: cabecalhoDisposicao,
+  tipoSeguro,
+} = require('./cabecalhos-ficheiro');
 
 // Papéis que podem ver todos os documentos do condomínio (o router já valida
 // o papel; aqui repetimos a verificação como defesa em profundidade).
@@ -178,16 +187,25 @@ async function autorizarAcessoDocumento({ documentoId, req, area = 'gestao' }) {
 }
 
 // ── Serviço do ficheiro ─────────────────────────────────────────────
-function nomeSeguro(nome) {
-  return String(nome || 'documento')
-    .replace(/[\r\n"\\/]+/g, '_')
-    .replace(/[\u0000-\u001f\u007f]+/g, '')
-    .trim()
-    .slice(0, 120) || 'documento';
+// Os cabeçalhos do ficheiro (nome e tipo) são construídos em
+// helpers/cabecalhos-ficheiro.js: um nome com um caractere fora de Latin-1
+// (travessão "–", emoji, escrita não latina) fazia o Node lançar
+// ERR_INVALID_CHAR em `res.setHeader` — e a exceção subia fora de qualquer
+// try/catch, derrubando o processo do servidor. Aí o nome segue também em
+// `filename*` (RFC 5987), pelo que nada se perde na interface.
+
+// Código de estado tanto numa resposta Express (res.status) como num
+// ServerResponse simples (res.statusCode): assim `servirDocumento` também
+// funciona fora de uma rota (scripts de diagnóstico, exportações).
+function definirEstado(res, codigo) {
+  if (typeof res.status === 'function') res.status(codigo);
+  else res.statusCode = codigo;
 }
 
 // Envia o documento para a resposta HTTP, em streaming, a partir do provedor.
 // `disposicao`: 'inline' (ver no browser) ou 'attachment' (descarregar).
+// NUNCA rejeita: todas as falhas são devolvidas como recusa (uma rejeição aqui
+// subia pela rota, que não tem try/catch, e derrubava o processo).
 async function servirDocumento({ documento, res, req, disposicao = 'inline', via = 'sessao' }) {
   if (!documento || !documento.drive_file_id) {
     return { ok: false, motivo: MOTIVO.SEM_FICHEIRO, mensagem: MENSAGENS[MOTIVO.SEM_FICHEIRO] };
@@ -224,14 +242,24 @@ async function servirDocumento({ documento, res, req, disposicao = 'inline', via
   }
 
   const tamanho = abertura.tamanho || (documento.tamanho ? Number(documento.tamanho) : null);
-  res.setHeader('Content-Type', documento.mime_type || 'application/octet-stream');
-  res.setHeader('Content-Disposition', `${disposicao === 'attachment' ? 'attachment' : 'inline'}; filename="${nomeSeguro(documento.nome)}"`);
-  if (tamanho && Number.isFinite(tamanho)) res.setHeader('Content-Length', String(tamanho));
-  // Documento privado: nunca guardar em caches partilhadas, nunca deixar o
-  // browser adivinhar o tipo nem executar conteúdo dentro do documento.
-  res.setHeader('Cache-Control', 'private, no-store, max-age=0');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'; img-src 'self' data:; object-src 'none'");
+  try {
+    res.setHeader('Content-Type', tipoSeguro(documento.mime_type));
+    res.setHeader('Content-Disposition', cabecalhoDisposicao(documento.nome, disposicao));
+    if (tamanho && Number.isFinite(tamanho)) res.setHeader('Content-Length', String(tamanho));
+    // Documento privado: nunca guardar em caches partilhadas, nunca deixar o
+    // browser adivinhar o tipo nem executar conteúdo dentro do documento.
+    res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'; img-src 'self' data:; object-src 'none'");
+  } catch (err) {
+    // Defesa em profundidade: preparar a resposta nunca pode derrubar o
+    // processo. Fecha-se o fluxo já aberto e devolve-se uma recusa normal.
+    console.error('[documentos-acesso] falha ao preparar a resposta:', http.sanitizar(err && err.message));
+    if (abertura && abertura.fluxo && typeof abertura.fluxo.destroy === 'function') abertura.fluxo.destroy();
+    if (!res.headersSent) definirEstado(res, 502);
+    res.end();
+    return { ok: false, motivo: MOTIVO.LIGACAO_INVALIDA, mensagem: MENSAGENS[MOTIVO.LIGACAO_INVALIDA] };
+  }
 
   audit({
     userId: req && req.user ? req.user.id : null,
@@ -250,15 +278,30 @@ async function servirDocumento({ documento, res, req, disposicao = 'inline', via
       if (fluxo && typeof fluxo.destroy === 'function') fluxo.destroy();
       resolve(r);
     };
-    fluxo.on('error', (err) => {
-      console.error('[documentos-acesso] erro no fluxo do documento:', http.sanitizar(err && err.message));
-      if (!res.headersSent) res.status(502);
+    const recusa = () => ({ ok: false, motivo: MOTIVO.LIGACAO_INVALIDA, mensagem: MENSAGENS[MOTIVO.LIGACAO_INVALIDA] });
+    try {
+      if (!fluxo || typeof fluxo.on !== 'function' || typeof fluxo.pipe !== 'function') {
+        console.error('[documentos-acesso] o provedor não devolveu um fluxo legível.');
+        if (!res.headersSent) definirEstado(res, 502);
+        res.end();
+        return fechar(recusa());
+      }
+      fluxo.on('error', (err) => {
+        console.error('[documentos-acesso] erro no fluxo do documento:', http.sanitizar(err && err.message));
+        if (!res.headersSent) definirEstado(res, 502);
+        res.end();
+        fechar(recusa());
+      });
+      res.on('close', () => fechar({ ok: true, interrompido: true }));
+      res.on('finish', () => fechar({ ok: true }));
+      fluxo.pipe(res);
+    } catch (err) {
+      console.error('[documentos-acesso] falha ao enviar o documento:', http.sanitizar(err && err.message));
+      if (!res.headersSent) definirEstado(res, 502);
       res.end();
-      fechar({ ok: false, motivo: MOTIVO.LIGACAO_INVALIDA, mensagem: MENSAGENS[MOTIVO.LIGACAO_INVALIDA] });
-    });
-    res.on('close', () => fechar({ ok: true, interrompido: true }));
-    res.on('finish', () => fechar({ ok: true }));
-    fluxo.pipe(res);
+      return fechar(recusa());
+    }
+    return undefined;
   });
 }
 
@@ -395,6 +438,10 @@ module.exports = {
   urlInternaAbsoluta,
   urlParaEmail,
   nomeSeguro,
+  nomeAscii,
+  nomeCodificado,
+  cabecalhoDisposicao,
+  tipoSeguro,
   criarLinkTemporario,
   verificarLinkTemporario,
   documentoDeLinkTemporario,

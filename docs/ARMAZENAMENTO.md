@@ -77,9 +77,22 @@ obtido no serviço de armazenamento. As causas habituais são:
 * o ficheiro foi criado por **outra conta** do serviço: a autorização do
   GesCondu só acede aos ficheiros que criou (mudar de conta Google obriga a
   voltar a carregar os documentos ou a religar a conta original);
+* o ficheiro vive noutro serviço que já não está ligado (ex.: documentos
+  carregados quando o principal era o Dropbox);
 * a autorização da conta foi **revogada** no fornecedor;
 * é um documento **nativo** do Google (Docs/Sheets/Slides), que tem de ser
   carregado como PDF/imagem.
+
+**Um 502 que não vem do armazenamento:** o nome de um documento com caracteres
+fora de Latin-1 (travessão “–”, aspas curvas, emoji, escrita não latina) fazia o
+Node lançar `ERR_INVALID_CHAR` ao montar o `Content-Disposition`. Como a
+exceção saía de uma rota `async` sem `try/catch`, o processo do servidor
+**terminava** — atrás de um proxy, o browser mostrava um 502 e a aplicação
+reiniciava. Os cabeçalhos de ficheiro passaram a ser construídos num único
+sítio (`helpers/cabecalhos-ficheiro.js`), que envia o nome também em
+`filename*=UTF-8''…` (RFC 5987) e valida o tipo de conteúdo. Os registos do
+serviço deixam, por isso, de mostrar reinícios com
+`at servirDocumento (helpers/documentos-acesso.js:…)`.
 
 Para quem gere o condomínio, a mensagem do 502 inclui a **causa provável**
 (nunca ids, tokens nem URLs); para o condómino é sempre genérica. Em cada

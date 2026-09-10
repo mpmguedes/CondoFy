@@ -14,6 +14,7 @@ const { audit } = require('../helpers/audit');
 const { getCondominio } = require('../helpers/condominio');
 const storage = require('../helpers/storage');
 const { gerarConvocatoriaPDF, gerarAtaPDF } = require('../helpers/pdf');
+const cabecalhos = require('../helpers/cabecalhos-ficheiro');
 
 const router = express.Router();
 // Isolamento: condomínio ativo (sessão validada) em todas as operações.
@@ -388,7 +389,7 @@ router.get('/assembleias/:id/convocatoria', async (req, res) => {
   }
 
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="convocatoria_${assembleia.numero || assembleia.id}.pdf"`);
+  res.setHeader('Content-Disposition', cabecalhos.disposicao(`convocatoria_${assembleia.numero || assembleia.id}.pdf`, 'inline', 'convocatoria.pdf'));
   res.send(buffer);
 });
 
@@ -417,7 +418,7 @@ router.get('/assembleias/:id/ata', async (req, res) => {
     ataTexto: assembleia.ata_texto,
   });
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="ata_${assembleia.numero || assembleia.id}.pdf"`);
+  res.setHeader('Content-Disposition', cabecalhos.disposicao(`ata_${assembleia.numero || assembleia.id}.pdf`, 'inline', 'ata.pdf'));
   res.send(buffer);
 });
 
