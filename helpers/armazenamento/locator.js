@@ -53,6 +53,30 @@ function montar(provedor, id) {
   return loc;
 }
 
+// Alguns registos antigos guardaram o LINK do ficheiro (webViewLink) em vez do
+// identificador. Como o id é opaco, um URL nunca é um id válido: quando o
+// formato é reconhecido, extrai-se o identificador de dentro do link. Sem isto
+// o fornecedor responde "não encontrado" e o documento aparece como 502.
+// O que não for reconhecido é devolvido inalterado (comportamento anterior).
+const ID_EM_LINK = [
+  /\/file\/d\/([A-Za-z0-9_-]{10,})/, // Drive: /file/d/<id>/view
+  /\/document\/d\/([A-Za-z0-9_-]{10,})/, // Google Docs
+  /\/spreadsheets\/d\/([A-Za-z0-9_-]{10,})/, // Google Sheets
+  /\/presentation\/d\/([A-Za-z0-9_-]{10,})/, // Google Slides
+  /\/folders\/([A-Za-z0-9_-]{10,})/, // pasta do Drive
+  /[?&]id=([A-Za-z0-9_-]{10,})/, // Drive antigo: ?id=<id>
+];
+
+function idDeLink(valor) {
+  const texto = String(valor == null ? '' : valor).trim();
+  if (!/^https?:\/\//i.test(texto)) return texto;
+  for (const re of ID_EM_LINK) {
+    const encontrado = texto.match(re);
+    if (encontrado) return encontrado[1];
+  }
+  return texto;
+}
+
 // Lê um localizador → { provedor, id }. Valores antigos (sem prefixo) são
 // ids do Google Drive.
 function ler(valor) {
@@ -62,11 +86,11 @@ function ler(valor) {
   if (i > 0) {
     const p = POR_PREFIXO[texto.slice(0, i).toLowerCase()];
     if (p) {
-      const id = texto.slice(i + 1);
+      const id = idDeLink(texto.slice(i + 1));
       return id ? { provedor: p, id } : { provedor: null, id: null };
     }
   }
-  return { provedor: PROVEDOR_PADRAO, id: texto };
+  return { provedor: PROVEDOR_PADRAO, id: idDeLink(texto) };
 }
 
 // Nome do provedor de um localizador (null quando vazio).
@@ -93,6 +117,7 @@ module.exports = {
   provedorValido,
   montar,
   ler,
+  idDeLink,
   provedorDe,
   valido,
 };

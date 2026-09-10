@@ -34,6 +34,7 @@ const crypto = require('crypto');
 const { Documento } = require('../models');
 const { audit } = require('./audit');
 const storage = require('./storage');
+const http = require('./armazenamento/http');
 
 // Papéis que podem ver todos os documentos do condomínio (o router já valida
 // o papel; aqui repetimos a verificação como defesa em profundidade).
@@ -63,6 +64,38 @@ const MENSAGENS = {
   [MOTIVO.PROVEDOR_INDISPONIVEL]: 'O armazenamento do condomínio não está ligado. Contacte o administrador.',
   [MOTIVO.LIGACAO_INVALIDA]: 'Não foi possível obter o documento no serviço de armazenamento.',
 };
+
+// Falha do fornecedor ao entregar o ficheiro (502): causa provável, em
+// linguagem simples, deduzida da resposta do serviço. NUNCA inclui ids, tokens
+// nem URLs — só a explicação da classe de erro.
+const CAUSAS_FICHEIRO = [
+  {
+    re: /invalid_grant|token has been expired|revoked|authentication error|\b401\b/i,
+    texto: 'a autorização da conta foi revogada no serviço de armazenamento — volte a ligar a conta',
+  },
+  {
+    re: /not ?found|\b404\b/i,
+    texto: 'o ficheiro já não existe na conta ligada (pode ter sido apagado no serviço ou criado por outra conta)',
+  },
+  {
+    re: /forbidden|permission|insufficient|\b403\b/i,
+    texto: 'a conta ligada não tem acesso a este ficheiro (foi criado por outra conta do serviço)',
+  },
+  {
+    re: /quota|rate ?limit|too many requests|\b429\b/i,
+    texto: 'o serviço de armazenamento atingiu o limite de pedidos — tente novamente mais tarde',
+  },
+  {
+    re: /google-apps\.(document|spreadsheet|presentation)/i,
+    texto: 'o ficheiro é um documento nativo do Google (Docs/Sheets/Slides): tem de ser carregado como PDF ou imagem',
+  },
+];
+
+function explicarFalhaDoFornecedor(mensagem) {
+  const texto = String(mensagem || '');
+  const encontrada = CAUSAS_FICHEIRO.find((c) => c.re.test(texto));
+  return encontrada ? encontrada.texto : null;
+}
 
 function recusar(motivo) {
   return { ok: false, motivo, mensagem: MENSAGENS[motivo] || 'Acesso negado.' };
@@ -164,7 +197,8 @@ async function servirDocumento({ documento, res, req, disposicao = 'inline', via
   try {
     abertura = await storage.abrirFluxo(documento.drive_file_id, condominioId);
   } catch (err) {
-    console.error('[documentos-acesso] falha ao abrir o documento:', err.message);
+    // Mensagem sanitizada no registo: nunca pode conter credenciais.
+    console.error('[documentos-acesso] falha ao abrir o documento:', http.sanitizar(err && err.message));
     // Distingue "ligação em baixo" de "erro do fornecedor" para dar uma
     // mensagem útil sem revelar detalhes internos.
     let ligado = false;
@@ -173,10 +207,19 @@ async function servirDocumento({ documento, res, req, disposicao = 'inline', via
     } catch (e) {
       ligado = false;
     }
+    if (!ligado) {
+      return { ok: false, motivo: MOTIVO.PROVEDOR_INDISPONIVEL, mensagem: MENSAGENS[MOTIVO.PROVEDOR_INDISPONIVEL] };
+    }
+    // Quem gere o condomínio precisa de saber PORQUE falhou (autorização
+    // revogada? ficheiro apagado? conta trocada?); o condómino recebe a
+    // mensagem genérica. A explicação não expõe ids, tokens nem URLs.
+    const explicacao = explicarFalhaDoFornecedor(err && err.message);
+    const detalhe = podeVerTudo(req) && explicacao ? ` Causa provável: ${explicacao}.` : '';
     return {
       ok: false,
-      motivo: ligado ? MOTIVO.LIGACAO_INVALIDA : MOTIVO.PROVEDOR_INDISPONIVEL,
-      mensagem: ligado ? MENSAGENS[MOTIVO.LIGACAO_INVALIDA] : MENSAGENS[MOTIVO.PROVEDOR_INDISPONIVEL],
+      motivo: MOTIVO.LIGACAO_INVALIDA,
+      mensagem: `${MENSAGENS[MOTIVO.LIGACAO_INVALIDA]}${detalhe}`,
+      causa: explicacao || null,
     };
   }
 
@@ -208,7 +251,7 @@ async function servirDocumento({ documento, res, req, disposicao = 'inline', via
       resolve(r);
     };
     fluxo.on('error', (err) => {
-      console.error('[documentos-acesso] erro no fluxo do documento:', err.message);
+      console.error('[documentos-acesso] erro no fluxo do documento:', http.sanitizar(err && err.message));
       if (!res.headersSent) res.status(502);
       res.end();
       fechar({ ok: false, motivo: MOTIVO.LIGACAO_INVALIDA, mensagem: MENSAGENS[MOTIVO.LIGACAO_INVALIDA] });
@@ -343,6 +386,7 @@ module.exports = {
   MENSAGENS,
   HTTP,
   PAPEIS_GESTAO,
+  explicarFalhaDoFornecedor,
   TTL_PADRAO_SEGUNDOS,
   autorizarAcessoDocumento,
   servirDocumento,

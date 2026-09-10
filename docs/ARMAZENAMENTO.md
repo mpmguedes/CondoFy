@@ -66,6 +66,37 @@ Trocar um id autorizado por outro de outro condomínio
 em **403** e a mensagem é igual à de um documento inexistente (não se revela
 o condomínio alheio). Testado em `scripts/test-documentos-acesso.js`.
 
+### Quando um documento dá 502 («falha do fornecedor»)
+
+O **502** significa que a autorização está correta (o documento existe, é
+deste condomínio e o utilizador tem permissão) mas o ficheiro não pôde ser
+obtido no serviço de armazenamento. As causas habituais são:
+
+* o ficheiro foi **apagado** no serviço, ou o link foi colado no lugar do
+  identificador (caso antigo — o identificador é agora extraído do link);
+* o ficheiro foi criado por **outra conta** do serviço: a autorização do
+  GesCondu só acede aos ficheiros que criou (mudar de conta Google obriga a
+  voltar a carregar os documentos ou a religar a conta original);
+* a autorização da conta foi **revogada** no fornecedor;
+* é um documento **nativo** do Google (Docs/Sheets/Slides), que tem de ser
+  carregado como PDF/imagem.
+
+Para quem gere o condomínio, a mensagem do 502 inclui a **causa provável**
+(nunca ids, tokens nem URLs); para o condómino é sempre genérica. Em cada
+abertura falhada, o registo do serviço guarda a linha
+`[documentos-acesso] falha ao abrir o documento: …` (mensagem sanitizada).
+
+Diagnóstico completo, documento a documento (somente leitura):
+
+```bash
+node scripts/diagnostico-documentos.js            # 40 documentos mais recentes
+node scripts/diagnostico-documentos.js --todos    # todos
+node scripts/diagnostico-documentos.js --condominio 2 --tipo convocatoria
+```
+
+Indica, por documento, a conta em uso, o dono do ficheiro (mascarado), o tipo,
+se está na lixeira e se abre — e resume as causas com o que fazer.
+
 ### Links temporários (emails)
 
 Emails para destinatários **sem conta** no GesCondu (fornecedores, endereços

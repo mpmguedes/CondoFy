@@ -106,6 +106,26 @@ function testarLocalizadores() {
   assert.throws(() => locator.montar('provedor-desconhecido', 'x'), /desconhecido/i, 'provedor desconhecido rejeitado');
   assert.throws(() => locator.montar('dropbox', ''), /obrigatório/i, 'id vazio rejeitado');
   assert.throws(() => locator.montar('dropbox', 'x'.repeat(locator.LIMITE_COLUNA)), /demasiado longo/i, 'id acima da coluna rejeitado');
+
+  // Registos antigos que guardaram o LINK em vez do id: o identificador é
+  // extraído do link (sem isto o fornecedor responde "não encontrado" e o
+  // documento aparece como 502 na interface).
+  const ID = '1AbCdEfGhIjKlMnOp';
+  const comLink = {
+    [`https://drive.google.com/file/d/${ID}/view?usp=sharing`]: ID,
+    [`https://drive.google.com/open?id=${ID}`]: ID,
+    [`https://docs.google.com/document/d/${ID}/edit`]: ID,
+    [`https://docs.google.com/spreadsheets/d/${ID}/edit#gid=0`]: ID,
+    [`https://drive.google.com/drive/folders/${ID}`]: ID,
+    [`gd:https://drive.google.com/file/d/${ID}/view`]: ID,
+  };
+  for (const [link, esperado] of Object.entries(comLink)) {
+    assert.strictEqual(locator.ler(link).id, esperado, `id extraído do link (${link.slice(0, 40)}…)`);
+    assert.strictEqual(locator.ler(link).provedor, 'google_drive', 'link do Drive lido como Google Drive');
+  }
+  // Um id normal nunca é tocado, e um link de outro fornecedor não é inventado.
+  assert.strictEqual(locator.idDeLink('1AbCdEfGhIjKlMnOp'), '1AbCdEfGhIjKlMnOp', 'id normal inalterado');
+  assert.strictEqual(locator.ler('dbx:https://www.dropbox.com/scl/fi/xyz/doc.pdf').id, 'https://www.dropbox.com/scl/fi/xyz/doc.pdf', 'link do Dropbox mantido (id opaco da API)');
 }
 
 // ── 3. Ligações por condomínio (isolamento) ─────────────────────────

@@ -304,12 +304,60 @@ function testarCodigosHttp() {
   assert.ok(!/drive\.google|dropbox|onedrive/.test(String(res.corpo)), 'recusa sem referências ao fornecedor');
 }
 
+// ── 6.1 Falha do fornecedor (502): explicação para quem gere o condomínio e
+// mensagem genérica para o condómino. Nenhuma mensagem expõe ids, tokens,
+// credenciais nem o nome do fornecedor.
+async function testarFalhaDoFornecedor() {
+  const reqAdminCtx = { user: { id: 1 }, isAuthenticated: () => true, condominioId: 1, papelCondominio: 'admin' };
+  const reqCondominoCtx = { user: { id: 3 }, isAuthenticated: () => true, condominioId: 1, papelCondominio: 'condomino' };
+  const abrirReal = storage.abrirFluxo;
+  try {
+    const falhas = [
+      { erro: 'invalid_grant: Token has been expired or revoked.', esperado: /autorização da conta foi revogada/i },
+      { erro: 'File not found: 1AbC-xyz.', esperado: /já não existe na conta ligada/i },
+      { erro: 'The user does not have sufficient permissions for this file.', esperado: /não tem acesso a este ficheiro/i },
+      { erro: 'User Rate Limit Exceeded', esperado: /limite de pedidos/i },
+    ];
+    for (const f of falhas) {
+      storage.abrirFluxo = async () => { throw new Error(f.erro); };
+      const doc = documentos.get(10);
+      const admin = await servirCom(doc, reqAdminCtx);
+      assert.strictEqual(admin.resultado.ok, false, `${f.erro}: documento não é servido`);
+      assert.strictEqual(admin.resultado.motivo, acesso.MOTIVO.LIGACAO_INVALIDA, `${f.erro}: motivo ligação inválida`);
+      assert.strictEqual(acesso.HTTP[admin.resultado.motivo], 502, `${f.erro}: código 502`);
+      assert.ok(f.esperado.test(admin.resultado.mensagem), `${f.erro}: explicação útil para o admin (${admin.resultado.mensagem})`);
+      assert.ok(!/1AbC-xyz|invalid_grant|Rate Limit/i.test(admin.resultado.mensagem), `${f.erro}: sem detalhes técnicos crus`);
+      assert.ok(!/drive\.google|dropbox|onedrive|access_token/i.test(admin.resultado.mensagem), `${f.erro}: sem fornecedor nem credenciais na mensagem`);
+
+      // Condómino (área do condómino): mensagem genérica, sem diagnóstico.
+      const cond = await servirCom(doc, reqCondominoCtx);
+      assert.strictEqual(cond.resultado.mensagem, acesso.MENSAGENS[acesso.MOTIVO.LIGACAO_INVALIDA], `${f.erro}: condómino recebe a mensagem genérica`);
+    }
+
+    // Serviço desligado → 503 (e não 502), como antes.
+    storage.abrirFluxo = async () => { throw new Error('File not found: 1AbC-xyz.'); };
+    const ligadoAntes = storage.isConfiguredPara;
+    storage.isConfiguredPara = async () => false;
+    const r503 = await servirCom(documentos.get(10), reqAdminCtx);
+    assert.strictEqual(r503.resultado.motivo, acesso.MOTIVO.PROVEDOR_INDISPONIVEL, 'serviço desligado → armazenamento indisponível');
+    assert.strictEqual(acesso.HTTP[r503.resultado.motivo], 503, 'serviço desligado → 503');
+    storage.isConfiguredPara = ligadoAntes;
+
+    // A explicação é reutilizável pelo diagnóstico por linha de comando.
+    assert.match(acesso.explicarFalhaDoFornecedor('invalid_grant'), /revogada/i, 'explicação reutilizável');
+    assert.strictEqual(acesso.explicarFalhaDoFornecedor('erro estranho'), null, 'sem explicação quando não se reconhece a causa');
+  } finally {
+    storage.abrirFluxo = abrirReal;
+  }
+}
+
 (async () => {
   await testarAutorizacao();
   await testarServicoDeFicheiro();
   testarLinks();
   testarLinksTemporarios();
   testarCodigosHttp();
+  await testarFalhaDoFornecedor();
   testarVistas();
   console.log('✓ Testes do acesso autorizado a documentos passaram (sem rede/BD).');
 })().catch((err) => {
