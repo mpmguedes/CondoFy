@@ -256,6 +256,7 @@ async function main() {
     const abertura = opcoes.soMetadados ? { ok: null } : await testarAbertura(doc.drive_file_id, doc.condominio_id);
     const dono = meta && Array.isArray(meta.owners) && meta.owners[0] ? meta.owners[0].emailAddress : null;
     const detalhe = [
+      `serviço: ${lido.provedor || '?'}`,
       `conta em uso: ${mascarar(info.conta)}`,
       meta ? `dono: ${mascarar(dono)}` : null,
       meta ? `tipo: ${meta.mimeType}${meta.trashed ? ' (NA LIXEIRA)' : ''}` : null,
@@ -284,10 +285,19 @@ async function main() {
   linha('4. Resumo');
   const porCausa = new Map();
   for (const f of resultados.falhas) porCausa.set(f.causa, (porCausa.get(f.causa) || 0) + 1);
+  const porServico = new Map();
+  for (const d of documentos) {
+    const p = locator.ler(d.drive_file_id).provedor || '?';
+    porServico.set(p, (porServico.get(p) || 0) + 1);
+  }
   console.log(`  Abrem sem problema: ${resultados.ok.length}`);
   console.log(`  Falham:             ${resultados.falhas.length}`);
   for (const [causa, n] of [...porCausa.entries()].sort((a, b) => b[1] - a[1])) {
     console.log(`    · ${causa}: ${n}`);
+  }
+  console.log('  Documentos verificados, por serviço de armazenamento:');
+  for (const [servico, n] of [...porServico.entries()].sort((a, b) => b[1] - a[1])) {
+    console.log(`    · ${servico}: ${n}`);
   }
 
   linha('5. O que fazer');
