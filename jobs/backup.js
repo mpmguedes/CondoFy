@@ -82,17 +82,21 @@ async function executarBackup(tipo = 'diario') {
     const ligado = Boolean(provedor && provedor.isConfigured(null));
 
     if (provedor && ligado) {
-      const pastaId = await storage.pastaDeBackups(destino);
+      // Ligação a usar: de plataforma quando existe, senão a do condomínio que
+      // tem esse serviço ligado (uma ligação por serviço, sem contas duplicadas).
+      const ligacao = storage.ligacaoDeBackup(destino);
+      const pastaId = await storage.pastaDeBackups(destino, ligacao.condominioId);
       const up = await storage.uploadComProvedor(destino, {
         nome,
         mimeType: 'application/gzip',
         buffer: gz,
         parentFolderId: pastaId,
+        condominioId: ligacao.condominioId,
       });
       const referencia = up.localizador || up.provedorFileId || up.driveFileId || null;
       await log.update({ estado: 'concluido', ficheiro_drive_id: referencia, tamanho: gz.length });
       const removidos = await limparBackupsAntigos(tipo);
-      console.log(`[backup] ${nome} concluído em ${provedor.rotulo()} (${gz.length} bytes); ${removidos} antigo(s) fora da retenção.`);
+      console.log(`[backup] ${nome} concluído em ${provedor.rotulo()}${ligacao.conta ? ` (${ligacao.conta})` : ''} (${gz.length} bytes); ${removidos} antigo(s) fora da retenção.`);
     } else {
       const dir = path.join(__dirname, '..', 'backups', 'local');
       fs.mkdirSync(dir, { recursive: true });

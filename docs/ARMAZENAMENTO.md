@@ -166,10 +166,14 @@ Fora do âmbito desta cifragem (registado para tarefa separada): a password SMTP
 Os backups são da **instalação** (o dump contém dados de todos os
 condomínios), por isso:
 
-* usam uma **ligação de plataforma** (nunca a conta de um condomínio — isso
-  daria a esse condomínio acesso aos dados dos outros);
+* usam a **ligação já existente** do serviço escolhido — **uma ligação por
+  serviço**, sem contas duplicadas e sem voltar a autorizar nada; a escolha do
+  destino é feita na própria página, entre os serviços ligados;
 * podem ficar num **serviço diferente** do armazenamento dos documentos
   (ex.: documentos no Google Drive, backups no Dropbox);
+* quando o destino é a conta de um **condomínio** (e não a conta histórica de
+  plataforma do Google Drive), a interface avisa que o dump contém dados de
+  todos os condomínios, para a decisão ser explícita;
 * sem destino ligado, os backups ficam apenas em `backups/local/` no servidor;
 * a arquitetura não impede vários destinos no futuro (basta permitir uma lista
   em `storage:backup`).

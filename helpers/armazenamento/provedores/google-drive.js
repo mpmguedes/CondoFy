@@ -71,9 +71,11 @@ module.exports = {
 
   // Pasta de BACKUPS da plataforma: <raiz>/Backups (sem condomínio). Os
   // backups são da instalação e usam a conta de plataforma do Drive.
-  pastaDeBackups: async () => {
-    const arvore = await drive.criarEstruturaPastas(null);
-    return arvore.backupsId;
+  pastaDeBackups: async (condominioId = null) => {
+    // A pasta Backups é sempre na raiz; a ligação usada é a do condomínio
+    // quando indicada, senão a da plataforma.
+    const raiz = await drive.obterNomeRaiz(condominioId);
+    return drive.encontrarOuCriarPasta('Backups', await drive.encontrarOuCriarPasta(raiz, null, condominioId), condominioId);
   },
 
   // Expediente usado por jobs/backup.js e por código legado.

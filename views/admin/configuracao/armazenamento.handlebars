@@ -3,7 +3,7 @@
 <div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
     <h1>Armazenamento e Backups</h1>
-    <p class="subtitle">Serviços de armazenamento do condomínio, armazenamento principal dos documentos e backups</p>
+    <p class="subtitle">Serviços ligados, armazenamento dos documentos e destino dos backups</p>
   </div>
 </div>
 
@@ -24,63 +24,40 @@
 </div>
 {{/unless}}
 
-{{!-- ── Serviços de armazenamento do condomínio ─────────────────────── --}}
-<h2 class="h6 mt-3 mb-2">Serviços de armazenamento</h2>
+{{!-- ── 1. Ligações aos serviços (estado + conta) ───────────────────── --}}
+<h2 class="h6 mt-3 mb-2">Ligações aos serviços</h2>
 <div class="row g-3">
   {{#each armazenamento.provedores}}
   <div class="col-12 col-lg-4">
     <div class="card h-100" id="{{nome}}">
-      <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <span class="fw-semibold"><i class="{{icone}} me-1" aria-hidden="true"></i>{{rotulo}}</span>
-        {{#if principal}}<span class="badge text-bg-primary">Principal</span>{{/if}}
-      </div>
       <div class="card-body d-flex flex-column">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <span class="fw-semibold"><i class="{{icone}} me-2" aria-hidden="true"></i>{{rotulo}}</span>
+          {{#if ligado}}<span class="badge text-bg-success">Ligado ✓</span>{{else}}<span class="badge text-bg-secondary">Não ligado</span>{{/if}}
+        </div>
         {{#if ligado}}
-          <p class="mb-1">
-            <span class="badge text-bg-success">Ligado ✓</span>
-            {{#if contaPlataforma}}<span class="badge text-bg-light border ms-1">conta da plataforma</span>{{/if}}
+          <p class="small mb-3 text-truncate" title="{{conta}}">
+            <i class="bi bi-person-circle me-1" aria-hidden="true"></i>{{#if conta}}{{conta}}{{else}}conta autorizada{{/if}}
           </p>
-          {{#if conta}}<p class="small fw-semibold mb-1"><i class="bi bi-person-circle me-1"></i>{{conta}}</p>{{/if}}
-          <p class="text-muted small">
-            {{#if principal}}É neste serviço que ficam os documentos deste condomínio.{{else}}Disponível para ser usado como armazenamento principal.{{/if}}
-            {{#if contaPlataforma}}A conta é da plataforma (partilhada): desligá-la aqui remove também a ligação usada pelos backups.{{/if}}
-          </p>
-          <div class="d-grid gap-2 mt-auto">
-            {{#unless principal}}
-            <form action="/admin/config/armazenamento/principal" method="POST">
-              <input type="hidden" name="provedor" value="{{nome}}" />
-              <button type="submit" class="btn btn-outline-primary w-100"><i class="bi bi-star me-1"></i>Tornar principal</button>
+          <div class="d-flex gap-2 mt-auto">
+            <form action="/admin/config/armazenamento/{{nome}}/testar" method="POST">
+              <button type="submit" class="btn btn-sm btn-outline-secondary" title="Testar ligação" aria-label="Testar ligação a {{rotulo}}">
+                <i class="bi bi-plug" aria-hidden="true"></i>
+              </button>
             </form>
-            {{/unless}}
-            <div class="d-flex gap-2">
-              <form action="/admin/config/armazenamento/{{nome}}/testar{{#if contaPlataforma}}?ambito=plataforma{{/if}}" method="POST" class="flex-fill">
-                <button type="submit" class="btn btn-outline-secondary w-100"><i class="bi bi-plug me-1"></i>Testar ligação</button>
-              </form>
-              {{#if contaPlataforma}}
-              {{!-- A conta pertence à plataforma: desligar só é possível nesse âmbito. --}}
-              <form action="/admin/config/armazenamento/{{nome}}/desligar?ambito=plataforma" method="POST" class="flex-fill"
-                    data-confirmar="Desligar {{rotulo}} da plataforma? Este serviço está ligado através da conta da plataforma (a mesma usada pelos backups), por isso a ligação é removida em ambos os sítios. Os ficheiros já guardados não são apagados." data-confirmar-perigo="1">
-                <button type="submit" class="btn btn-outline-danger w-100"><i class="bi bi-x-circle me-1"></i>Desligar</button>
-              </form>
-              {{else}}
-              <form action="/admin/config/armazenamento/{{nome}}/desligar" method="POST" class="flex-fill"
-                    data-confirmar="Desligar {{rotulo}} deste condomínio? Os ficheiros já guardados não são apagados." data-confirmar-perigo="1">
-                <button type="submit" class="btn btn-outline-danger w-100"><i class="bi bi-x-circle me-1"></i>Desligar</button>
-              </form>
-              {{/if}}
-            </div>
+            <form action="/admin/config/armazenamento/{{nome}}/desligar" method="POST" class="flex-fill"
+                  data-confirmar="Desligar {{rotulo}}? Os ficheiros já guardados não são apagados e a conta não é afetada." data-confirmar-perigo="1">
+              <button type="submit" class="btn btn-sm btn-outline-danger w-100">Desligar</button>
+            </form>
           </div>
         {{else}}
-          <p class="mb-1"><span class="badge text-bg-secondary">Não ligado</span></p>
           {{#if disponivel}}
-            <p class="text-muted small">Associe uma conta {{rotulo}} para guardar aqui os documentos deste condomínio.</p>
+            <p class="text-muted small">Associe uma conta para guardar documentos neste serviço.</p>
             <a href="/admin/config/armazenamento/{{nome}}/ligar" class="btn btn-primary w-100 mt-auto">
-              <i class="bi bi-box-arrow-in-right me-1"></i>Ligar {{rotulo}}
+              <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>Ligar {{rotulo}}
             </a>
           {{else}}
-            <p class="text-muted small mb-0">
-              Disponível após configuração pelo administrador do GesCondu.
-            </p>
+            <p class="text-muted small mb-0 mt-auto">Disponível após configuração pelo administrador do GesCondu.</p>
           {{/if}}
         {{/if}}
       </div>
@@ -89,109 +66,113 @@
   {{/each}}
 </div>
 
-{{!-- ── Armazenamento principal dos documentos ──────────────────────── --}}
-<h2 class="h6 mt-4 mb-2">Armazenamento principal</h2>
+{{!-- ── 2. Armazenamento dos documentos ─────────────────────────────── --}}
+<h2 class="h6 mt-4 mb-2">Armazenamento dos documentos</h2>
 <div class="card mb-4">
   <div class="card-body">
     <p class="text-muted small">
-      Os documentos deste condomínio são guardados num único serviço — não são copiados automaticamente
-      para os outros. As automações de documentos (“Guardar no armazenamento”) usam o serviço escolhido aqui.
+      Onde ficam os documentos deste condomínio. É este o serviço usado pelas automações de documentos —
+      os documentos não são copiados para os outros serviços.
     </p>
-    <form action="/admin/config/armazenamento/principal" method="POST" class="row g-2 align-items-end">
-      <div class="col-12 col-md-6">
-        <label class="form-label small" for="provedorPrincipal">Armazenamento principal dos documentos</label>
-        <select class="form-select" id="provedorPrincipal" name="provedor">
-          {{#each armazenamento.provedores}}
-          {{#if ligado}}
-          <option value="{{nome}}" {{#if principal}}selected{{/if}}>{{rotulo}}</option>
-          {{/if}}
-          {{/each}}
-        </select>
+    {{#if armazenamento.temLigacoes}}
+    <form action="/admin/config/armazenamento/principal" method="POST">
+      <div class="row g-2">
+        {{#each armazenamento.provedores}}
+        {{#if ligado}}
+        <div class="col-12 col-md-4">
+          <label class="border rounded p-3 d-flex align-items-center gap-2 w-100 h-100 {{#if principal}}border-primary border-2{{/if}}">
+            <input class="form-check-input m-0" type="radio" name="provedor" value="{{nome}}" {{#if principal}}checked{{/if}} />
+            <i class="{{icone}} fs-5" aria-hidden="true"></i>
+            <span class="fw-semibold">{{rotulo}}</span>
+            {{#if principal}}<span class="badge text-bg-primary ms-auto">Em uso</span>{{/if}}
+          </label>
+        </div>
+        {{/if}}
+        {{/each}}
       </div>
-      <div class="col-12 col-md-3">
-        <button type="submit" class="btn btn-primary w-100"><i class="bi bi-check2 me-1"></i>Guardar</button>
-      </div>
+      <button type="submit" class="btn btn-primary mt-3"><i class="bi bi-check2 me-1"></i>Guardar</button>
     </form>
+    {{else}}
+    <p class="mb-0 text-muted small">Ligue um serviço acima para escolher onde guardar os documentos.</p>
+    {{/if}}
   </div>
 </div>
 
-{{!-- ── Backups (da instalação) ─────────────────────────────────────── --}}
+{{!-- ── 3. Backups ──────────────────────────────────────────────────── --}}
 <h2 class="h6 mt-4 mb-2">Backups</h2>
 <div class="card mb-4">
   <div class="card-body">
     <p class="text-muted small">
-      Os backups são da instalação do GesCondu e contêm dados de todos os condomínios — por isso usam uma
-      ligação própria da plataforma e podem ficar num serviço diferente do armazenamento dos documentos.
+      Os backups são da instalação e usam a ligação já existente do serviço escolhido — não é preciso
+      autorizar outra vez. Escolha apenas onde quer guardar.
     </p>
 
-    <div class="row g-3">
-      <div class="col-12 col-lg-7">
-        <form action="/admin/config/armazenamento/backups" method="POST" class="row g-2 align-items-end">
-          <div class="col-12 col-sm-7">
-            <label class="form-label small" for="destinoBackups">Destino dos backups</label>
-            <select class="form-select" id="destinoBackups" name="provedor">
-              <option value="nenhum" {{#unless armazenamento.backup.destino}}selected{{/unless}}>Só neste servidor (sem serviço externo)</option>
-              {{#each armazenamento.plataforma}}
-              {{#if ligado}}
-              <option value="{{nome}}" {{#if (eq nome ../armazenamento.backup.destino)}}selected{{/if}}>{{rotulo}}</option>
-              {{/if}}
-              {{/each}}
-            </select>
-          </div>
-          <div class="col-12 col-sm-5">
-            <button type="submit" class="btn btn-primary w-100"><i class="bi bi-check2 me-1"></i>Guardar destino</button>
-          </div>
-        </form>
-
-        <hr />
-
-        <div class="fw-semibold small mb-2">Ligações da plataforma (usadas pelos backups)</div>
-        <ul class="list-unstyled mb-0 small">
-          {{#each armazenamento.plataforma}}
-          <li class="d-flex justify-content-between align-items-center flex-wrap gap-2 py-1">
-            <span>
-              <i class="{{icone}} me-1" aria-hidden="true"></i>{{rotulo}}
-              {{#if ligado}}<span class="badge text-bg-success ms-1">Ligado ✓</span>
-              {{else}}<span class="badge text-bg-secondary ms-1">Não ligado</span>{{/if}}
-              {{#if (eq nome ../armazenamento.backup.destino)}}<span class="badge text-bg-primary ms-1">Destino</span>{{/if}}
-              {{#if conta}}<span class="text-muted ms-1">· {{conta}}</span>{{/if}}
-            </span>
-            <span class="d-flex gap-1">
-              {{#if ligado}}
-                <form action="/admin/config/armazenamento/{{nome}}/testar?ambito=plataforma" method="POST">
-                  <button type="submit" class="btn btn-sm btn-outline-secondary">Testar</button>
-                </form>
-                <form action="/admin/config/armazenamento/{{nome}}/desligar?ambito=plataforma" method="POST"
-                      data-confirmar="Desligar {{rotulo}} da plataforma? Os backups já guardados não são apagados." data-confirmar-perigo="1">
-                  <button type="submit" class="btn btn-sm btn-outline-danger">Desligar</button>
-                </form>
-              {{else if disponivel}}
-                <a href="/admin/config/armazenamento/{{nome}}/ligar?ambito=plataforma" class="btn btn-sm btn-outline-primary">Ligar para backups</a>
-              {{else}}
-                <span class="text-muted">Disponível após configuração pelo administrador do GesCondu.</span>
-              {{/if}}
-            </span>
-          </li>
-          {{/each}}
-        </ul>
-      </div>
-
-      <div class="col-12 col-lg-5">
-        <div class="border rounded p-3 h-100">
-          <div class="fw-semibold small mb-2">Último backup</div>
-          {{#if ultimoBackup}}
-          <div class="d-flex justify-content-between small"><span class="text-muted">Data</span><span>{{formatDateTime ultimoBackup.data}}</span></div>
-          <div class="d-flex justify-content-between small"><span class="text-muted">Tipo</span><span>{{ultimoBackup.tipo}}</span></div>
-          <div class="d-flex justify-content-between small">
-            <span class="text-muted">Estado</span>
-            {{#if (eq ultimoBackup.estado 'concluido')}}<span class="badge text-bg-success">Concluído</span>
-            {{else if (eq ultimoBackup.estado 'erro')}}<span class="badge text-bg-danger" title="{{ultimoBackup.erro}}">Erro</span>
-            {{else}}<span class="badge text-bg-warning">Em curso</span>{{/if}}
-          </div>
-          {{else}}
-          <p class="text-muted small mb-0">Ainda não existem backups registados.</p>
-          {{/if}}
+    {{#if armazenamento.temLigacoes}}
+    <form action="/admin/config/armazenamento/backups" method="POST">
+      <div class="row g-2">
+        <div class="col-12 col-md-4">
+          <label class="border rounded p-3 d-flex align-items-center gap-2 w-100 h-100 {{#unless armazenamento.backup.destino}}border-primary border-2{{/unless}}">
+            <input class="form-check-input m-0" type="radio" name="provedor" value="nenhum" {{#unless armazenamento.backup.destino}}checked{{/unless}} />
+            <i class="bi bi-hdd fs-5" aria-hidden="true"></i>
+            <span class="fw-semibold">Só neste servidor</span>
+            {{#unless armazenamento.backup.destino}}<span class="badge text-bg-primary ms-auto">Em uso</span>{{/unless}}
+          </label>
         </div>
+        {{#each armazenamento.provedores}}
+        {{#if ligado}}
+        <div class="col-12 col-md-4">
+          <label class="border rounded p-3 d-flex align-items-center gap-2 w-100 h-100 {{#if (eq nome ../armazenamento.backup.destino)}}border-primary border-2{{/if}}">
+            <input class="form-check-input m-0" type="radio" name="provedor" value="{{nome}}" {{#if (eq nome ../armazenamento.backup.destino)}}checked{{/if}} />
+            <i class="{{icone}} fs-5" aria-hidden="true"></i>
+            <span class="fw-semibold">{{rotulo}}</span>
+            {{#if (eq nome ../armazenamento.backup.destino)}}<span class="badge text-bg-primary ms-auto">Em uso</span>{{/if}}
+          </label>
+        </div>
+        {{/if}}
+        {{/each}}
+      </div>
+      <button type="submit" class="btn btn-primary mt-3"><i class="bi bi-check2 me-1"></i>Guardar destino</button>
+    </form>
+
+    {{#if armazenamento.backup.avisoPartilhado}}
+    <div class="alert alert-warning small mt-3 mb-0">
+      <span class="material-symbols-outlined me-1" aria-hidden="true">info</span>
+      Os backups contêm dados de <strong>todos os condomínios</strong> e vão para a conta
+      {{#if armazenamento.backup.conta}}<strong>{{armazenamento.backup.conta}}</strong>{{else}}desse serviço{{/if}},
+      que é a mesma usada pelos documentos. Se essa conta não for da administração da plataforma,
+      escolha um serviço ligado diretamente à instalação ou mantenha os backups só no servidor.
+    </div>
+    {{/if}}
+    {{else}}
+    <p class="mb-0 text-muted small">Ligue um serviço acima para poder guardar backups fora do servidor.</p>
+    {{/if}}
+
+    <hr />
+    <div class="row g-3">
+      <div class="col-12 col-lg-6">
+        <div class="fw-semibold small mb-1">Destino atual</div>
+        <p class="small mb-0">
+          {{#if armazenamento.backup.destino}}
+            <i class="{{armazenamento.backup.icone}} me-1" aria-hidden="true"></i>{{armazenamento.backup.rotulo}}
+            {{#if armazenamento.backup.conta}}<span class="text-muted">· {{armazenamento.backup.conta}}</span>{{/if}}
+          {{else}}
+            <i class="bi bi-hdd me-1" aria-hidden="true"></i>Só neste servidor
+          {{/if}}
+        </p>
+      </div>
+      <div class="col-12 col-lg-6">
+        <div class="fw-semibold small mb-1">Último backup</div>
+        {{#if ultimoBackup}}
+        <p class="small mb-0">
+          {{formatDateTime ultimoBackup.data}}
+          <span class="text-muted">· {{ultimoBackup.tipo}}</span>
+          {{#if (eq ultimoBackup.estado 'concluido')}}<span class="badge text-bg-success ms-1">Concluído</span>
+          {{else if (eq ultimoBackup.estado 'erro')}}<span class="badge text-bg-danger ms-1" title="{{ultimoBackup.erro}}">Erro</span>
+          {{else}}<span class="badge text-bg-warning ms-1">Em curso</span>{{/if}}
+        </p>
+        {{else}}
+        <p class="small mb-0 text-muted">Ainda não existem backups registados.</p>
+        {{/if}}
       </div>
     </div>
   </div>
@@ -217,9 +198,6 @@
     </form>
     <hr />
     <div class="d-flex flex-wrap gap-2">
-      <form action="/admin/config/drive/testar" method="POST">
-        <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-plug me-1"></i>Testar ligação</button>
-      </form>
       <form action="/admin/config/drive/estrutura" method="POST">
         <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-diagram-3 me-1"></i>Criar/verificar estrutura de pastas</button>
       </form>

@@ -277,8 +277,9 @@ router.post('/config/armazenamento/principal', async (req, res) => {
 router.post('/config/armazenamento/provedor', (req, res) => res.redirect(307, '/admin/config/armazenamento/principal'));
 
 // ── Destino de backups (instalação) ────────────────────────────────
-// Os backups contêm dados de todos os condomínios: o destino usa sempre uma
-// ligação de PLATAFORMA e pode ser um serviço diferente do principal.
+// Os backups usam a ligação JÁ EXISTENTE do serviço escolhido (uma ligação por
+// serviço, sem contas duplicadas). Como o dump contém dados de todos os
+// condomínios, a interface avisa quando a conta é a de um condomínio.
 router.post('/config/armazenamento/backups', async (req, res) => {
   const escolha = String(req.body.provedor || '').trim().toLowerCase();
   try {
@@ -288,11 +289,17 @@ router.post('/config/armazenamento/backups', async (req, res) => {
     } else {
       const p = storage.obterProvedor(escolha);
       if (!p) throw new Error('Serviço de armazenamento desconhecido.');
-      if (!p.isConfigured(null)) {
-        throw new Error(`${p.rotulo()} não tem ligação da plataforma. Ligue o serviço para backups primeiro.`);
+      const ligacao = storage.ligacaoDeBackup(escolha);
+      if (!p.isConfigured(req.condominioId) && !p.isConfigured(null)) {
+        throw new Error(`${p.rotulo()} não está ligado. Ligue o serviço antes de o escolher para backups.`);
       }
       await storage.definirDestinoDeBackup(escolha);
-      req.flash('success_msg', `Destino dos backups: ${p.rotulo()}.`);
+      req.flash(
+        'success_msg',
+        ligacao.conta
+          ? `Destino dos backups: ${p.rotulo()} (${ligacao.conta}).`
+          : `Destino dos backups: ${p.rotulo()}.`
+      );
     }
     await audit({
       userId: req.user.id,

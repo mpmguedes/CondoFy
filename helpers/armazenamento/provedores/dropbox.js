@@ -560,10 +560,12 @@ async function criarEstruturaPastas(condominioId = null, ano = new Date().getFul
 // Caminho da pasta de BACKUPS da plataforma: <raiz>/Backups (sem condomínio).
 // Os backups são da instalação (o dump contém dados de todos os condomínios),
 // por isso usam a ligação de plataforma — nunca a conta de um condomínio.
-async function pastaDeBackups() {
-  return comAutenticacao(null, async (accessToken) => {
+async function pastaDeBackups(condominioId = null) {
+  // Sem condominioId usa a ligação de plataforma; com condominioId usa a
+  // ligação desse condomínio (uma ligação por serviço, sem contas duplicadas).
+  return comAutenticacao(condominioId, async (accessToken) => {
     const criar = criadorDePastas(accessToken);
-    const raizSeg = await segmentosRaiz(null);
+    const raizSeg = await segmentosRaiz(condominioId);
     const raizId = await criar(raizSeg);
     return criar([raizId, 'Backups']);
   });

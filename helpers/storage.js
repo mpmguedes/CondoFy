@@ -156,10 +156,20 @@ async function estadoDoCondominio(condominioId) {
     // chave da instalação não está configurada). Nunca inclui chaves/tokens.
     cifra: ligacoes.estadoCifra(),
     provedores,
+    // Há pelo menos um serviço ligado? (as escolhas de principal e de backups
+    // só aparecem quando existe alguma ligação)
+    temLigacoes: provedores.some((p) => p.ligado),
     backup: {
       destino: destinoBackup,
       rotulo: pBackup ? pBackup.rotulo() : null,
-      ligadoPlataforma: Boolean(pBackup && pBackup.isConfigured && pBackup.isConfigured(null)),
+      icone: pBackup && typeof pBackup.icone === 'function' ? pBackup.icone() : null,
+      // Conta que vai receber os backups (a mesma ligação usada pelos
+      // documentos, quando o serviço só tem uma ligação).
+      conta: destinoBackup ? ligacoes.ligacaoParaBackup(destinoBackup).conta : null,
+      origem: destinoBackup ? ligacoes.ligacaoParaBackup(destinoBackup).origem : null,
+      // Os backups contêm dados de TODOS os condomínios: quando a conta é a de
+      // um condomínio, a interface avisa.
+      avisoPartilhado: Boolean(destinoBackup && ligacoes.ligacaoParaBackup(destinoBackup).origem === 'condominio'),
     },
     // Serviços com ligação de plataforma (podem servir de destino de backups).
     // Inclui a conta autorizada e o ícone, para a interface os identificar
@@ -256,17 +266,25 @@ async function criarEstruturaPastas(condominioId, ano) {
   return p.criarEstruturaPastas(condominioId, ano);
 }
 
-// ── Escritas com proveniência explícita (backups da instalação) ─────
-// Usado apenas onde o destino é a plataforma (nunca documentos de condomínio).
+// ── Escritas de backups (instalação) ────────────────────────────────
+// Os backups usam a ligação JÁ EXISTENTE do serviço escolhido (uma ligação por
+// serviço): de plataforma quando existe, senão a do condomínio que a tem.
 async function uploadComProvedor(nomeProvedor, opcoes = {}) {
   const p = exigirProvedor(nomeProvedor);
-  return p.uploadArquivo({ ...opcoes, plataforma: true });
+  return p.uploadArquivo(opcoes);
 }
 
-async function pastaDeBackups(nomeProvedor) {
+async function pastaDeBackups(nomeProvedor, condominioId = null) {
   const p = exigirProvedor(nomeProvedor);
-  if (typeof p.pastaDeBackups === 'function') return p.pastaDeBackups();
-  throw new Error(`O provedor ${p.rotulo()} não suporta destino de backups.`);
+  if (typeof p.pastaDeBackups !== 'function') {
+    throw new Error(`O provedor ${p.rotulo()} não suporta destino de backups.`);
+  }
+  return p.pastaDeBackups(condominioId);
+}
+
+// Ligação que os backups vão usar para um serviço (conta + contexto).
+function ligacaoDeBackup(nomeProvedor) {
+  return ligacoes.ligacaoParaBackup(nomeProvedor);
 }
 
 // ── Leituras (provedor pelo LOCALIZADOR do ficheiro) ────────────────
@@ -367,6 +385,7 @@ module.exports = {
   // escritas de plataforma (backups)
   uploadComProvedor,
   pastaDeBackups,
+  ligacaoDeBackup,
   destinoDeBackup,
   definirDestinoDeBackup,
   // leituras

@@ -285,6 +285,35 @@ async function definirPrincipal(condominioId, nome) {
   return alvo;
 }
 
+// ── Backups: que ligação usar ───────────────────────────────────────
+// Os backups são da instalação (o dump contém dados de todos os condomínios) e
+// usam a ligação JÁ EXISTENTE do serviço escolhido — uma ligação por serviço,
+// sem contas duplicadas:
+//   1. ligação de plataforma do serviço (quando existe: é o caso histórico do
+//      Google Drive e mantém-se válida);
+//   2. caso contrário, a ligação do condomínio que a tem (o primeiro, por id),
+//      com aviso explícito na interface de que os backups contêm dados de todos
+//      os condomínios.
+// Devolve { condominioId, conta, origem } — `condominioId` nulo significa que se
+// usa a ligação de plataforma.
+function ligacaoParaBackup(provedor) {
+  const plataforma = tokensSync(provedor, null, { plataforma: true }).tokens;
+  if (plataforma) {
+    return { condominioId: null, conta: plataforma.conta || null, origem: 'plataforma' };
+  }
+  const prefixo = `${PREFIXO_CHAVES}tokens:${provedor}:c`;
+  const candidatos = [..._cache.tokens.keys()]
+    .filter((k) => k.startsWith(prefixo))
+    .map((k) => ({ chave: k, cid: Number(k.slice(prefixo.length)) }))
+    .filter((x) => Number.isFinite(x.cid) && x.cid > 0)
+    .sort((a, b) => a.cid - b.cid);
+  for (const c of candidatos) {
+    const tokens = _cache.tokens.get(c.chave);
+    if (tokens) return { condominioId: c.cid, conta: tokens.conta || null, origem: 'condominio' };
+  }
+  return { condominioId: null, conta: null, origem: null };
+}
+
 // ── Tokens (sempre cifrados na BD) ──────────────────────────────────
 // Carrega (e usa) as credenciais de uma chave de configuração.
 // Fail-safe: sem ENCRYPTION_KEY nenhuma credencial é usada — nem sequer um
@@ -521,6 +550,7 @@ module.exports = {
   limparTokens,
   lerDestinoBackup,
   definirDestinoBackup,
+  ligacaoParaBackup,
   lerRaiz,
   raizSync,
   guardarRaiz,

@@ -615,9 +615,11 @@ async function criarEstruturaPastas(condominioId, ano = new Date().getFullYear()
 // Pasta de BACKUPS da plataforma: <raiz>/Backups (sem condomínio). Os backups
 // são da instalação (o dump contém dados de todos os condomínios) e usam a
 // ligação de plataforma — nunca a conta de um condomínio.
-async function pastaDeBackups() {
-  const raiz = await garantirPasta(await obterCaminhoRaiz(null), null);
-  return garantirPasta(juntarCaminho(raiz, 'Backups'), null);
+async function pastaDeBackups(condominioId = null) {
+  // Sem condominioId usa a ligação de plataforma; com condominioId usa a
+  // ligação desse condomínio (uma ligação por serviço, sem contas duplicadas).
+  const raiz = await garantirPasta(await obterCaminhoRaiz(condominioId), condominioId);
+  return garantirPasta(juntarCaminho(raiz, 'Backups'), condominioId);
 }
 
 // Não existem partilhas: o acesso aos documentos passa sempre pelo GesCondu

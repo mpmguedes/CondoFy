@@ -131,16 +131,17 @@ const TAB4 = 'href="/admin/config/auditoria"';
   assert.strictEqual(r.status, 200, 'GET /admin/config/armazenamento responde 200');
   assert.ok(r.corpo.includes(`class="config-tab active" ${TAB2}`), 'armazenamento: separador 2 ativo');
   // Três serviços, cada um com o seu cartão e estado.
-  assert.ok(r.corpo.includes('Serviços de armazenamento'), 'armazenamento: secção de serviços');
+  assert.ok(r.corpo.includes('Ligações aos serviços'), 'armazenamento: secção de ligações');
   for (const nome of ['google_drive', 'dropbox', 'onedrive']) {
     assert.ok(r.corpo.includes(`id="${nome}"`), `armazenamento: cartão do serviço ${nome}`);
   }
   assert.ok(r.corpo.includes('Google Drive') && r.corpo.includes('Dropbox') && r.corpo.includes('Microsoft OneDrive'), 'armazenamento: serviços nomeados');
-  // Armazenamento principal e backups são áreas separadas.
-  assert.ok(r.corpo.includes('Armazenamento principal'), 'armazenamento: secção do principal');
-  assert.ok(r.corpo.includes('action="/admin/config/armazenamento/principal"'), 'armazenamento: gravação do principal');
-  assert.ok(r.corpo.includes('Destino dos backups'), 'armazenamento: secção de backups');
+  // Escolha do serviço para documentos e para backups (sem autorizar de novo).
+  assert.ok(r.corpo.includes('Armazenamento dos documentos'), 'armazenamento: secção do armazenamento dos documentos');
+  assert.ok(r.corpo.includes('action="/admin/config/armazenamento/principal"'), 'armazenamento: gravação do armazenamento dos documentos');
+  assert.ok(r.corpo.includes('Backups'), 'armazenamento: secção de backups');
   assert.ok(r.corpo.includes('action="/admin/config/armazenamento/backups"'), 'armazenamento: gravação do destino de backups');
+  assert.ok(!r.corpo.includes('Ligar para backups'), 'armazenamento: não pede autorização nova para os backups');
   assert.ok(r.corpo.includes('name="pasta_raiz"'), 'armazenamento: pasta raiz do Google Drive mantida');
   assert.ok(r.corpo.includes('privados'), 'armazenamento: explica que os documentos ficam privados');
   // Sem credenciais na instalação: mensagem amigável, nunca detalhes técnicos.
@@ -159,7 +160,7 @@ const TAB4 = 'href="/admin/config/auditoria"';
     const rDropbox = await pedir('/admin/config/armazenamento');
     assert.ok(rDropbox.corpo.includes('href="/admin/config/armazenamento/dropbox/ligar"'), 'armazenamento: ligar Dropbox disponível');
     assert.ok(rDropbox.corpo.includes('Ligar Dropbox'), 'armazenamento: texto do botão de ligar');
-    assert.ok(rDropbox.corpo.includes('href="/admin/config/armazenamento/dropbox/ligar?ambito=plataforma"'), 'armazenamento: ligar Dropbox para backups');
+    assert.ok(rDropbox.corpo.includes('href="/admin/config/armazenamento/dropbox/ligar"'), 'armazenamento: ligar Dropbox disponível');
     assert.ok(!rDropbox.corpo.includes('href="/admin/config/armazenamento/onedrive/ligar"'), 'armazenamento: OneDrive sem credenciais não mostra ligação');
     // Regressão: "Desligar (plataforma)" tem de passar o âmbito ao adaptador,
     // senão a ligação de backups fica sempre a aparecer como ligada.
