@@ -28,8 +28,9 @@ require.cache[modelsPath] = {
       findOne: async ({ where }) => {
         const d = documentos.get(Number(where.id));
         if (!d) return null;
-        // Reproduz o filtro por condomínio da query real.
-        if (Number(where.condominio_id) !== Number(d.condominio_id)) return null;
+        // Reproduz o filtro por condomínio da query real — apenas quando a
+        // consulta o pede (a sonda de existência não filtra).
+        if (where.condominio_id !== undefined && Number(where.condominio_id) !== Number(d.condominio_id)) return null;
         return d;
       },
     },
@@ -108,13 +109,30 @@ async function testarAutorizacao() {
   }
 
   // 1.4 Documento de OUTRO condomínio: nunca, mesmo com admin e mesmo com
-  // disponivel_condominos = true (isolamento multi-tenant).
+  // disponivel_condominos = true (isolamento multi-tenant) — 403 Forbidden.
   for (const req of [reqAdmin, reqGestor, reqCondomino]) {
     const r = await acesso.autorizarAcessoDocumento({ documentoId: 20, req, area: 'gestao' });
     assert.strictEqual(r.ok, false, `${req.papelCondominio}: documento de outro condomínio recusado`);
-    assert.strictEqual(r.motivo, acesso.MOTIVO.NAO_ENCONTRADO, 'motivo igual ao de inexistente (não revela existência)');
+    assert.strictEqual(r.motivo, acesso.MOTIVO.OUTRO_CONDOMINIO, 'motivo: outro condomínio');
+    assert.strictEqual(acesso.HTTP[r.motivo], 403, 'outro condomínio → 403 Forbidden');
     assert.ok(!/outro condomínio/i.test(r.mensagem), 'mensagem não revela o condomínio alheio');
+    assert.strictEqual(r.mensagem, acesso.MENSAGENS[acesso.MOTIVO.NAO_ENCONTRADO], 'mensagem igual à de documento inexistente');
   }
+
+  // 1.4.1 Documento que não existe mesmo → 404 (não se confunde com 403).
+  const rInexistente = await acesso.autorizarAcessoDocumento({ documentoId: 9999, req: reqAdmin, area: 'gestao' });
+  assert.strictEqual(rInexistente.motivo, acesso.MOTIVO.NAO_ENCONTRADO, 'documento inexistente');
+  assert.strictEqual(acesso.HTTP[rInexistente.motivo], 404, 'inexistente → 404');
+
+  // 1.4.2 Adulteração de id pelo utilizador autorizado: 123 (seu) → 124 (de
+  // outro condomínio) tem de resultar em 403 e nunca entregar o documento.
+  documentos.set(123, { id: 123, condominio_id: 1, nome: 'Do meu condomínio.pdf', drive_file_id: 'gd-123', mime_type: 'application/pdf', disponivel_condominos: false });
+  documentos.set(124, { id: 124, condominio_id: 2, nome: 'De outro condomínio.pdf', drive_file_id: 'gd-124', mime_type: 'application/pdf', disponivel_condominos: false });
+  const meu = await acesso.autorizarAcessoDocumento({ documentoId: 123, req: reqAdmin, area: 'gestao' });
+  assert.strictEqual(meu.ok, true, 'documento do próprio condomínio autorizado');
+  const adulterado = await acesso.autorizarAcessoDocumento({ documentoId: 124, req: reqAdmin, area: 'gestao' });
+  assert.strictEqual(adulterado.ok, false, 'id adulterado para outro condomínio é recusado');
+  assert.strictEqual(acesso.HTTP[adulterado.motivo], 403, 'id adulterado → 403');
 
   // 1.5 Condómino: só documentos disponibilizados
   const rCondNaoDisp = await acesso.autorizarAcessoDocumento({ documentoId: 10, req: reqCondomino, area: 'condomino' });
@@ -258,11 +276,40 @@ function testarVistas() {
   assert.ok(rotasDocumentos.includes('autorizarAcessoDocumento') && rotasCondomino.includes('autorizarAcessoDocumento'), 'rotas usam a camada de autorização');
 }
 
+// ── 6. Códigos HTTP das recusas (401/403/404/502/503) ───────────────
+function testarCodigosHttp() {
+  assert.strictEqual(acesso.HTTP[acesso.MOTIVO.SEM_SESSAO], 401, 'sem sessão → 401');
+  assert.strictEqual(acesso.HTTP[acesso.MOTIVO.SEM_CONDOMINIO], 401, 'sem condomínio ativo → 401');
+  assert.strictEqual(acesso.HTTP[acesso.MOTIVO.SEM_PERMISSAO], 403, 'sem permissão → 403');
+  assert.strictEqual(acesso.HTTP[acesso.MOTIVO.OUTRO_CONDOMINIO], 403, 'outro condomínio → 403');
+  assert.strictEqual(acesso.HTTP[acesso.MOTIVO.NAO_ENCONTRADO], 404, 'inexistente → 404');
+  assert.strictEqual(acesso.HTTP[acesso.MOTIVO.SEM_FICHEIRO], 404, 'sem ficheiro → 404');
+  assert.strictEqual(acesso.HTTP[acesso.MOTIVO.LIGACAO_INVALIDA], 502, 'falha do fornecedor → 502');
+  assert.strictEqual(acesso.HTTP[acesso.MOTIVO.PROVEDOR_INDISPONIVEL], 503, 'armazenamento em baixo → 503');
+
+  // A resposta de recusa nunca entrega conteúdo e é privada.
+  const cabecalhos = {};
+  const res = {
+    headersSent: false,
+    setHeader: (k, v) => { cabecalhos[k] = v; },
+    status(c) { this.codigo = c; return this; },
+    type() { return this; },
+    send(b) { this.corpo = b; return this; },
+  };
+  const codigo = acesso.responderRecusa(res, { motivo: acesso.MOTIVO.OUTRO_CONDOMINIO, mensagem: acesso.MENSAGENS[acesso.MOTIVO.OUTRO_CONDOMINIO] });
+  assert.strictEqual(codigo, 403, 'resposta de recusa devolve 403');
+  assert.strictEqual(res.codigo, 403, 'estado definido na resposta');
+  assert.strictEqual(res.corpo, 'Documento não encontrado.', 'mensagem de recusa apresentada');
+  assert.strictEqual(cabecalhos['Cache-Control'], 'private, no-store', 'recusa sem cache partilhada');
+  assert.ok(!/drive\.google|dropbox|onedrive/.test(String(res.corpo)), 'recusa sem referências ao fornecedor');
+}
+
 (async () => {
   await testarAutorizacao();
   await testarServicoDeFicheiro();
   testarLinks();
   testarLinksTemporarios();
+  testarCodigosHttp();
   testarVistas();
   console.log('✓ Testes do acesso autorizado a documentos passaram (sem rede/BD).');
 })().catch((err) => {

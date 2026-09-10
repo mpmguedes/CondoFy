@@ -145,9 +145,9 @@ router.post('/avisos/:id/enviar', async (req, res) => {
   const doc = aviso.documento || null;
   let anexoBuffer = null;
   let anexoNome = null;
-  if (doc && doc.drive_file_id && drive.isConfigured()) {
+  if (doc && doc.drive_file_id && drive.isConfigured(req.condominioId)) {
     try {
-      anexoBuffer = await drive.descargarArquivo(doc.drive_file_id);
+      anexoBuffer = await drive.descargarArquivo(doc.drive_file_id, req.condominioId);
       anexoNome = String(doc.nome || '').trim() || 'documento.pdf';
     } catch (err) {
       anexoBuffer = null;

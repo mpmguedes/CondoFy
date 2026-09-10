@@ -4,8 +4,10 @@ const fs = require('fs');
 const path = require('path');
 const { Op } = require('sequelize');
 const { BackupLog } = require('../models');
-const drive = require('../helpers/drive');
-const { getConfig } = require('../helpers/config');
+// Backups são da INSTALAÇÃO (o dump contém dados de todos os condomínios):
+// usam o destino configurado em Configurações → Armazenamento e Backups, com a
+// ligação de PLATAFORMA do serviço escolhido — nunca a conta de um condomínio.
+const storage = require('../helpers/storage');
 
 function executarMysqldump() {
   return new Promise((resolve, reject) => {
@@ -51,9 +53,12 @@ async function limparBackupsAntigos(tipo) {
       ficheiro_drive_id: { [Op.ne]: null },
     },
   });
+  // Mantém a retenção: os backups fora do prazo deixam de estar referenciados
+  // e são removidos no fornecedor quando este suporta remoção (o Google Drive
+  // suportava já este comportamento).
   for (const b of antigos) {
     try {
-      await drive.getDrive().files.delete({ fileId: b.ficheiro_drive_id });
+      await storage.apagarArquivo(b.ficheiro_drive_id);
     } catch (err) {
       console.error('[backup] erro ao remover ficheiro antigo:', err.message);
     }
@@ -61,7 +66,8 @@ async function limparBackupsAntigos(tipo) {
   return antigos.length;
 }
 
-// Executa um backup: dump → gzip → Google Drive (ou cópia local temporária).
+// Executa um backup: dump → gzip → destino configurado (ou cópia local quando
+// ainda não há nenhum serviço ligado à plataforma).
 async function executarBackup(tipo = 'diario') {
   const log = await BackupLog.create({ tipo, estado: 'em_curso' });
   try {
@@ -69,25 +75,30 @@ async function executarBackup(tipo = 'diario') {
     const gz = zlib.gzipSync(dump);
     const nome = `backup_${tipo}_${new Date().toISOString().slice(0, 10)}_${Date.now()}.sql.gz`;
 
-    // Preferência "Guardar backups no Google Drive" (Configuração → Google Drive).
-    const backupsNoDrive = (await getConfig('drive_auto_backups', '1')) === '1';
-    if (drive.isConfigured() && backupsNoDrive) {
-      const estrutura = await drive.criarEstruturaPastas();
-      const up = await drive.uploadArquivo({
+    // Destino de backups: escolha do administrador (pode ser diferente do
+    // armazenamento principal dos documentos).
+    const destino = await storage.destinoDeBackup();
+    const provedor = destino ? storage.obterProvedor(destino) : null;
+    const ligado = Boolean(provedor && provedor.isConfigured(null));
+
+    if (provedor && ligado) {
+      const pastaId = await storage.pastaDeBackups(destino);
+      const up = await storage.uploadComProvedor(destino, {
         nome,
         mimeType: 'application/gzip',
         buffer: gz,
-        parentFolderId: estrutura.backupsId,
+        parentFolderId: pastaId,
       });
-      await log.update({ estado: 'concluido', ficheiro_drive_id: up.driveFileId, tamanho: gz.length });
+      const referencia = up.localizador || up.provedorFileId || up.driveFileId || null;
+      await log.update({ estado: 'concluido', ficheiro_drive_id: referencia, tamanho: gz.length });
       const removidos = await limparBackupsAntigos(tipo);
-      console.log(`[backup] ${nome} concluído (${gz.length} bytes); ${removidos} antigo(s) removido(s).`);
+      console.log(`[backup] ${nome} concluído em ${provedor.rotulo()} (${gz.length} bytes); ${removidos} antigo(s) fora da retenção.`);
     } else {
       const dir = path.join(__dirname, '..', 'backups', 'local');
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(path.join(dir, nome), gz);
       await log.update({ estado: 'concluido', tamanho: gz.length });
-      console.log(`[backup] ${nome} guardado localmente (Drive não configurado).`);
+      console.log(`[backup] ${nome} guardado localmente (sem destino de backups ligado na plataforma).`);
     }
     return log;
   } catch (err) {

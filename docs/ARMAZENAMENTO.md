@@ -49,6 +49,23 @@ serviço de ficheiros.
 (`abrir_documento`, com `via` = `sessao`, `sessao_condomino` ou
 `link_temporario`).
 
+### Códigos de resposta (nunca se entrega o documento)
+
+| Situação | Resposta |
+|---|---|
+| Sem sessão / sem condomínio ativo | **401** |
+| Documento de outro condomínio (id adulterado) | **403** |
+| Sem permissão (condómino, documento não disponibilizado) | **403** |
+| Documento inexistente | **404** |
+| Documento sem ficheiro (só referência externa) | **404** |
+| Falha do fornecedor de armazenamento | **502** |
+| Serviço de armazenamento do condomínio desligado | **503** |
+
+Trocar um id autorizado por outro de outro condomínio
+(`/admin/documentos/123/ficheiro` → `/admin/documentos/124/ficheiro`) resulta
+em **403** e a mensagem é igual à de um documento inexistente (não se revela
+o condomínio alheio). Testado em `scripts/test-documentos-acesso.js`.
+
 ### Links temporários (emails)
 
 Emails para destinatários **sem conta** no GesCondu (fornecedores, endereços
@@ -68,11 +85,15 @@ exige sessão. Em nenhum caso é enviado o URL do fornecedor.
 
 ## 2. Serviços suportados
 
-| Provedor | Chave | Estado | Identificador do ficheiro |
+| Provedor | Chave | Ligação | Identificador do ficheiro |
 |---|---|---|---|
-| Google Drive | `google_drive` | ligação da plataforma (fluxo existente) | id do ficheiro (sem prefixo) |
-| Dropbox | `dropbox` | ligação por condomínio | `dbx:<id>` |
-| Microsoft OneDrive | `onedrive` | ligação por condomínio | `od:<id>` |
+| Google Drive | `google_drive` | por condomínio (ou conta da plataforma) | id do ficheiro (sem prefixo) |
+| Dropbox | `dropbox` | por condomínio | `dbx:<id>` |
+| Microsoft OneDrive | `onedrive` | por condomínio | `od:<id>` |
+
+Um condomínio pode ter **vários serviços ligados ao mesmo tempo**, mas apenas
+**um é o armazenamento principal** — é nele que ficam os documentos. Não há
+duplicação automática de documentos por estarem vários serviços ligados.
 
 O identificador é guardado em `documentos.drive_file_id` (nome histórico,
 `STRING(191)`). Valores **sem prefixo conhecido** são ids antigos do Google
@@ -87,18 +108,54 @@ Chaves da tabela `configuracoes` (sem migração de esquema; a coluna `chave` é
 
 | Chave | Conteúdo |
 |---|---|
-| `storage:provedor:c<id>` | provedor escolhido pelo condomínio |
-| `storage:tokens:<provedor>:c<id>` | tokens OAuth da ligação do condomínio |
+| `storage:principal:c<id>` | armazenamento principal dos documentos do condomínio |
+| `storage:tokens:<provedor>:c<id>` | contas autorizadas do condomínio |
 | `storage:raiz:<provedor>:c<id>` | pasta raiz opcional (por provedor/condomínio) |
+| `storage:backup` | destino dos backups da instalação |
+| `storage:tokens:<provedor>:plataforma` | contas autorizadas da plataforma (backups) |
 
-Compatibilidade: a ligação global antiga (`google_drive_tokens`) e a pasta raiz
-global (`google_drive_root_folder`) continuam a ser usadas quando o condomínio
-não tem ligação própria — uma instalação existente comporta-se como antes.
-`STORAGE_PROVIDER` define o provedor por omissão (sem escolha do condomínio).
+Compatibilidade: a chave antiga `storage:provedor:c<id>` continua a ser lida e
+mantida em escrita; a ligação global antiga do Google Drive
+(`google_drive_tokens`) é a ligação de **plataforma** do Drive e serve de
+fallback aos condomínios sem conta própria; a pasta raiz global
+(`google_drive_root_folder`) mantém a prioridade. Uma instalação existente
+comporta-se como antes. `STORAGE_PROVIDER` define o serviço por omissão.
 
-**Isolamento:** cada condomínio tem o seu provedor, a sua ligação e a sua
-árvore de pastas (`<raiz>/<Condomínio>/<ano>/…`). Os tokens de um condomínio
-nunca são usados por outro (testado em `scripts/test-storage-provedores.js`).
+**Isolamento:** cada condomínio tem o seu armazenamento principal, as suas
+contas e a sua árvore de pastas. Os tokens de um condomínio nunca são usados
+por outro — e, fora do Google Drive (que tem conta de plataforma desde o
+início), não existe fallback para a conta da plataforma (testado em
+`scripts/test-storage-provedores.js`).
+
+## 2.1 Backups (conceito separado)
+
+Os backups são da **instalação** (o dump contém dados de todos os
+condomínios), por isso:
+
+* usam uma **ligação de plataforma** (nunca a conta de um condomínio — isso
+  daria a esse condomínio acesso aos dados dos outros);
+* podem ficar num **serviço diferente** do armazenamento dos documentos
+  (ex.: documentos no Google Drive, backups no Dropbox);
+* sem destino ligado, os backups ficam apenas em `backups/local/` no servidor;
+* a arquitetura não impede vários destinos no futuro (basta permitir uma lista
+  em `storage:backup`).
+
+## 2.2 Configuração: o `.env` é só técnico
+
+As credenciais dos fornecedores (client id/secret da aplicação GesCondu,
+redirect URIs e chaves técnicas) pertencem à **instalação** e vivem no `.env`
+(variáveis documentadas em `.env.example`): `GOOGLE_*`, `DROPBOX_*`,
+`ONEDRIVE_*`, `STORAGE_PROVIDER`, `DOC_LINK_*`.
+
+Tudo o que é **por condomínio** (que serviços estão ligados, qual é o
+principal, destino de backups, pasta raiz) é configurado na própria interface
+em **Configurações → Armazenamento e Backups**, por OAuth — nunca editando o
+`.env`.
+
+Se a instalação ainda não tiver as credenciais técnicas de um serviço, a
+interface mostra apenas: **“Disponível após configuração pelo administrador do
+GesCondu.”** Não são apresentadas mensagens como “desativado no `.env`” nem
+qualquer detalhe técnico ao utilizador final.
 
 ### Estrutura de pastas
 
@@ -150,10 +207,11 @@ no upload.
 
 ## 5. Notas e trabalho seguinte
 
-* Vários módulos ainda chamam `helpers/drive` diretamente (assembleias,
-  convocatórias, financeiro, fornecedores, avisos, `jobs/backup`). Continuam a
-  funcionar (usam a ligação Google Drive da plataforma); a migração para a
-  fachada deve ser feita módulo a módulo, sem alterar comportamento.
+* Os uploads de documentos passam todos pela fachada (`helpers/storage`) e usam
+  o **armazenamento principal do condomínio** — incluindo as automações de
+  documentos (`helpers/document-actions.js`), assembleias, convocatórias,
+  quotas, recibos, documentos e fornecedores. As descargas usam o localizador
+  do ficheiro, pelo que continuam a funcionar depois de mudar de serviço.
 * Os tokens das ligações são guardados em texto simples na tabela
   `configuracoes`, como acontecia com o Google Drive. Cifrá-los exige uma
   chave de aplicação (`ENCRYPTION_KEY`) e é uma evolução separada.
@@ -164,3 +222,5 @@ no upload.
 * `GET /admin/documentos/drive/pasta` continua a abrir a pasta do condomínio no
   painel do Google Drive: é um atalho de administração, não um caminho de
   acesso a documentos.
+* Vários destinos de backup (por tipo: diário/semanal/mensal) é a evolução
+  natural seguinte: `storage:backup` passaria a guardar uma lista.

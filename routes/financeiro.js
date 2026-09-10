@@ -50,7 +50,7 @@ const background = require('../helpers/background-jobs');
 const { getQuotaConfig, setQuotaConfig } = require('../helpers/quotas-config');
 const { calcularQuota, calcularQuotasOrcamento } = require('../helpers/quotas-calc');
 const { validarPermilagem } = require('../helpers/permilagem');
-const drive = require('../helpers/drive');
+const storage = require('../helpers/storage');
 
 const router = express.Router();
 
@@ -387,7 +387,7 @@ router.get('/quotas', async (req, res) => {
     quotaConfig,
     permilagem,
     previstasMes: fromCents(previstasMesC),
-    driveLigado: drive.isConfigured(),
+    driveLigado: storage.isConfigured(req.condominioId),
   });
 });
 
@@ -514,7 +514,7 @@ router.get('/quotas/gerar', async (req, res) => {
     orcamentosJson: JSON.stringify(orcamentosJson),
     fracoesJson: JSON.stringify(fracoes.map((f) => ({ id: f.id, designacao: f.designacao, permilagem: f.permilagem }))),
     existentesJson: JSON.stringify(existentesSet),
-    driveLigado: drive.isConfigured(),
+    driveLigado: storage.isConfigured(req.condominioId),
     autoQuotas: { drive: autoQuotasDrive, email: autoQuotasEmail, automatico: autoQuotasAutomatico },
   });
 });
@@ -608,26 +608,28 @@ router.post('/quotas/gerar', async (req, res) => {
     await t.commit();
     await audit({ userId: req.user.id, acao: 'gerar_quotas', entidade: 'Quota', detalhes: { ano: anoNum, mes: mesNum, escopo, metodo: metodoLabel, criadas } });
 
-    // ── Processamento em segundo plano (PDFs/Drive/emails) ──────────
+    // ── Processamento em segundo plano (PDFs/armazenamento/emails) ──
     // A criação das quotas é síncrona; as operações pesadas (gerar PDFs,
-    // Google Drive, colocar emails na fila) correm fora do request.
+    // guardar no armazenamento do condomínio, colocar emails na fila) correm
+    // fora do request.
     let extraMsg = '';
     try {
       if (criadas > 0) {
         const guardarDrive = req.body.guardar_drive === 'on' || (await automacaoAtiva('quotas', 'drive'));
         const enviarEmail = req.body.enviar_email === 'on' || (await automacaoAtiva('quotas', 'automatico'));
-        if ((guardarDrive && drive.isConfigured()) || enviarEmail) {
+        const storageLigado = storage.isConfigured(req.condominioId);
+        if ((guardarDrive && storageLigado) || enviarEmail) {
           const baseUrl = `${req.protocol}://${req.get('host')}`;
           background.enqueue('quotas_pos_processamento', {
             ano: anoNum,
             mes: mesNum,
             condominioId: req.condominioId,
-            guardarDrive: Boolean(guardarDrive && drive.isConfigured()),
+            guardarDrive: Boolean(guardarDrive && storageLigado),
             enviarEmail: Boolean(enviarEmail),
             userId: req.user.id,
             baseUrl,
           });
-          extraMsg = ' Processamento em segundo plano iniciado (PDFs/Drive/emails). A interface continua disponível.';
+          extraMsg = ' Processamento em segundo plano iniciado (PDFs/armazenamento/emails). A interface continua disponível.';
         }
       }
     } catch (e) {
@@ -798,7 +800,7 @@ async function enfileirarLoteEmails({
 
 router.get('/quotas/enviar', async (req, res) => {
   const ctx = await contextoEnvioQuotas({ ano: req.query.ano, mes: req.query.mes, condominioId: req.condominioId });
-  res.render('admin/quotas/enviar', { titulo: 'Enviar quotas por email', driveLigado: drive.isConfigured(), ...ctx });
+  res.render('admin/quotas/enviar', { titulo: 'Enviar quotas por email', driveLigado: storage.isConfigured(req.condominioId), ...ctx });
 });
 
 router.post('/quotas/enviar', async (req, res) => {
@@ -875,7 +877,7 @@ router.get('/quotas/:id', async (req, res) => {
     pago: fromCents(pagoC),
     emFalta: fromCents(toCents(quota.valor) - pagoC),
     ultimaData: ultima || null,
-    driveLigado: drive.isConfigured(),
+    driveLigado: storage.isConfigured(req.condominioId),
   });
 });
 
@@ -923,7 +925,7 @@ router.get('/pagamentos', async (req, res) => {
     ],
     order: [['data_pagamento', 'DESC'], ['id', 'DESC']],
   });
-  res.render('admin/pagamentos/listar', { titulo: 'Pagamentos', pagamentos, driveLigado: drive.isConfigured() });
+  res.render('admin/pagamentos/listar', { titulo: 'Pagamentos', pagamentos, driveLigado: storage.isConfigured(req.condominioId) });
 });
 
 router.get('/pagamentos/nova', async (req, res) => {
@@ -1149,7 +1151,7 @@ async function contextoEnvioRecibos() {
 
 router.get('/pagamentos/enviar-recibos', async (req, res) => {
   const ctx = await contextoEnvioRecibos();
-  res.render('admin/pagamentos/enviar-recibos', { titulo: 'Enviar recibos por email', driveLigado: drive.isConfigured(), ...ctx });
+  res.render('admin/pagamentos/enviar-recibos', { titulo: 'Enviar recibos por email', driveLigado: storage.isConfigured(req.condominioId), ...ctx });
 });
 
 router.post('/pagamentos/enviar-recibos', async (req, res) => {
@@ -1242,7 +1244,7 @@ router.get('/pagamentos/:id', async (req, res) => {
   res.render('admin/pagamentos/detalhe', {
     titulo: `Pagamento ${pagamento.numero_documento || ''}`,
     pagamento,
-    driveLigado: drive.isConfigured(),
+    driveLigado: storage.isConfigured(req.condominioId),
     recibosPagamento,
     temRecibo: recibosPagamento.length > 0,
   });
@@ -1520,8 +1522,8 @@ router.post('/pagamentos/:id/recibo/emitir', async (req, res) => {
       condominioId: req.condominioId,
       userId: req.user.id,
     });
-    // Documento do recibo na biblioteca (apenas quando o Drive está ligado,
-    // exatamente como na emissão atual de recibos).
+    // Documento do recibo na biblioteca (apenas quando o armazenamento do
+    // condomínio está ligado, exatamente como na emissão atual de recibos).
     await quotaModulo.garantirDocumentoRecibo(recibo.id, { condominioId: req.condominioId, userId: req.user.id }).catch(() => null);
     await audit({
       userId: req.user.id,
@@ -1539,12 +1541,13 @@ router.post('/pagamentos/:id/recibo/emitir', async (req, res) => {
   return res.redirect(`/admin/pagamentos/${pagamento.id}`);
 });
 
-// Guarda no Google Drive um PDF gerado pelo Financeiro (aviso/recibo) e
-// regista-o como Documento (fica disponível na biblioteca para enviar por email).
+// Guarda no armazenamento do condomínio um PDF gerado pelo Financeiro
+// (aviso/recibo) e regista-o como Documento (fica disponível na biblioteca
+// para enviar por email).
 async function guardarPdfFinanceiroDrive({ tipo, numeroDocumento, nome, buffer, anoData, userId, condominioId }) {
-  if (!drive.isConfigured()) throw new Error('Google Drive não está ligado (Configuração → Google Drive).');
-  const pastaId = await drive.pastaParaDocumento(tipo, anoData, condominioId);
-  const up = await drive.uploadArquivo({ nome, mimeType: 'application/pdf', buffer, parentFolderId: pastaId });
+  if (!storage.isConfigured(condominioId)) throw new Error('O armazenamento do condomínio não está ligado (Configuração → Armazenamento e Backups).');
+  const pastaId = await storage.pastaParaDocumento(tipo, anoData, condominioId);
+  const up = await storage.uploadArquivo({ nome, mimeType: 'application/pdf', buffer, parentFolderId: pastaId, condominioId });
   const doc = await Documento.create({
     condominio_id: condominioId,
     tipo,
@@ -1552,7 +1555,7 @@ async function guardarPdfFinanceiroDrive({ tipo, numeroDocumento, nome, buffer, 
     nome,
     // Classificação central (recibo → recibos; aviso_quota → outros; etc.)
     pasta: resolverPastaDocumento({ tipo, pastaEscolhida: null, pastasValidas: Object.keys(PASTAS_BASE) }).pasta,
-    drive_file_id: up.driveFileId,
+    drive_file_id: up.localizador || up.driveFileId || null,
     drive_folder_id: pastaId,
     mime_type: 'application/pdf',
     tamanho: up.tamanho,
@@ -1579,10 +1582,10 @@ router.post('/quotas/:id/aviso/drive', async (req, res) => {
       condominioId: req.condominioId,
     });
     await audit({ userId: req.user.id, acao: 'guardar_documento_drive', entidade: 'Documento', entidadeId: doc.id, detalhes: { tipo: 'aviso_quota' } }).catch(() => {});
-    req.flash('success_msg', 'Aviso de quota guardado no Google Drive.');
+    req.flash('success_msg', 'Aviso de quota guardado no armazenamento do condomínio.');
   } catch (err) {
     console.error('[aviso-drive]', err.message);
-    req.flash('error_msg', `Não foi possível guardar no Drive: ${err.message}`);
+    req.flash('error_msg', `Não foi possível guardar no armazenamento do condomínio: ${err.message}`);
   }
   res.redirect(req.get('Referer') || '/admin/quotas');
 });
@@ -1601,17 +1604,17 @@ router.post('/pagamentos/:id/recibo/drive', async (req, res) => {
       condominioId: req.condominioId,
     });
     await audit({ userId: req.user.id, acao: 'guardar_documento_drive', entidade: 'Documento', entidadeId: doc.id, detalhes: { tipo: 'recibo' } }).catch(() => {});
-    req.flash('success_msg', 'Recibo guardado no Google Drive.');
+    req.flash('success_msg', 'Recibo guardado no armazenamento do condomínio.');
   } catch (err) {
     console.error('[recibo-drive]', err.message);
-    req.flash('error_msg', `Não foi possível guardar no Drive: ${err.message}`);
+    req.flash('error_msg', `Não foi possível guardar no armazenamento do condomínio: ${err.message}`);
   }
   res.redirect(req.get('Referer') || '/admin/pagamentos');
 });
 
 // ── Processamento em segundo plano: pós-geração de quotas ──────────
-// (PDFs → Google Drive → emails para a email_fila). Idempotente: não
-// duplica documentos (verifica Documento associado) nem emails
+// (PDFs → armazenamento do condomínio → emails para a email_fila). Idempotente:
+// não duplica documentos (verifica Documento associado) nem emails
 // (existeEnvioPara), mesmo quando a tarefa corre/repete mais do que uma vez.
 async function processarPosGeracaoQuotas({ ano, mes, guardarDrive, enviarEmail, userId, baseUrl, condominioId }, progresso) {
   if (!ano || !mes || (!guardarDrive && !enviarEmail)) return;
@@ -1639,7 +1642,7 @@ async function processarPosGeracaoQuotas({ ano, mes, guardarDrive, enviarEmail, 
   progresso({ fases, resumo: {} });
   const erros = [];
 
-  // 1) Guardar avisos no Google Drive (idempotente por quota)
+  // 1) Guardar avisos no armazenamento do condomínio (idempotente por quota)
   if (guardarDrive) {
     let ok = 0;
     let atual = 0;

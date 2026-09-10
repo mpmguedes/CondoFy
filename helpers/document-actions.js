@@ -2,20 +2,21 @@
 // Ações sobre documentos — camada transversal.
 //
 // Reutilizável por qualquer módulo que tenha um documento/PDF:
-//  · guardarDocumentoNoDrive(...)  → Google Drive (estado no model Documento)
+//  · guardarDocumentoNoDrive(...)  → armazenamento do condomínio (estado no
+//    model Documento)
 //  · enviarDocumentoPorEmail(...)  → fila normal ou envio imediato
 //  · guardarEEnviarDocumento(...)  → as duas, com resultado independente
 //  · obterLinkDrive(...)           → link INTERNO do documento no GesCondu
 //
 // Nenhuma destas operações é obrigatória para gerar/utilizar um PDF
-// localmente; falhas de Drive/email nunca bloqueiam a aplicação.
+// localmente; falhas de armazenamento/email nunca bloqueiam a aplicação.
 //
 // Segurança: os documentos nunca são partilhados por links do fornecedor de
 // armazenamento. O acesso passa sempre pelo backend do GesCondu, que verifica
 // Utilizador → Condomínio → Documento (helpers/documentos-acesso.js).
 // ─────────────────────────────────────────────────────────────────────
 const { Documento, EmailFila } = require('../models');
-const drive = require('./drive');
+const storage = require('./storage');
 const mailer = require('./mailer');
 const { enfileirarEmail } = require('./email-fila');
 const { audit } = require('./audit');
@@ -58,8 +59,9 @@ function normalizarDestinatarios(input) {
   return [...unicos.values()];
 }
 
-// ── Google Drive ────────────────────────────────────────────────────
-// Guarda um buffer (PDF/doc) no Drive e regista/atualiza o Documento.
+// ── Armazenamento do condomínio ─────────────────────────────────────
+// Guarda um buffer (PDF/doc) no armazenamento do condomínio e regista/atualiza
+// o Documento.
 // Devolve sempre { ok, documento?, driveFileId?, url?, erro? }.
 async function guardarDocumentoNoDrive({
   tipo,
@@ -73,29 +75,31 @@ async function guardarDocumentoNoDrive({
   userId,
   condominioId,
 }) {
-  if (!drive.isConfigured()) {
-    return { ok: false, erro: 'Google Drive não está ligado (Configuração → Google Drive).' };
-  }
-  // O condomínio é obrigatório para escolher a pasta física no Drive — nunca se
-  // deduz por tipo/ano/ficheiro nem se assume o "primeiro condomínio" da BD.
+  // O condomínio é obrigatório para escolher a pasta física no armazenamento —
+  // nunca se deduz por tipo/ano/ficheiro nem se assume o "primeiro condomínio"
+  // da BD.
   const cid = condominioId ? Number(condominioId) : null;
   if (!cid) {
-    return { ok: false, erro: 'condominioId é obrigatório para guardar o documento no Google Drive.' };
+    return { ok: false, erro: 'condominioId é obrigatório para guardar o documento no armazenamento do condomínio.' };
+  }
+  if (!storage.isConfigured(cid)) {
+    return { ok: false, erro: 'O armazenamento do condomínio não está ligado (Configuração → Armazenamento e Backups).' };
   }
   try {
-    const pastaId = await drive.pastaParaDocumento(tipo, ano || anoAtual(data), cid);
-    const up = await drive.uploadArquivo({
+    const pastaId = await storage.pastaParaDocumento(tipo, ano || anoAtual(data), cid);
+    const up = await storage.uploadArquivo({
       nome,
       mimeType,
       buffer,
       parentFolderId: pastaId,
+      condominioId: cid,
     });
 
     let documento = null;
     if (documentoId) documento = await Documento.findByPk(documentoId);
     if (documento) {
       await documento.update({
-        drive_file_id: up.driveFileId,
+        drive_file_id: up.localizador || up.driveFileId || null,
         url: up.url,
         mime_type: mimeType,
         tamanho: up.tamanho,
@@ -110,7 +114,7 @@ async function guardarDocumentoNoDrive({
         tipo: tipo || 'outro',
         nome,
         pasta: pasta || 'outros',
-        drive_file_id: up.driveFileId,
+        drive_file_id: up.localizador || up.driveFileId || null,
         drive_folder_id: pastaId,
         url: up.url,
         mime_type: mimeType,
@@ -127,9 +131,9 @@ async function guardarDocumentoNoDrive({
       acao: 'guardar_documento_drive',
       entidade: 'Documento',
       entidadeId: documento.id,
-      detalhes: { ok: true, tipo, driveFileId: up.driveFileId },
+      detalhes: { ok: true, tipo, driveFileId: up.localizador || up.driveFileId || null },
     });
-    return { ok: true, documento, driveFileId: up.driveFileId, url: up.url };
+    return { ok: true, documento, driveFileId: up.localizador || up.driveFileId || null, url: up.url };
   } catch (err) {
     const erro = String((err && err.message) || err || 'erro desconhecido');
     if (documentoId) {

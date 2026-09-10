@@ -24,7 +24,7 @@ const {
 const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
-const drive = require('../helpers/drive');
+const storage = require('../helpers/storage');
 // Links de documento para email: sempre uma rota do GesCondu.
 const { urlParaEmail } = require('../helpers/documentos-acesso');
 const mailer = require('../helpers/mailer');
@@ -266,7 +266,7 @@ router.get('/fornecedores/:id/pagamentos/novo', async (req, res) => {
     metodos,
     contas,
     today: new Date(),
-    driveLigado: drive.isConfigured(),
+    driveLigado: storage.isConfigured(req.condominioId),
   });
 });
 
@@ -346,30 +346,31 @@ router.get('/fornecedores/:id/pagamentos/:pid', async (req, res) => {
     fornecedorId: req.params.id,
     pagamento,
     envios,
-    driveLigado: drive.isConfigured(),
+    driveLigado: storage.isConfigured(req.condominioId),
   });
 });
 
-// Comprovativo: upload (guardado no Google Drive e registado como Documento).
+// Comprovativo: upload (guardado no armazenamento do condomínio e registado
+// como Documento).
 router.post('/fornecedores/:id/pagamentos/:pid/comprovativo', upload.single('ficheiro'), async (req, res) => {
   const pagamento = await carregarPagamento(req, [{ model: Fornecedor, as: 'fornecedor' }]);
   if (!pagamento || !pagamentoDoFornecedor(pagamento, req.params.id)) return res.redirect('/admin/fornecedores');
   const fornecedor = pagamento.fornecedor || {};
   try {
     if (!req.file) throw new Error('Selecione o ficheiro do comprovativo.');
-    if (!drive.isConfigured()) throw new Error('O Google Drive não está ligado — é necessário para guardar o comprovativo.');
+    if (!storage.isConfigured(req.condominioId)) throw new Error('O armazenamento do condomínio não está ligado — é necessário para guardar o comprovativo.');
     const ano = pagamento.data_pagamento ? new Date(pagamento.data_pagamento).getFullYear() : new Date().getFullYear();
     // Comprovativo físico DENTRO da árvore do condomínio ativo (o Documento
     // registado abaixo fica com condominio_id = req.condominioId).
-    const pastas = await drive.pastaParaFornecedor({ condominioId: req.condominioId, nome: fornecedor.nome || 'Fornecedor', ano, subpasta: 'Comprovativos' });
-    const up = await drive.uploadArquivo({ nome: req.file.originalname, mimeType: req.file.mimetype, buffer: req.file.buffer, parentFolderId: pastas.subpastaId });
+    const pastas = await storage.pastaParaFornecedor({ condominioId: req.condominioId, nome: fornecedor.nome || 'Fornecedor', ano, subpasta: 'Comprovativos' });
+    const up = await storage.uploadArquivo({ nome: req.file.originalname, mimeType: req.file.mimetype, buffer: req.file.buffer, parentFolderId: pastas.subpastaId, condominioId: req.condominioId });
 
     const documento = await Documento.create({
       condominio_id: req.condominioId,
       tipo: 'comprovativo',
       nome: `Comprovativo ${fornecedor.nome || ''} — ${pagamento.referencia || pagamento.id}`.trim(),
       pasta: 'fornecedores',
-      drive_file_id: up.driveFileId,
+      drive_file_id: up.localizador || up.driveFileId || null,
       drive_folder_id: pastas.subpastaId,
       mime_type: req.file.mimetype,
       tamanho: up.tamanho,
@@ -383,7 +384,7 @@ router.post('/fornecedores/:id/pagamentos/:pid/comprovativo', upload.single('fic
     });
     await pagamento.update({ comprovativo_documento_id: documento.id });
     await audit({ userId: req.user.id, acao: 'guardar_comprovativo_drive', entidade: 'Documento', entidadeId: documento.id }).catch(() => {});
-    req.flash('success_msg', 'Comprovativo guardado no Google Drive.');
+    req.flash('success_msg', 'Comprovativo guardado no armazenamento do condomínio.');
   } catch (err) {
     console.error('[comprovativo]', err.message);
     req.flash('error_msg', err.message);
@@ -406,7 +407,7 @@ router.get('/fornecedores/:id/pagamentos/:pid/comprovativo/enviar', async (req, 
     titulo: 'Enviar comprovativo ao fornecedor',
     pagamento,
     fornecedorId: req.params.id,
-    driveLigado: drive.isConfigured(),
+    driveLigado: storage.isConfigured(req.condominioId),
     comprovativo: pagamento.comprovativo || null,
     emailFornecedor: fornecedor.email || '',
     assuntoSugerido: `Comprovativo de pagamento — ${condominio.designacao || 'Condomínio'}${pagamento.referencia ? ` — ${pagamento.referencia}` : ''}`,
@@ -428,7 +429,7 @@ router.post('/fornecedores/:id/pagamentos/:pid/comprovativo/enviar', async (req,
     if (!pagamento.comprovativo || !pagamento.comprovativo.drive_file_id) {
       throw new Error('Este pagamento ainda não tem comprovativo guardado.');
     }
-    const buffer = await drive.descargarArquivo(pagamento.comprovativo.drive_file_id);
+    const buffer = await storage.descargarArquivo(pagamento.comprovativo.drive_file_id, req.condominioId);
     const nomeAnexo = pagamento.comprovativo.nome || 'comprovativo.pdf';
 
     // Template central de fornecedor (mantém saudação/assinatura). Se o

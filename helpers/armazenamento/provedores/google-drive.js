@@ -62,10 +62,18 @@ module.exports = {
   // Leituras (o id já vem resolvido pelo localizador, sem prefixo no Drive)
   descarregarArquivo: (fileId, condominioId) => drive.descargarArquivo(fileId, condominioId),
   abrirFluxo: (fileId, condominioId) => drive.abrirFluxo(fileId, condominioId),
+  apagarArquivo: (fileId, condominioId) => drive.apagarArquivo(fileId, condominioId),
 
   // Atalho de administração para o painel do fornecedor (nunca para servir
   // documentos). Devolve null quando não há pasta.
   linkPasta: (pastaId) => drive.linkPastaDrive(pastaId),
+
+  // Pasta de BACKUPS da plataforma: <raiz>/Backups (sem condomínio). Os
+  // backups são da instalação e usam a conta de plataforma do Drive.
+  pastaDeBackups: async () => {
+    const arvore = await drive.criarEstruturaPastas(null);
+    return arvore.backupsId;
+  },
 
   // Expediente usado por jobs/backup.js e por código legado.
   cliente: (condominioId) => drive.getDrive(condominioId),

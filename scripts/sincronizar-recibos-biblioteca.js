@@ -2,8 +2,8 @@
 // Sincronização única do histórico — Recibos emitidos → Biblioteca de Documentos.
 //
 // Para cada Recibo com estado='emitido' e SEM Documento associado, gera o PDF
-// com a lógica já existente (mesmo output dos recibos), guarda-o no Google
-// Drive (se configurado) e cria o Documento:
+// com a lógica já existente (mesmo output dos recibos), guarda-o no
+// armazenamento do condomínio (se configurado) e cria o Documento:
 //   tipo='recibo', pasta='recibos' (via resolverPastaDocumento),
 //   condominio_id do recibo, vínculo entidade_tipo='Recibo'/entidade_id.
 //
@@ -11,7 +11,7 @@
 //  · só processa estado='emitido' (anulados ignorados);
 //  · não duplica: salta recibos que já tenham Documento (por vínculo ou código);
 //  · re-correr o script não cria nada novo;
-//  · sem Google Drive configurado, apenas reporta (não cria documentos "vazios");
+//  · sem armazenamento configurado, apenas reporta (não cria documentos "vazios");
 //  · executa apenas com o argumento --confirmar; use --listar para pré-visualizar.
 // Não altera código da aplicação nem corre migrações.
 //
@@ -26,7 +26,6 @@ const { resumoFracao } = require('../helpers/saldos');
 const { gerarReciboPDF } = require('../helpers/pdf');
 const recibosHelper = require('../helpers/recibos');
 const storage = require('../helpers/storage');
-const drive = require('../helpers/drive');
 const { PASTAS_BASE, mapaPastas, resolverPastaDocumento } = require('../helpers/documento-pastas');
 
 const CONFIRMAR = process.argv.includes('--confirmar');
@@ -93,9 +92,9 @@ async function gerarPdfRecibo(recibo, condRow) {
 }
 
 async function main() {
-  // Standalone: carrega os tokens do Google Drive guardados na BD (na app é
+  // Standalone: carrega as ligações de armazenamento guardadas na BD (na app é
   // feito no arranque). Sem isto, isConfigured() devolve sempre false.
-  await drive.inicializar();
+  await storage.inicializar();
 
   const recibos = await Recibo.findAll({
     where: { estado: 'emitido' },
@@ -123,7 +122,7 @@ async function main() {
   const condPorId = new Map(conds.map((c) => [c.id, c]));
 
   console.log(`Recibos emitidos: ${recibos.length} | sem Documento (alvos): ${alvos.length}`);
-  console.log(`Drive configurado: ${storage.isConfigured() ? 'sim' : 'não'}`);
+  console.log(`Armazenamento configurado: ${storage.isConfigured() ? 'sim' : 'não'}`);
 
   if (LISTAR || !storage.isConfigured()) {
     for (const r of alvos.slice(0, 25)) {
@@ -133,13 +132,13 @@ async function main() {
     if (alvos.length > 25) console.log(`  … (+${alvos.length - 25})`);
     if (!CONFIRMAR) console.log('\nModo pré-visualização: nada foi criado.');
     if (!storage.isConfigured()) {
-      console.log('\nGoogle Drive NÃO está configurado — não é possível guardar os PDFs. Nada foi criado.');
+      console.log('\nO armazenamento NÃO está configurado — não é possível guardar os PDFs. Nada foi criado.');
     }
     await sequelize.close();
     return;
   }
 
-  // Execução real (--confirmar + Drive configurado).
+  // Execução real (--confirmar + armazenamento configurado).
   let criados = 0;
   let erros = 0;
   for (const recibo of alvos) {
@@ -153,12 +152,13 @@ async function main() {
       });
       const buffer = await gerarPdfRecibo(recibo, cond);
       const ano = recibo.data_emissao ? new Date(recibo.data_emissao).getFullYear() : new Date().getFullYear();
-      const pastaDrive = await storage.pastaParaDocumento('recibo', ano, recibo.condominio_id);
+      const pastaId = await storage.pastaParaDocumento('recibo', ano, recibo.condominio_id);
       const up = await storage.uploadArquivo({
         nome: `Recibo ${recibo.codigo}.pdf`,
         mimeType: 'application/pdf',
         buffer,
-        parentFolderId: pastaDrive,
+        parentFolderId: pastaId,
+        condominioId: recibo.condominio_id,
       });
       await Documento.create({
         condominio_id: recibo.condominio_id,
@@ -166,8 +166,8 @@ async function main() {
         numero_documento: recibo.codigo,
         nome: `Recibo ${recibo.codigo}`,
         pasta: decisao.pasta,
-        drive_file_id: up.driveFileId,
-        drive_folder_id: pastaDrive,
+        drive_file_id: up.localizador || up.driveFileId || null,
+        drive_folder_id: pastaId,
         mime_type: 'application/pdf',
         tamanho: up.tamanho,
         data: recibo.data_emissao || new Date(),

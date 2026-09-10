@@ -1,21 +1,31 @@
 // ─────────────────────────────────────────────────────────────────────
 // StorageProvider — fachada ÚNICA de acesso ao armazenamento de ficheiros.
 //
-// Todos os documentos do GesCondu vivem num provedor externo escolhido POR
-// CONDOMÍNIO (Google Drive, Dropbox, OneDrive, …) e são sempre servidos pelo
-// backend depois de verificar Utilizador → Condomínio → Documento
-// (helpers/documentos-acesso.js). Nenhuma vista nem email recebe links do
-// fornecedor.
+// DOIS CONCEITOS SEPARADOS:
 //
-// Compatibilidade: sem STORAGE_PROVIDER definido e sem provedor escolhido no
-// condomínio, o provedor é o Google Drive — exatamente como antes desta
-// abstração. `isConfigured()` continua SÍNCRONO (as vistas dependem disso).
+//  · ARMAZENAMENTO DE DOCUMENTOS — por condomínio. Cada condomínio escolhe o
+//    seu serviço principal (Google Drive | Dropbox | OneDrive) e tem as suas
+//    próprias contas autorizadas. Pode ter vários serviços ligados ao mesmo
+//    tempo, mas só UM é o principal: é nele que ficam os documentos (sem
+//    duplicação automática).
 //
-// Regras de resolução:
-//  · ESCRITAS (upload/pastas): o provedor é o do condomínio (storage:provedor:c<id>);
-//  · LEITURAS (descarregar/abrir): o provedor é o do LOCALIZADOR do ficheiro
-//    (documentos.drive_file_id, com prefixo gd:/dbx:/od:), para que mudar de
-//    provedor não torne ilegíveis os documentos já guardados.
+//  · BACKUPS — da instalação. O dump contém dados de todos os condomínios, por
+//    isso o destino de backups usa uma ligação de PLATAFORMA (nunca a conta de
+//    um condomínio) e pode ser um serviço diferente do principal.
+//
+// Segurança: o acesso aos documentos passa sempre pelo backend do GesCondu
+// (helpers/documentos-acesso.js) depois de verificar sessão, condomínio e
+// permissões. Não são criados links públicos nem se entrega nenhum URL do
+// fornecedor ao browser. Os tokens ficam no backend, associados ao condomínio
+// (ou à plataforma) e ao fornecedor, e nunca são expostos.
+//
+// Compatibilidade: sem escolha guardada e sem STORAGE_PROVIDER, o serviço é o
+// Google Drive, com a conta de plataforma — exatamente como antes.
+//
+// Resolução do provedor:
+//  · ESCRITAS (upload/pastas)  → principal do condomínio;
+//  · LEITURAS (abrir/descarregar) → provedor do LOCALIZADOR do ficheiro, para
+//    que mudar de serviço não torne ilegíveis os documentos já guardados.
 // ─────────────────────────────────────────────────────────────────────
 const REGISTO = require('./armazenamento/provedores');
 const ligacoes = require('./armazenamento/ligacoes');
@@ -36,69 +46,105 @@ function obterProvedor(nome) {
   return REGISTO[chave] || null;
 }
 
-// Provedor por omissão (compatível com o contrato antigo): STORAGE_PROVIDER
-// válido ou google_drive.
+function exigirProvedor(nome) {
+  const p = obterProvedor(nome);
+  if (!p) throw new Error(`Provedor de armazenamento desconhecido: ${nome}`);
+  return p;
+}
+
+// Provedor por omissão (contrato histórico): STORAGE_PROVIDER ou google_drive.
 function nome() {
   return ligacoes.provedorPadrao();
 }
 
-// Provedor do condomínio (assíncrono: lê a escolha guardada na BD).
-async function provedorDoCondominio(condominioId) {
-  const nomeProvedor = await ligacoes.provedorDoCondominio(condominioId, REGISTO);
-  return REGISTO[nomeProvedor] || REGISTO.google_drive;
+// ── Armazenamento principal do condomínio ───────────────────────────
+async function nomePrincipalDoCondominio(condominioId) {
+  return ligacoes.principalDoCondominio(condominioId, REGISTO);
 }
 
-async function nomeDoCondominio(condominioId) {
-  return (await provedorDoCondominio(condominioId)).nome();
+async function principalDoCondominio(condominioId) {
+  return exigirProvedor(await nomePrincipalDoCondominio(condominioId));
 }
 
-async function definirProvedorDoCondominio(condominioId, nomeProvedor) {
-  if (!obterProvedor(nomeProvedor)) {
-    throw new Error(`Provedor de armazenamento desconhecido: ${nomeProvedor}`);
-  }
-  return ligacoes.definirProvedor(condominioId, nomeProvedor);
+async function definirPrincipalDoCondominio(condominioId, nomeProvedor) {
+  exigirProvedor(nomeProvedor);
+  return ligacoes.definirPrincipal(condominioId, nomeProvedor);
 }
 
-// Estado de todos os provedores para um condomínio (usado pela interface de
-// Configuração → Armazenamento e Backups).
+// Alias históricos (mesma semântica).
+const provedorDoCondominio = principalDoCondominio;
+const nomeDoCondominio = nomePrincipalDoCondominio;
+const definirProvedorDoCondominio = definirPrincipalDoCondominio;
+
+// ── Estado para a interface ─────────────────────────────────────────
+// Serviços do condomínio + armazenamento principal + backups da instalação.
 async function estadoDoCondominio(condominioId) {
-  const escolhido = String(await ligacoes.provedorDoCondominio(condominioId, REGISTO)).trim().toLowerCase();
-  const lista = [];
+  const principal = String(await nomePrincipalDoCondominio(condominioId)).trim().toLowerCase();
+  const provedores = [];
+
   for (const [chave, p] of Object.entries(REGISTO)) {
-    let estado;
+    let estado = null;
+    let erro = null;
     try {
       estado = await p.estadoLigacao(condominioId);
     } catch (err) {
-      estado = { ativo: false, credenciais: false, ligado: false, viaEnv: false, conta: null, erro: err.message };
+      erro = err.message;
     }
-    lista.push({
+    const ligado = Boolean(estado && estado.ligado);
+    const plataforma = Boolean(p.isConfigured && p.isConfigured(null));
+    const origem = ligacoes.tokensSync(chave, condominioId).origem;
+    provedores.push({
       nome: chave,
       rotulo: p.rotulo(),
       capacidades: p.capacidades(),
-      escolhido: chave === escolhido,
-      ligado: Boolean(estado.ligado),
-      estado,
+      // A instalação tem as credenciais técnicas para disponibilizar o serviço?
+      disponivel: Boolean(p.temCredenciais && p.temCredenciais()),
+      ligado,
+      // Ligado através da conta da plataforma (só acontece no Google Drive).
+      contaPlataforma: Boolean(ligado && origem === 'plataforma_fallback'),
+      // Ligado à plataforma (usado pelos backups).
+      ligadoPlataforma: plataforma,
+      principal: chave === principal,
+      conta: (estado && estado.conta) || null,
+      erro,
+      estado: estado || null,
     });
   }
-  return { escolhido, provedores: lista };
+
+  const destinoBackup = await ligacoes.lerDestinoBackup().catch(() => null);
+  const pBackup = destinoBackup ? REGISTO[destinoBackup] : null;
+
+  return {
+    principal: REGISTO[principal] ? principal : locator.PROVEDOR_PADRAO,
+    provedores,
+    backup: {
+      destino: destinoBackup,
+      rotulo: pBackup ? pBackup.rotulo() : null,
+      ligadoPlataforma: Boolean(pBackup && pBackup.isConfigured && pBackup.isConfigured(null)),
+    },
+    // Serviços com ligação de plataforma (podem servir de destino de backups).
+    plataforma: Object.entries(REGISTO).map(([chave, p]) => ({
+      nome: chave,
+      rotulo: p.rotulo(),
+      disponivel: Boolean(p.temCredenciais && p.temCredenciais()),
+      ligado: Boolean(p.isConfigured && p.isConfigured(null)),
+    })),
+  };
 }
 
-// ── Delegações (API histórica) ──────────────────────────────────────
-// Sem condominioId usa-se o provedor por omissão (comportamento anterior).
+// ── Delegações históricas ───────────────────────────────────────────
 function provedorParaEscrita(condominioId) {
-  // Síncrono quando não há condomínio; caso contrário, o caller já resolveu
-  // pelo provedorDoCondominio (ver métodos async abaixo).
-  return REGISTO[ligacoes.provedorSync(condominioId, REGISTO)] || REGISTO.google_drive;
+  return REGISTO[ligacoes.principalSync(condominioId, REGISTO)] || REGISTO.google_drive;
 }
 
-// Síncrono: útil para as vistas ("está ligado?").
+// Síncrono: para as vistas ("está ligado?").
 function isConfigured(condominioId) {
   return provedorParaEscrita(condominioId).isConfigured(condominioId);
 }
 
-// Igual, mas com o provedor resolvido na BD (escolha do condomínio).
+// Assíncrono: resolve o principal na BD (escolha do condomínio).
 async function isConfiguredPara(condominioId) {
-  const p = await provedorDoCondominio(condominioId);
+  const p = await principalDoCondominio(condominioId);
   return p.isConfigured(condominioId);
 }
 
@@ -120,38 +166,53 @@ function trocarCodigo(opcoes = {}) {
   return p.trocarCodigo(opcoes);
 }
 
+// Aceita desligar(condominioId) ou desligar({ provedor, condominioId, plataforma }).
 function desligar(opcoes = {}) {
-  // Aceita desligar(condominioId) (assinatura histórica) ou
-  // desligar({ provedor, condominioId }).
   const alvo = typeof opcoes === 'object' && opcoes !== null ? opcoes : { condominioId: opcoes };
   const p = obterProvedor(alvo.provedor) || provedorParaEscrita(alvo.condominioId);
-  return p.desligar(alvo.condominioId);
+  return p.desligar(alvo.condominioId, { plataforma: Boolean(alvo.plataforma) });
 }
 
-// ── Escritas ────────────────────────────────────────────────────────
+// ── Escritas (armazenamento principal do condomínio) ────────────────
 async function uploadArquivo(opcoes = {}) {
-  const p = await provedorDoCondominio(opcoes.condominioId);
+  const p = await principalDoCondominio(opcoes.condominioId);
+  if (!p.isConfigured(opcoes.condominioId)) {
+    throw new Error(`O armazenamento principal do condomínio (${p.rotulo()}) não está ligado.`);
+  }
   return p.uploadArquivo(opcoes);
 }
 
 async function pastaParaDocumento(tipo, ano, condominioId) {
-  const p = await provedorDoCondominio(condominioId);
+  const p = await principalDoCondominio(condominioId);
   return p.pastaParaDocumento(tipo, ano, condominioId);
 }
 
 async function pastaParaFornecedor(opcoes = {}) {
-  const p = await provedorDoCondominio(opcoes.condominioId);
+  const p = await principalDoCondominio(opcoes.condominioId);
   return p.pastaParaFornecedor(opcoes);
 }
 
 async function obterPastaCondominioId(condominioId) {
-  const p = await provedorDoCondominio(condominioId);
+  const p = await principalDoCondominio(condominioId);
   return p.obterPastaCondominioId(condominioId);
 }
 
 async function criarEstruturaPastas(condominioId, ano) {
-  const p = await provedorDoCondominio(condominioId);
+  const p = await principalDoCondominio(condominioId);
   return p.criarEstruturaPastas(condominioId, ano);
+}
+
+// ── Escritas com proveniência explícita (backups da instalação) ─────
+// Usado apenas onde o destino é a plataforma (nunca documentos de condomínio).
+async function uploadComProvedor(nomeProvedor, opcoes = {}) {
+  const p = exigirProvedor(nomeProvedor);
+  return p.uploadArquivo({ ...opcoes, plataforma: true });
+}
+
+async function pastaDeBackups(nomeProvedor) {
+  const p = exigirProvedor(nomeProvedor);
+  if (typeof p.pastaDeBackups === 'function') return p.pastaDeBackups();
+  throw new Error(`O provedor ${p.rotulo()} não suporta destino de backups.`);
 }
 
 // ── Leituras (provedor pelo LOCALIZADOR do ficheiro) ────────────────
@@ -160,7 +221,6 @@ function provedorDoLocalizador(localizador) {
   return REGISTO[provedor] || null;
 }
 
-// Abre o ficheiro como fluxo (para servir ao cliente pelo GesCondu).
 async function abrirFluxo(localizador, condominioId) {
   const { provedor, id } = locator.ler(localizador);
   const p = REGISTO[provedor];
@@ -175,16 +235,31 @@ async function descargarArquivo(localizador, condominioId) {
   return p.descarregarArquivo(id, condominioId);
 }
 
-// Alias em PT-PT (a fachada histórica chama-se descargarArquivo).
-const descarregarArquivo = descargarArquivo;
+// Remoção no fornecedor (capacidade opcional: usada pela retenção de backups).
+// Devolve false quando o provedor não suporta remoção.
+async function apagarArquivo(localizador, condominioId) {
+  const { provedor, id } = locator.ler(localizador);
+  const p = REGISTO[provedor];
+  if (!p || typeof p.apagarArquivo !== 'function') return false;
+  return p.apagarArquivo(id, condominioId);
+}
+
+// ── Backups (instalação) ────────────────────────────────────────────
+async function destinoDeBackup() {
+  return ligacoes.lerDestinoBackup().catch(() => null);
+}
+
+async function definirDestinoDeBackup(nomeProvedor) {
+  if (nomeProvedor) exigirProvedor(nomeProvedor);
+  return ligacoes.definirDestinoBackup(nomeProvedor);
+}
 
 // ── Atalhos de administração ────────────────────────────────────────
 async function linkPasta(pastaId, condominioId) {
-  const p = await provedorDoCondominio(condominioId);
+  const p = await principalDoCondominio(condominioId);
   return p.linkPasta(pastaId);
 }
 
-// Compatibilidade com o nome histórico (só Google Drive).
 function linkPastaDrive(pastaId) {
   return REGISTO.google_drive.linkPasta(pastaId);
 }
@@ -210,9 +285,12 @@ module.exports = {
   nome,
   contrato,
   // por condomínio
-  provedorDoCondominio,
+  principalDoCondominio,
+  nomePrincipalDoCondominio,
   nomeDoCondominio,
+  definirPrincipalDoCondominio,
   definirProvedorDoCondominio,
+  provedorDoCondominio,
   estadoDoCondominio,
   // estado das ligações
   isConfigured,
@@ -223,17 +301,22 @@ module.exports = {
   urlAutorizacao,
   trocarCodigo,
   desligar,
-  // escritas
+  // escritas (documentos)
   uploadArquivo,
   pastaParaDocumento,
   pastaParaFornecedor,
   obterPastaCondominioId,
   criarEstruturaPastas,
+  // escritas de plataforma (backups)
+  uploadComProvedor,
+  pastaDeBackups,
+  destinoDeBackup,
+  definirDestinoDeBackup,
   // leituras
   abrirFluxo,
-  // `descargarArquivo` é o nome histórico usado por routes/helpers — mantém-se
-  // como canónico; `descarregarArquivo` fica como alias em PT-PT.
   descargarArquivo,
+  apagarArquivo,
+  // `descargarArquivo` é o nome histórico; mantém-se como canónico.
   descarregarArquivo: descargarArquivo,
   // atalhos
   linkPasta,
@@ -241,6 +324,7 @@ module.exports = {
   // localizadores
   montarLocalizador,
   lerLocalizador,
-  // inicialização da cache de ligações
+  // cache de ligações
   inicializar,
+  ligacoes,
 };

@@ -95,53 +95,33 @@ router.get('/config/armazenamento', async (req, res) => {
 });
 
 // ── Serviço de armazenamento do condomínio ─────────────────────────
-// Cada condomínio escolhe o provedor onde os seus documentos são guardados
-// (isolamento multi-tenant: storage:provedor:c<id>). Os documentos já
-// guardados continuam legíveis: a leitura usa o localizador do ficheiro.
-router.post('/config/armazenamento/provedor', async (req, res) => {
-  try {
-    const escolhido = await storage.definirProvedorDoCondominio(req.condominioId, req.body.provedor);
-    await audit({
-      userId: req.user.id,
-      acao: 'definir_provedor_armazenamento',
-      entidade: 'Condominio',
-      entidadeId: req.condominioId,
-      detalhes: { provedor: escolhido },
-    }).catch(() => {});
-    req.flash('success_msg', `Serviço de armazenamento do condomínio: ${escolhido}.`);
-  } catch (err) {
-    req.flash('error_msg', `Não foi possível guardar o serviço de armazenamento: ${err.message}`);
-  }
-  res.redirect('/admin/config/armazenamento');
-});
+// A escolha do armazenamento principal e do destino de backups é feita em
+// /config/armazenamento/principal e /config/armazenamento/backups (abaixo).
 
 // Ligar (passo 1): envia o administrador para o fornecedor escolhido.
+// Âmbito: 'condominio' (documentos do condomínio, por omissão) ou 'plataforma'
+// (ligação da instalação, usada pelos backups).
 router.get('/config/armazenamento/:provedor/ligar', async (req, res) => {
   const provedor = String(req.params.provedor || '').toLowerCase();
+  const ambito = req.query.ambito === 'plataforma' ? 'plataforma' : 'condominio';
   if (!PROVEDORES_OAUTH.has(provedor)) {
     return res.redirect('/admin/config/armazenamento');
   }
   const p = storage.obterProvedor(provedor);
-  const estado = await p.estadoLigacao(req.condominioId);
-  if (!estado.ativo) {
-    req.flash('error_msg', `A integração ${p.rotulo()} está desativada (defina ${provedor.toUpperCase()}_ENABLED=true no .env).`);
-    return res.redirect('/admin/config/armazenamento');
-  }
-  if (!estado.credenciais) {
-    req.flash('error_msg', `Faltam as credenciais de ${p.rotulo()} no .env.`);
+  const alvo = ambito === 'plataforma' ? null : req.condominioId;
+  const estado = await p.estadoLigacao(alvo);
+  if (!estado.ativo || !estado.credenciais) {
+    // Mensagem amigável: o utilizador final nunca vê detalhes técnicos.
+    req.flash('error_msg', `${p.rotulo()} ainda não está disponível nesta instalação. Contacte o administrador do GesCondu.`);
     return res.redirect('/admin/config/armazenamento');
   }
 
-  const forcarNome = VAR_REDIRECT[provedor];
   const redirectUri = redirectUriDe(req, provedor);
-  if (!process.env[forcarNome]) {
-    console.warn(`[armazenamento] ${forcarNome} não definido — a usar ${redirectUri}`);
-  }
   const state = crypto.randomBytes(18).toString('hex');
-  // O estado fica na sessão e inclui o condomínio: o callback nunca aceita um
-  // condominioId vindo do browser.
-  req.session.storageOauthState = { provedor, state, condominioId: req.condominioId };
-  const url = p.urlAutorizacao({ redirectUri, state, condominioId: req.condominioId });
+  // O estado fica na sessão e inclui condomínio e âmbito: o callback nunca
+  // aceita nem o condomínio nem o âmbito vindos do browser.
+  req.session.storageOauthState = { provedor, state, ambito, condominioId: ambito === 'plataforma' ? null : req.condominioId };
+  const url = p.urlAutorizacao({ redirectUri, state, condominioId: req.session.storageOauthState.condominioId });
   return res.redirect(url);
 });
 
@@ -173,17 +153,20 @@ router.get('/config/armazenamento/:provedor/callback', async (req, res) => {
     const tokens = await p.trocarCodigo({
       code,
       redirectUri: redirectUriDe(req, provedor),
-      condominioId: guardado.condominioId,
+      // Âmbito guardado na sessão: 'condominio' liga a conta ao condomínio ativo,
+      // 'plataforma' cria a ligação da instalação (usada pelos backups).
+      condominioId: guardado.ambito === 'plataforma' ? undefined : guardado.condominioId,
     });
     await storage.inicializar();
     await audit({
       userId: req.user.id,
       acao: 'ligar_armazenamento',
       entidade: p.rotulo(),
-      entidadeId: guardado.condominioId,
-      detalhes: { provedor, conta: tokens && tokens.conta ? tokens.conta : null },
+      entidadeId: guardado.ambito === 'plataforma' ? null : guardado.condominioId,
+      detalhes: { provedor, ambito: guardado.ambito || 'condominio', conta: tokens && tokens.conta ? tokens.conta : null },
     }).catch(() => {});
-    req.flash('success_msg', `${p.rotulo()} ligado com sucesso${tokens && tokens.conta ? ` (${tokens.conta})` : ''}.`);
+    const onde = guardado.ambito === 'plataforma' ? 'à plataforma' : 'a este condomínio';
+    req.flash('success_msg', `${p.rotulo()} ligado ${onde}${tokens && tokens.conta ? ` (${tokens.conta})` : ''}.`);
   } catch (err) {
     console.error(`[armazenamento] callback ${provedor}:`, err.message);
     req.flash('error_msg', `Não foi possível ligar ${p.rotulo()}: ${err.message}`);
@@ -191,25 +174,30 @@ router.get('/config/armazenamento/:provedor/callback', async (req, res) => {
   return res.redirect('/admin/config/armazenamento');
 });
 
-// Desligar: remove os tokens da ligação do condomínio (os ficheiros no
-// fornecedor NÃO são apagados nem despartilhados).
+// Desligar: remove os tokens da ligação (do condomínio ou da plataforma). Os
+// ficheiros no fornecedor NÃO são apagados nem despartilhados.
 router.post('/config/armazenamento/:provedor/desligar', async (req, res) => {
   const provedor = String(req.params.provedor || '').toLowerCase();
+  const plataforma = req.query.ambito === 'plataforma' || req.body.ambito === 'plataforma';
   if (!PROVEDORES_OAUTH.has(provedor)) {
     return res.redirect('/admin/config/armazenamento');
   }
   const p = storage.obterProvedor(provedor);
   try {
-    await p.desligar(req.condominioId);
+    await p.desligar(plataforma ? null : req.condominioId);
     await storage.inicializar();
+    // Desligar o serviço de backup liberta o destino configurado.
+    if (plataforma && (await storage.destinoDeBackup()) === provedor) {
+      await storage.definirDestinoDeBackup(null);
+    }
     await audit({
       userId: req.user.id,
       acao: 'desligar_armazenamento',
       entidade: p.rotulo(),
-      entidadeId: req.condominioId,
-      detalhes: { provedor },
+      entidadeId: plataforma ? null : req.condominioId,
+      detalhes: { provedor, ambito: plataforma ? 'plataforma' : 'condominio' },
     }).catch(() => {});
-    req.flash('success_msg', `${p.rotulo()} desligado. Os ficheiros já guardados não foram apagados.`);
+    req.flash('success_msg', `${p.rotulo()} desligado${plataforma ? ' (ligação da plataforma)' : ''}. Os ficheiros já guardados não foram apagados.`);
   } catch (err) {
     req.flash('error_msg', `Não foi possível desligar ${p.rotulo()}: ${err.message}`);
   }
@@ -219,18 +207,79 @@ router.post('/config/armazenamento/:provedor/desligar', async (req, res) => {
 // Testar a ligação (sem criar pastas nem enviar ficheiros).
 router.post('/config/armazenamento/:provedor/testar', async (req, res) => {
   const provedor = String(req.params.provedor || '').toLowerCase();
+  const plataforma = req.query.ambito === 'plataforma' || req.body.ambito === 'plataforma';
   if (!PROVEDORES_OAUTH.has(provedor)) {
     return res.redirect('/admin/config/armazenamento');
   }
   const p = storage.obterProvedor(provedor);
-  const r = await p.testarLigacao(req.condominioId);
+  const r = await p.testarLigacao(plataforma ? null : req.condominioId);
   if (r.ok) {
-    await audit({ userId: req.user.id, acao: 'testar_armazenamento', entidade: p.rotulo(), detalhes: { ok: true } }).catch(() => {});
+    await audit({ userId: req.user.id, acao: 'testar_armazenamento', entidade: p.rotulo(), detalhes: { ok: true, ambito: plataforma ? 'plataforma' : 'condominio' } }).catch(() => {});
     req.flash('success_msg', r.conta ? `✓ Ligação a ${p.rotulo()} estabelecida (${r.conta}).` : `✓ Ligação a ${p.rotulo()} estabelecida.`);
   } else {
     req.flash('error_msg', `✕ Não foi possível testar ${p.rotulo()}: ${r.erro}`);
   }
   return res.redirect('/admin/config/armazenamento');
+});
+
+// ── Armazenamento principal (documentos) ───────────────────────────
+// Só pode ser principal um serviço LIGADO neste condomínio. Os documentos
+// continuam a ser gravados num único serviço (sem duplicação automática) e é
+// este o serviço usado pelas automações de documentos.
+router.post('/config/armazenamento/principal', async (req, res) => {
+  const nome = String(req.body.provedor || '').trim().toLowerCase();
+  try {
+    const p = storage.obterProvedor(nome);
+    if (!p) throw new Error('Serviço de armazenamento desconhecido.');
+    if (!p.isConfigured(req.condominioId)) {
+      throw new Error(`${p.rotulo()} não está ligado a este condomínio. Ligue o serviço antes de o tornar principal.`);
+    }
+    await storage.definirPrincipalDoCondominio(req.condominioId, nome);
+    await audit({
+      userId: req.user.id,
+      acao: 'definir_armazenamento_principal',
+      entidade: 'Condominio',
+      entidadeId: req.condominioId,
+      detalhes: { provedor: nome },
+    }).catch(() => {});
+    req.flash('success_msg', `Armazenamento principal dos documentos: ${p.rotulo()}.`);
+  } catch (err) {
+    req.flash('error_msg', `Não foi possível definir o armazenamento principal: ${err.message}`);
+  }
+  res.redirect('/admin/config/armazenamento');
+});
+
+// Compatibilidade com o nome anterior da rota.
+router.post('/config/armazenamento/provedor', (req, res) => res.redirect(307, '/admin/config/armazenamento/principal'));
+
+// ── Destino de backups (instalação) ────────────────────────────────
+// Os backups contêm dados de todos os condomínios: o destino usa sempre uma
+// ligação de PLATAFORMA e pode ser um serviço diferente do principal.
+router.post('/config/armazenamento/backups', async (req, res) => {
+  const escolha = String(req.body.provedor || '').trim().toLowerCase();
+  try {
+    if (!escolha || escolha === 'nenhum') {
+      await storage.definirDestinoDeBackup(null);
+      req.flash('success_msg', 'Backups passam a ser guardados apenas localmente no servidor.');
+    } else {
+      const p = storage.obterProvedor(escolha);
+      if (!p) throw new Error('Serviço de armazenamento desconhecido.');
+      if (!p.isConfigured(null)) {
+        throw new Error(`${p.rotulo()} não tem ligação da plataforma. Ligue o serviço para backups primeiro.`);
+      }
+      await storage.definirDestinoDeBackup(escolha);
+      req.flash('success_msg', `Destino dos backups: ${p.rotulo()}.`);
+    }
+    await audit({
+      userId: req.user.id,
+      acao: 'definir_destino_backups',
+      entidade: 'Configuracao',
+      detalhes: { provedor: escolha || null },
+    }).catch(() => {});
+  } catch (err) {
+    req.flash('error_msg', `Não foi possível guardar o destino dos backups: ${err.message}`);
+  }
+  res.redirect('/admin/config/armazenamento');
 });
 
 // Upload do logótipo com tratamento de erro amigável (formato inválido não
@@ -345,30 +394,37 @@ router.post('/config/automacoes', async (req, res) => {
 
 // Passo 1 — o administrador clica "Ligar Google Drive" e é enviado para
 // o Google para autorizar a aplicação (scope mínimo: drive.file).
+// Âmbito: 'condominio' (por omissão — a conta fica associada ao condomínio
+// ativo) ou 'plataforma' (conta da instalação, usada pelos backups).
 router.get('/config/drive/ligar', async (req, res) => {
-  const estado = await drive.estadoLigacao();
-  if (!estado.ativo) {
-    req.flash('error_msg', 'A integração Google Drive está desativada. Ative GOOGLE_DRIVE_ENABLED=true no .env.');
-    return res.redirect('/admin/config/armazenamento#google-drive');
-  }
-  if (!estado.credenciais || !estado.redirectUriDefinido) {
-    req.flash('error_msg', 'Faltam as credenciais do Google (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e GOOGLE_REDIRECT_URI) no .env.');
+  const ambito = req.query.ambito === 'plataforma' ? 'plataforma' : 'condominio';
+  const alvo = ambito === 'plataforma' ? null : req.condominioId;
+  const estado = await drive.estadoLigacao(alvo);
+  if (!estado.ativo || !estado.credenciais) {
+    // Mensagem amigável: nunca se expõem detalhes técnicos de configuração.
+    req.flash('error_msg', 'O Google Drive ainda não está disponível nesta instalação. Contacte o administrador do GesCondu.');
     return res.redirect('/admin/config/armazenamento#google-drive');
   }
 
   const redirectUri = drive.obterRedirectUri(req);
   const state = crypto.randomBytes(18).toString('hex');
-  req.session.googleDriveState = state;
+  // O estado (com âmbito e condomínio) fica na sessão: o callback nunca
+  // aceita o condomínio nem o âmbito vindos do browser.
+  req.session.googleDriveState = { state, ambito, condominioId: alvo };
   const url = drive.construirUrlAutorizacao({ redirectUri, state });
   res.redirect(url);
 });
 
 // Passo 4/5/6 — o Google redireciona para aqui; troca o código pelos
-// tokens e guarda-os na base de dados.
+// tokens e guarda-os na base de dados (da conta do condomínio ou da
+// plataforma, conforme o âmbito pedido no passo 1).
 router.get('/config/drive/callback', async (req, res) => {
   const { code, state, error } = req.query;
-  const esperado = req.session.googleDriveState;
+  const guardado = req.session.googleDriveState;
   delete req.session.googleDriveState;
+  const esperado = guardado && typeof guardado === 'object' ? guardado.state : guardado;
+  const ambito = guardado && typeof guardado === 'object' ? guardado.ambito : 'plataforma';
+  const condominioAlvo = guardado && typeof guardado === 'object' ? guardado.condominioId : null;
 
   if (error) {
     req.flash('error_msg', 'Autorização no Google não concluída. Se recusou o acesso, pode voltar a tentar.');
@@ -385,10 +441,23 @@ router.get('/config/drive/callback', async (req, res) => {
 
   const redirectUri = drive.obterRedirectUri(req);
   try {
-    await drive.trocarCodigo({ code, redirectUri });
+    await drive.trocarCodigo({
+      code,
+      redirectUri,
+      // Âmbito guardado na sessão: 'condominio' guarda a conta no condomínio;
+      // 'plataforma' (e fluxos antigos sem estado) guarda a conta da instalação.
+      condominioId: ambito === 'plataforma' ? undefined : condominioAlvo,
+    });
     await drive.inicializar();
-    await audit({ userId: req.user.id, acao: 'ligar_google_drive', entidade: 'GoogleDrive' });
-    req.flash('success_msg', 'Google Drive ligado com sucesso. Os documentos podem agora ser guardados no Drive.');
+    await audit({
+      userId: req.user.id,
+      acao: 'ligar_google_drive',
+      entidade: 'GoogleDrive',
+      entidadeId: ambito === 'plataforma' ? null : condominioAlvo,
+      detalhes: { ambito },
+    }).catch(() => {});
+    const onde = ambito === 'plataforma' ? 'à plataforma' : 'a este condomínio';
+    req.flash('success_msg', `Google Drive ligado ${onde}. Os documentos podem agora ser guardados no Drive.`);
   } catch (err) {
     console.error('[drive] erro no callback OAuth:', err.message);
     req.flash('error_msg', `Não foi possível ligar o Google Drive: ${err.message}`);
@@ -398,11 +467,23 @@ router.get('/config/drive/callback', async (req, res) => {
 
 // Passo Desligar — remove a conta e os tokens (os ficheiros no Drive não
 // são apagados). A confirmação é feita na interface.
+// Âmbito: a conta do condomínio (por omissão) ou a da plataforma.
 router.post('/config/drive/desligar', async (req, res) => {
+  const plataforma = req.query.ambito === 'plataforma' || req.body.ambito === 'plataforma';
   try {
-    await drive.desligar();
-    await audit({ userId: req.user.id, acao: 'desligar_google_drive', entidade: 'GoogleDrive' });
-    req.flash('success_msg', 'Google Drive desligado. Os ficheiros já guardados no Drive não foram apagados.');
+    await drive.desligar(plataforma ? null : req.condominioId);
+    await drive.inicializar();
+    if (plataforma && (await storage.destinoDeBackup()) === 'google_drive') {
+      await storage.definirDestinoDeBackup(null);
+    }
+    await audit({
+      userId: req.user.id,
+      acao: 'desligar_google_drive',
+      entidade: 'GoogleDrive',
+      entidadeId: plataforma ? null : req.condominioId,
+      detalhes: { ambito: plataforma ? 'plataforma' : 'condominio' },
+    }).catch(() => {});
+    req.flash('success_msg', `Google Drive desligado${plataforma ? ' (ligação da plataforma)' : ''}. Os ficheiros já guardados no Drive não foram apagados.`);
   } catch (err) {
     console.error('[drive] erro ao desligar:', err.message);
     req.flash('error_msg', `Não foi possível desligar o Google Drive: ${err.message}`);

@@ -146,12 +146,13 @@ async function testarLigacoes() {
   assert.strictEqual((await ligacoes.lerTokens('dropbox', 2)).tokens.access_token, 'tok-2', 'condomínio 2 mantém-se ligado');
   await ligacoes.limparTokens('dropbox', 2);
 
-  // Fallback legado: a ligação global antiga do Google Drive continua a valer.
+  // Fallback à ligação de PLATAFORMA: a conta global do Google Drive (chave
+  // histórica) continua a valer para os condomínios sem conta própria.
   loja.set(ligacoes.CHAVE_TOKENS_LEGADO, JSON.stringify({ refresh_token: 'legado-drive', conta: 'plataforma@gmail.com' }));
   ligacoes.limparCache();
   const legado = await ligacoes.lerTokens('google_drive', 7);
-  assert.strictEqual(legado.origem, 'legado', 'condomínio sem ligação própria usa a ligação global antiga');
-  assert.strictEqual(legado.tokens.refresh_token, 'legado-drive', 'token legado preservado');
+  assert.strictEqual(legado.origem, 'plataforma_fallback', 'condomínio sem ligação própria usa a ligação da plataforma');
+  assert.strictEqual(legado.tokens.refresh_token, 'legado-drive', 'token da plataforma preservado');
   const cidComLigacao = 8;
   await ligacoes.guardarTokens('google_drive', cidComLigacao, { refresh_token: 'proprio-do-8' });
   const propria = await ligacoes.lerTokens('google_drive', cidComLigacao);
@@ -163,7 +164,166 @@ async function testarLigacoes() {
   assert.strictEqual((await ligacoes.lerTokens('onedrive', 7)).tokens, null, 'OneDrive não usa a ligação legada do Google');
 }
 
-// ── 4. Leitura pelo localizador (nunca pelo provedor "atual") ───────
+// ── 4. Armazenamento principal: um só, por condomínio ───────────────
+async function testarPrincipal() {
+  loja.clear();
+  ligacoes.limparCache();
+  process.env.STORAGE_PROVIDER = '';
+  // Credenciais técnicas da instalação (no Google Drive são variáveis de
+  // ambiente globais — não são configuração por condomínio).
+  const envAntes = {
+    GOOGLE_DRIVE_ENABLED: process.env.GOOGLE_DRIVE_ENABLED,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    ONEDRIVE_ENABLED: process.env.ONEDRIVE_ENABLED,
+    ONEDRIVE_CLIENT_ID: process.env.ONEDRIVE_CLIENT_ID,
+    ONEDRIVE_CLIENT_SECRET: process.env.ONEDRIVE_CLIENT_SECRET,
+    DROPBOX_ENABLED: process.env.DROPBOX_ENABLED,
+    DROPBOX_APP_KEY: process.env.DROPBOX_APP_KEY,
+    DROPBOX_APP_SECRET: process.env.DROPBOX_APP_SECRET,
+  };
+  process.env.GOOGLE_DRIVE_ENABLED = 'true';
+  process.env.GOOGLE_CLIENT_ID = 'cliente-teste';
+  process.env.GOOGLE_CLIENT_SECRET = 'segredo-teste';
+  process.env.ONEDRIVE_ENABLED = 'true';
+  process.env.ONEDRIVE_CLIENT_ID = 'cliente-teste';
+  process.env.ONEDRIVE_CLIENT_SECRET = 'segredo-teste';
+  process.env.DROPBOX_ENABLED = 'true';
+  process.env.DROPBOX_APP_KEY = 'chave-teste';
+  process.env.DROPBOX_APP_SECRET = 'segredo-teste';
+
+  // Vários serviços ligados ao mesmo tempo, mas um único principal.
+  await ligacoes.definirPrincipal(1, 'google_drive');
+  await ligacoes.guardarTokens('google_drive', 1, { refresh_token: 'gd-1' });
+  await ligacoes.guardarTokens('dropbox', 1, { refresh_token: 'dbx-1' });
+  assert.strictEqual(await storage.nomePrincipalDoCondominio(1), 'google_drive', 'principal do condomínio 1');
+  assert.strictEqual(storage.isConfigured(1), true, 'serviço principal ligado');
+  // Escolher o Dropbox como principal não desliga o Google Drive.
+  await ligacoes.definirPrincipal(1, 'dropbox');
+  assert.strictEqual(await storage.nomePrincipalDoCondominio(1), 'dropbox', 'principal passou a Dropbox');
+  assert.strictEqual((await ligacoes.lerTokens('google_drive', 1)).tokens.refresh_token, 'gd-1', 'ligação anterior mantida');
+
+  // A escolha é por condomínio (isolamento).
+  await ligacoes.definirPrincipal(2, 'onedrive');
+  await ligacoes.guardarTokens('onedrive', 2, { refresh_token: 'od-2' });
+  assert.strictEqual(await storage.nomePrincipalDoCondominio(2), 'onedrive', 'principal do condomínio 2');
+  assert.strictEqual(await storage.nomePrincipalDoCondominio(1), 'dropbox', 'condomínio 1 não foi afetado');
+  assert.strictEqual(await storage.nomePrincipalDoCondominio(3), 'google_drive', 'condomínio sem escolha usa o serviço por omissão');
+
+  // Chave antiga (`storage:provedor:c<id>`) continua a ser lida (compatibilidade).
+  loja.delete(ligacoes.chavePrincipal(9));
+  loja.set(ligacoes.chaveProvedor(9), 'onedrive');
+  ligacoes.limparCache();
+  assert.strictEqual(await storage.nomePrincipalDoCondominio(9), 'onedrive', 'chave antiga do provedor continua a valer');
+  // Recarrega a cache de tokens do condomínio 2 (limparCache acima esvaziou-a).
+  await ligacoes.lerTokens('onedrive', 2);
+
+  // Escritas usam o principal; leituras usam o localizador.
+  const chamadas = [];
+  const originais = {};
+  for (const nome of PROVEDORES) {
+    const p = storage.obterProvedor(nome);
+    originais[nome] = { uploadArquivo: p.uploadArquivo, pastaParaDocumento: p.pastaParaDocumento };
+    p.uploadArquivo = async (opcoes) => {
+      chamadas.push(['upload', nome, opcoes.condominioId]);
+      return { provedorFileId: 'x', localizador: locator.montar(nome, 'x'), tamanho: 1, pastaId: 'p' };
+    };
+    p.pastaParaDocumento = async (tipo, ano, cid) => {
+      chamadas.push(['pasta', nome, cid]);
+      return 'pasta-do-provedor';
+    };
+  }
+  try {
+    await storage.pastaParaDocumento('recibo', 2026, 2);
+    await storage.uploadArquivo({ nome: 'r.pdf', buffer: Buffer.from('x'), parentFolderId: 'pasta-do-provedor', condominioId: 2 });
+    assert.deepStrictEqual(chamadas, [['pasta', 'onedrive', 2], ['upload', 'onedrive', 2]], 'escritas vão para o armazenamento principal do condomínio');
+  } finally {
+    for (const nome of PROVEDORES) {
+      const p = storage.obterProvedor(nome);
+      p.uploadArquivo = originais[nome].uploadArquivo;
+      p.pastaParaDocumento = originais[nome].pastaParaDocumento;
+    }
+  }
+
+  // Serviço principal desligado: a escrita falha com mensagem clara (nunca
+  // grava no serviço errado).
+  await ligacoes.limparTokens('onedrive', 2);
+  await assert.rejects(
+    () => storage.uploadArquivo({ nome: 'r.pdf', buffer: Buffer.from('x'), condominioId: 2 }),
+    /não está ligado/i,
+    'sem ligação no principal, o upload é recusado'
+  );
+
+  for (const [k, v] of Object.entries(envAntes)) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
+}
+
+// ── 5. Backups: destino separado, com ligação de plataforma ─────────
+async function testarBackups() {
+  loja.clear();
+  ligacoes.limparCache();
+
+  // Sem configuração: segue o comportamento antigo (Drive da plataforma).
+  loja.set(ligacoes.CHAVE_TOKENS_LEGADO, JSON.stringify({ refresh_token: 'plataforma-drive' }));
+  ligacoes.limparCache();
+  await ligacoes.inicializar();
+  assert.strictEqual(await storage.destinoDeBackup(), 'google_drive', 'sem escolha, destino por omissão é o Drive da plataforma');
+
+  // Destino diferente do armazenamento dos documentos.
+  await ligacoes.definirPrincipal(4, 'google_drive');
+  await ligacoes.guardarTokens('dropbox', null, { refresh_token: 'plataforma-dropbox' }); // ligação de PLATAFORMA
+  await ligacoes.guardarTokens('dropbox', 4, { refresh_token: 'conta-do-condominio-4' }); // ligação do condomínio
+  ligacoes.limparCache();
+  await ligacoes.inicializar();
+
+  await storage.definirDestinoDeBackup('dropbox');
+  assert.strictEqual(await storage.destinoDeBackup(), 'dropbox', 'backups num serviço diferente dos documentos');
+  assert.strictEqual(await storage.nomePrincipalDoCondominio(4), 'google_drive', 'documentos continuam no principal');
+
+  // Os tokens de plataforma são distintos dos do condomínio.
+  assert.strictEqual((await ligacoes.lerTokens('dropbox', null, { plataforma: true })).tokens.refresh_token, 'plataforma-dropbox', 'tokens de plataforma isolados');
+  assert.strictEqual((await ligacoes.lerTokens('dropbox', 4)).tokens.refresh_token, 'conta-do-condominio-4', 'tokens do condomínio isolados');
+  assert.strictEqual((await ligacoes.lerTokens('dropbox', 5)).tokens, null, 'condomínio sem conta Dropbox não usa a conta de plataforma nem a de outro condomínio');
+
+  // Chaves de plataforma: o Drive mantém a chave histórica; os outros têm a sua.
+  assert.strictEqual(ligacoes.chaveTokensPlataforma('google_drive'), 'google_drive_tokens', 'chave histórica do Drive preservada');
+  assert.strictEqual(ligacoes.chaveTokensPlataforma('dropbox'), 'storage:tokens:dropbox:plataforma', 'chave de plataforma do Dropbox');
+  assert.strictEqual(ligacoes.chaveTokensPlataforma('dropbox'), ligacoes.chaveTokensPlataforma('dropbox'), 'chave de plataforma estável');
+
+  // A pasta de backups existe em todos os provedores.
+  for (const nome of PROVEDORES) {
+    assert.strictEqual(typeof storage.obterProvedor(nome).pastaDeBackups, 'function', `${nome}: pasta de backups disponível`);
+  }
+
+  // Sem destino configurado → backups locais.
+  await storage.definirDestinoDeBackup(null);
+  loja.set('drive_auto_backups', '0');
+  ligacoes.limparCache();
+  assert.strictEqual(await storage.destinoDeBackup(), null, 'destino desligado → backups locais');
+}
+
+// ── 6. Estado para a interface (mensagem amigável) ──────────────────
+async function testarEstadoInterface() {
+  loja.clear();
+  ligacoes.limparCache();
+  ligacoes.limparCache();
+  process.env.GOOGLE_DRIVE_ENABLED = 'false';
+  const estado = await storage.estadoDoCondominio(3);
+  assert.strictEqual(estado.provedores.length, PROVEDORES.length, 'um cartão por serviço');
+  for (const p of estado.provedores) {
+    assert.strictEqual(typeof p.disponivel, 'boolean', `${p.nome}: disponibilidade declarada à interface`);
+    assert.strictEqual(typeof p.ligado, 'boolean', `${p.nome}: estado ligado`);
+    assert.strictEqual(typeof p.principal, 'boolean', `${p.nome}: principal`);
+  }
+  assert.strictEqual(estado.provedores.filter((p) => p.principal).length, 1, 'exatamente um serviço principal');
+  assert.ok('destino' in estado.backup, 'estado dos backups presente');
+  assert.strictEqual(estado.provedores.find((p) => p.nome === 'google_drive').disponivel, false, 'sem credenciais → não disponível');
+  delete process.env.GOOGLE_DRIVE_ENABLED;
+}
+
+// ── 7. Leitura pelo localizador (nunca pelo provedor "atual") ───────
 async function testarLeituraPorLocalizador() {
   const chamadas = [];
   // Substitui temporariamente os métodos dos provedores para observar o encaminhamento.
@@ -227,10 +387,14 @@ function testarFachada() {
   testarRegisto();
   testarLocalizadores();
   await testarLigacoes();
+  await testarPrincipal();
+  await testarBackups();
+  await testarEstadoInterface();
   await testarLeituraPorLocalizador();
   testarFachada();
   console.log('✓ Testes da arquitetura de armazenamento (multi-provedor) passaram.');
 })().catch((err) => {
   console.error('✗ ' + err.message);
+  if (err.stack) console.error(err.stack.split('\n').slice(1, 5).join('\n'));
   process.exit(1);
 });

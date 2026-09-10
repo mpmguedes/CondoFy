@@ -8,7 +8,7 @@ const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { getCondominio } = require('../helpers/condominio');
 const { audit } = require('../helpers/audit');
-const drive = require('../helpers/drive');
+const storage = require('../helpers/storage');
 const {
   construirDocumento,
   normalizarPontos,
@@ -128,7 +128,7 @@ router.get('/convocatorias/nova', async (req, res) => {
     titulo: 'Nova Convocatória',
     valores: valoresPorOmissao(c, numero),
     previa: null,
-    driveLigado: drive.isConfigured(),
+    driveLigado: storage.isConfigured(req.condominioId),
   });
 });
 
@@ -157,7 +157,7 @@ router.post('/convocatorias', async (req, res) => {
     titulo: 'Nova Convocatória',
     valores,
     previa: acao === 'preview' ? doc : null,
-    driveLigado: drive.isConfigured(),
+    driveLigado: storage.isConfigured(req.condominioId),
   };
 
   if (acao === 'pdf') {
@@ -175,19 +175,21 @@ router.post('/convocatorias', async (req, res) => {
       .filter(Boolean)
       .join('-');
 
-    // Guardar automaticamente na Biblioteca de Documentos quando o Drive está
-    // ligado (o "Gerar PDF" deixa sempre o documento registado; a opção manual
-    // mantém-se apenas para compatibilidade). Sem Drive, devolve o PDF normal.
-    const guardarDrive = drive.isConfigured();
+    // Guardar automaticamente na Biblioteca de Documentos quando o
+    // armazenamento do condomínio está ligado (o "Gerar PDF" deixa sempre o
+    // documento registado; a opção manual mantém-se apenas para
+    // compatibilidade). Sem armazenamento, devolve o PDF normal.
+    const guardarDrive = storage.isConfigured(req.condominioId);
     if (guardarDrive) {
       try {
         const ano = valores.data ? Number(valores.data.slice(0, 4)) : new Date().getFullYear();
-        const pastaId = await drive.pastaParaDocumento('convocatoria', ano, req.condominioId);
-        const up = await drive.uploadArquivo({
+        const pastaId = await storage.pastaParaDocumento('convocatoria', ano, req.condominioId);
+        const up = await storage.uploadArquivo({
           nome: `${nomeFicheiro}.pdf`,
           mimeType: 'application/pdf',
           buffer,
           parentFolderId: pastaId,
+          condominioId: req.condominioId,
         });
         const tituloDoc = `${doc.textos.titulo}${valores.reuniao_numero ? ` — ${valores.reuniao_numero}` : ''}`;
         const jaRegistada = await Documento.findOne({
@@ -203,7 +205,7 @@ router.post('/convocatorias', async (req, res) => {
             disponivel_condominos: true,
             nome: tituloDoc,
             pasta: 'convocatorias',
-            drive_file_id: up.driveFileId,
+            drive_file_id: up.localizador || up.driveFileId || null,
             drive_folder_id: pastaId,
             mime_type: 'application/pdf',
             tamanho: up.tamanho,
@@ -216,11 +218,11 @@ router.post('/convocatorias', async (req, res) => {
           req.flash('success_msg', 'PDF gerado e convocatória guardada nos Documentos.');
         }
       } catch (err) {
-        console.error('[convocatoria] erro ao guardar no Drive:', err.message);
+        console.error('[convocatoria] erro ao guardar no armazenamento:', err.message);
         req.flash('error_msg', `${err.message} (o PDF continua a ser descarregado).`);
       }
     } else {
-      req.flash('success_msg', 'PDF gerado (Google Drive não ligado — a convocatória não fica guardada nos Documentos).');
+      req.flash('success_msg', 'PDF gerado (armazenamento do condomínio não ligado — a convocatória não fica guardada nos Documentos).');
     }
 
     try {

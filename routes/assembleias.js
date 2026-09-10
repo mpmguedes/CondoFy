@@ -12,7 +12,7 @@ const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const { getCondominio } = require('../helpers/condominio');
-const drive = require('../helpers/drive');
+const storage = require('../helpers/storage');
 const { gerarConvocatoriaPDF, gerarAtaPDF } = require('../helpers/pdf');
 
 const router = express.Router();
@@ -76,10 +76,10 @@ async function proximoNumeroAssembleia(ano, condominioId) {
 }
 
 // Upload para a pasta do condomínio ATIVO (o condominioId é obrigatório —
-// a pasta física no Drive é sempre do condomínio).
+// a pasta física no armazenamento principal é sempre do condomínio).
 async function enviarParaDrive(tipo, ano, condominioId, nome, buffer, mimeType) {
-  const pastaId = await drive.pastaParaDocumento(tipo, ano, condominioId);
-  return drive.uploadArquivo({ nome, mimeType, buffer, parentFolderId: pastaId });
+  const pastaId = await storage.pastaParaDocumento(tipo, ano, condominioId);
+  return storage.uploadArquivo({ nome, mimeType, buffer, parentFolderId: pastaId, condominioId });
 }
 
 // ── Lista (dashboard + filtros) ────────────────────────────────────
@@ -167,7 +167,7 @@ router.get('/assembleias/:id', async (req, res) => {
     fracoes,
     pessoas,
     anexos,
-    driveLigado: drive.isConfigured(),
+    driveLigado: storage.isConfigured(req.condominioId),
     tipos: TIPOS,
     estadosLabel: ESTADOS_LABEL,
   });
@@ -261,12 +261,12 @@ router.post('/assembleias/:id/anexos', upload.single('ficheiro'), async (req, re
       req.flash('error_msg', 'Selecione um ficheiro para anexar.');
       return res.redirect(`/admin/assembleias/${assembleia.id}`);
     }
-    if (!drive.isConfigured()) {
-      req.flash('error_msg', 'Google Drive não configurado — não é possível guardar anexos.');
+    if (!storage.isConfigured(req.condominioId)) {
+      req.flash('error_msg', 'O armazenamento do condomínio não está configurado — não é possível guardar anexos.');
       return res.redirect(`/admin/assembleias/${assembleia.id}`);
     }
     const ano = assembleia.data ? new Date(assembleia.data).getFullYear() : new Date().getFullYear();
-    const up = await enviarParaDrive('ata', ano, req.file.originalname, req.file.buffer, req.file.mimetype);
+    const up = await enviarParaDrive('ata', ano, req.condominioId, req.file.originalname, req.file.buffer, req.file.mimetype);
     await Documento.create({
       condominio_id: req.condominioId,
       tipo: 'outro',
@@ -275,7 +275,7 @@ router.post('/assembleias/:id/anexos', upload.single('ficheiro'), async (req, re
       pasta: 'assembleias',
       // Anexo de assembleia disponibilizado aos condóminos.
       disponivel_condominos: true,
-      drive_file_id: up.driveFileId,
+      drive_file_id: up.localizador || up.driveFileId || null,
       mime_type: req.file.mimetype,
       tamanho: up.tamanho,
       data: new Date(),
@@ -351,15 +351,16 @@ router.get('/assembleias/:id/convocatoria', async (req, res) => {
   // Comportamento igual ao módulo Convocatórias: ao gerar a convocatória da
   // assembleia, registá-la automaticamente nos Documentos (idempotente — se já
   // existir convocatória guardada, não cria outra).
-  if (drive.isConfigured() && !assembleia.convocatoria_documento_id) {
+  if (storage.isConfigured(req.condominioId) && !assembleia.convocatoria_documento_id) {
     try {
       const ano = assembleia.data ? new Date(assembleia.data).getFullYear() : new Date().getFullYear();
-      const pastaId = await drive.pastaParaDocumento('convocatoria', ano, req.condominioId);
-      const up = await drive.uploadArquivo({
+      const pastaId = await storage.pastaParaDocumento('convocatoria', ano, req.condominioId);
+      const up = await storage.uploadArquivo({
         nome: `Convocatoria_${assembleia.numero || assembleia.id}.pdf`,
         mimeType: 'application/pdf',
         buffer,
         parentFolderId: pastaId,
+        condominioId: req.condominioId,
       });
       const doc = await Documento.create({
         condominio_id: req.condominioId,
@@ -368,7 +369,7 @@ router.get('/assembleias/:id/convocatoria', async (req, res) => {
         nome: `Convocatória ${assembleia.numero || assembleia.id}`,
         pasta: 'assembleias',
         disponivel_condominos: true,
-        drive_file_id: up.driveFileId,
+        drive_file_id: up.localizador || up.driveFileId || null,
         drive_folder_id: pastaId,
         mime_type: 'application/pdf',
         tamanho: up.tamanho,
@@ -424,8 +425,8 @@ router.get('/assembleias/:id/ata', async (req, res) => {
 router.post('/assembleias/:id/convocatoria/drive', async (req, res) => {
   const assembleia = await carregarAssembleia(req, [{ model: AgendaItem, as: 'agenda_itens' }]);
   if (!assembleia) return res.redirect('/admin/assembleias');
-  if (!drive.isConfigured()) {
-    req.flash('error_msg', 'Google Drive não configurado.');
+  if (!storage.isConfigured(req.condominioId)) {
+    req.flash('error_msg', 'Armazenamento do condomínio não configurado.');
     return res.redirect(`/admin/assembleias/${assembleia.id}`);
   }
   if (assembleia.convocatoria_documento_id) {
@@ -454,7 +455,7 @@ router.post('/assembleias/:id/convocatoria/drive', async (req, res) => {
       numero_documento: null,
       nome: `Convocatória ${assembleia.numero || assembleia.id}`,
       pasta: 'assembleias',
-      drive_file_id: up.driveFileId,
+      drive_file_id: up.localizador || up.driveFileId || null,
       mime_type: 'application/pdf',
       tamanho: up.tamanho,
       data: new Date(),
@@ -478,8 +479,8 @@ router.post('/assembleias/:id/convocatoria/drive', async (req, res) => {
 router.post('/assembleias/:id/ata/drive', async (req, res) => {
   const assembleia = await carregarAssembleia(req, [{ model: AgendaItem, as: 'agenda_itens' }]);
   if (!assembleia) return res.redirect('/admin/assembleias');
-  if (!drive.isConfigured()) {
-    req.flash('error_msg', 'Google Drive não configurado.');
+  if (!storage.isConfigured(req.condominioId)) {
+    req.flash('error_msg', 'Armazenamento do condomínio não configurado.');
     return res.redirect(`/admin/assembleias/${assembleia.id}`);
   }
   try {
@@ -510,7 +511,7 @@ router.post('/assembleias/:id/ata/drive', async (req, res) => {
       numero_documento: null,
       nome: `Ata ${assembleia.numero || assembleia.id}`,
       pasta: 'assembleias',
-      drive_file_id: up.driveFileId,
+      drive_file_id: up.localizador || up.driveFileId || null,
       mime_type: 'application/pdf',
       tamanho: up.tamanho,
       data: new Date(),

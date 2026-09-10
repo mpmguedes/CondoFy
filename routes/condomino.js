@@ -27,7 +27,7 @@ const { gerarReciboPDF } = require('../helpers/pdf');
 const recibosHelper = require('../helpers/recibos');
 const { mapaPastas } = require('../helpers/documento-pastas');
 // Acesso autorizado a documentos (neste módulo: só os disponibilizados).
-const { autorizarAcessoDocumento, servirDocumento } = require('../helpers/documentos-acesso');
+const { autorizarAcessoDocumento, servirDocumento, responderRecusa } = require('../helpers/documentos-acesso');
 
 const router = express.Router();
 
@@ -462,14 +462,14 @@ router.get('/documentos', async (req, res) => {
 router.get('/documentos/:id/ficheiro', async (req, res) => {
   const autorizacao = await autorizarAcessoDocumento({ documentoId: req.params.id, req, area: 'condomino' });
   if (!autorizacao.ok) {
-    req.flash('error_msg', autorizacao.mensagem);
-    return res.redirect('/condomino/documentos');
+    // 401 sem sessão / 403 de outro condomínio ou não disponibilizado ao
+    // condomínio / 404 inexistente. Nunca devolve o documento.
+    return responderRecusa(res, autorizacao);
   }
   const disposicao = req.query.descarregar === '1' ? 'attachment' : 'inline';
   const servido = await servirDocumento({ documento: autorizacao.documento, req, res, disposicao, via: 'sessao_condomino' });
   if (!servido.ok && !res.headersSent) {
-    req.flash('error_msg', servido.mensagem);
-    return res.redirect('/condomino/documentos');
+    return responderRecusa(res, servido);
   }
   return undefined;
 });

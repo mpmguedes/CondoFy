@@ -43,6 +43,8 @@ const MOTIVO = {
   SEM_SESSAO: 'sem_sessao',
   SEM_CONDOMINIO: 'sem_condominio',
   NAO_ENCONTRADO: 'nao_encontrado',
+  // Existe mas pertence a outro condomínio (isolamento multi-tenant).
+  OUTRO_CONDOMINIO: 'outro_condominio',
   SEM_PERMISSAO: 'sem_permissao',
   SEM_FICHEIRO: 'sem_ficheiro',
   PROVEDOR_INDISPONIVEL: 'provedor_indisponivel',
@@ -53,8 +55,9 @@ const MENSAGENS = {
   [MOTIVO.SEM_SESSAO]: 'Inicie sessão para aceder aos documentos.',
   [MOTIVO.SEM_CONDOMINIO]: 'Selecione um condomínio para aceder aos documentos.',
   // A mesma mensagem para "não existe" e "é de outro condomínio": não se
-  // revela a existência de documentos de outros condomínios.
+  // revela o conteúdo nem a que condomínio pertence.
   [MOTIVO.NAO_ENCONTRADO]: 'Documento não encontrado.',
+  [MOTIVO.OUTRO_CONDOMINIO]: 'Documento não encontrado.',
   [MOTIVO.SEM_PERMISSAO]: 'Não tem permissões para aceder a este documento.',
   [MOTIVO.SEM_FICHEIRO]: 'Este documento não tem ficheiro associado (apenas referência externa).',
   [MOTIVO.PROVEDOR_INDISPONIVEL]: 'O armazenamento do condomínio não está ligado. Contacte o administrador.',
@@ -64,6 +67,23 @@ const MENSAGENS = {
 function recusar(motivo) {
   return { ok: false, motivo, mensagem: MENSAGENS[motivo] || 'Acesso negado.' };
 }
+
+// Código HTTP de cada recusa. A autorização é sempre Utilizador → Condomínio →
+// Documento; um documento que não pertence ao condomínio ativo (ou sem
+// permissão) resulta em 403 Forbidden, nunca na entrega do ficheiro.
+const HTTP = {
+  [MOTIVO.SEM_SESSAO]: 401,
+  [MOTIVO.SEM_CONDOMINIO]: 401,
+  [MOTIVO.NAO_ENCONTRADO]: 404,
+  [MOTIVO.SEM_PERMISSAO]: 403,
+  [MOTIVO.SEM_FICHEIRO]: 404,
+  [MOTIVO.PROVEDOR_INDISPONIVEL]: 503,
+  [MOTIVO.LIGACAO_INVALIDA]: 502,
+  // Um documento que existe mas é de OUTRO condomínio: 403 (pedido do
+  // projeto). Para não facilitar a enumeração de ids, a mensagem é a mesma de
+  // um documento inexistente.
+  [MOTIVO.OUTRO_CONDOMINIO]: 403,
+};
 
 // Utilizador autenticado (req.user) — nunca confiar apenas no pedido.
 function utilizadorDe(req) {
@@ -107,7 +127,13 @@ async function autorizarAcessoDocumento({ documentoId, req, area = 'gestao' }) {
   // A consulta já exige o condomínio ativo: um id de outro condomínio não
   // devolve registo nenhum (não há caminho Utilizador → Documento).
   const documento = await Documento.findOne({ where: { id, condominio_id: condominioId } });
-  if (!documento) return recusar(MOTIVO.NAO_ENCONTRADO);
+  if (!documento) {
+    // Distingue "não existe" de "existe noutro condomínio" apenas para
+    // responder 403 no segundo caso (exigência do projeto). A mensagem
+    // apresentada é igual, para não revelar o condomínio alheio.
+    const alheio = await Documento.findOne({ where: { id }, attributes: ['id'] }).catch(() => null);
+    return recusar(alheio ? MOTIVO.OUTRO_CONDOMINIO : MOTIVO.NAO_ENCONTRADO);
+  }
 
   if (area === 'condomino') {
     if (!documento.disponivel_condominos) return recusar(MOTIVO.SEM_PERMISSAO);
@@ -295,13 +321,32 @@ function urlParaEmail({ documento, baseUrl = '', destinatarioInterno = false }) 
   return link ? link.url : null;
 }
 
+// ── Resposta HTTP de recusa ─────────────────────────────────────────
+// Usada pelas rotas que servem ficheiros: devolve o código correto
+// (401 sem sessão, 403 sem permissão ou de outro condomínio, 404 inexistente)
+// e nunca o conteúdo do documento.
+function responderRecusa(res, resultado) {
+  const status = HTTP[resultado && resultado.motivo] || 403;
+  if (res.headersSent) {
+    res.end();
+    return status;
+  }
+  res.status(status);
+  res.type('text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.send(resultado && resultado.mensagem ? resultado.mensagem : 'Acesso negado.');
+  return status;
+}
+
 module.exports = {
   MOTIVO,
   MENSAGENS,
+  HTTP,
   PAPEIS_GESTAO,
   TTL_PADRAO_SEGUNDOS,
   autorizarAcessoDocumento,
   servirDocumento,
+  responderRecusa,
   urlInterna,
   urlInternaAbsoluta,
   urlParaEmail,

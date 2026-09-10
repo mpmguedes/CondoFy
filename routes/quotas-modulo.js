@@ -924,7 +924,7 @@ async function pdfDeRecibo(recibo, condRow) {
 
 // Regista/atualiza o Documento do recibo na biblioteca (pasta "recibos").
 // Idempotente: se já existir (por entidade Recibo ou pelo código) atualiza,
-// nunca duplica. Só cria quando o armazenamento (Drive) está configurado.
+// nunca duplica. Só cria quando o armazenamento do condomínio está configurado.
 async function garantirDocumentoRecibo(reciboId, { condominioId, userId }) {
   const recibo = await Recibo.findOne({
     where: { id: reciboId, condominio_id: condominioId },
@@ -968,16 +968,17 @@ async function garantirDocumentoRecibo(reciboId, { condominioId, userId }) {
   }
 
   // Sem armazenamento configurado não criamos um documento "vazio".
-  if (!storage.isConfigured()) return null;
+  if (!storage.isConfigured(condominioId)) return null;
 
   const buffer = await pdfDeRecibo(recibo, condRow);
   const ano = recibo.data_emissao ? new Date(recibo.data_emissao).getFullYear() : new Date().getFullYear();
-  const pastaDrive = await storage.pastaParaDocumento('recibo', ano, condominioId);
+  const pastaId = await storage.pastaParaDocumento('recibo', ano, condominioId);
   const up = await storage.uploadArquivo({
     nome: `Recibo ${recibo.codigo}.pdf`,
     mimeType: 'application/pdf',
     buffer,
-    parentFolderId: pastaDrive,
+    parentFolderId: pastaId,
+    condominioId,
   });
   const doc = await Documento.create({
     condominio_id: condominioId,
@@ -985,8 +986,8 @@ async function garantirDocumentoRecibo(reciboId, { condominioId, userId }) {
     numero_documento: recibo.codigo,
     nome: `Recibo ${recibo.codigo}`,
     pasta: decisao.pasta,
-    drive_file_id: up.driveFileId,
-    drive_folder_id: pastaDrive,
+    drive_file_id: up.localizador || up.driveFileId || null,
+    drive_folder_id: pastaId,
     mime_type: 'application/pdf',
     tamanho: up.tamanho,
     data: recibo.data_emissao || new Date(),

@@ -547,6 +547,18 @@ async function criarEstruturaPastas(condominioId = null, ano = new Date().getFul
   });
 }
 
+// Caminho da pasta de BACKUPS da plataforma: <raiz>/Backups (sem condomínio).
+// Os backups são da instalação (o dump contém dados de todos os condomínios),
+// por isso usam a ligação de plataforma — nunca a conta de um condomínio.
+async function pastaDeBackups() {
+  return comAutenticacao(null, async (accessToken) => {
+    const criar = criadorDePastas(accessToken);
+    const raizSeg = await segmentosRaiz(null);
+    const raizId = await criar(raizSeg);
+    return criar([raizId, 'Backups']);
+  });
+}
+
 // Caminho da pasta do condomínio/ano/tipo do documento (cria o que faltar).
 // O condominioId é OBRIGATÓRIO — o condomínio nunca se deduz pelo tipo/ano.
 async function pastaParaDocumento(tipo, ano, condominioId) {
@@ -753,5 +765,6 @@ module.exports = {
   pastaParaFornecedor,
   obterPastaCondominioId,
   criarEstruturaPastas,
+  pastaDeBackups,
   linkPasta,
 };

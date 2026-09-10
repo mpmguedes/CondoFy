@@ -484,6 +484,14 @@ async function abrirFluxo(fileId, condominioId) {
   });
 }
 
+// Remove um ficheiro do Drive (usado pela retenção dos backups).
+async function apagarArquivo(fileId, condominioId) {
+  return operacaoDrive(async () => {
+    await getDrive(condominioId).files.delete({ fileId });
+    return true;
+  });
+}
+
 // ── Upload ──────────────────────────────────────────────────────────
 // Faz upload de um Buffer para o Drive.
 // Devolve as chaves novas do contrato de armazenamento (provedorFileId,
@@ -530,6 +538,7 @@ module.exports = {
   descargarArquivo,
   uploadArquivo,
   abrirFluxo,
+  apagarArquivo,
   encontrarOuCriarPasta,
   // Estrutura por condomínio (multi-condomínio). As funções puras vivem em
   // helpers/armazenamento/estrutura.js (fonte única) e são reexportadas para

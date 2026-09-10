@@ -150,33 +150,97 @@ assert.ok(!html.includes('modalDesligarDrive'), 'config: modal do Drive saiu do 
 assert.ok(!html.includes('Configurar automações'), 'config: botão antigo das automações removido');
 assert.ok(!html.includes('href="/admin/emails"'), 'config: atalho de emails acompanhou as automações');
 
-// 6.2 Separador 2 — Armazenamento e Backups (mesmos estados do Drive, sem duplicação)
+// 6.2 Separador 2 — Armazenamento e Backups (serviços, principal e backups)
+// `armazenamento` é o estado que a fachada entrega à vista
+// (helpers/storage.estadoDoCondominio).
 const ctxArm = { titulo: 'Armazenamento e Backups' };
-const driveBase = { ativo: true, credenciais: true, ligado: false, viaEnv: false, conta: null, redirectUriDefinido: true };
-const opcoesBase = { pastaRaiz: 'CondoFy', backupsDrive: true };
+const estadoArm = (over = {}) => ({
+  principal: 'google_drive',
+  provedores: [
+    { nome: 'google_drive', rotulo: 'Google Drive', disponivel: true, ligado: true, contaPlataforma: false, ligadoPlataforma: true, principal: true, conta: 'admin@gmail.com', estado: {} },
+    { nome: 'dropbox', rotulo: 'Dropbox', disponivel: true, ligado: true, contaPlataforma: false, ligadoPlataforma: false, principal: false, conta: 'gestao@exemplo.pt', estado: {} },
+    { nome: 'onedrive', rotulo: 'Microsoft OneDrive', disponivel: true, ligado: false, contaPlataforma: false, ligadoPlataforma: false, principal: false, conta: null, estado: {} },
+  ],
+  backup: { destino: 'dropbox', rotulo: 'Dropbox', ligadoPlataforma: true },
+  plataforma: [
+    { nome: 'google_drive', rotulo: 'Google Drive', disponivel: true, ligado: true },
+    { nome: 'dropbox', rotulo: 'Dropbox', disponivel: true, ligado: true },
+    { nome: 'onedrive', rotulo: 'Microsoft OneDrive', disponivel: false, ligado: false },
+  ],
+  ...over,
+});
+const opcoesBase = { pastaRaiz: 'GesCondu', backupsDrive: true };
 
-html = armazenamento({ ...ctxArm, driveLigado: false, driveEstado: driveBase, driveOpcoes: opcoesBase, ultimoBackup: null });
+// Vários serviços ligados ao mesmo tempo, com um único principal.
+html = armazenamento({ ...ctxArm, driveLigado: true, driveOpcoes: opcoesBase, ultimoBackup: null, armazenamento: estadoArm() });
 assert.ok(html.includes('class="config-tab active" href="/admin/config/armazenamento"'), 'armazenamento: separador 2 ativo');
-assert.ok(html.includes('Ligar Google Drive'), 'armazenamento: botão ligar quando não ligado');
-assert.ok(html.includes('Desligado'), 'armazenamento: estado desligado');
-assert.ok(html.includes('id="google-drive"'), 'armazenamento: âncora google-drive preservada');
+assert.ok(html.includes('Serviços de armazenamento'), 'armazenamento: secção de serviços');
+assert.ok(html.includes('id="google_drive"') && html.includes('id="dropbox"') && html.includes('id="onedrive"'), 'armazenamento: cartão por serviço');
+assert.ok(html.includes('Ligado ✓'), 'armazenamento: estado ligado visível');
+assert.ok(html.includes('admin@gmail.com') && html.includes('gestao@exemplo.pt'), 'armazenamento: contas autorizadas visíveis');
+assert.ok(html.includes('Principal'), 'armazenamento: serviço principal assinalado');
+assert.ok(/value="dropbox"[\s\S]{0,120}Tornar principal/.test(html), 'armazenamento: tornar principal disponível para o serviço ligado');
+assert.ok(html.includes('href="/admin/config/armazenamento/onedrive/ligar"'), 'armazenamento: ligar serviço disponível');
+assert.ok(html.includes('Não ligado'), 'armazenamento: serviço não ligado assinalado');
+assert.ok(!html.includes('.env'), 'armazenamento: nunca menciona .env');
+assert.ok(!html.includes('Google Drive desativada') && !html.includes('credenciais'), 'armazenamento: sem mensagens técnicas');
 
-html = armazenamento({ ...ctxArm, driveLigado: true, driveEstado: { ...driveBase, ligado: true, conta: 'admin@gmail.com' }, driveOpcoes: opcoesBase, ultimoBackup: null });
-assert.ok(html.includes('admin@gmail.com'), 'armazenamento: conta ligada visível');
-assert.ok(html.includes('Desligar'), 'armazenamento: botão desligar');
-assert.ok(html.includes('Abrir Google Drive'), 'armazenamento: abrir drive');
-assert.ok(html.includes('Testar ligação'), 'armazenamento: testar ligação');
-assert.ok(html.includes('Pasta de destino no Google Drive'), 'armazenamento: opções de armazenamento');
-assert.ok(html.includes('name="pasta_raiz"') && html.includes('name="backups_drive"'), 'armazenamento: campos de pasta e backups');
-assert.ok(html.includes('action="/admin/config/drive/opcoes"'), 'armazenamento: rota de gravação das opções');
-assert.ok(html.includes('modalDesligarDrive'), 'armazenamento: modal de confirmação');
+// Armazenamento principal (um só) e backups (serviço separado).
+assert.ok(html.includes('Armazenamento principal'), 'armazenamento: secção do principal');
+assert.ok(/id="provedorPrincipal"[\s\S]{0,400}value="google_drive"[\s\S]{0,80}selected/.test(html), 'armazenamento: principal selecionado');
+assert.ok(html.includes('Destino dos backups'), 'armazenamento: secção de backups');
+assert.ok(html.includes('/admin/config/armazenamento/backups'), 'armazenamento: rota do destino de backups');
+assert.ok(/id="destinoBackups"[\s\S]{0,400}value="dropbox"[\s\S]{0,80}selected/.test(html), 'armazenamento: destino de backups selecionado');
+assert.ok(html.includes('/admin/config/armazenamento/dropbox/testar?ambito=plataforma'), 'armazenamento: testar ligação de plataforma');
+assert.ok(html.includes('/admin/config/armazenamento/dropbox/desligar?ambito=plataforma'), 'armazenamento: desligar ligação de plataforma');
+assert.ok(!html.includes('Abrir Google Drive'), 'armazenamento: sem atalhos diretos ao fornecedor');
 
-html = armazenamento({ ...ctxArm, driveLigado: true, driveEstado: { ...driveBase, ligado: true, viaEnv: true }, driveOpcoes: opcoesBase, ultimoBackup: { data: new Date(), tipo: 'diario', estado: 'concluido', erro: null } });
-assert.ok(html.includes('via .env'), 'armazenamento: estado legado via .env');
+// Serviço sem credenciais na instalação: mensagem amigável (nunca .env).
+html = armazenamento({
+  ...ctxArm,
+  driveLigado: true,
+  driveOpcoes: opcoesBase,
+  ultimoBackup: null,
+  armazenamento: estadoArm({
+    provedores: [
+      { nome: 'google_drive', rotulo: 'Google Drive', disponivel: false, ligado: false, contaPlataforma: false, ligadoPlataforma: false, principal: true, conta: null, estado: {} },
+      { nome: 'dropbox', rotulo: 'Dropbox', disponivel: false, ligado: false, contaPlataforma: false, ligadoPlataforma: false, principal: false, conta: null, estado: {} },
+      { nome: 'onedrive', rotulo: 'Microsoft OneDrive', disponivel: false, ligado: false, contaPlataforma: false, ligadoPlataforma: false, principal: false, conta: null, estado: {} },
+    ],
+    backup: { destino: null, rotulo: null, ligadoPlataforma: false },
+  }),
+});
+assert.ok(html.includes('Disponível após configuração pelo administrador do GesCondu.'), 'armazenamento: mensagem amigável sem credenciais');
+assert.ok(html.includes('Não ligado'), 'armazenamento: serviços não ligados');
+assert.ok(!html.includes('.env'), 'armazenamento: sem .env mesmo sem credenciais');
+
+// Serviço disponível mas sem ligação de plataforma: permite ligar para backups.
+html = armazenamento({
+  ...ctxArm,
+  driveLigado: true,
+  driveOpcoes: opcoesBase,
+  ultimoBackup: null,
+  armazenamento: estadoArm({
+    plataforma: [
+      { nome: 'google_drive', rotulo: 'Google Drive', disponivel: true, ligado: true },
+      { nome: 'dropbox', rotulo: 'Dropbox', disponivel: true, ligado: false },
+      { nome: 'onedrive', rotulo: 'Microsoft OneDrive', disponivel: false, ligado: false },
+    ],
+    backup: { destino: 'google_drive', rotulo: 'Google Drive', ligadoPlataforma: true },
+  }),
+});
+assert.ok(html.includes('href="/admin/config/armazenamento/dropbox/ligar?ambito=plataforma"'), 'armazenamento: ligar serviço à plataforma para backups');
+assert.ok(/id="destinoBackups"[\s\S]{0,300}value="google_drive"[\s\S]{0,80}selected/.test(html), 'armazenamento: destino de backups da plataforma');
+
+// Último backup visível com estado.
+html = armazenamento({ ...ctxArm, driveLigado: true, driveOpcoes: opcoesBase, armazenamento: estadoArm(), ultimoBackup: { data: new Date(), tipo: 'diario', estado: 'concluido', erro: null } });
 assert.ok(html.includes('Último backup'), 'armazenamento: último backup visível');
+assert.ok(html.includes('Concluído'), 'armazenamento: estado do último backup');
 
-html = armazenamento({ ...ctxArm, driveLigado: false, driveEstado: { ativo: false, credenciais: false, ligado: false, viaEnv: false, conta: null, redirectUriDefinido: false }, driveOpcoes: opcoesBase, ultimoBackup: null });
-assert.ok(html.includes('Desativado'), 'armazenamento: integração desativada');
+// Sem destino de backups: opção "só neste servidor" selecionada.
+html = armazenamento({ ...ctxArm, driveLigado: false, driveOpcoes: opcoesBase, ultimoBackup: null, armazenamento: estadoArm({ backup: { destino: null, rotulo: null, ligadoPlataforma: false } }) });
+assert.ok(/id="destinoBackups"[\s\S]{0,300}value="nenhum"[\s\S]{0,60}selected/.test(html), 'armazenamento: sem destino de backups');
+assert.ok(html.includes('Ainda não existem backups registados.'), 'armazenamento: sem backups registados');
 
 // 6.3 Separador 3 — Documentos e Automações (área antes escondida atrás de um botão)
 const gruposAuto = [{

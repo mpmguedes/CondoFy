@@ -1,21 +1,26 @@
 // ─────────────────────────────────────────────────────────────────────
-// Ligações de armazenamento por condomínio (multi-tenant).
+// Ligações de armazenamento (multi-tenant + plataforma).
 //
-//  · Qual provedor usa cada condomínio:  storage:provedor:c<id>
-//  · Tokens/credenciais da ligação:      storage:tokens:<provedor>:c<id>
-//  · Pasta raiz opcional por provedor:   storage:raiz:<provedor>:c<id>
+// Conceitos SEPARADOS (não misturar):
 //
-// São chaves da tabela `configuracoes` (chave única, STRING(120)): não é
-// precisa migração de esquema e o valor por omissão mantém o comportamento
-// anterior à introdução de múltiplos provedores.
+//  · ARMazenamento de documentos — por condomínio:
+//      storage:principal:c<id>            provedor principal (onde ficam os documentos)
+//      storage:tokens:<provedor>:c<id>    contas autorizadas do condomínio
+//      storage:raiz:<provedor>:c<id>      pasta raiz (opcional)
 //
-// Compatibilidade (Google Drive):
-//  · a ligação global antiga (chave `google_drive_tokens`, criada pelo fluxo
-//    de Configuração → Google Drive) continua a ser a ligação usada quando o
-//    condomínio não tem ligação própria — nenhuma instalação existente muda
-//    de comportamento;
-//  · a pasta raiz global (`google_drive_root_folder`) continua a ter
-//    prioridade sobre o .env, como antes.
+//  · BACKUPS — da instalação (o dump contém dados de TODOS os condomínios):
+//      storage:backup                     provedor de destino dos backups
+//      storage:tokens:<provedor>:plataforma  contas autorizadas da plataforma
+//
+// Relação conceptual: Condomínio → Serviço → Conta autorizada → Pastas.
+//
+// Compatibilidade:
+//  · a chave antiga `storage:provedor:c<id>` continua a ser lida (e mantida em
+//    escrita) como armazenamento principal;
+//  · a ligação global antiga do Google Drive (`google_drive_tokens`) é a
+//    ligação de PLATAFORMA do Drive e serve de fallback aos condomínios que
+//    ainda não têm conta própria;
+//  · a pasta raiz global (`google_drive_root_folder`) mantém a prioridade.
 //
 // Os tokens nunca são expostos ao browser nem escritos em ficheiros públicos.
 // ─────────────────────────────────────────────────────────────────────
@@ -23,13 +28,23 @@ const { Op } = require('sequelize');
 const { getConfig, setConfig } = require('../config');
 const locator = require('./locator');
 
-const CHAVE_TOKENS_LEGADO = 'google_drive_tokens'; // ligação global antiga ao Google Drive
+const CHAVE_TOKENS_LEGADO = 'google_drive_tokens'; // ligação de plataforma do Google Drive
 const CHAVE_RAIZ_LEGADO = 'google_drive_root_folder';
 const PREFIXO_CHAVES = 'storage:';
+const SUFIXO_PLATAFORMA = 'plataforma';
 
-const chaveProvedor = (condominioId) => `${PREFIXO_CHAVES}provedor:c${condominioId}`;
+const chavePrincipal = (condominioId) => `${PREFIXO_CHAVES}principal:c${condominioId}`;
+const chaveProvedor = (condominioId) => `${PREFIXO_CHAVES}provedor:c${condominioId}`; // legado
 const chaveTokens = (provedor, condominioId) => `${PREFIXO_CHAVES}tokens:${provedor}:c${condominioId}`;
 const chaveRaiz = (provedor, condominioId) => `${PREFIXO_CHAVES}raiz:${provedor}:c${condominioId}`;
+const CHAVE_BACKUP = `${PREFIXO_CHAVES}backup`;
+
+// Tokens da plataforma: o Google Drive mantém a chave histórica.
+function chaveTokensPlataforma(provedor) {
+  return String(provedor) === 'google_drive'
+    ? CHAVE_TOKENS_LEGADO
+    : `${PREFIXO_CHAVES}tokens:${provedor}:${SUFIXO_PLATAFORMA}`;
+}
 
 // Provedor usado quando o condomínio não tem escolha guardada.
 function provedorPadrao() {
@@ -43,19 +58,16 @@ function normalizarCondominio(condominioId) {
 }
 
 // ── Cache síncrona ──────────────────────────────────────────────────
-// As vistas e alguns callers precisam de saber "está ligado?" de forma
-// síncrona (comportamento herdado de helpers/drive). A cache é preenchida
-// no arranque e em cada escrita; sem BD (testes offline) fica vazia e
-// aplicam-se os valores por omissão.
+// As vistas precisam de saber "está ligado?" sem esperar pela BD.
 const _cache = {
   pronto: false,
-  provedores: new Map(), // condominioId → nome do provedor
-  tokens: new Map(), // `${provedor}:${condominioId|legado}` → tokens|false
+  principal: new Map(), // condominioId → provedor principal
+  tokens: new Map(), // `${provedor}:${condominioId|plataforma|legado}` → tokens|false
   raizes: new Map(),
 };
 
 function chaveCacheTokens(provedor, condominioId) {
-  return `${provedor}:${condominioId || 'legado'}`;
+  return `${provedor}:${condominioId || SUFIXO_PLATAFORMA}`;
 }
 
 function parseTokens(valor) {
@@ -69,21 +81,58 @@ function parseTokens(valor) {
   }
 }
 
+function preencherCache(chave, valor) {
+  const partes = String(chave).slice(PREFIXO_CHAVES.length).split(':');
+  const campo = partes[0];
+  if ((campo === 'principal' || campo === 'provedor') && partes[1]) {
+    const cid = Number(String(partes[1]).replace(/^c/, ''));
+    const nome = String(valor || '').trim().toLowerCase();
+    // `principal` tem prioridade sobre a chave legada `provedor`.
+    if (cid && nome && (campo === 'principal' || !_cache.principal.has(cid))) {
+      _cache.principal.set(cid, nome);
+    }
+    return;
+  }
+  if (campo === 'tokens' && partes[1] && partes[2]) {
+    const provedor = partes[1];
+    const alvo = String(partes[2]);
+    if (alvo === SUFIXO_PLATAFORMA || provedor === 'google_drive') {
+      // A plataforma do Drive usa a chave histórica, tratada abaixo.
+      if (alvo === SUFIXO_PLATAFORMA) {
+        _cache.tokens.set(chaveCacheTokens(provedor, null), parseTokens(valor) || false);
+        return;
+      }
+    }
+    const cid = Number(alvo.replace(/^c/, ''));
+    if (cid) _cache.tokens.set(chaveCacheTokens(provedor, cid), parseTokens(valor) || false);
+    return;
+  }
+  if (campo === 'raiz' && partes[1] && partes[2]) {
+    const provedor = partes[1];
+    const cid = Number(String(partes[2]).replace(/^c/, ''));
+    if (cid && valor) _cache.raizes.set(`${provedor}:${cid}`, String(valor));
+  }
+}
+
 // Uma única leitura preenche a cache (arranque da aplicação).
 async function inicializar() {
   try {
     const { Configuracao } = require('../../models');
     const linhas = await Configuracao.findAll({ where: { chave: { [Op.like]: `${PREFIXO_CHAVES}%` } } });
-    for (const l of linhas) {
-      preencherCache(l.chave, l.valor);
+    for (const l of linhas) preencherCache(l.chave, l.valor);
+
+    // Ligações de plataforma (chaves históricas/legado).
+    const legadoDrive = await getConfig(CHAVE_TOKENS_LEGADO, null).catch(() => null);
+    if (legadoDrive) _cache.tokens.set(chaveCacheTokens('google_drive', null), parseTokens(legadoDrive) || false);
+    for (const provedor of locator.provedores()) {
+      if (provedor === 'google_drive') continue;
+      const chave = chaveTokensPlataforma(provedor);
+      const valor = await getConfig(chave, null).catch(() => null);
+      if (valor) _cache.tokens.set(chaveCacheTokens(provedor, null), parseTokens(valor) || false);
     }
-    // Ligação global antiga do Google Drive (legado).
-    const legado = await getConfig(CHAVE_TOKENS_LEGADO, null);
-    _cache.tokens.set(chaveCacheTokens('google_drive', null), parseTokens(legado) || false);
-    const raizLegado = await getConfig(CHAVE_RAIZ_LEGADO, null);
+    const raizLegado = await getConfig(CHAVE_RAIZ_LEGADO, null).catch(() => null);
     if (raizLegado) _cache.raizes.set('google_drive:legado', String(raizLegado));
   } catch (err) {
-    // Sem BD (testes offline) ou BD indisponível: cache vazia, defaults.
     console.warn('[armazenamento] cache de ligações não carregada:', err.message);
   } finally {
     _cache.pronto = true;
@@ -91,31 +140,11 @@ async function inicializar() {
   return _cache;
 }
 
-function preencherCache(chave, valor) {
-  const partes = String(chave).slice(PREFIXO_CHAVES.length).split(':');
-  const campo = partes[0];
-  if (campo === 'provedor' && partes[1]) {
-    const cid = Number(String(partes[1]).replace(/^c/, ''));
-    if (cid) _cache.provedores.set(cid, String(valor || '').trim().toLowerCase());
-    return;
-  }
-  if ((campo === 'tokens' || campo === 'raiz') && partes[1] && partes[2]) {
-    const provedor = partes[1];
-    const cid = Number(String(partes[2]).replace(/^c/, ''));
-    const chaveMapa = campo === 'tokens' ? chaveCacheTokens(provedor, cid) : `${provedor}:${cid}`;
-    const mapa = campo === 'tokens' ? _cache.tokens : _cache.raizes;
-    if (campo === 'tokens') mapa.set(chaveMapa, parseTokens(valor) || false);
-    else if (valor) mapa.set(chaveMapa, String(valor));
-  }
-}
-
-// ── Provedor por condomínio ─────────────────────────────────────────
-// Síncrono: cache → STORAGE_PROVIDER (.env) → google_drive.
-function provedorSync(condominioId, registo = null) {
+// ── Armazenamento principal (documentos) ────────────────────────────
+function principalSync(condominioId, registo = null) {
   const cid = normalizarCondominio(condominioId);
-  const daCache = cid ? _cache.provedores.get(cid) : null;
-  const candidatos = [daCache, provedorPadrao(), locator.PROVEDOR_PADRAO];
-  for (const c of candidatos) {
+  const daCache = cid ? _cache.principal.get(cid) : null;
+  for (const c of [daCache, provedorPadrao(), locator.PROVEDOR_PADRAO]) {
     if (!c) continue;
     if (registo && !registo[c]) continue;
     if (locator.provedorValido(c)) return c;
@@ -123,60 +152,80 @@ function provedorSync(condominioId, registo = null) {
   return locator.PROVEDOR_PADRAO;
 }
 
-async function provedorDoCondominio(condominioId, registo = null) {
+async function principalDoCondominio(condominioId, registo = null) {
   const cid = normalizarCondominio(condominioId);
-  if (!cid) return provedorSync(null, registo);
+  if (!cid) return principalSync(null, registo);
   try {
-    const valor = await getConfig(chaveProvedor(cid), null);
-    if (valor) {
-      const nome = String(valor).trim().toLowerCase();
-      _cache.provedores.set(cid, nome);
-    }
+    const valor = await getConfig(chavePrincipal(cid), null);
+    const legado = valor || (await getConfig(chaveProvedor(cid), null));
+    if (legado) _cache.principal.set(cid, String(legado).trim().toLowerCase());
   } catch (err) {
     // BD indisponível → defaults
   }
-  return provedorSync(cid, registo);
+  return principalSync(cid, registo);
 }
 
-async function definirProvedor(condominioId, nome) {
+async function definirPrincipal(condominioId, nome) {
   const cid = normalizarCondominio(condominioId);
   const alvo = String(nome || '').trim().toLowerCase();
-  if (!cid) throw new Error('condominioId é obrigatório para definir o provedor de armazenamento.');
+  if (!cid) throw new Error('condominioId é obrigatório para definir o armazenamento principal.');
   if (!locator.provedorValido(alvo)) throw new Error(`Provedor de armazenamento desconhecido: ${nome}`);
+  await setConfig(chavePrincipal(cid), alvo);
+  // Mantém a chave antiga alinhada (leitores legados continuam coerentes).
   await setConfig(chaveProvedor(cid), alvo);
-  _cache.provedores.set(cid, alvo);
+  _cache.principal.set(cid, alvo);
   return alvo;
 }
 
-// ── Tokens da ligação ───────────────────────────────────────────────
-// Leitura assíncrona (BD) com fallback à ligação global antiga do Drive.
-async function lerTokens(provedor, condominioId) {
-  const cid = normalizarCondominio(condominioId);
-  let tokens = null;
+// ── Tokens ──────────────────────────────────────────────────────────
+// Leitura assíncrona (BD).
+//  · `opcoes.plataforma` → ligação da instalação (usada pelos backups);
+//  · caso contrário → ligação do condomínio e, SÓ para o Google Drive (que tem
+//    uma conta de plataforma desde o início), fallback à conta da plataforma.
+//    Nos restantes provedores a ligação é sempre do condomínio: documentos de
+//    condomínios diferentes nunca partilham a mesma conta.
+async function lerTokens(provedor, condominioId, opcoes = {}) {
+  const plataforma = Boolean(opcoes.plataforma);
+  const cid = plataforma ? null : normalizarCondominio(condominioId);
+  const admiteFallback = provedor === 'google_drive';
+
   if (cid) {
-    tokens = parseTokens(await getConfig(chaveTokens(provedor, cid), null).catch(() => null));
+    const tokens = parseTokens(await getConfig(chaveTokens(provedor, cid), null).catch(() => null));
     _cache.tokens.set(chaveCacheTokens(provedor, cid), tokens || false);
+    if (tokens) return { tokens, origem: 'condominio' };
   }
-  if (tokens) return { tokens, origem: 'condominio' };
-  // Ligação global antiga (só Google Drive): mantém as instalações existentes.
-  if (provedor === 'google_drive') {
-    const legado = parseTokens(await getConfig(CHAVE_TOKENS_LEGADO, null).catch(() => null));
-    _cache.tokens.set(chaveCacheTokens(provedor, null), legado || false);
-    if (legado) return { tokens: legado, origem: 'legado' };
+
+  if (plataforma || admiteFallback || !cid) {
+    const chavePlataforma = chaveTokensPlataforma(provedor);
+    const tokensPlataforma = parseTokens(await getConfig(chavePlataforma, null).catch(() => null));
+    _cache.tokens.set(chaveCacheTokens(provedor, null), tokensPlataforma || false);
+    if (tokensPlataforma) {
+      return { tokens: tokensPlataforma, origem: plataforma ? 'plataforma' : 'plataforma_fallback' };
+    }
+  }
+
+  // Ligação antiga por variável de ambiente (mantida como último recurso).
+  if (!plataforma && provedor === 'google_drive') {
+    const env = String(process.env.GOOGLE_REFRESH_TOKEN || '').trim();
+    if (env) return { tokens: { refresh_token: env, origem: 'env' }, origem: 'env' };
   }
   return { tokens: null, origem: null };
 }
 
-// Síncrono (cache). Sem entrada em cache devolve o legado do Drive, quando existe.
-function tokensSync(provedor, condominioId) {
-  const cid = normalizarCondominio(condominioId);
+// Síncrono (cache) — mesmas regras do lerTokens.
+function tokensSync(provedor, condominioId, opcoes = {}) {
+  const plataforma = Boolean(opcoes.plataforma);
+  const cid = plataforma ? null : normalizarCondominio(condominioId);
+  const admiteFallback = provedor === 'google_drive';
   if (cid) {
     const t = _cache.tokens.get(chaveCacheTokens(provedor, cid));
     if (t) return { tokens: t, origem: 'condominio' };
   }
-  if (provedor === 'google_drive') {
-    const legado = _cache.tokens.get(chaveCacheTokens('google_drive', null));
-    if (legado) return { tokens: legado, origem: 'legado' };
+  if (plataforma || admiteFallback || !cid) {
+    const tp = _cache.tokens.get(chaveCacheTokens(provedor, null));
+    if (tp) return { tokens: tp, origem: plataforma ? 'plataforma' : 'plataforma_fallback' };
+  }
+  if (!plataforma && provedor === 'google_drive') {
     const env = String(process.env.GOOGLE_REFRESH_TOKEN || '').trim();
     if (env) return { tokens: { refresh_token: env, origem: 'env' }, origem: 'env' };
   }
@@ -185,12 +234,9 @@ function tokensSync(provedor, condominioId) {
 
 async function guardarTokens(provedor, condominioId, dados) {
   const cid = normalizarCondominio(condominioId);
-  const chave = cid ? chaveTokens(provedor, cid) : CHAVE_TOKENS_LEGADO;
-  // Lê sempre o valor atual da BD antes de fundir: nunca perde o refresh_token
-  // (a cache pode ainda não estar carregada quando o token é renovado).
-  const atuais = cid
-    ? parseTokens(await getConfig(chave, null).catch(() => null)) || {}
-    : parseTokens(await getConfig(CHAVE_TOKENS_LEGADO, null).catch(() => null)) || {};
+  const chave = cid ? chaveTokens(provedor, cid) : chaveTokensPlataforma(provedor);
+  // Lê sempre o valor atual da BD antes de fundir: nunca perde o refresh_token.
+  const atuais = parseTokens(await getConfig(chave, null).catch(() => null)) || {};
   const novos = {
     access_token: dados.access_token != null ? dados.access_token : atuais.access_token || null,
     refresh_token: dados.refresh_token != null ? dados.refresh_token : atuais.refresh_token || null,
@@ -204,12 +250,42 @@ async function guardarTokens(provedor, condominioId, dados) {
 
 async function limparTokens(provedor, condominioId) {
   const cid = normalizarCondominio(condominioId);
-  const chave = cid ? chaveTokens(provedor, cid) : CHAVE_TOKENS_LEGADO;
+  const chave = cid ? chaveTokens(provedor, cid) : chaveTokensPlataforma(provedor);
   await setConfig(chave, null);
   _cache.tokens.set(chaveCacheTokens(provedor, cid), false);
 }
 
-// ── Pasta raiz por provedor (opcional) ──────────────────────────────
+// ── Backups (instalação) ────────────────────────────────────────────
+// O dump da base de dados contém dados de TODOS os condomínios: o destino de
+// backups usa sempre a ligação de PLATAFORMA, nunca a de um condomínio.
+async function lerDestinoBackup() {
+  try {
+    const valor = await getConfig(CHAVE_BACKUP, null);
+    if (valor !== null && valor !== undefined && String(valor).trim() !== '') {
+      const nome = String(valor).trim().toLowerCase();
+      return locator.provedorValido(nome) ? nome : null;
+    }
+  } catch (err) {
+    // cai no valor por omissão
+  }
+  // Compatibilidade: sem escolha explícita usa o Drive se estiver ligado à
+  // plataforma e a opção antiga de backups no Drive não estiver desligada.
+  const antigo = await getConfig('drive_auto_backups', '1').catch(() => '1');
+  if (String(antigo) === '0') return null;
+  const drive = tokensSync('google_drive', null, { plataforma: true }).tokens;
+  return drive ? 'google_drive' : null;
+}
+
+async function definirDestinoBackup(nome) {
+  const alvo = nome === null || nome === '' ? null : String(nome).trim().toLowerCase();
+  if (alvo !== null && !locator.provedorValido(alvo)) {
+    throw new Error(`Provedor de backups desconhecido: ${nome}`);
+  }
+  await setConfig(CHAVE_BACKUP, alvo);
+  return alvo;
+}
+
+// ── Pasta raiz (por provedor) ───────────────────────────────────────
 async function lerRaiz(provedor, condominioId) {
   const cid = normalizarCondominio(condominioId);
   if (cid) {
@@ -235,34 +311,34 @@ function raizSync(provedor, condominioId) {
     const v = _cache.raizes.get(`${provedor}:${cid}`);
     if (v) return v;
   }
-  if (provedor === 'google_drive') {
-    const v = _cache.raizes.get('google_drive:legado');
-    if (v) return v;
-  }
+  if (provedor === 'google_drive') return _cache.raizes.get('google_drive:legado') || '';
   return '';
 }
 
 async function guardarRaiz(provedor, condominioId, valor) {
   const cid = normalizarCondominio(condominioId);
   const chave = cid ? chaveRaiz(provedor, cid) : CHAVE_RAIZ_LEGADO;
-  await setConfig(chave, String(valor || '').trim() || null);
-  if (String(valor || '').trim()) _cache.raizes.set(`${provedor}:${cid || 'legado'}`, String(valor).trim());
+  const limpo = String(valor || '').trim();
+  await setConfig(chave, limpo || null);
+  if (limpo) _cache.raizes.set(`${provedor}:${cid || 'legado'}`, limpo);
   else _cache.raizes.delete(`${provedor}:${cid || 'legado'}`);
 }
 
-// Utilitário de diagnóstico (nunca expõe tokens, só o estado).
-function resumoCache() {
+// ── Diagnóstico ─────────────────────────────────────────────────────
+function resumo(registo = null) {
+  const provedores = registo ? Object.keys(registo) : locator.provedores();
+  const comLigacao = (provedor, cid) => Boolean(tokensSync(provedor, cid).tokens);
   return {
     pronto: _cache.pronto,
-    provedores: Object.fromEntries(_cache.provedores),
-    ligacoes: [..._cache.tokens.entries()].map(([k, v]) => [k, v ? 'ligado' : 'sem tokens']),
-    raizes: Object.fromEntries(_cache.raizes),
+    principal: Object.fromEntries(_cache.principal),
+    plataforma: provedores.map((p) => ({ provedor: p, ligado: comLigacao(p, null) })),
+    ligacoes: [..._cache.tokens.keys()],
   };
 }
 
 function limparCache() {
   _cache.pronto = false;
-  _cache.provedores.clear();
+  _cache.principal.clear();
   _cache.tokens.clear();
   _cache.raizes.clear();
 }
@@ -270,23 +346,33 @@ function limparCache() {
 module.exports = {
   CHAVE_TOKENS_LEGADO,
   CHAVE_RAIZ_LEGADO,
+  CHAVE_BACKUP,
   PREFIXO_CHAVES,
+  SUFIXO_PLATAFORMA,
+  chavePrincipal,
   chaveProvedor,
   chaveTokens,
+  chaveTokensPlataforma,
   chaveRaiz,
   provedorPadrao,
-  provedorSync,
-  provedorDoCondominio,
-  definirProvedor,
+  principalSync,
+  principalDoCondominio,
+  definirPrincipal,
+  // aliases históricos (mesma semântica: armazenamento principal)
+  provedorSync: principalSync,
+  provedorDoCondominio: principalDoCondominio,
+  definirProvedor: definirPrincipal,
   lerTokens,
   tokensSync,
   guardarTokens,
   limparTokens,
+  lerDestinoBackup,
+  definirDestinoBackup,
   lerRaiz,
   raizSync,
   guardarRaiz,
   inicializar,
-  resumoCache,
+  resumo,
   limparCache,
   normalizarCondominio,
 };

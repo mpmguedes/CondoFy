@@ -126,28 +126,31 @@ const TAB4 = 'href="/admin/config/auditoria"';
   assert.ok(!r.corpo.includes('modalDesligarDrive'), 'config: sem modal do Drive no separador 1');
   assert.ok(!r.corpo.includes('Configurar automações'), 'config: botão antigo das automações removido');
 
-  // 2. Separador 2 — Armazenamento e Backups (mesmas funções, novo acesso)
+  // 2. Separador 2 — Armazenamento e Backups (serviços, principal e backups)
   r = await pedir('/admin/config/armazenamento');
   assert.strictEqual(r.status, 200, 'GET /admin/config/armazenamento responde 200');
   assert.ok(r.corpo.includes(`class="config-tab active" ${TAB2}`), 'armazenamento: separador 2 ativo');
-  assert.ok(r.corpo.includes('id="google-drive"') && r.corpo.includes('admin@gmail.com'), 'armazenamento: estado do Google Drive');
-  assert.ok(r.corpo.includes('Pasta de destino no Google Drive'), 'armazenamento: pasta de destino');
-  assert.ok(r.corpo.includes('name="backups_drive"'), 'armazenamento: backups da base de dados');
-  assert.ok(r.corpo.includes('action="/admin/config/drive/opcoes"'), 'armazenamento: gravação das opções');
-  assert.ok(r.corpo.includes('action="/admin/config/drive/testar"'), 'armazenamento: testar ligação');
-  assert.ok(r.corpo.includes('action="/admin/config/drive/estrutura"'), 'armazenamento: estrutura de pastas');
-  assert.ok(r.corpo.includes('modalDesligarDrive'), 'armazenamento: modal de desligar');
-  // Escolha do serviço de armazenamento do condomínio (multi-provedor)
-  assert.ok(r.corpo.includes('action="/admin/config/armazenamento/provedor"'), 'armazenamento: formulário do serviço');
-  assert.ok(r.corpo.includes('name="provedor"'), 'armazenamento: campo provedor');
+  // Três serviços, cada um com o seu cartão e estado.
+  assert.ok(r.corpo.includes('Serviços de armazenamento'), 'armazenamento: secção de serviços');
   for (const nome of ['google_drive', 'dropbox', 'onedrive']) {
-    assert.ok(r.corpo.includes(`value="${nome}"`), `armazenamento: provedor ${nome} disponível`);
+    assert.ok(r.corpo.includes(`id="${nome}"`), `armazenamento: cartão do serviço ${nome}`);
   }
+  assert.ok(r.corpo.includes('Google Drive') && r.corpo.includes('Dropbox') && r.corpo.includes('Microsoft OneDrive'), 'armazenamento: serviços nomeados');
+  // Armazenamento principal e backups são áreas separadas.
+  assert.ok(r.corpo.includes('Armazenamento principal'), 'armazenamento: secção do principal');
+  assert.ok(r.corpo.includes('action="/admin/config/armazenamento/principal"'), 'armazenamento: gravação do principal');
+  assert.ok(r.corpo.includes('Destino dos backups'), 'armazenamento: secção de backups');
+  assert.ok(r.corpo.includes('action="/admin/config/armazenamento/backups"'), 'armazenamento: gravação do destino de backups');
+  assert.ok(r.corpo.includes('name="pasta_raiz"'), 'armazenamento: pasta raiz do Google Drive mantida');
   assert.ok(r.corpo.includes('privados'), 'armazenamento: explica que os documentos ficam privados');
+  // Sem credenciais na instalação: mensagem amigável, nunca detalhes técnicos.
+  assert.ok(r.corpo.includes('Disponível após configuração pelo administrador do GesCondu.'), 'armazenamento: mensagem amigável');
+  assert.ok(!r.corpo.includes('.env'), 'armazenamento: nunca menciona .env');
+  assert.ok(!r.corpo.includes('desativada no'), 'armazenamento: sem mensagens de desativação técnica');
   assert.ok(!r.corpo.includes('name="designacao"'), 'armazenamento: sem campos do condomínio');
   assert.ok(!r.corpo.includes('auto_convocatoria_drive'), 'armazenamento: sem automações');
 
-  // 2.1 Provedor alternativo configurado mas ainda não ligado: a página mostra
+  // 2.1 Serviço disponível na instalação mas ainda não ligado: a página mostra
   // a ação de ligar (o fluxo OAuth é sempre iniciado pelo backend).
   process.env.DROPBOX_ENABLED = 'true';
   process.env.DROPBOX_APP_KEY = 'chave-de-teste';
@@ -156,7 +159,8 @@ const TAB4 = 'href="/admin/config/auditoria"';
     const rDropbox = await pedir('/admin/config/armazenamento');
     assert.ok(rDropbox.corpo.includes('href="/admin/config/armazenamento/dropbox/ligar"'), 'armazenamento: ligar Dropbox disponível');
     assert.ok(rDropbox.corpo.includes('Ligar Dropbox'), 'armazenamento: texto do botão de ligar');
-    assert.ok(!rDropbox.corpo.includes('href="/admin/config/armazenamento/onedrive/ligar"'), 'armazenamento: OneDrive desativado não mostra ligação');
+    assert.ok(rDropbox.corpo.includes('href="/admin/config/armazenamento/dropbox/ligar?ambito=plataforma"'), 'armazenamento: ligar Dropbox para backups');
+    assert.ok(!rDropbox.corpo.includes('href="/admin/config/armazenamento/onedrive/ligar"'), 'armazenamento: OneDrive sem credenciais não mostra ligação');
   } finally {
     delete process.env.DROPBOX_ENABLED;
     delete process.env.DROPBOX_APP_KEY;

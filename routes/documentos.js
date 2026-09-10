@@ -14,7 +14,7 @@ const { compor: comporEmail, nomeFicheiro: nomeFicheiroEmail } = require('../hel
 const { getCondominio, clearCondominioCache } = require('../helpers/condominio');
 const { PASTAS_BASE: PASTAS, mapaPastas, pastasPersonalizadas, novaKey, resolverPastaDocumento } = require('../helpers/documento-pastas');
 // Acesso autorizado a documentos (Utilizador → Condomínio → Documento).
-const { autorizarAcessoDocumento, servirDocumento, urlParaEmail, urlInterna } = require('../helpers/documentos-acesso');
+const { autorizarAcessoDocumento, servirDocumento, responderRecusa, urlParaEmail, urlInterna } = require('../helpers/documentos-acesso');
 
 const router = express.Router();
 // Isolamento: todas as operações usam o condomínio ativo (sessão validada).
@@ -109,7 +109,7 @@ router.get('/documentos', async (req, res) => {
       categorias,
       personalizadas,
       total: [...contagem.values()].reduce((s, n) => s + n, 0),
-      driveLigado: drive.isConfigured(),
+      driveLigado: drive.isConfigured(req.condominioId),
     });
   }
 
@@ -140,7 +140,7 @@ router.get('/documentos', async (req, res) => {
       return res.render('admin/documentos/recibos-anos', {
         titulo: 'Recibos de Pagamento',
         anos,
-        driveLigado: drive.isConfigured(),
+        driveLigado: drive.isConfigured(req.condominioId),
       });
     }
 
@@ -189,7 +189,7 @@ router.get('/documentos', async (req, res) => {
       titulo: 'Recibos de Pagamento',
       ano: anoRecibos,
       linhas,
-      driveLigado: drive.isConfigured(),
+      driveLigado: drive.isConfigured(req.condominioId),
     });
   }
 
@@ -207,7 +207,7 @@ router.get('/documentos', async (req, res) => {
     nDocumentos: documentos.length,
     pastas: mapa,
     pastaCustom: pasta && pasta.startsWith('c-') ? pasta : null,
-    driveLigado: drive.isConfigured(),
+    driveLigado: drive.isConfigured(req.condominioId),
   });
 });
 
@@ -216,7 +216,7 @@ router.get('/documentos', async (req, res) => {
 // (nunca aceite do browser). Cria/regista a pasta quando ainda não existe.
 router.get('/documentos/drive/pasta', async (req, res) => {
   try {
-    if (!drive.isConfigured()) {
+    if (!drive.isConfigured(req.condominioId)) {
       req.flash('error_msg', 'Google Drive não está ligado (Configuração → Google Drive).');
       return res.redirect('/admin/documentos');
     }
@@ -295,7 +295,7 @@ router.get('/documentos/nova', async (req, res) => {
     titulo: 'Novo documento',
     pastas: mapaPastas(cond),
     categoriasDoc,
-    driveLigado: drive.isConfigured(),
+    driveLigado: drive.isConfigured(req.condominioId),
   });
 });
 
@@ -324,8 +324,8 @@ router.post('/documentos', upload.single('ficheiro'), async (req, res) => {
     let driveUploadedAt = null;
 
     if (req.file) {
-      if (!drive.isConfigured()) {
-        req.flash('error_msg', 'Google Drive não está ligado — ligue a conta em Configuração ou indique apenas um URL externo.');
+      if (!drive.isConfigured(req.condominioId)) {
+        req.flash('error_msg', 'O armazenamento do condomínio não está ligado — ligue o serviço em Configuração → Armazenamento e Backups ou indique apenas um URL externo.');
         return res.redirect('/admin/documentos/nova');
       }
       const pastaId = await drive.pastaParaDocumento(tipo, ano, req.condominioId);
@@ -334,9 +334,12 @@ router.post('/documentos', upload.single('ficheiro'), async (req, res) => {
         mimeType: req.file.mimetype,
         buffer: req.file.buffer,
         parentFolderId: pastaId,
+        condominioId: req.condominioId,
       });
-      driveFileId = up.driveFileId;
-      driveUrl = up.url;
+      // Identificador do ficheiro no provedor de armazenamento principal do
+      // condomínio (pode ter prefixo dbx:/od:; sem prefixo = Google Drive).
+      driveFileId = up.localizador || up.driveFileId || null;
+      driveUrl = driveFileId ? null : up.url;
       drivePastaId = pastaId;
       mimeType = req.file.mimetype;
       tamanho = up.tamanho;
@@ -425,7 +428,7 @@ router.get('/documentos/:id/email', async (req, res) => {
     titulo: 'Enviar documento por email',
     documento,
     pessoas,
-    driveLigado: drive.isConfigured(),
+    driveLigado: drive.isConfigured(req.condominioId),
     emissorNome,
     temAnexo: Boolean(documento.drive_file_id),
   });
@@ -459,9 +462,9 @@ router.post('/documentos/:id/email', async (req, res) => {
   // Anexo (cópia independente): descarrega o ficheiro do Drive quando disponível.
   let anexoBuffer = null;
   let anexoNome = null;
-  if (documento.drive_file_id && drive.isConfigured()) {
+  if (documento.drive_file_id && drive.isConfigured(documento.condominio_id)) {
     try {
-      anexoBuffer = await drive.descargarArquivo(documento.drive_file_id);
+      anexoBuffer = await drive.descargarArquivo(documento.drive_file_id, documento.condominio_id);
       anexoNome = String(documento.nome || '').trim() || 'documento.pdf';
     } catch (err) {
       console.error('[documento-email] sem anexo:', err.message);
@@ -541,14 +544,13 @@ router.post('/documentos/:id/email', async (req, res) => {
 router.get('/documentos/:id/ficheiro', async (req, res) => {
   const autorizacao = await autorizarAcessoDocumento({ documentoId: req.params.id, req, area: 'gestao' });
   if (!autorizacao.ok) {
-    req.flash('error_msg', autorizacao.mensagem);
-    return res.redirect('/admin/documentos');
+    // 401 sem sessão / 403 de outro condomínio ou sem permissão / 404 inexistente.
+    return responderRecusa(res, autorizacao);
   }
   const disposicao = req.query.descarregar === '1' ? 'attachment' : 'inline';
   const servido = await servirDocumento({ documento: autorizacao.documento, req, res, disposicao, via: 'sessao' });
   if (!servido.ok && !res.headersSent) {
-    req.flash('error_msg', servido.mensagem);
-    return res.redirect('/admin/documentos');
+    return responderRecusa(res, servido);
   }
   return undefined;
 });

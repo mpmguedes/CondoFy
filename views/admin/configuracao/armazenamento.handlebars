@@ -3,258 +3,208 @@
 <div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
     <h1>Armazenamento e Backups</h1>
-    <p class="subtitle">Ligação ao Google Drive, pasta de destino e backups da base de dados</p>
+    <p class="subtitle">Serviços de armazenamento do condomínio, armazenamento principal dos documentos e backups</p>
   </div>
 </div>
 
 <div class="alert alert-info small">
   <span class="material-symbols-outlined me-1" aria-hidden="true">lock</span>
-  Os documentos ficam <strong>privados</strong> no serviço de armazenamento escolhido e são sempre
-  entregues pelo GesCondu, depois de verificar a sessão, o condomínio e as permissões do utilizador.
-  O GesCondu não cria links públicos (“qualquer pessoa com o link”) nem envia links do serviço por email.
+  Os documentos ficam <strong>privados</strong> no serviço de armazenamento e são sempre entregues pelo
+  GesCondu, depois de verificar a sessão, o condomínio e as permissões do utilizador. O GesCondu não cria
+  links públicos (“qualquer pessoa com o link”) nem envia links do serviço por email.
 </div>
 
-<div class="card mb-4" id="servico-armazenamento">
-  <div class="card-header bg-white"><i class="bi bi-hdd-network me-1"></i>Serviço de armazenamento do condomínio</div>
-  <div class="card-body">
-    <p class="text-muted small">
-      Escolha onde ficam guardados os documentos <strong>deste condomínio</strong>. Cada condomínio tem o
-      seu próprio serviço e a sua própria ligação (isolamento entre condomínios). Mudar de serviço não
-      esconde documentos antigos: o GesCondu sabe em que serviço ficou cada ficheiro e continua a
-      servi-lo.
-    </p>
-    <form action="/admin/config/armazenamento/provedor" method="POST">
-      <div class="row g-3">
-        {{#each armazenamento.provedores}}
-        <div class="col-12 col-md-4">
-          <div class="border rounded p-3 h-100 {{#if escolhido}}border-primary{{/if}}">
-            <div class="form-check mb-0">
-              <input class="form-check-input" type="radio" name="provedor" id="prov_{{nome}}" value="{{nome}}" {{#if escolhido}}checked{{/if}} />
-              <label class="form-check-label" for="prov_{{nome}}">
-                <span class="fw-semibold d-block">{{rotulo}}</span>
-              </label>
-            </div>
-            <div class="mt-2 d-flex flex-wrap gap-1">
-              {{#if ligado}}<span class="badge text-bg-success">Ligado</span>{{else}}<span class="badge text-bg-secondary">Não ligado</span>{{/if}}
-              {{#if escolhido}}<span class="badge text-bg-primary">Em uso</span>{{/if}}
+{{!-- ── Serviços de armazenamento do condomínio ─────────────────────── --}}
+<h2 class="h6 mt-3 mb-2">Serviços de armazenamento</h2>
+<div class="row g-3">
+  {{#each armazenamento.provedores}}
+  <div class="col-12 col-lg-4">
+    <div class="card h-100" id="{{nome}}">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">{{rotulo}}</span>
+        {{#if principal}}<span class="badge text-bg-primary">Principal</span>{{/if}}
+      </div>
+      <div class="card-body d-flex flex-column">
+        {{#if ligado}}
+          <p class="mb-1">
+            <span class="badge text-bg-success">Ligado ✓</span>
+            {{#if contaPlataforma}}<span class="badge text-bg-light border ms-1">conta da plataforma</span>{{/if}}
+          </p>
+          {{#if conta}}<p class="small fw-semibold mb-1"><i class="bi bi-person-circle me-1"></i>{{conta}}</p>{{/if}}
+          <p class="text-muted small">
+            {{#if principal}}É neste serviço que ficam os documentos deste condomínio.{{else}}Disponível para ser usado como armazenamento principal.{{/if}}
+          </p>
+          <div class="d-grid gap-2 mt-auto">
+            {{#unless principal}}
+            <form action="/admin/config/armazenamento/principal" method="POST">
+              <input type="hidden" name="provedor" value="{{nome}}" />
+              <button type="submit" class="btn btn-outline-primary w-100"><i class="bi bi-star me-1"></i>Tornar principal</button>
+            </form>
+            {{/unless}}
+            <div class="d-flex gap-2">
+              <form action="/admin/config/armazenamento/{{nome}}/testar" method="POST" class="flex-fill">
+                <button type="submit" class="btn btn-outline-secondary w-100"><i class="bi bi-plug me-1"></i>Testar ligação</button>
+              </form>
+              <form action="/admin/config/armazenamento/{{nome}}/desligar" method="POST" class="flex-fill"
+                    onsubmit="return confirm('Desligar {{rotulo}} deste condomínio? Os ficheiros já guardados não são apagados.');">
+                <button type="submit" class="btn btn-outline-danger w-100"><i class="bi bi-x-circle me-1"></i>Desligar</button>
+              </form>
             </div>
           </div>
-        </div>
-        {{/each}}
-      </div>
-      <button type="submit" class="btn btn-primary mt-3"><i class="bi bi-check2 me-1"></i>Guardar serviço</button>
-    </form>
-  </div>
-</div>
-
-<div class="row g-4">
-  <div class="col-12 col-lg-6">
-    <div class="card" id="google-drive">
-      <div class="card-header bg-white"><i class="bi bi-cloud me-1"></i>Google Drive</div>
-      <div class="card-body">
-        {{#if driveEstado.ativo}}
-          {{#if driveEstado.credenciais}}
-            {{#if driveEstado.ligado}}
-              {{#if driveEstado.viaEnv}}
-                {{!-- Ligado através do .env (legado) --}}
-                <p class="mb-2"><span class="badge text-bg-success">🟢 Ligado (via .env)</span></p>
-                <p class="text-muted small mb-3">
-                  A ligação está configurada através de <code>GOOGLE_REFRESH_TOKEN</code> no
-                  <code>.env</code>. Pode mantê-la ou passar a usar a conta Google ligada pela
-                  aplicação (recomendado).
-                </p>
-                <p class="small text-muted mb-2"><i class="bi bi-folder2 me-1"></i>Pasta de destino: <strong>{{driveOpcoes.pastaRaiz}}</strong></p>
-                <a href="/admin/config/drive/ligar" class="btn btn-primary w-100 mb-2">
-                  <i class="bi bi-google me-1"></i>Ligar com a conta Google
-                </a>
-                <form action="/admin/config/drive/estrutura" method="POST">
-                  <button type="submit" class="btn btn-outline-primary w-100 mb-2">
-                    <i class="bi bi-diagram-3 me-1"></i>Criar estrutura de pastas
-                  </button>
-                </form>
-                <p class="form-text mb-0">
-                  Para desligar completamente, remova <code>GOOGLE_REFRESH_TOKEN</code> do
-                  <code>.env</code>.
-                </p>
-              {{else}}
-                {{!-- Ligado à conta Google --}}
-                <p class="mb-2"><span class="badge text-bg-success">🟢 Ligado</span></p>
-                {{#if driveEstado.conta}}
-                <p class="mb-1 fw-semibold small"><i class="bi bi-person-circle me-1"></i>{{driveEstado.conta}}</p>
-                {{/if}}
-                <p class="small text-muted mb-3"><i class="bi bi-folder2 me-1"></i>Pasta de destino: <strong>{{driveOpcoes.pastaRaiz}}</strong></p>
-                <div class="d-grid gap-2 mb-2">
-                  <a href="https://drive.google.com" target="_blank" rel="noopener" class="btn btn-outline-primary">
-                    <i class="bi bi-box-arrow-up-right me-1"></i>Abrir Google Drive
-                  </a>
-                  <a href="#armazenamento" class="btn btn-outline-secondary">
-                    <i class="bi bi-folder-plus me-1"></i>Alterar pasta
-                  </a>
-                  <form action="/admin/config/drive/testar" method="POST">
-                    <button type="submit" class="btn btn-outline-secondary w-100">
-                      <i class="bi bi-plug me-1"></i>Testar ligação
-                    </button>
-                  </form>
-                  <form action="/admin/config/drive/estrutura" method="POST">
-                    <button type="submit" class="btn btn-outline-secondary w-100">
-                      <i class="bi bi-diagram-3 me-1"></i>Criar/verificar estrutura de pastas
-                    </button>
-                  </form>
-                </div>
-                <button type="button" class="btn btn-outline-danger w-100" data-bs-toggle="modal" data-bs-target="#modalDesligarDrive">
-                  <i class="bi bi-plug me-1"></i>Desligar Google Drive
-                </button>
-              {{/if}}
-            {{else}}
-              {{!-- Desligado (não ligado) --}}
-              <p class="mb-2"><span class="badge text-bg-danger">🔴 Desligado</span></p>
-              <p class="text-muted small mb-3">
-                Associe uma conta Google para guardar automaticamente documentos, recibos, avisos
-                e outros ficheiros do condomínio no Google Drive.
-              </p>
-              {{#unless driveEstado.redirectUriDefinido}}
-              <p class="alert alert-warning small py-2 px-3">
-                Defina também <code>GOOGLE_REDIRECT_URI</code> no <code>.env</code> antes de ligar.
-              </p>
-              {{/unless}}
-              <a href="/admin/config/drive/ligar" class="btn btn-primary w-100">
-                <i class="bi bi-google me-1"></i>Ligar Google Drive
-              </a>
-            {{/if}}
+        {{else}}
+          <p class="mb-1"><span class="badge text-bg-secondary">Não ligado</span></p>
+          {{#if disponivel}}
+            <p class="text-muted small">Associe uma conta {{rotulo}} para guardar aqui os documentos deste condomínio.</p>
+            <a href="/admin/config/armazenamento/{{nome}}/ligar" class="btn btn-primary w-100 mt-auto">
+              <i class="bi bi-box-arrow-in-right me-1"></i>Ligar {{rotulo}}
+            </a>
           {{else}}
-            {{!-- Credenciais em falta --}}
-            <p class="mb-2"><span class="badge text-bg-secondary">⚪ Não configurado</span></p>
             <p class="text-muted small mb-0">
-              Adicione as credenciais OAuth do Google no <code>.env</code>:
-              <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code> e
-              <code>GOOGLE_REDIRECT_URI</code>.
+              Disponível após configuração pelo administrador do GesCondu.
             </p>
           {{/if}}
-        {{else}}
-          {{!-- Integração desativada --}}
-          <p class="mb-2"><span class="badge text-bg-secondary">Desativado</span></p>
-          <p class="text-muted small mb-0">
-            A integração está desativada. Defina <code>GOOGLE_DRIVE_ENABLED=true</code> e as
-            credenciais OAuth no <code>.env</code>.
-          </p>
         {{/if}}
       </div>
     </div>
   </div>
+  {{/each}}
+</div>
 
-  <div class="col-12 col-lg-6">
-    {{#if driveLigado}}
-    <div class="card" id="armazenamento">
-      <div class="card-header bg-white"><i class="bi bi-diagram-3 me-1"></i>Armazenamento &amp; backups</div>
-      <div class="card-body">
-        <form action="/admin/config/drive/opcoes" method="POST" id="formPasta">
-          <div class="mb-2">
-            <label class="form-label small" for="pastaRaiz">Pasta de destino no Google Drive</label>
-            <input type="text" class="form-control" id="pastaRaiz" name="pasta_raiz" value="{{driveOpcoes.pastaRaiz}}" placeholder="ex.: CondoFy ou GesCondu" />
-            <div class="form-text">
-              A pasta guardada aqui é a única fonte de verdade e tem prioridade sobre o <code>.env</code>.
-              Se a pasta já existir, é reutilizada (nunca são criadas duplicadas). Pode indicar uma
-              pasta antiga (ex.: <code>CondoFy</code>) — os documentos existentes não são alterados.
-            </div>
+{{!-- ── Armazenamento principal dos documentos ──────────────────────── --}}
+<h2 class="h6 mt-4 mb-2">Armazenamento principal</h2>
+<div class="card mb-4">
+  <div class="card-body">
+    <p class="text-muted small">
+      Os documentos deste condomínio são guardados num único serviço — não são copiados automaticamente
+      para os outros. As automações de documentos (“Guardar no armazenamento”) usam o serviço escolhido aqui.
+    </p>
+    <form action="/admin/config/armazenamento/principal" method="POST" class="row g-2 align-items-end">
+      <div class="col-12 col-md-6">
+        <label class="form-label small" for="provedorPrincipal">Armazenamento principal dos documentos</label>
+        <select class="form-select" id="provedorPrincipal" name="provedor">
+          {{#each armazenamento.provedores}}
+          {{#if ligado}}
+          <option value="{{nome}}" {{#if principal}}selected{{/if}}>{{rotulo}}</option>
+          {{/if}}
+          {{/each}}
+        </select>
+      </div>
+      <div class="col-12 col-md-3">
+        <button type="submit" class="btn btn-primary w-100"><i class="bi bi-check2 me-1"></i>Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{{!-- ── Backups (da instalação) ─────────────────────────────────────── --}}
+<h2 class="h6 mt-4 mb-2">Backups</h2>
+<div class="card mb-4">
+  <div class="card-body">
+    <p class="text-muted small">
+      Os backups são da instalação do GesCondu e contêm dados de todos os condomínios — por isso usam uma
+      ligação própria da plataforma e podem ficar num serviço diferente do armazenamento dos documentos.
+    </p>
+
+    <div class="row g-3">
+      <div class="col-12 col-lg-7">
+        <form action="/admin/config/armazenamento/backups" method="POST" class="row g-2 align-items-end">
+          <div class="col-12 col-sm-7">
+            <label class="form-label small" for="destinoBackups">Destino dos backups</label>
+            <select class="form-select" id="destinoBackups" name="provedor">
+              <option value="nenhum" {{#unless armazenamento.backup.destino}}selected{{/unless}}>Só neste servidor (sem serviço externo)</option>
+              {{#each armazenamento.plataforma}}
+              {{#if ligado}}
+              <option value="{{nome}}" {{#if (eq nome ../armazenamento.backup.destino)}}selected{{/if}}>{{rotulo}}</option>
+              {{/if}}
+              {{/each}}
+            </select>
           </div>
-          <div class="form-check mb-3">
-            <input class="form-check-input" type="checkbox" name="backups_drive" value="on" id="backupsDrive" {{#if driveOpcoes.backupsDrive}}checked{{/if}} />
-            <label class="form-check-label small" for="backupsDrive">Guardar backups da base de dados no Google Drive</label>
+          <div class="col-12 col-sm-5">
+            <button type="submit" class="btn btn-primary w-100"><i class="bi bi-check2 me-1"></i>Guardar destino</button>
           </div>
-          <button type="submit" class="btn btn-outline-primary w-100"><i class="bi bi-check2 me-1"></i>Guardar pasta/opções</button>
         </form>
 
-        {{#if ultimoBackup}}
         <hr />
-        <div class="small">
-          <div class="fw-semibold mb-1">Último backup</div>
-          <div class="d-flex justify-content-between"><span class="text-muted">Data</span><span>{{formatDateTime ultimoBackup.data}}</span></div>
-          <div class="d-flex justify-content-between"><span class="text-muted">Tipo</span><span>{{ultimoBackup.tipo}}</span></div>
-          <div class="d-flex justify-content-between">
+
+        <div class="fw-semibold small mb-2">Ligações da plataforma (usadas pelos backups)</div>
+        <ul class="list-unstyled mb-0 small">
+          {{#each armazenamento.plataforma}}
+          <li class="d-flex justify-content-between align-items-center flex-wrap gap-2 py-1">
+            <span>
+              {{rotulo}}
+              {{#if ligado}}<span class="badge text-bg-success ms-1">Ligado ✓</span>
+              {{else}}<span class="badge text-bg-secondary ms-1">Não ligado</span>{{/if}}
+              {{#if (eq nome ../armazenamento.backup.destino)}}<span class="badge text-bg-primary ms-1">Destino</span>{{/if}}
+            </span>
+            <span class="d-flex gap-1">
+              {{#if ligado}}
+                <form action="/admin/config/armazenamento/{{nome}}/testar?ambito=plataforma" method="POST">
+                  <button type="submit" class="btn btn-sm btn-outline-secondary">Testar</button>
+                </form>
+                <form action="/admin/config/armazenamento/{{nome}}/desligar?ambito=plataforma" method="POST"
+                      onsubmit="return confirm('Desligar {{rotulo}} da plataforma? Os backups já guardados não são apagados.');">
+                  <button type="submit" class="btn btn-sm btn-outline-danger">Desligar</button>
+                </form>
+              {{else if disponivel}}
+                <a href="/admin/config/armazenamento/{{nome}}/ligar?ambito=plataforma" class="btn btn-sm btn-outline-primary">Ligar para backups</a>
+              {{else}}
+                <span class="text-muted">Disponível após configuração pelo administrador do GesCondu.</span>
+              {{/if}}
+            </span>
+          </li>
+          {{/each}}
+        </ul>
+      </div>
+
+      <div class="col-12 col-lg-5">
+        <div class="border rounded p-3 h-100">
+          <div class="fw-semibold small mb-2">Último backup</div>
+          {{#if ultimoBackup}}
+          <div class="d-flex justify-content-between small"><span class="text-muted">Data</span><span>{{formatDateTime ultimoBackup.data}}</span></div>
+          <div class="d-flex justify-content-between small"><span class="text-muted">Tipo</span><span>{{ultimoBackup.tipo}}</span></div>
+          <div class="d-flex justify-content-between small">
             <span class="text-muted">Estado</span>
             {{#if (eq ultimoBackup.estado 'concluido')}}<span class="badge text-bg-success">Concluído</span>
             {{else if (eq ultimoBackup.estado 'erro')}}<span class="badge text-bg-danger" title="{{ultimoBackup.erro}}">Erro</span>
             {{else}}<span class="badge text-bg-warning">Em curso</span>{{/if}}
           </div>
-        </div>
-        {{/if}}
-      </div>
-    </div>
-    {{/if}}
-  </div>
-</div>
-
-{{!-- Outros serviços (Dropbox, OneDrive, …): ligação por condomínio. --}}
-<div class="row g-4 mt-1">
-  {{#each armazenamento.provedores}}
-  {{#if (ne nome 'google_drive')}}
-  <div class="col-12 col-lg-6">
-    <div class="card" id="{{nome}}">
-      <div class="card-header bg-white"><i class="bi bi-cloud-arrow-up me-1"></i>{{rotulo}}</div>
-      <div class="card-body">
-        {{#if estado.ligado}}
-          <p class="mb-2">
-            <span class="badge text-bg-success">🟢 Ligado</span>
-            {{#if estado.conta}}<span class="fw-semibold small ms-1">{{estado.conta}}</span>{{/if}}
-            {{#if escolhido}}<span class="badge text-bg-primary ms-1">Em uso</span>{{/if}}
-          </p>
-          <p class="text-muted small">Os documentos deste condomínio são guardados nesta conta e servidos pelo GesCondu.</p>
-          <div class="d-grid gap-2">
-            <form action="/admin/config/armazenamento/{{nome}}/testar" method="POST">
-              <button type="submit" class="btn btn-outline-secondary w-100"><i class="bi bi-plug me-1"></i>Testar ligação</button>
-            </form>
-            <form action="/admin/config/armazenamento/{{nome}}/desligar" method="POST" onsubmit="return confirm('Desligar {{rotulo}}? Os ficheiros já guardados não são apagados.');">
-              <button type="submit" class="btn btn-outline-danger w-100"><i class="bi bi-x-circle me-1"></i>Desligar</button>
-            </form>
-          </div>
-        {{else if estado.ativo}}
-          {{#if estado.credenciais}}
-            <p class="mb-2"><span class="badge text-bg-danger">🔴 Desligado</span></p>
-            <p class="text-muted small">Ligue uma conta {{rotulo}} para guardar os documentos deste condomínio neste serviço.</p>
-            <a href="/admin/config/armazenamento/{{nome}}/ligar" class="btn btn-primary w-100">
-              <i class="bi bi-box-arrow-in-right me-1"></i>Ligar {{rotulo}}
-            </a>
           {{else}}
-            <p class="mb-2"><span class="badge text-bg-secondary">⚪ Não configurado</span></p>
-            <p class="text-muted small mb-0">
-              Adicione as credenciais de {{rotulo}} ao <code>.env</code> para poder ligar este serviço.
-            </p>
+          <p class="text-muted small mb-0">Ainda não existem backups registados.</p>
           {{/if}}
-        {{else}}
-          <p class="mb-2"><span class="badge text-bg-secondary">Desativado</span></p>
-          <p class="text-muted small mb-0">A integração {{rotulo}} está desativada no <code>.env</code>.</p>
-        {{/if}}
+        </div>
       </div>
     </div>
   </div>
-  {{/if}}
-  {{/each}}
 </div>
 
-{{!-- Modal de confirmação dupla — Desligar Google Drive --}}
-<div class="modal fade" id="modalDesligarDrive" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content border-danger">
-      <div class="modal-header bg-danger text-white">
-        <h5 class="modal-title"><i class="bi bi-exclamation-triangle me-1"></i>Desligar Google Drive</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+{{!-- ── Opções avançadas do Google Drive ────────────────────────────── --}}
+{{#if driveLigado}}
+<h2 class="h6 mt-4 mb-2">Opções avançadas do Google Drive</h2>
+<div class="card mb-4">
+  <div class="card-body">
+    <form action="/admin/config/drive/opcoes" method="POST" id="formPasta" class="row g-3 align-items-end">
+      <div class="col-12 col-lg-7">
+        <label class="form-label small" for="pastaRaiz">Pasta de destino no Google Drive</label>
+        <input type="text" class="form-control" id="pastaRaiz" name="pasta_raiz" value="{{driveOpcoes.pastaRaiz}}" placeholder="ex.: GesCondu" />
+        <div class="form-text">
+          Pasta raiz da conta Google. Se já existir, é reutilizada (nunca são criadas pastas duplicadas).
+          Os documentos de cada condomínio ficam sempre numa subpasta própria.
+        </div>
       </div>
-      <div class="modal-body">
-        <p><strong>Tem a certeza que pretende desligar o Google Drive?</strong></p>
-        <ul class="small text-muted mb-0">
-          <li>A aplicação deixará de conseguir gravar novos documentos no Google Drive.</li>
-          <li>Os documentos já existentes no Google Drive <strong>não serão apagados</strong>.</li>
-          <li>A conta Google não será apagada.</li>
-          <li>A autorização OAuth será removida da aplicação.</li>
-          <li>Será necessário voltar a autorizar o Google Drive para voltar a utilizar a integração.</li>
-        </ul>
+      <div class="col-12 col-lg-5">
+        <button type="submit" class="btn btn-outline-primary w-100"><i class="bi bi-check2 me-1"></i>Guardar pasta</button>
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <form action="/admin/config/drive/desligar" method="POST" class="d-inline">
-          <button type="submit" class="btn btn-danger">Desligar Google Drive</button>
-        </form>
-      </div>
+    </form>
+    <hr />
+    <div class="d-flex flex-wrap gap-2">
+      <form action="/admin/config/drive/testar" method="POST">
+        <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-plug me-1"></i>Testar ligação</button>
+      </form>
+      <form action="/admin/config/drive/estrutura" method="POST">
+        <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-diagram-3 me-1"></i>Criar/verificar estrutura de pastas</button>
+      </form>
+      <a href="/admin/documentos/drive/pasta" class="btn btn-outline-secondary"><i class="bi bi-folder2-open me-1"></i>Abrir pasta no Google Drive</a>
     </div>
   </div>
 </div>
+{{/if}}
