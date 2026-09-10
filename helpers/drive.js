@@ -13,12 +13,42 @@
 const { Readable } = require('stream');
 const { google } = require('googleapis');
 const { Op } = require('sequelize');
-const { getConfig, setConfig } = require('./config');
+// Ligações de armazenamento por condomínio (tokens/configuração) e planners
+// puros da hierarquia de pastas, partilhados por todos os provedores.
+const ligacoes = require('./armazenamento/ligacoes');
+const estrutura = require('./armazenamento/estrutura');
+const locator = require('./armazenamento/locator');
 
-const CHAVE_TOKENS = 'google_drive_tokens'; // JSON {access_token, refresh_token, expiry_date, conta}
+const PROVEDOR = 'google_drive';
 
-// Cache síncrona (para isConfigured() continuar síncrono, como os callers esperam).
-let _cache = { pronto: false, tokens: null };
+// ── Tokens ──────────────────────────────────────────────────────────
+// Geridos por helpers/armazenamento/ligacoes.js:
+//   · ligação global (comportamento de hoje) → chave 'google_drive_tokens';
+//   · ligação por condomínio                  → 'storage:tokens:google_drive:c<id>',
+//     com fallback automático à ligação global quando o condomínio não tem
+//     ligação própria (as instalações existentes não mudam de comportamento).
+function obterTokensSync(condominioId) {
+  return ligacoes.tokensSync(PROVEDOR, condominioId).tokens;
+}
+
+async function obterTokensDb(condominioId) {
+  const r = await ligacoes.lerTokens(PROVEDOR, condominioId);
+  return r.tokens;
+}
+
+async function gravarTokens(dados, condominioId) {
+  return ligacoes.guardarTokens(PROVEDOR, condominioId, dados);
+}
+
+async function limparTokens(condominioId) {
+  return ligacoes.limparTokens(PROVEDOR, condominioId);
+}
+
+// Carrega o estado das ligações para a cache síncrona (chamado no arranque da
+// aplicação e depois de ligar/desligar).
+async function inicializar() {
+  await ligacoes.inicializar();
+}
 
 // ── Configuração (variáveis de ambiente) ────────────────────────────
 function featureAtiva() {
@@ -42,59 +72,6 @@ function refreshTokenEnv() {
   return process.env.GOOGLE_REFRESH_TOKEN || '';
 }
 
-// ── Leitura/escrita de tokens ───────────────────────────────────────
-function parseTokens(valor) {
-  if (!valor) return null;
-  try {
-    const t = JSON.parse(valor);
-    return t && typeof t === 'object' ? t : null;
-  } catch (err) {
-    return null;
-  }
-}
-
-// Tokens atuais (BD com prioridade; .env apenas como legado).
-function obterTokensSync() {
-  if (_cache.pronto && _cache.tokens) return _cache.tokens;
-  const env = refreshTokenEnv();
-  return env ? { refresh_token: env, origem: 'env' } : null;
-}
-
-async function obterTokensDb() {
-  const valor = await getConfig(CHAVE_TOKENS, null);
-  return parseTokens(valor);
-}
-
-async function gravarTokens({ access_token, refresh_token, expiry_date, conta }) {
-  const atuais = (await obterTokensDb()) || {};
-  const novos = {
-    access_token: access_token != null ? access_token : atuais.access_token || null,
-    refresh_token: refresh_token != null ? refresh_token : atuais.refresh_token || null,
-    expiry_date: expiry_date != null ? expiry_date : atuais.expiry_date || null,
-    conta: conta != null ? conta : atuais.conta || null,
-  };
-  await setConfig(CHAVE_TOKENS, JSON.stringify(novos));
-  _cache = { pronto: true, tokens: novos };
-  return novos;
-}
-
-async function limparTokens() {
-  await setConfig(CHAVE_TOKENS, null);
-  _cache = { pronto: true, tokens: null };
-}
-
-// Carrega o estado para a cache síncrona (chamado no arranque da app e
-// depois de ligar/desligar).
-async function inicializar() {
-  try {
-    const t = await obterTokensDb();
-    _cache = { pronto: true, tokens: t };
-  } catch (err) {
-    console.error('[drive] não foi possível ler os tokens:', err.message);
-    _cache = { pronto: true, tokens: null };
-  }
-}
-
 // ── Cliente OAuth ───────────────────────────────────────────────────
 function criarCliente() {
   const c = credenciaisOAuth();
@@ -103,8 +80,10 @@ function criarCliente() {
 
 // Cliente com as credenciais guardadas; renova o access token
 // automaticamente e persiste os tokens novos na BD.
-function obterClienteAutenticado() {
-  const tokens = obterTokensSync();
+// `condominioId` é opcional: sem ele usa a ligação global (comportamento
+// anterior à abstração de múltiplos provedores).
+function obterClienteAutenticado(condominioId) {
+  const tokens = obterTokensSync(condominioId) || {};
   const cliente = criarCliente();
 
   const creds = { refresh_token: tokens.refresh_token || undefined };
@@ -114,36 +93,39 @@ function obterClienteAutenticado() {
 
   cliente.on('tokens', (novos) => {
     if (!novos || !(novos.access_token || novos.refresh_token)) return;
-    gravarTokens({
-      access_token: novos.access_token,
-      refresh_token: novos.refresh_token,
-      expiry_date: novos.expiry_date != null ? novos.expiry_date : novos.expires_in ? Date.now() + novos.expires_in * 1000 : null,
-    }).catch(() => {});
+    gravarTokens(
+      {
+        access_token: novos.access_token,
+        refresh_token: novos.refresh_token,
+        expiry_date: novos.expiry_date != null ? novos.expiry_date : novos.expires_in ? Date.now() + novos.expires_in * 1000 : null,
+      },
+      condominioId
+    ).catch(() => {});
   });
 
   return cliente;
 }
 
-function getDrive() {
-  return google.drive({ version: 'v3', auth: obterClienteAutenticado() });
+function getDrive(condominioId) {
+  return google.drive({ version: 'v3', auth: obterClienteAutenticado(condominioId) });
 }
 
 // ── Estado da integração ────────────────────────────────────────────
 // O estado "configurado" exige credenciais OAuth; a Drive API só é usada
 // depois de ligada uma conta (tokens na BD) ou em modo legado (.env).
-function isConfigured() {
+function isConfigured(condominioId) {
   if (!featureAtiva() || !temCredenciais()) return false;
-  const t = obterTokensSync();
+  const t = obterTokensSync(condominioId);
   return Boolean(t && (t.refresh_token || t.access_token));
 }
 
 // Estado detalhado para a interface de Configuração.
-async function estadoLigacao() {
+async function estadoLigacao(condominioId) {
   const ativo = featureAtiva();
   const credenciais = temCredenciais();
   const redirectUriDefinido = Boolean(credenciaisOAuth().redirectUri);
 
-  const dbTokens = await obterTokensDb();
+  const dbTokens = await obterTokensDb(condominioId);
   const envToken = refreshTokenEnv();
 
   const ligado = Boolean((dbTokens && (dbTokens.refresh_token || dbTokens.access_token)) || envToken);
@@ -319,19 +301,21 @@ async function criarPasta(nome, parentId) {
 }
 
 // Encontra uma pasta pelo nome (e pasta-mãe) ou cria-a — nunca duplica.
-async function encontrarOuCriarPasta(nome, parentId) {
-  const existente = await encontrarPastaPorNome(nome, parentId);
+async function encontrarOuCriarPasta(nome, parentId, condominioId) {
+  const existente = await encontrarPastaPorNome(nome, parentId, condominioId);
   if (existente) return existente;
-  return criarPasta(nome, parentId);
+  return criarPasta(nome, parentId, condominioId);
 }
 
 // Fonte única de verdade da pasta raiz no Google Drive.
-// Precedência: configuração guardada na BD → GOOGLE_DRIVE_ROOT_FOLDER (.env)
-// → pasta inicial "GesCondu". Nunca substitui uma pasta já configurada.
-async function obterNomeRaiz() {
+// Precedência: raiz do condomínio (storage:raiz:google_drive:c<id>) →
+// configuração global antiga (google_drive_root_folder) →
+// GOOGLE_DRIVE_ROOT_FOLDER (.env) → pasta inicial "GesCondu".
+// Nunca substitui uma pasta já configurada.
+async function obterNomeRaiz(condominioId) {
   try {
-    const dbRaiz = String((await getConfig('google_drive_root_folder', '')) || '').trim();
-    if (dbRaiz) return dbRaiz;
+    const raizCondominio = String((await ligacoes.lerRaiz(PROVEDOR, condominioId)) || '').trim();
+    if (raizCondominio) return raizCondominio;
   } catch (err) {
     // BD indisponível → segue para .env/fallback
   }
@@ -355,48 +339,15 @@ async function obterNomeRaiz() {
 // (coluna da migração 063). Nunca por nome de ficheiro, fração, tipo, ano,
 // email ou pasta. Ficheiros antigos (estrutura global <raiz>/<ano>/…) NÃO são
 // movidos: os Documentos continuam a apontar para os drive_file_id existentes.
-
-// Nome amigável da pasta do condomínio na raiz (nunca o id no nome).
-function nomePastaCondominio(cond) {
-  const nome = String((cond && cond.designacao) || '').trim();
-  if (nome) {
-    // Nomes puramente numéricos colidiriam com as pastas de anos antigas
-    // (<raiz>/<ano>); o prefixo mantém a árvore legível e sem ambiguidade.
-    if (/^\d+$/.test(nome)) return `Condomínio ${nome}`;
-    return nome;
-  }
-  return cond && cond.id ? `Condomínio ${cond.id}` : 'Condomínio';
-}
-
-// Rótulo físico da subpasta por tipo de documento (mesmo mapeamento antigo).
-const SUBPASTA_POR_TIPO = {
-  ata: 'Assembleias',
-  convocatoria: 'Assembleias',
-  aviso_quota: 'Quotas',
-  recibo: 'Recibos',
-  fatura: 'Despesas',
-  contrato: 'Contratos',
-  relatorio: 'Outros',
-  orcamento: 'Outros',
-  outro: 'Outros',
-};
-
-function subpastaDoTipo(tipo) {
-  return SUBPASTA_POR_TIPO[tipo] || 'Outros';
-}
-
-// Planners puros do caminho físico (usados pelos resolvedores reais e pelos
-// testes offline — fonte única de verdade para os nomes da hierarquia).
-function caminhoPastaDocumento({ raiz, condominioNome, ano, tipo }) {
-  return [raiz, condominioNome, String(ano || new Date().getFullYear()), subpastaDoTipo(tipo)];
-}
-
-function caminhoPastaFornecedor({ raiz, condominioNome, ano, nome, subpasta = 'Comprovativos' }) {
-  return [raiz, condominioNome, String(ano || new Date().getFullYear()), 'Fornecedores', String(nome || 'Fornecedor'), String(subpasta || 'Outros')];
-}
+//
+// Os nomes da hierarquia vivem em helpers/armazenamento/estrutura.js (fonte
+// única de verdade, partilhada por todos os provedores de armazenamento) e são
+// reexportados aqui para manter a API histórica deste módulo.
 
 // Link para abrir uma pasta do Google Drive. A aplicação sabe condominio_id →
 // drive_folder_id e gera o link; o administrador nunca precisa do folderId.
+// É um atalho de administração para o painel do fornecedor: os DOCUMENTOS
+// nunca são servidos por links do fornecedor (ver helpers/documentos-acesso.js).
 function linkPastaDrive(folderId) {
   return folderId ? `https://drive.google.com/drive/folders/${folderId}` : null;
 }
@@ -427,9 +378,9 @@ async function obterPastaCondominioId(condominioId) {
   if (cond.estado === 'inativo') {
     throw new Error(`O condomínio "${nomePastaCondominio(cond)}" está inativo — não são criadas pastas novas no Google Drive.`);
   }
-  const raizId = await encontrarOuCriarPasta(await obterNomeRaiz());
+  const raizId = await encontrarOuCriarPasta(await obterNomeRaiz(cid), null, cid);
   const nome = nomePastaCondominio(cond);
-  const existenteId = await encontrarPastaPorNome(nome, raizId);
+  const existenteId = await encontrarPastaPorNome(nome, raizId, cid);
   if (existenteId) {
     // Adota a pasta existente apenas se nenhum OUTRO condomínio a registou.
     const outroDono = await Condominio.findOne({
@@ -444,7 +395,7 @@ async function obterPastaCondominioId(condominioId) {
     // pastas com o mesmo nome; o id registado resolve sem ambiguidade).
     console.warn(`[drive] pasta "${nome}" já registada noutro condomínio — criada pasta própria.`);
   }
-  const criadaId = await criarPasta(nome, raizId);
+  const criadaId = await criarPasta(nome, raizId, cid);
   await registarPastaCondominio(cid, criadaId);
   return criadaId;
 }
@@ -455,21 +406,21 @@ async function obterPastaCondominioId(condominioId) {
 //    legado — usado pelos backups automáticos, que são infraestrutura global).
 // A pasta Backups é sempre global (<raiz>/Backups).
 async function criarEstruturaPastas(condominioId = null, ano = new Date().getFullYear()) {
-  const raizId = await encontrarOuCriarPasta(await obterNomeRaiz());
-  const nomes = ['Assembleias', 'Quotas', 'Recibos', 'Despesas', 'Contratos', 'Outros'];
+  const cid = ligacoes.normalizarCondominio(condominioId);
+  const raizId = await encontrarOuCriarPasta(await obterNomeRaiz(cid), null, cid);
   const subpastas = {};
   let condominioFolderId = null;
   let anoId;
-  if (condominioId) {
-    condominioFolderId = await obterPastaCondominioId(condominioId);
-    anoId = await encontrarOuCriarPasta(String(ano), condominioFolderId);
+  if (cid) {
+    condominioFolderId = await obterPastaCondominioId(cid);
+    anoId = await encontrarOuCriarPasta(String(ano), condominioFolderId, cid);
   } else {
-    anoId = await encontrarOuCriarPasta(String(ano), raizId);
+    anoId = await encontrarOuCriarPasta(String(ano), raizId, null);
   }
-  for (const nome of nomes) {
-    subpastas[nome] = await encontrarOuCriarPasta(nome, anoId);
+  for (const nome of estrutura.NOMES_PASTAS_ANO) {
+    subpastas[nome] = await encontrarOuCriarPasta(nome, anoId, cid);
   }
-  const backupsId = await encontrarOuCriarPasta('Backups', raizId);
+  const backupsId = await encontrarOuCriarPasta('Backups', raizId, cid);
   return { raizId, condominioFolderId, anoId, subpastas, backupsId };
 }
 
@@ -481,8 +432,8 @@ async function pastaParaDocumento(tipo, ano, condominioId) {
   if (!cid) {
     throw new Error('condominioId é obrigatório para determinar a pasta do documento no Google Drive.');
   }
-  const estrutura = await criarEstruturaPastas(cid, ano || new Date().getFullYear());
-  return estrutura.subpastas[subpastaDoTipo(tipo)];
+  const arvore = await criarEstruturaPastas(cid, ano || new Date().getFullYear());
+  return arvore.subpastas[subpastaDoTipo(tipo)];
 }
 
 // Pasta de comprovativos de um fornecedor, DENTRO da árvore do condomínio
@@ -499,28 +450,49 @@ async function pastaParaFornecedor({ condominioId, nome, ano, subpasta = 'Compro
   }
   const condominioFolderId = await obterPastaCondominioId(cid);
   const anoNum = ano || new Date().getFullYear();
-  const anoId = await encontrarOuCriarPasta(String(anoNum), condominioFolderId);
-  const fornecedoresId = await encontrarOuCriarPasta('Fornecedores', anoId);
-  const fornecedorId = await encontrarOuCriarPasta(String(nome || 'Fornecedor'), fornecedoresId);
-  const subId = await encontrarOuCriarPasta(String(subpasta || 'Outros'), fornecedorId);
+  const anoId = await encontrarOuCriarPasta(String(anoNum), condominioFolderId, cid);
+  const fornecedoresId = await encontrarOuCriarPasta('Fornecedores', anoId, cid);
+  const fornecedorId = await encontrarOuCriarPasta(String(nome || 'Fornecedor'), fornecedoresId, cid);
+  const subId = await encontrarOuCriarPasta(String(subpasta || 'Outros'), fornecedorId, cid);
   return { condominioFolderId, anoId, fornecedoresId, fornecedorId, subpastaId: subId };
 }
 
-// Descarrega um ficheiro do Drive para um Buffer (para anexar em email).
-async function descargarArquivo(fileId) {
+// Descarrega um ficheiro do Drive para um Buffer (ex.: para anexar em email).
+async function descargarArquivo(fileId, condominioId) {
   return operacaoDrive(async () => {
-    const res = await getDrive().files.get({ fileId, alt: 'media' }, { responseType: 'stream' });
+    const res = await getDrive(condominioId).files.get({ fileId, alt: 'media' }, { responseType: 'stream' });
     const chunks = [];
     for await (const c of res.data) chunks.push(c);
     return Buffer.concat(chunks);
   });
 }
 
+// Abre um ficheiro do Drive como FLUXO (para servir ao cliente através do
+// GesCondu, sem expor links do fornecedor). Usado por
+// helpers/documentos-acesso.js depois da verificação de autorização.
+async function abrirFluxo(fileId, condominioId) {
+  return operacaoDrive(async () => {
+    const res = await getDrive(condominioId).files.get(
+      { fileId, alt: 'media' },
+      { responseType: 'stream' }
+    );
+    return {
+      fluxo: res.data,
+      tamanho: res.headers && res.headers['content-length'] ? Number(res.headers['content-length']) : null,
+      nome: null,
+    };
+  });
+}
+
 // ── Upload ──────────────────────────────────────────────────────────
 // Faz upload de um Buffer para o Drive.
-async function uploadArquivo({ nome, mimeType, buffer, parentFolderId }) {
+// Devolve as chaves novas do contrato de armazenamento (provedorFileId,
+// localizador, tamanho, pastaId) e mantém as antigas (driveFileId, url) para
+// os chamadores existentes. `localizador` fica sem prefixo no Google Drive
+// (compatível com os ids já gravados em documentos.drive_file_id).
+async function uploadArquivo({ nome, mimeType, buffer, parentFolderId, condominioId }) {
   return operacaoDrive(async () => {
-    const drive = getDrive();
+    const drive = getDrive(condominioId);
     const res = await drive.files.create({
       requestBody: {
         name: nome,
@@ -530,8 +502,12 @@ async function uploadArquivo({ nome, mimeType, buffer, parentFolderId }) {
       media: { mimeType: mimeType || 'application/pdf', body: Readable.from(buffer) },
       fields: 'id, webViewLink, size',
     });
+    const id = res.data.id;
     return {
-      driveFileId: res.data.id,
+      provedorFileId: id,
+      localizador: locator.montar(PROVEDOR, id),
+      pastaId: parentFolderId || null,
+      driveFileId: id,
       url: res.data.webViewLink || null,
       tamanho: res.data.size ? parseInt(res.data.size, 10) : null,
     };
@@ -553,12 +529,18 @@ module.exports = {
   pastaParaFornecedor,
   descargarArquivo,
   uploadArquivo,
+  abrirFluxo,
   encontrarOuCriarPasta,
-  // Estrutura por condomínio (multi-condomínio)
-  nomePastaCondominio,
-  subpastaDoTipo,
-  caminhoPastaDocumento,
-  caminhoPastaFornecedor,
+  // Estrutura por condomínio (multi-condomínio). As funções puras vivem em
+  // helpers/armazenamento/estrutura.js (fonte única) e são reexportadas para
+  // manter a API histórica deste módulo.
+  SUBPASTA_POR_TIPO: estrutura.SUBPASTA_POR_TIPO,
+  NOMES_PASTAS_ANO: estrutura.NOMES_PASTAS_ANO,
+  nomePastaCondominio: estrutura.nomePastaCondominio,
+  subpastaDoTipo: estrutura.subpastaDoTipo,
+  caminhoPastaDocumento: estrutura.caminhoPastaDocumento,
+  caminhoPastaFornecedor: estrutura.caminhoPastaFornecedor,
   obterPastaCondominioId,
   linkPastaDrive,
+  linkPasta: linkPastaDrive,
 };
