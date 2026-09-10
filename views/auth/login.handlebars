@@ -6,12 +6,22 @@
   .auth-flash { max-width: 480px; margin: 0 auto; padding-top: 1rem; }
 
   /* Logótipo da entrada: versão horizontal com fundo transparente, pensada para
-     superfícies escuras. No computador fica ao dobro do tamanho usado nas
-     outras páginas públicas; no telemóvel é dimensionado pela largura para
-     caber ao lado dos controlos de aparência. */
-  .auth-logo img { height: clamp(112px, 10.8vw, 176px); width: auto; max-width: 100%; }
+     superfícies escuras, maior do que nas restantes páginas públicas. No
+     telemóvel é dimensionado pela largura para caber bem. */
+  .auth-logo img { height: clamp(104px, 9.5vw, 150px); width: auto; max-width: 100%; }
   @media (max-width: 575.98px) {
     .auth-logo img { height: auto; width: min(60vw, 220px); }
+  }
+
+  /* Caixa de entrada mais alta (centrada): o cabeçalho fica mais compacto e,
+     nos ecrãs de menor altura, a caixa encolhe ao conteúdo em vez de forçar a
+     altura mínima definida — assim o conjunto cabe na janela e fica centrado
+     em vez de “cair” para baixo. */
+  .auth-head { padding-bottom: 0; }
+  .auth-stage { padding-top: 0; }
+  @media (max-height: 860px) {
+    .auth-panel-inner { min-height: 0; }
+    .auth-head { padding-top: clamp(20px, 3vh, 34px); }
   }
 </style>
 
@@ -20,7 +30,6 @@
     <a class="auth-logo" href="/" title="GesCondu">
       <img src="/img/gescondu-logo-ativo.png" alt="GesCondu" />
     </a>
-    {{> _tema-toggle}}
   </header>
 
   <div class="auth-stage">

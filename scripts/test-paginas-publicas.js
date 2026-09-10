@@ -9,7 +9,7 @@
 //  · GET /politica-privacidade e GET /termos respondem 200 sem sessão;
 //  · não redirecionam para o login nem exigem condomínio ativo;
 //  · o conteúdo essencial é servido no HTML (não depende de JavaScript);
-//  · o título, o layout público e os controlos de aparência são os da aplicação;
+//  · o título, o layout público e o rodapé são os da aplicação;
 //  · as ligações internas apontam para rotas existentes (sem links quebrados);
 //  · a identificação/contacto vêm da configuração: com variáveis LEGAL_*
 //    definidas desaparecem os marcadores «[CONFIGURAR …]».
@@ -93,7 +93,9 @@ async function main() {
     'título da página correto'
   );
   assert.ok(r.corpo.includes('class="auth-page pagina-legal"'), 'usa a casca pública das páginas legais');
-  assert.ok(r.corpo.includes('data-tema-toggle') && r.corpo.includes('data-fonte-opcao="xlarge"'), 'mantém os controlos de aparência da aplicação');
+  // Os controlos de aparência (tema e tamanho do texto) existem apenas depois
+  // de iniciar sessão: nas páginas públicas não aparecem.
+  assert.ok(!r.corpo.includes('data-tema-toggle') && !r.corpo.includes('data-fonte-opcao'), 'páginas públicas sem controlos de aparência');
 
   // Conteúdo essencial servido no HTML (sem depender de JavaScript).
   const conteudoPolitica = [

@@ -285,16 +285,27 @@ function testarControloNaInterface() {
     );
   }
 
-  // O controlo aparece onde já existia o de claro/escuro (cabeçalho, login e
-  // seleção de condomínios) — sem criar páginas nem painéis novos.
-  for (const ficheiro of ['views/layouts/main.handlebars', 'views/auth/login.handlebars', 'views/condominios/meus.handlebars']) {
-    assert.ok(ler(ficheiro).includes('{{> _tema-toggle}}'), `${ficheiro}: controlo de aparência incluído`);
-  }
+  // O controlo existe UMA vez, no cabeçalho da aplicação (depois de iniciar
+  // sessão): nas páginas públicas (homepage, entrada, escolha de condomínio e
+  // páginas legais) não aparece — é uma opção de quem já está autenticado.
+  assert.ok(
+    ler('views/layouts/main.handlebars').includes('{{> _tema-toggle}}'),
+    'o controlo de aparência está no cabeçalho da aplicação (autenticado)'
+  );
   // No cabeçalho fica exatamente ao lado do botão de claro/escuro.
   assert.ok(
     /\{\{> _tema-toggle\}\}[\s\S]{0,200}?title="Notificações"/.test(ler('views/layouts/main.handlebars')),
     'o botão do tamanho fica na mesma zona do cabeçalho que o do tema'
   );
+  const publicas = [
+    'views/publicas/home.handlebars',
+    'views/auth/login.handlebars',
+    'views/condominios/meus.handlebars',
+    'views/partials/_pagina-legal.handlebars',
+  ];
+  for (const ficheiro of publicas) {
+    assert.ok(!ler(ficheiro).includes('_tema-toggle'), `${ficheiro}: sem controlos de aparência (só depois do login)`);
+  }
 }
 
 // ── 7. Aviso de documento na aplicação (sem nova janela) ────────────
