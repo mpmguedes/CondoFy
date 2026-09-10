@@ -88,6 +88,15 @@ function rotuloPrincipal(condominioId) {
   return 'serviço de armazenamento do condomínio';
 }
 
+// Ícone do serviço de armazenamento principal (Bootstrap Icons), para a
+// interface identificar o serviço sem ambiguidade. Monocromático.
+function iconePrincipal(condominioId) {
+  const nome = ligacoes.principalSync(condominioId, REGISTO);
+  const p = REGISTO[nome];
+  if (p && p.isConfigured(condominioId) && typeof p.icone === 'function') return p.icone();
+  return 'bi bi-hdd-network';
+}
+
 // Nem todos os serviços expõem link da pasta no painel do fornecedor (só o
 // Google Drive; Dropbox e OneDrive não criam partilhas). Usa a capacidade do
 // adaptador, sem fixar nomes de provedores.
@@ -326,6 +335,7 @@ module.exports = {
   nomePrincipalDoCondominio,
   nomeDoCondominio,
   rotuloPrincipal,
+  iconePrincipal,
   abrePastaNoFornecedor,
   definirPrincipalDoCondominio,
   definirProvedorDoCondominio,

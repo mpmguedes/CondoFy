@@ -10,7 +10,7 @@
 
 <div class="alert alert-info small">
   <span class="material-symbols-outlined me-1">info</span>
-  “Guardar no {{armazenamentoRotulo}}” e “Enviar automaticamente por email” são opções
+  “Guardar no {{@root.armazenamentoRotulo}}” e “Enviar automaticamente por email” são opções
   <strong>independentes</strong>. Nada é enviado ou guardado automaticamente sem uma
   configuração explícita aqui.
 </div>
@@ -24,7 +24,7 @@
         <thead class="table-light">
           <tr>
             <th>Documento</th>
-            <th style="width:180px"><i class="bi bi-cloud-arrow-up me-1"></i>Guardar no {{armazenamentoRotulo}}</th>
+            <th style="width:180px"><i class="{{@root.armazenamentoIcone}} me-1"></i>Guardar no {{@root.armazenamentoRotulo}}</th>
             <th style="width:180px"><i class="bi bi-send me-1"></i>Disponível para email</th>
             <th style="width:180px"><i class="bi bi-lightning-charge me-1"></i>Enviar automaticamente</th>
             <th style="width:110px">Estado</th>
@@ -37,7 +37,7 @@
             <td>
               <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" role="switch" id="auto_{{tipo}}_drive" name="auto_{{tipo}}_drive" value="on" {{#if drive}}checked{{/if}} />
-                <label class="form-check-label small" for="auto_{{tipo}}_drive">Drive</label>
+                <label class="form-check-label small" for="auto_{{tipo}}_drive">Guardar</label>
               </div>
             </td>
             <td>
@@ -54,7 +54,7 @@
             </td>
             <td>
               {{#if automatico}}<span class="badge text-bg-info">Automático</span>
-              {{else if drive}}<span class="badge text-bg-primary">Drive</span>
+              {{else if drive}}<span class="badge text-bg-primary">Guardar</span>
               {{else}}<span class="badge text-bg-secondary">Manual</span>{{/if}}
             </td>
           </tr>

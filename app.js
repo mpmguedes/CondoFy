@@ -138,6 +138,7 @@ app.use(async (req, res, next) => {
   // vez de escreverem "Drive" fixo. Fica global, num único ponto.
   res.locals.armazenamentoRotulo = storage.rotuloPrincipal(res.locals.condominioAtivo && res.locals.condominioAtivo.id);
   res.locals.armazenamentoAbrePasta = storage.abrePastaNoFornecedor(res.locals.condominioAtivo && res.locals.condominioAtivo.id);
+  res.locals.armazenamentoIcone = storage.iconePrincipal(res.locals.condominioAtivo && res.locals.condominioAtivo.id);
   res.locals.tarefas = background.resumo();
   // Dados para o aviso de expiração da sessão no cliente (só quando autenticado).
   res.locals.sessaoExpiraEm = req.user ? sessao.expiraEm(req.session) : null;

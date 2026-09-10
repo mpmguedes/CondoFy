@@ -43,6 +43,9 @@
 const METODOS_OBRIGATORIOS = [
   'nome',
   'rotulo',
+  // Classe de ícone (Bootstrap Icons) do serviço, para a interface o
+  // identificar sem ambiguidade. Monocromático, sem logótipos de marca.
+  'icone',
   'capacidades',
   'featureAtiva',
   'temCredenciais',

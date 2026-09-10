@@ -29,6 +29,7 @@ async function estadoLigacao(condominioId) {
 module.exports = {
   nome: () => 'google_drive',
   rotulo: () => 'Google Drive',
+  icone: () => 'bi bi-google',
 
   capacidades,
 

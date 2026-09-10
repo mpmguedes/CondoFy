@@ -235,7 +235,7 @@
             <tr>
               <th>Evento</th>
               <th style="width:120px"><i class="bi bi-envelope me-1"></i>Enviar email</th>
-              <th style="width:140px"><i class="bi bi-cloud me-1"></i>Guardar no {{armazenamentoRotulo}}</th>
+              <th style="width:140px"><i class="{{@root.armazenamentoIcone}} me-1"></i>Guardar no {{@root.armazenamentoRotulo}}</th>
             </tr>
           </thead>
           <tbody>
@@ -251,7 +251,7 @@
               <td>
                 <div class="form-check form-switch">
                   <input class="form-check-input" type="checkbox" role="switch" id="notif_{{evento}}_drive" name="notif_{{evento}}_drive" value="on" {{#if drive}}checked{{/if}} />
-                  <label class="form-check-label small" for="notif_{{evento}}_drive">Drive</label>
+                  <label class="form-check-label small" for="notif_{{evento}}_drive">Guardar</label>
                 </div>
               </td>
             </tr>
@@ -262,7 +262,7 @@
       <div class="form-text mb-3">
         <i class="bi bi-info-circle me-1"></i>
         A preferência aplica-se aos envios automáticos existentes (recibo do pagamento e avisos
-        de quotas em atraso). O canal “Guardar no {{armazenamentoRotulo}}” fica disponível para os fluxos automáticos
+        de quotas em atraso). O canal “Guardar no {{@root.armazenamentoRotulo}}” fica disponível para os fluxos automáticos
         futuros; nos restantes documentos a ação de guardar é manual em cada módulo.
       </div>
       <button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i>Guardar notificações</button>

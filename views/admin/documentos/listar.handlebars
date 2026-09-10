@@ -58,7 +58,7 @@
           <th>Categorias</th>
           <th>Tipo</th>
           <th>Data</th>
-          <th>Armazenamento</th>
+          <th><i class="{{@root.armazenamentoIcone}} me-1"></i>Armazenamento</th>
           <th>Condóminos</th>
           <th class="text-end">Ações</th>
         </tr>
@@ -86,7 +86,7 @@
           </td>
           <td class="text-nowrap">{{formatDate data}}</td>
           <td>
-            {{#if (eq drive_status 'guardado')}}<span class="badge text-bg-success" title="Guardado no {{armazenamentoRotulo}}">☁ Guardado</span>
+            {{#if (eq drive_status 'guardado')}}<span class="badge text-bg-success" title="Guardado no {{@root.armazenamentoRotulo}}">☁ Guardado</span>
             {{else if (eq drive_status 'erro')}}<span class="badge text-bg-danger" title="{{drive_erro}}">Erro</span>
             {{else if (eq drive_status 'pendente')}}<span class="badge text-bg-warning">A guardar</span>
             {{else}}<span class="badge text-bg-secondary">Não guardado</span>{{/if}}

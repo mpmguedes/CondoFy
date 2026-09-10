@@ -860,6 +860,7 @@ module.exports = {
   // Identificação
   nome,
   rotulo,
+  icone: () => 'bi bi-microsoft',
   capacidades,
   // Configuração/estado
   featureAtiva,

@@ -122,7 +122,7 @@
   <div class="card-body">
     <div class="form-check form-switch mb-2">
       <input class="form-check-input" type="checkbox" role="switch" id="guardarDrive" name="guardar_drive" value="on" {{#if autoQuotas.drive}}checked{{/if}} {{#unless driveLigado}}disabled{{/unless}} />
-      <label class="form-check-label" for="guardarDrive">Guardar automaticamente no {{armazenamentoRotulo}}</label>
+      <label class="form-check-label" for="guardarDrive"><i class="{{@root.armazenamentoIcone}} me-1"></i>Guardar automaticamente no {{@root.armazenamentoRotulo}}</label>
       {{#unless driveLigado}}<div class="form-text">Ligue um serviço de armazenamento em Configurações → Armazenamento e Backups para ativar esta opção.</div>{{/unless}}
     </div>
     <div class="form-check form-switch mb-2">

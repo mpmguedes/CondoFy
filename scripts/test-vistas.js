@@ -480,25 +480,30 @@ assert.ok(html.includes('Biblioteca'), 'listagem: breadcrumb da biblioteca');
 
 // 17.1 As vistas mostram o SERVIÇO DE ARMAZENAMENTO ativo (não "Drive" fixo):
 // o rótulo vem de res.locals.armazenamentoRotulo (helpers/storage.rotuloPrincipal).
-const ctxRotulo = { armazenamentoRotulo: 'Dropbox' };
+const ctxRotulo = { armazenamentoRotulo: 'Dropbox', armazenamentoIcone: 'bi bi-dropbox' };
 html = automacoesVista({ titulo: 'Documentos e Automações', grupos: gruposAuto, ...ctxRotulo });
 assert.ok(html.includes('Guardar no Dropbox'), 'automações: etiqueta com o serviço ativo');
+assert.ok(html.includes('bi bi-dropbox'), 'automações: ícone do serviço ativo');
+assert.ok(!html.includes('>Drive<'), 'automações: interruptor sem "Drive"');
 assert.ok(!html.includes('Guardar no Drive'), 'automações: sem "Drive" fixo');
 assert.ok(html.includes('name="auto_convocatoria_drive"'), 'automações: chave de configuração inalterada');
 
 html = emailsView({ titulo: 'Emails', emails: [], filtro: 'pendentes', contagens: { total: 0, pendentes: 0, enviados: 0, erros: 0, cancelados: 0 }, estadoSmtp, preferencias, estadosLabel: {}, ...ctxRotulo });
 assert.ok(html.includes('Guardar no Dropbox'), 'emails: etiqueta com o serviço ativo');
+assert.ok(html.includes('bi bi-dropbox'), 'emails: ícone do serviço ativo');
+assert.ok(!html.includes('>Drive<'), 'emails: interruptor sem "Drive"');
 assert.ok(!html.includes('Guardar no Drive'), 'emails: sem "Drive" fixo');
 
 html = handlebars.compile(ler('admin/documentos/form.handlebars'))({ pastas: { outros: 'Outros' }, categoriasDoc: [], driveLigado: true, ...ctxRotulo });
-assert.ok(html.includes('guardado no Dropbox'), 'novo documento: campo do ficheiro nomeia o serviço ativo');
+assert.ok(html.includes('guardado no') && html.includes('Dropbox'), 'novo documento: campo do ficheiro nomeia o serviço ativo');
+assert.ok(html.includes('bi bi-dropbox'), 'novo documento: ícone do serviço ativo');
 assert.ok(!html.includes('Google Drive'), 'novo documento: sem "Google Drive" fixo');
 
 html = docLista({ documentos: [], pasta: null, pastasMulti: ['recibos'], rotulo: 'Recibos', nDocumentos: 0, pastas: {}, pastaCustom: null, driveLigado: false, ...ctxRotulo });
 // A tabela só é renderizada com documentos, por isso a coluna é verificada na
 // própria vista (o resto é verificação de conteúdo renderizado).
 const fonteLista = ler('admin/documentos/listar.handlebars');
-assert.ok(fonteLista.includes('<th>Armazenamento</th>') && !fonteLista.includes('<th>Drive</th>'), 'listagem: coluna "Armazenamento" (sem "Drive")');
+assert.ok(fonteLista.includes('Armazenamento</th>') && !fonteLista.includes('<th>Drive</th>'), 'listagem: coluna "Armazenamento" (sem "Drive")');
 assert.ok(!html.includes('Google Drive'), 'listagem: sem "Google Drive" fixo');
 assert.ok(!html.includes('<code>.env</code>'), 'listagem: sem menção ao .env');
 
@@ -516,8 +521,9 @@ assert.ok(!html.includes('Google Drive não ligado'), 'convocatória: sem "Googl
 // O painel só mostra a linha de estado em certas condições; verifica-se na
 // própria vista (e no rótulo global) para não depender do contexto completo.
 const fontePainel = ler('admin/dashboard.handlebars');
-assert.ok(fontePainel.includes('{{armazenamentoRotulo}}: {{#if sistema.driveLigado}}'), 'painel: estado nomeia o serviço ativo');
-assert.ok(fontePainel.includes('{{armazenamentoRotulo}} desligado'), 'painel: aviso nomeia o serviço ativo');
+assert.ok(fontePainel.includes('{{@root.armazenamentoRotulo}}: {{#if sistema.driveLigado}}'), 'painel: estado nomeia o serviço ativo');
+assert.ok(fontePainel.includes('{{@root.armazenamentoRotulo}} desligado'), 'painel: aviso nomeia o serviço ativo');
+assert.ok(fontePainel.includes('{{@root.armazenamentoIcone}}'), 'painel: ícone do serviço ativo');
 assert.ok(!fontePainel.includes('Google Drive'), 'painel: sem "Google Drive" fixo');
 
 // 18. Área do Condómino — páginas de consulta (Fase 1)

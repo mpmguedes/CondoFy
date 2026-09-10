@@ -752,6 +752,7 @@ async function abrirFluxo(fileId, condominioId) {
 module.exports = {
   nome,
   rotulo,
+  icone: () => 'bi bi-dropbox',
   capacidades,
   featureAtiva,
   temCredenciais,
