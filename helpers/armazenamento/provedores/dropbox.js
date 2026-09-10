@@ -188,11 +188,29 @@ function pedidoComTokenInvalido(resposta) {
   return PADRAO_TOKEN_INVALIDO.test(String(resumo));
 }
 
+// Etiqueta técnica do erro da Dropbox (ex.: `path/not_found`, `path/not_file`,
+// `path/no_permission`): diz a CAUSA sem revelar caminhos nem ids. Sem isto, o
+// `semLocalizacao` transformava tudo em "path/…" e não se distinguia "ficheiro
+// apagado" de "sem permissão" ou "conta trocada".
+function etiquetaErro(resposta) {
+  const resumo = String(resumoErro(comoTexto(resposta)) || '');
+  // As mensagens terminam muitas vezes em `/..` (caminho omitido): não faz
+  // parte da etiqueta.
+  const partes = resumo.split('/').filter((p) => p && p !== '..' && p !== '.');
+  if (!partes.length) return null;
+  const etiqueta = partes.slice(0, 2).join('/');
+  // Só etiquetas de erro (palavras minúsculas); nunca caminhos com maiúsculas,
+  // pontos ou ids.
+  return /^[a-z_]+(\/[a-z_]+)?$/.test(etiqueta) ? etiqueta : null;
+}
+
 // Erro normalizado do provedor (nunca inclui tokens, caminhos nem ids).
 function erroDropbox(resposta, contexto) {
   const r = comoTexto(resposta);
   const e = erroApi(ROTULO, r, contexto);
+  const etiqueta = etiquetaErro(r);
   e.message = semLocalizacao(e.message);
+  if (etiqueta && !e.message.includes(etiqueta)) e.message = `${e.message} (${etiqueta})`;
   if (pedidoComTokenInvalido(r)) e.tokenInvalido = true;
   return e;
 }
@@ -204,6 +222,15 @@ function erroRede(err) {
   const e = new Error(`${ROTULO}: falha de rede${motivo ? ` — ${motivo}` : ''}.`);
   e.codigo = 'REDE';
   return e;
+}
+
+// Limpa a ligação do âmbito EM USO: a do condomínio ou — quando não há
+// condomínio — a da plataforma (a mesma usada pelos backups). Sem o âmbito
+// explícito, um token revogado na ligação de plataforma nunca era removido e o
+// serviço continuava a aparecer como "Ligado ✓" sem funcionar.
+function esquecerLigacaoDoAmbito(condominioId) {
+  const cid = normalizarId(condominioId);
+  return esquecerLigacao(cid, { plataforma: !cid });
 }
 
 // ── Tokens: renovação e chamadas autenticadas ───────────────────────
@@ -257,7 +284,7 @@ async function renovarToken(condominioId, { forcar = false } = {}) {
   });
   if (!resposta.ok) {
     if (pedidoComTokenInvalido(resposta)) {
-      await esquecerLigacao(cid);
+      await esquecerLigacaoDoAmbito(cid);
       throw new Error(MENSAGEM_RELIGAR);
     }
     throw erroDropbox(resposta, 'não foi possível renovar o acesso ao Dropbox');
@@ -284,7 +311,7 @@ async function comAutenticacao(condominioId, executar) {
   } catch (err) {
     if (!err || !err.tokenInvalido) throw err;
     if (!tokens.refresh_token) {
-      await esquecerLigacao(condominioId);
+      await esquecerLigacaoDoAmbito(condominioId);
       throw new Error(MENSAGEM_RELIGAR);
     }
     const renovados = await renovarToken(condominioId, { forcar: true });
@@ -292,7 +319,7 @@ async function comAutenticacao(condominioId, executar) {
       return await executar(renovados.access_token);
     } catch (err2) {
       if (!err2 || !err2.tokenInvalido) throw err2;
-      await esquecerLigacao(condominioId);
+      await esquecerLigacaoDoAmbito(condominioId);
       throw new Error(MENSAGEM_RELIGAR);
     }
   }
@@ -372,7 +399,9 @@ async function trocarCodigo({ code, redirectUri, condominioId, plataforma = fals
   });
 }
 
-// Testa a ligação atual (não altera nada e nunca lança).
+// Testa a ligação atual (nunca lança). Um token revogado é tratado pelo
+// `comAutenticacao`, que remove a ligação do âmbito testado — a página passa a
+// mostrar "Não ligado" e o botão "Ligar" volta a aparecer.
 async function testarLigacao(condominioId) {
   try {
     if (!isConfigured(condominioId)) {
@@ -780,4 +809,6 @@ module.exports = {
   criarEstruturaPastas,
   pastaDeBackups,
   linkPasta,
+  // Exposto para diagnóstico/testes: etiqueta da causa de um erro da API.
+  etiquetaErro,
 };

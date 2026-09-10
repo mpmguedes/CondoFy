@@ -70,19 +70,19 @@ const MENSAGENS = {
 // nem URLs — só a explicação da classe de erro.
 const CAUSAS_FICHEIRO = [
   {
-    re: /invalid_grant|token has been expired|revoked|authentication error|\b401\b/i,
+    re: /invalid_grant|invalid_access_token|expired_access_token|token has been expired|revoked|authentication error|missing_scope|no_access|\b401\b/i,
     texto: 'a autorização da conta foi revogada no serviço de armazenamento — volte a ligar a conta',
   },
   {
-    re: /not ?found|\b404\b/i,
-    texto: 'o ficheiro já não existe na conta ligada (pode ter sido apagado no serviço ou criado por outra conta)',
+    re: /not[_ ]?found|file_not_found|path\/not_file|\b404\b/i,
+    texto: 'o ficheiro já não existe na conta ligada (pode ter sido apagado ou movido no serviço, ou pertencer a outra conta)',
   },
   {
-    re: /forbidden|permission|insufficient|\b403\b/i,
+    re: /forbidden|permission|insufficient|no_permission|\b403\b/i,
     texto: 'a conta ligada não tem acesso a este ficheiro (foi criado por outra conta do serviço)',
   },
   {
-    re: /quota|rate ?limit|too many requests|\b429\b/i,
+    re: /quota|rate ?limit|too[_ ]?many|too many requests|\b429\b/i,
     texto: 'o serviço de armazenamento atingiu o limite de pedidos — tente novamente mais tarde',
   },
   {

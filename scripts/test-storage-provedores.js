@@ -444,6 +444,34 @@ async function testarAmbitoPlataformaDrive() {
   }
 }
 
+// ── 8.2 Etiqueta técnica dos erros da Dropbox ───────────────────────
+// As mensagens da Dropbox têm a forma `path/not_found/...`; o sanitizador de
+// mensagens (que esconde caminhos) transformava tudo em `path/…` e a causa
+// ficava indistinguível nos registos. A etiqueta preserva a CAUSA sem revelar
+// caminhos nem ids.
+function testarEtiquetasDropbox() {
+  const dropbox = storage.obterProvedor('dropbox');
+  assert.strictEqual(typeof dropbox.etiquetaErro, 'function', 'Dropbox expõe a etiqueta de erro (diagnóstico)');
+  const casos = {
+    'path/not_found/..': 'path/not_found',
+    'path/not_file/..': 'path/not_file',
+    'path/no_permission/..': 'path/no_permission',
+    'invalid_access_token/': 'invalid_access_token',
+    'too_many_write_operations/..': 'too_many_write_operations',
+  };
+  for (const [resumo, esperado] of Object.entries(casos)) {
+    assert.strictEqual(
+      dropbox.etiquetaErro({ dados: { error_summary: resumo } }),
+      esperado,
+      `etiqueta extraída de "${resumo}"`
+    );
+  }
+  // Um caminho real da conta NUNCA é devolvido como etiqueta (privacidade).
+  assert.strictEqual(dropbox.etiquetaErro({ dados: { error_summary: '/Apps/GesCondu/Recibos 2026/r.pdf' } }), null, 'caminho real não é etiqueta');
+  assert.strictEqual(dropbox.etiquetaErro({ dados: {} }), null, 'sem resumo → sem etiqueta');
+  assert.strictEqual(dropbox.etiquetaErro(null), null, 'sem resposta → sem etiqueta');
+}
+
 // ── 9. URL de autorização: pede sempre a escolha da conta ───────────
 function testarUrlAutorizacao() {
   const envAntes = {
@@ -545,6 +573,7 @@ function testarFachada() {
   await testarEstadoInterface();
   await testarAmbitoPlataforma();
   await testarAmbitoPlataformaDrive();
+  testarEtiquetasDropbox();
   testarUrlAutorizacao();
   await testarLeituraPorLocalizador();
   testarFachada();

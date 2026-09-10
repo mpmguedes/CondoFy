@@ -317,6 +317,12 @@ async function testarFalhaDoFornecedor() {
       { erro: 'File not found: 1AbC-xyz.', esperado: /já não existe na conta ligada/i },
       { erro: 'The user does not have sufficient permissions for this file.', esperado: /não tem acesso a este ficheiro/i },
       { erro: 'User Rate Limit Exceeded', esperado: /limite de pedidos/i },
+      // Mensagens reais dos outros provedores (Dropbox: causa sanitizada +
+      // etiqueta técnica; OneDrive: código do Microsoft Graph).
+      { erro: 'Dropbox: não foi possível abrir o ficheiro no Dropbox — path/… (path/not_found)', esperado: /já não existe na conta ligada/i },
+      { erro: 'Dropbox: não foi possível abrir o ficheiro no Dropbox — path/… (path/no_permission)', esperado: /não tem acesso a este ficheiro/i },
+      { erro: 'Dropbox: não foi possível renovar o acesso ao Dropbox — invalid_access_token', esperado: /autorização da conta foi revogada/i },
+      { erro: 'Microsoft OneDrive: não foi possível obter o ficheiro — itemNotFound', esperado: /já não existe na conta ligada/i },
     ];
     for (const f of falhas) {
       storage.abrirFluxo = async () => { throw new Error(f.erro); };
