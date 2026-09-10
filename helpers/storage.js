@@ -76,6 +76,32 @@ const provedorDoCondominio = principalDoCondominio;
 const nomeDoCondominio = nomePrincipalDoCondominio;
 const definirProvedorDoCondominio = definirPrincipalDoCondominio;
 
+// ── Rótulo para a interface ─────────────────────────────────────────
+// Nome do serviço de armazenamento principal do condomínio, para as vistas
+// não escreverem "Drive" fixo (o principal pode ser Dropbox ou OneDrive).
+// Devolve um texto genérico quando ainda não há ligação. Síncrono (cache de
+// ligações), para poder ser definido no layout de todas as páginas.
+function rotuloPrincipal(condominioId) {
+  const nome = ligacoes.principalSync(condominioId, REGISTO);
+  const p = REGISTO[nome];
+  if (p && p.isConfigured(condominioId)) return p.rotulo();
+  return 'serviço de armazenamento do condomínio';
+}
+
+// Nem todos os serviços expõem link da pasta no painel do fornecedor (só o
+// Google Drive; Dropbox e OneDrive não criam partilhas). Usa a capacidade do
+// adaptador, sem fixar nomes de provedores.
+function abrePastaNoFornecedor(condominioId) {
+  const nome = ligacoes.principalSync(condominioId, REGISTO);
+  const p = REGISTO[nome];
+  if (!p || !p.isConfigured(condominioId)) return false;
+  try {
+    return Boolean(p.linkPasta('verificacao-de-capacidade'));
+  } catch (err) {
+    return false;
+  }
+}
+
 // ── Estado para a interface ─────────────────────────────────────────
 // Serviços do condomínio + armazenamento principal + backups da instalação.
 async function estadoDoCondominio(condominioId) {
@@ -299,6 +325,8 @@ module.exports = {
   principalDoCondominio,
   nomePrincipalDoCondominio,
   nomeDoCondominio,
+  rotuloPrincipal,
+  abrePastaNoFornecedor,
   definirPrincipalDoCondominio,
   definirProvedorDoCondominio,
   provedorDoCondominio,

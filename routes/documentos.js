@@ -211,24 +211,26 @@ router.get('/documentos', async (req, res) => {
   });
 });
 
-// Abrir a pasta do condomínio no Google Drive. O folderId é SEMPRE resolvido
-// no servidor a partir de req.condominioId → condominios.drive_folder_id
-// (nunca aceite do browser). Cria/regista a pasta quando ainda não existe.
+// Abrir a pasta do condomínio no painel do serviço de armazenamento ativo. O
+// folderId é SEMPRE resolvido no servidor a partir de req.condominioId →
+// condominios.drive_folder_id (nunca aceite do browser). Cria/regista a pasta
+// quando ainda não existe. Só os serviços que expõem link de pasta (Google
+// Drive) disponibilizam este atalho.
 router.get('/documentos/drive/pasta', async (req, res) => {
   try {
     if (!drive.isConfigured(req.condominioId)) {
-      req.flash('error_msg', 'Google Drive não está ligado (Configuração → Google Drive).');
+      req.flash('error_msg', 'Não há serviço de armazenamento ligado neste condomínio (Configurações → Armazenamento e Backups).');
       return res.redirect('/admin/documentos');
     }
     const folderId = await drive.obterPastaCondominioId(req.condominioId);
-    const link = drive.linkPastaDrive(folderId);
+    const link = await drive.linkPasta(folderId, req.condominioId);
     if (!link) {
-      req.flash('error_msg', 'Não foi possível gerar o link da pasta do condomínio.');
+      req.flash('error_msg', 'O serviço de armazenamento deste condomínio não disponibiliza link para a pasta.');
       return res.redirect('/admin/documentos');
     }
     return res.redirect(link);
   } catch (err) {
-    console.error('[documentos-drive-pasta]', err.message);
+    console.error('[documentos-pasta-armazenamento]', err.message);
     req.flash('error_msg', `Não foi possível abrir a pasta do condomínio: ${err.message}`);
     return res.redirect('/admin/documentos');
   }

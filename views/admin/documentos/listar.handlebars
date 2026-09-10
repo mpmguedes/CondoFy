@@ -20,7 +20,7 @@
 </div>
 
 {{#unless driveLigado}}
-<div class="alert alert-warning"><span class="material-symbols-outlined me-1">info</span>Google Drive não configurado — o upload de ficheiros ficará indisponível até configurar o <code>.env</code>.</div>
+<div class="alert alert-warning"><span class="material-symbols-outlined me-1">info</span>Sem serviço de armazenamento ligado — o upload de ficheiros fica indisponível até ligar um serviço em Configurações → Armazenamento e Backups.</div>
 {{/unless}}
 
 <div class="card mb-3">
@@ -58,7 +58,7 @@
           <th>Categorias</th>
           <th>Tipo</th>
           <th>Data</th>
-          <th>Drive</th>
+          <th>Armazenamento</th>
           <th>Condóminos</th>
           <th class="text-end">Ações</th>
         </tr>
@@ -86,8 +86,8 @@
           </td>
           <td class="text-nowrap">{{formatDate data}}</td>
           <td>
-            {{#if (eq drive_status 'guardado')}}<span class="badge text-bg-success" title="Guardado no Google Drive">☁ Guardado</span>
-            {{else if (eq drive_status 'erro')}}<span class="badge text-bg-danger" title="{{drive_erro}}">Erro Drive</span>
+            {{#if (eq drive_status 'guardado')}}<span class="badge text-bg-success" title="Guardado no {{armazenamentoRotulo}}">☁ Guardado</span>
+            {{else if (eq drive_status 'erro')}}<span class="badge text-bg-danger" title="{{drive_erro}}">Erro</span>
             {{else if (eq drive_status 'pendente')}}<span class="badge text-bg-warning">A guardar</span>
             {{else}}<span class="badge text-bg-secondary">Não guardado</span>{{/if}}
           </td>

@@ -39,7 +39,7 @@
             <textarea class="form-control" name="mensagem" rows="3" placeholder="Mensagem opcional para os destinatários."></textarea>
           </div>
           <button type="submit" class="btn btn-primary"><i class="bi bi-send me-1"></i>Enviar</button>
-          <div class="form-text mt-2">O envio é feito através da fila de emails; o link do documento (Google Drive) é incluído quando disponível.</div>
+          <div class="form-text mt-2">O envio é feito através da fila de emails; o link do documento é incluído quando disponível (servido sempre pelo GesCondu, com verificação de permissões).</div>
         </form>
       </div>
     </div>
@@ -53,7 +53,7 @@
           <dt class="col-4">Nome</dt><dd class="col-8">{{documento.nome}}</dd>
           <dt class="col-4">Pasta</dt><dd class="col-8">{{documento.pasta}}</dd>
           <dt class="col-4">Data</dt><dd class="col-8">{{formatDate documento.data}}</dd>
-          <dt class="col-4">Estado Drive</dt>
+          <dt class="col-4">Estado do ficheiro</dt>
           <dd class="col-8">
             {{#if (eq documento.drive_status 'guardado')}}<span class="badge text-bg-success">☁ Guardado</span>
             {{else if (eq documento.drive_status 'erro')}}<span class="badge text-bg-danger">Erro</span>

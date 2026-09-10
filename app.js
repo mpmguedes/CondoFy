@@ -13,6 +13,8 @@ const handlebarsHelpers = require('./helpers/handlebars-helpers');
 const { getCondominio } = require('./helpers/condominio');
 const tenant = require('./helpers/tenant');
 const drive = require('./helpers/drive');
+// Fachada de armazenamento (rótulo do serviço principal usado nas vistas).
+const storage = require('./helpers/storage');
 const mailer = require('./helpers/mailer');
 const background = require('./helpers/background-jobs');
 const sessao = require('./helpers/sessao');
@@ -131,6 +133,11 @@ app.use(async (req, res, next) => {
   res.locals.appName = 'GesCondu';
   res.locals.currentYear = new Date().getFullYear();
   res.locals.currentPath = req.path || '';
+  // Nome do serviço de armazenamento principal do condomínio ativo: as vistas
+  // mostram o serviço realmente em uso (Google Drive, Dropbox, OneDrive…) em
+  // vez de escreverem "Drive" fixo. Fica global, num único ponto.
+  res.locals.armazenamentoRotulo = storage.rotuloPrincipal(res.locals.condominioAtivo && res.locals.condominioAtivo.id);
+  res.locals.armazenamentoAbrePasta = storage.abrePastaNoFornecedor(res.locals.condominioAtivo && res.locals.condominioAtivo.id);
   res.locals.tarefas = background.resumo();
   // Dados para o aviso de expiração da sessão no cliente (só quando autenticado).
   res.locals.sessaoExpiraEm = req.user ? sessao.expiraEm(req.session) : null;

@@ -75,7 +75,7 @@
         </div>
         <hr class="my-2" />
         <div class="small d-flex flex-column gap-1">
-          <div>Google Drive: {{#if sistema.driveLigado}}<span class="text-success">● Ligado</span>{{else}}<span class="text-muted">○ Desligado</span>{{/if}}</div>
+          <div>{{armazenamentoRotulo}}: {{#if sistema.driveLigado}}<span class="text-success">● Ligado</span>{{else}}<span class="text-muted">○ Desligado</span>{{/if}}</div>
           <div>Email/SMTP: {{#if sistema.smtp}}<span class="text-success">● Configurado</span>{{else}}<span class="text-muted">○ Não configurado</span>{{/if}}</div>
           <div>Backup: {{#if sistema.ultimoBackup}}{{#if (eq sistema.ultimoBackup.estado 'concluido')}}<span class="text-success">● Concluído</span>{{else if (eq sistema.ultimoBackup.estado 'erro')}}<span class="text-danger">● Erro</span>{{else}}<span class="text-warning">● Em curso</span>{{/if}}{{else}}<span class="text-muted">○ Sem backups</span>{{/if}}</div>
         </div>
@@ -92,7 +92,7 @@
     {{#if (gt nVencidas 0)}}<div><span class="text-danger">🔴 {{nVencidas}} quotas em atraso</span> · <a href="/admin/quotas">Ver quotas</a></div>{{/if}}
     {{#if (gt sistema.filaErros 0)}}<div><span class="text-warning">🟠 {{sistema.filaErros}} emails com erro</span> · <a href="/admin/emails?estado=erros">Ver emails</a></div>{{/if}}
     {{#if (gt nPagFornecedorPendentes 0)}}<div><span class="text-warning">🟠 {{nPagFornecedorPendentes}} pagamentos a fornecedores pendentes</span> · <a href="/admin/fornecedores">Ver</a></div>{{/if}}
-    {{#unless sistema.driveLigado}}<div><span class="text-muted">⚪ Google Drive desligado</span> · <a href="/admin/config/armazenamento#google-drive">Ligar</a></div>{{/unless}}
+    {{#unless sistema.driveLigado}}<div><span class="text-muted">⚪ {{armazenamentoRotulo}} desligado</span> · <a href="/admin/config/armazenamento#google-drive">Ligar</a></div>{{/unless}}
     {{#unless sistema.smtp}}<div><span class="text-muted">⚪ Email/SMTP não configurado</span> · <a href="/admin/emails#smtp">Configurar</a></div>{{/unless}}
   </div>
 </div></div>
