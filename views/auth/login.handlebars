@@ -4,12 +4,21 @@
      estrutura que "Os meus condomínios"). */
   .auth-body { background: var(--auth-bg); padding: 0; }
   .auth-flash { max-width: 480px; margin: 0 auto; padding-top: 1rem; }
+
+  /* Logótipo da entrada: o dobro do tamanho usado nas outras páginas públicas
+     (o cabeçalho é o mesmo; a medida é maior apenas aqui, no computador e no
+     telemóvel). O recurso é servido com o dobro da resolução para continuar
+     nítido em ecrãs retina. */
+  .auth-logo img { height: clamp(112px, 10.8vw, 176px); }
+  @media (max-width: 575.98px) {
+    .auth-logo img { height: 108px; }
+  }
 </style>
 
 <div class="auth-page">
   <header class="auth-head">
     <a class="auth-logo" href="/" title="GesCondu">
-      <img src="/img/logo_new_claro.png" alt="GesCondu" />
+      <img src="/img/logo_new_claro.svg" alt="GesCondu" />
     </a>
     {{> _tema-toggle}}
   </header>
