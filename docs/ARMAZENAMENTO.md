@@ -108,7 +108,35 @@ node scripts/diagnostico-documentos.js --condominio 2 --tipo convocatoria
 ```
 
 Indica, por documento, a conta em uso, o dono do ficheiro (mascarado), o tipo,
-se está na lixeira e se abre — e resume as causas com o que fazer.
+se está na lixeira e se abre — e resume as causas com o que fazer. A secção 1
+mostra **todas** as ligações de cada condomínio (ligado/não ligado, conta,
+âmbito) e a secção 1.1 o histórico de ligações/desligações da auditoria — é a
+forma de saber **que conta** voltar a ligar depois de uma ligação ter sido
+removida (nesse momento os tokens deixam de existir).
+
+### Documentos guardados num serviço que já não está ligado
+
+Quando uma conta é revogada no fornecedor, a ligação é removida (deixa de haver
+tokens) e os documentos que estavam nesse serviço ficam inacessíveis: abrir um
+deles devolve 502 com a causa «não há nenhuma conta ligada a este serviço».
+Os ficheiros **não são apagados** — continuam na conta do fornecedor. Para
+voltar a abri-los:
+
+1. Configurações → Armazenamento e Backups → **Ligar** o serviço em causa;
+2. usar **a mesma conta** que criou os documentos (a autorização do GesCondu só
+   acede aos ficheiros que criou — a conta usada está no histórico de ligações,
+   secção 1.1 do diagnóstico e na Auditoria);
+3. confirmar em «Armazenamento dos documentos» que esse serviço é o escolhido.
+
+A página de armazenamento avisa quando um serviço **não ligado** tem documentos
+do condomínio («Há N documentos deste condomínio guardados neste serviço e a
+conta não está ligada: esses documentos não abrem até voltar a ligar a mesma
+conta»), pelo que esta situação deixa de ser silenciosa.
+
+**Nota sobre o Google:** se o ecrã de consentimento OAuth do projeto estiver em
+modo **Teste**, os refresh tokens expiram ao fim de ~7 dias (a Google devolve
+`invalid_grant`) e a ligação tem de ser refeita. Publicar a aplicação (ou
+manter a conta como test user e religar) evita a repetição.
 
 ### Links temporários (emails)
 

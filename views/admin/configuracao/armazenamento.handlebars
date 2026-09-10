@@ -65,9 +65,23 @@
             </form>
             {{/unless}}
           </div>
+          {{#if documentos}}
+          <p class="text-muted small mb-0 mt-2">
+            <i class="bi bi-file-earmark-text me-1" aria-hidden="true"></i>{{documentos}} documento{{#unless (eq documentos 1)}}s{{/unless}} guardado{{#unless (eq documentos 1)}}s{{/unless}} neste serviço.
+          </p>
+          {{/if}}
         {{else}}
           {{#if disponivel}}
             <p class="text-muted small">Associe uma conta para guardar documentos neste serviço.</p>
+            {{#if documentos}}
+            <div class="alert alert-warning small">
+              <span class="material-symbols-outlined me-1" aria-hidden="true">warning</span>
+              Há <strong>{{documentos}} documento{{#unless (eq documentos 1)}}s{{/unless}}</strong> deste condomínio
+              guardado{{#unless (eq documentos 1)}}s{{/unless}} neste serviço e a conta <strong>não está ligada</strong>:
+              {{#unless (eq documentos 1)}}esses documentos não abrem{{else}}esse documento não abre{{/unless}} até
+              voltar a ligar <strong>a mesma conta</strong> que os criou (os ficheiros continuam no serviço e não são apagados).
+            </div>
+            {{/if}}
             <a href="/admin/config/armazenamento/{{nome}}/ligar" class="btn btn-primary w-100 mt-auto">
               <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>Ligar {{rotulo}}
             </a>

@@ -125,15 +125,17 @@ function classificar(status, mensagem, metadados) {
 
   const causa = /revogada/.test(explicacao)
     ? 'ligacao_invalida'
-    : /já não existe/.test(explicacao)
-      ? 'ficheiro_inexistente'
-      : /não tem acesso/.test(explicacao)
-        ? 'sem_permissao_no_ficheiro'
-        : /limite de pedidos/.test(explicacao)
-          ? 'limite_do_fornecedor'
-          : /documento nativo/.test(explicacao)
-            ? 'documento_nativo'
-            : 'outro';
+    : /não há nenhuma conta ligada/.test(explicacao)
+      ? 'sem_credenciais'
+      : /já não existe/.test(explicacao)
+        ? 'ficheiro_inexistente'
+        : /não tem acesso/.test(explicacao)
+          ? 'sem_permissao_no_ficheiro'
+          : /limite de pedidos/.test(explicacao)
+            ? 'limite_do_fornecedor'
+            : /documento nativo/.test(explicacao)
+              ? 'documento_nativo'
+              : 'outro';
   return { causa, explicacao };
 }
 
@@ -184,25 +186,81 @@ async function main() {
   const condominios = await Condominio.findAll({ order: [['id', 'ASC']] }).catch(() => []);
   const porCondominio = new Map();
   for (const c of condominios) {
-    let principal = '?';
-    let conta = null;
-    let origem = null;
+    let estado = null;
+    let erro = null;
     try {
-      principal = await storage.nomePrincipalDoCondominio(c.id);
-      const t = await ligacoes.lerTokens(principal, c.id);
-      conta = t.tokens && t.tokens.conta ? t.tokens.conta : null;
-      origem = t.origem;
+      estado = await storage.estadoDoCondominio(c.id);
     } catch (err) {
-      principal = `erro: ${err.message}`;
+      erro = err.message;
     }
-    porCondominio.set(c.id, { designacao: c.designacao, principal, conta, origem, pasta: c.drive_folder_id || null });
-    console.log(
-      `  · #${c.id} ${String(c.designacao || '').slice(0, 34)} — serviço: ${principal}` +
-        ` · conta: ${mascarar(conta)}${origem ? ` (${origem})` : ''}` +
-        ` · pasta registada: ${c.drive_folder_id ? 'sim' : 'não'}`
-    );
+    const principal = estado ? estado.principal : '?';
+    const provedores = (estado && estado.provedores) || [];
+    const doPrincipal = provedores.find((p) => p.nome === principal) || {};
+    porCondominio.set(c.id, {
+      designacao: c.designacao,
+      principal,
+      conta: doPrincipal.conta || null,
+      origem: doPrincipal.contaPlataforma ? 'plataforma_fallback' : doPrincipal.ligado ? 'condominio' : null,
+      pasta: c.drive_folder_id || null,
+      provedores,
+    });
+    console.log(`  · #${c.id} ${String(c.designacao || '').slice(0, 34)} — documentos em: ${principal}`);
+    if (!provedores.length) console.log(`      (não foi possível ler o estado das ligações${erro ? `: ${erro}` : ''})`);
+    for (const p of provedores) {
+      const marca = p.ligado ? 'LIGADO' : 'não ligado';
+      const detalhe = [
+        p.conta ? `conta: ${mascarar(p.conta)}` : null,
+        p.contaPlataforma ? 'conta da plataforma (partilhada com os backups)' : null,
+        p.ligadoPlataforma && !p.ligado ? 'ligação da plataforma existe' : null,
+        p.principal ? 'é o serviço dos documentos' : null,
+        p.disponivel ? null : 'sem credenciais técnicas na instalação',
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      console.log(`      ${p.ligado ? '✓' : '·'} ${p.rotulo}: ${marca}${detalhe ? ` — ${detalhe}` : ''}`);
+    }
+    console.log(`      pasta da conta registada: ${c.drive_folder_id ? 'sim' : 'não'}`);
   }
   if (!condominios.length) console.log('  (não foi possível ler os condomínios)');
+
+  // ── 1.1 Histórico de ligações (que conta esteve ligada) ────────────
+  // A auditoria guarda a conta em cada ligação/desligação de serviço. É a
+  // única forma de saber QUE conta voltar a ligar depois de uma ligação ter
+  // sido removida (os tokens deixam de existir).
+  linha('1.1 Histórico de ligações de armazenamento (auditoria)');
+  try {
+    const { AuditLog } = require('../models');
+    const registos = await AuditLog.findAll({
+      where: {
+        acao: {
+          [Op.in]: [
+            'ligar_google_drive',
+            'desligar_google_drive',
+            'ligar_armazenamento',
+            'desligar_armazenamento',
+            'testar_google_drive',
+            'testar_armazenamento',
+          ],
+        },
+      },
+      order: [['id', 'DESC']],
+      limit: 12,
+    });
+    if (!registos.length) {
+      console.log('  Sem registos de ligações/desligações de serviços.');
+    }
+    for (const r of registos) {
+      const d = r.detalhes || {};
+      const onde = d.ambito === 'plataforma' ? 'instalação/backups' : d.ambito === 'condominio' ? 'condomínio' : '—';
+      console.log(
+        `  · ${new Date(r.createdAt).toISOString().slice(0, 16).replace('T', ' ')} ${r.acao}` +
+          ` · ${r.entidade || ''}${r.entidadeId ? ` #${r.entidadeId}` : ''} · âmbito: ${onde}` +
+          `${d.provedor ? ` · serviço: ${d.provedor}` : ''}${d.conta ? ` · conta: ${mascarar(d.conta)}` : ''}`
+      );
+    }
+  } catch (err) {
+    console.log(`  Não foi possível ler a auditoria: ${err.message}`);
+  }
 
   // ── 2. Documentos com ficheiro guardado ────────────────────────────
   linha('2. Documentos com ficheiro guardado');
@@ -308,6 +366,15 @@ async function main() {
     console.log('  a aplicação escreve a linha «[documentos-acesso] falha ao abrir o documento: …».');
   } else {
     const tem = (c) => porCausa.has(c);
+    if (tem('sem_credenciais')) {
+      console.log('  · Não há NENHUMA conta ligada ao serviço onde estes documentos estão guardados.');
+      console.log('    Os ficheiros continuam na conta do serviço — basta LIGAR A MESMA CONTA em Configurações →');
+      console.log('    Armazenamento e Backups e voltam a abrir. A conta que estava ligada aparece em');
+      console.log('    «Histórico de ligações» (secção 1.1) e em Configuração → Auditoria.');
+      console.log('    Se o serviço dos documentos (indicado em «documentos em:» na secção 1) não for o mesmo');
+      console.log('    onde estão os ficheiros antigos, escolha o serviço certo na secção «Armazenamento dos');
+      console.log('    documentos» e ligue a conta que os criou.');
+    }
     if (tem('ficheiro_inexistente') || tem('sem_permissao_no_ficheiro')) {
       console.log('  · Ficheiros que já não existem na conta ligada: acontece quando a conta Google do');
       console.log('    GesCondu foi trocada (nova autorização com outra conta) ou quando os ficheiros foram');

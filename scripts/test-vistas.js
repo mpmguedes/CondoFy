@@ -203,6 +203,7 @@ assert.ok(/value="dropbox"\s+checked/.test(html), 'armazenamento: destino de bac
 assert.ok(!html.includes('Ligar para backups'), 'armazenamento: não volta a pedir autorização para os backups');
 assert.ok(!html.includes('ambito=plataforma'), 'armazenamento: sem ligações de plataforma duplicadas');
 assert.ok(html.includes('Destino atual') && html.includes('Último backup'), 'armazenamento: destino e último backup visíveis');
+assert.ok(!html.includes('Ligue um serviço acima para escolher onde guardar os documentos.'), 'armazenamento: com ligações não pede para ligar um serviço');
 
 // Google Drive ligado pela conta da plataforma (caso histórico: o condomínio não
 // tem ligação própria). A ligação pertence à instalação, por isso Testar e
@@ -257,6 +258,32 @@ html = armazenamento({
 assert.ok(html.includes('Ligue um serviço acima para escolher onde guardar os documentos.'), 'armazenamento: escolha explica que é preciso ligar');
 assert.ok(html.includes('Disponível após configuração pelo administrador do GesCondu.'), 'armazenamento: mensagem amigável sem credenciais');
 assert.ok(html.includes('Só neste servidor'), 'armazenamento: backups locais por omissão');
+
+// Documentos guardados num serviço que NÃO está ligado (ex.: 70 documentos no
+// Google Drive depois de a conta ter sido removida/revogada): a página avisa e
+// diz o que fazer — sem isso, o administrador só descobre ao abrir o documento
+// (502) e não sabe que basta voltar a ligar a mesma conta.
+html = armazenamento({
+  ...ctxArm,
+  driveLigado: true,
+  driveOpcoes: opcoesBase,
+  ultimoBackup: null,
+  armazenamento: estadoArm({
+    provedores: [
+      { ...provedoresBase[0], ligado: false, conta: null, contaPlataforma: false, documentos: 70 },
+      { ...provedoresBase[1], documentos: 3 },
+      provedoresBase[2],
+    ],
+  }),
+});
+assert.ok(/Há <strong>70 documentos<\/strong> deste condomínio/.test(html), 'armazenamento: avisa dos documentos num serviço desligado');
+assert.ok(html.includes('não abrem'), 'armazenamento: explica que não abrem até ligar a conta');
+assert.ok(html.includes('a mesma conta'), 'armazenamento: diz que é a MESMA conta que os criou');
+assert.ok(/3 documentos guardados neste serviço/.test(html), 'armazenamento: conta os documentos do serviço ligado');
+assert.ok(!/1 documentos/.test(html), 'armazenamento: singular/plural correto');
+
+// Sem contagem (ou zero) não aparece nenhum aviso.
+assert.ok(!armazenamento({ ...ctxArm, driveLigado: true, driveOpcoes: opcoesBase, ultimoBackup: null, armazenamento: estadoArm() }).includes('não abrem'), 'armazenamento: sem aviso quando não há documentos no serviço desligado');
 
 
 // Último backup visível com estado.

@@ -251,6 +251,13 @@ function analisarErro(err) {
 
 function erroDriveParaMensagem(err) {
   const { revogado, mensagem } = analisarErro(err);
+  // Sem NENHUMA credencial (nem access/refresh token, nem chave) o cliente do
+  // Google recusa o pedido com esta mensagem em inglês. Traduz-se para o que o
+  // administrador tem de fazer: é o caso de documentos antigos quando a
+  // ligação ao Drive foi removida/revogada.
+  if (/no access, refresh token, api key or refresh handler/i.test(String(mensagem))) {
+    return 'Não há nenhuma conta Google ligada para este ficheiro. Ligue a conta Google que criou os documentos em Configuração → Armazenamento e Backups (os ficheiros continuam na conta).';
+  }
   if (revogado) {
     return 'A ligação ao Google Drive foi revogada ou expirou. Vá a Configuração e ligue novamente a conta Google.';
   }

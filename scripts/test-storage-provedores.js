@@ -16,6 +16,9 @@ const path = require('path');
 // gerada aleatoriamente em cada execução — nunca é uma credencial real.
 process.env.ENCRYPTION_KEY = require('crypto').randomBytes(32).toString('base64');
 // ── Duplos de teste: BD e configurações em memória ──────────────────
+const { Op } = require('sequelize');
+// Contagens por serviço atribuídas aos documentos do duplo (ver secção 8.3).
+const contagensFalsas = { google_drive: 70, 'dbx:': 3, 'od:': 1 };
 const modelsPath = require.resolve('../models');
 require.cache[modelsPath] = {
   id: modelsPath, filename: modelsPath, loaded: true, children: [], paths: [],
@@ -26,7 +29,17 @@ require.cache[modelsPath] = {
       findOrCreate: async () => [{ valor: null, save: async () => {} }],
     },
     Condominio: { findByPk: async () => null, findOne: async () => null, update: async () => {} },
-    Documento: { findOne: async () => null },
+    Documento: {
+      findOne: async () => null,
+      // Só a contagem por serviço é usada (helpers/documentos-por-servico.js):
+      // distingue-se pela forma da cláusula (prefixo `LIKE` ou o conjunto `Op.and`).
+      count: async ({ where }) => {
+        const valor = where && where.drive_file_id;
+        if (valor && valor[Op.like]) return contagensFalsas[String(valor[Op.like]).replace('%', '')] || 0;
+        if (where && where[Op.and]) return contagensFalsas.google_drive;
+        return 0;
+      },
+    },
   },
 };
 
@@ -47,6 +60,7 @@ const contrato = require('../helpers/armazenamento/contrato');
 const locator = require('../helpers/armazenamento/locator');
 const ligacoes = require('../helpers/armazenamento/ligacoes');
 const storage = require('../helpers/storage');
+const documentosPorServico = require('../helpers/documentos-por-servico');
 
 const PROVEDORES = ['google_drive', 'dropbox', 'onedrive'];
 
@@ -472,6 +486,27 @@ function testarEtiquetasDropbox() {
   assert.strictEqual(dropbox.etiquetaErro(null), null, 'sem resposta → sem etiqueta');
 }
 
+// ── 8.3 Documentos guardados por serviço (aviso de serviço desligado) ─
+// A página de armazenamento avisa quando há documentos guardados num serviço
+// que NÃO está ligado: sem esse aviso, o administrador só descobre o problema
+// ao tentar abrir um documento (502) e não sabe que basta voltar a ligar a
+// mesma conta (os ficheiros continuam no serviço).
+async function testarDocumentosPorServico() {
+  const contagens = await documentosPorServico.contarPorServico(1);
+  assert.deepStrictEqual(
+    contagens,
+    { google_drive: 70, dropbox: 3, onedrive: 1 },
+    'contagem por localizador (sem prefixo → Drive, dbx: → Dropbox, od: → OneDrive)'
+  );
+  assert.strictEqual(documentosPorServico.documentosDoServico(contagens, 'google_drive'), 70, 'Drive: 70 documentos');
+  assert.strictEqual(documentosPorServico.documentosDoServico(contagens, 'dropbox'), 3, 'Dropbox: 3 documentos');
+  assert.strictEqual(documentosPorServico.documentosDoServico(contagens, 'onedrive'), 1, 'OneDrive: 1 documento');
+  assert.strictEqual(documentosPorServico.documentosDoServico(contagens, 'provedor-desconhecido'), 0, 'provedor desconhecido → 0');
+  assert.strictEqual(documentosPorServico.documentosDoServico(null, 'dropbox'), 0, 'sem contagens → 0');
+  // Sem condomínio não se faz nenhuma consulta.
+  assert.deepStrictEqual(await documentosPorServico.contarPorServico(null), { google_drive: 0, dropbox: 0, onedrive: 0 }, 'sem condomínio → zeros');
+}
+
 // ── 9. URL de autorização: pede sempre a escolha da conta ───────────
 function testarUrlAutorizacao() {
   const envAntes = {
@@ -574,6 +609,7 @@ function testarFachada() {
   await testarAmbitoPlataforma();
   await testarAmbitoPlataformaDrive();
   testarEtiquetasDropbox();
+  await testarDocumentosPorServico();
   testarUrlAutorizacao();
   await testarLeituraPorLocalizador();
   testarFachada();

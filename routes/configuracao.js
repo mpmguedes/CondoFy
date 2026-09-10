@@ -13,6 +13,7 @@ const { listarAutomacoes, guardarAutomacoes } = require('../helpers/automacoes')
 const drive = require('../helpers/drive');
 // Fachada de armazenamento multi-provedor (Google Drive | Dropbox | OneDrive).
 const storage = require('../helpers/storage');
+const { contarPorServico, documentosDoServico } = require('../helpers/documentos-por-servico');
 const { validarNif, validarIban } = require('../public/js/validacao-fiscal');
 
 const router = express.Router();
@@ -64,23 +65,34 @@ const upload = multer({
 async function dadosArmazenamento(condominioId) {
   const driveEstado = await drive.estadoLigacao();
 
-  const [ultimoBackup, raizDbRaw, backupsDb, estados] = await Promise.all([
+  const [ultimoBackup, raizDbRaw, backupsDb, estados, documentosPorServico] = await Promise.all([
     BackupLog.findOne({ order: [['id', 'DESC']] }).catch(() => null),
     getConfig('google_drive_root_folder', '').catch(() => ''),
     getConfig('drive_auto_backups', '1').catch(() => '1'),
     storage.estadoDoCondominio(condominioId).catch(() => ({ escolhido: 'google_drive', provedores: [] })),
+    // Quantos documentos deste condomínio estão em cada serviço: permite avisar
+    // quando há ficheiros guardados num serviço que não está ligado (sem esse
+    // aviso, o administrador só descobre ao tentar abrir um documento).
+    contarPorServico(condominioId),
   ]);
 
   // Fonte única de verdade: BD → .env → pasta inicial "GesCondu".
   const raizDb = String(raizDbRaw || '').trim();
   const raizEfetiva = raizDb || (process.env.GOOGLE_DRIVE_ROOT_FOLDER || '').trim() || 'GesCondu';
 
+  // Cada serviço fica a saber quantos documentos guardou (a vista usa isto para
+  // avisar quando não está ligado).
+  const provedores = (estados.provedores || []).map((p) => ({
+    ...p,
+    documentos: documentosDoServico(documentosPorServico, p.nome),
+  }));
+
   return {
     driveLigado: driveEstado.ligado,
     driveEstado,
     driveOpcoes: { pastaRaiz: raizEfetiva, backupsDrive: String(backupsDb) !== '0' },
     ultimoBackup: ultimoBackup ? ultimoBackup.toJSON() : null,
-    armazenamento: estados,
+    armazenamento: { ...estados, provedores },
   };
 }
 

@@ -79,6 +79,10 @@ const MENSAGENS = {
 // nem URLs — só a explicação da classe de erro.
 const CAUSAS_FICHEIRO = [
   {
+    re: /no access, refresh token, api key or refresh handler|não há nenhuma conta google ligada/i,
+    texto: 'não há nenhuma conta ligada a este serviço de armazenamento — ligue a conta que criou os documentos (os ficheiros continuam no serviço)',
+  },
+  {
     re: /invalid_grant|invalid_access_token|expired_access_token|token has been expired|revoked|authentication error|missing_scope|no_access|\b401\b/i,
     texto: 'a autorização da conta foi revogada no serviço de armazenamento — volte a ligar a conta',
   },
