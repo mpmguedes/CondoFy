@@ -1,0 +1,59 @@
+{{!-- Homepage PÚBLICA (sem sessão): identifica a aplicação pelo nome.
+     Existe para que https://gescondu.xyz/ mostre, em texto visível, o nome da
+     aplicação tal como está configurado na Google Auth Platform → Branding
+     («GesCondu»), e para dar uma entrada própria a quem chega sem sessão.
+     Usa a casca pública já existente (.auth-*), o mesmo layout da entrada
+     («blank») e o rodapé com as páginas legais. --}}
+<style>
+  /* Estilos próprios desta página: só a hierarquia do nome da aplicação.
+     Não alteram o CSS global. */
+  .home-marca {
+    font-size: clamp(2.2rem, 1.2rem + 2.4vw, 3.2rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin: 0;
+  }
+  .home-subtitulo {
+    font-size: clamp(1.05rem, 0.9rem + 0.7vw, 1.45rem);
+    font-weight: 600;
+    color: var(--c-accent);
+    margin: 0.4rem 0 0;
+  }
+  .home-descricao { margin: 1.1rem 0 0; font-size: 1rem; color: var(--nav-text-muted); max-width: 46ch; }
+  .home-acoes { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.6rem; }
+</style>
+
+<div class="auth-page">
+  <header class="auth-head">
+    <a class="auth-logo" href="/" title="GesCondu">
+      <img src="/img/gescondu-logo-ativo.png" alt="GesCondu" />
+    </a>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      {{> _tema-toggle}}
+      <a href="/login" class="btn btn-sm btn-outline-light">Entrar</a>
+    </div>
+  </header>
+
+  <div class="auth-stage">
+    <section class="auth-message">
+      <h1 class="home-marca">GesCondu</h1>
+      <p class="home-subtitulo">Gestão de Condomínios</p>
+      <p class="home-descricao">
+        Plataforma de gestão de condomínios: frações e condóminos, quotas, pagamentos e recibos,
+        despesas e orçamento, documentos, assembleias e comunicações — num só serviço, com os dados
+        de cada condomínio isolados.
+      </p>
+      <div class="home-acoes">
+        <a href="/login" class="btn btn-primary">Entrar</a>
+        <a href="/politica-privacidade" class="btn btn-outline-light">Política de Privacidade</a>
+      </div>
+    </section>
+  </div>
+
+  <footer class="auth-foot">
+    © 2026 GesCondu. Todos os direitos reservados. ·
+    <a href="/politica-privacidade">Política de Privacidade</a> ·
+    <a href="/termos">Termos de Utilização</a>
+  </footer>
+</div>

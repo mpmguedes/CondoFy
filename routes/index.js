@@ -16,9 +16,14 @@ function destinoAposLogin({ meus = [], ativo = null, user = {} } = {}) {
 }
 
 // Página inicial: LOGIN → "Os meus condomínios" → escolha → dashboard.
+// Sem sessão, a raiz serve a HOMEPAGE PÚBLICA (nome da aplicação visível) em vez
+// de redirecionar para a entrada: era essa a única razão da verificação da
+// marca na Google Auth Platform («o nome do app não corresponde ao nome na
+// página inicial»). A homepage não exige sessão nem condomínio e usa o layout
+// público já existente; o percurso de quem tem sessão fica exatamente igual.
 router.get('/', async (req, res) => {
   if (!req.isAuthenticated()) {
-    return res.redirect('/login');
+    return res.render('publicas/home', { layout: 'blank' });
   }
   try {
     const meus = await tenant.listarCondominios(req.user.id);
