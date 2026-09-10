@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
-const { Condominio, BackupLog } = require('../models');
+const { Condominio, BackupLog, AuditLog, User } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
@@ -130,6 +130,20 @@ router.get('/config/automacoes', async (req, res) => {
     grupos,
   });
 });
+
+// ── Separador 4: Auditoria (antes com entrada própria no menu principal) ──
+router.get('/config/auditoria', async (req, res) => {
+  const logs = await AuditLog.findAll({
+    include: [{ model: User, as: 'user', attributes: ['nome', 'email'] }],
+    order: [['id', 'DESC']],
+    limit: 300,
+  });
+  res.render('admin/configuracao/auditoria', { titulo: 'Auditoria', logs });
+});
+
+// Endereço antigo da auditoria (tinha entrada própria no menu principal):
+// mantém os links existentes a funcionar.
+router.get('/auditoria', (req, res) => res.redirect('/admin/config/auditoria'));
 
 router.post('/config/automacoes', async (req, res) => {
   try {

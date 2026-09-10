@@ -19,6 +19,7 @@ const models = require('../models');
 const orig = {
   userCondominioFindOne: models.UserCondominio.findOne,
   backupLogFindOne: models.BackupLog.findOne,
+  auditLogFindAll: models.AuditLog.findAll,
 };
 
 const condominioFake = {
@@ -40,6 +41,10 @@ const condominioFake = {
 
 models.UserCondominio.findOne = async () => ({ role: 'admin', condominio_id: 1 });
 models.BackupLog.findOne = async () => null;
+models.AuditLog.findAll = async () => ([
+  { data_hora: new Date('2026-09-09T10:15:00Z'), user: { nome: 'Administrador', email: 'admin@exemplo.pt' }, acao: 'editar_configuração', entidade: 'Condominio', entidade_id: 1, detalhes: null },
+  { data_hora: new Date('2026-09-08T18:02:00Z'), user: null, acao: 'criar_quota', entidade: 'Quota', entidade_id: 42, detalhes: '{"mes":9}' },
+]);
 
 // Helpers com BD: substituídos antes de carregar o router (que os importa).
 const condominio = require('../helpers/condominio');
@@ -74,6 +79,16 @@ app.use((req, res, next) => {
   req.user = { id: 1, nome: 'Administrador', email: 'admin@exemplo.pt', role_global: 'admin' };
   req.session = { condominio_ativo_id: 1 };
   req.flash = () => req;
+  // Locais que o app.js define para o layout (navegação lateral, etc.).
+  res.locals.user = req.user;
+  res.locals.isAdmin = true;
+  res.locals.meusCondominios = [];
+  res.locals.condominioAtivo = { id: 1, designacao: condominioFake.designacao, role: 'admin' };
+  res.locals.condominio = condominioFake;
+  res.locals.currentPath = req.path;
+  res.locals.appName = 'GesCondu';
+  res.locals.currentYear = new Date().getFullYear();
+  res.locals.tarefas = null;
   next();
 });
 app.use('/admin', router);
@@ -83,7 +98,10 @@ const pedir = (url) => new Promise((resolve, reject) => {
     http.get({ host: '127.0.0.1', port: servidor.address().port, path: url }, (res) => {
       let corpo = '';
       res.on('data', (d) => { corpo += d; });
-      res.on('end', () => { servidor.close(); resolve({ status: res.statusCode, corpo }); });
+      res.on('end', () => {
+        servidor.close();
+        resolve({ status: res.statusCode, corpo, location: res.headers.location });
+      });
     }).on('error', (e) => { servidor.close(); reject(e); });
   });
 });
@@ -91,6 +109,7 @@ const pedir = (url) => new Promise((resolve, reject) => {
 const TAB1 = 'href="/admin/config"';
 const TAB2 = 'href="/admin/config/armazenamento"';
 const TAB3 = 'href="/admin/config/automacoes"';
+const TAB4 = 'href="/admin/config/auditoria"';
 
 (async () => {
   // 1. Separador 1 — Configuração do Condomínio (campos intactos)
@@ -134,17 +153,39 @@ const TAB3 = 'href="/admin/config/automacoes"';
   assert.ok(r.corpo.includes('href="/admin/emails"'), 'automações: atalho para a central de emails');
   assert.ok(!r.corpo.includes('name="designacao"'), 'automações: sem campos do condomínio');
 
-  // 4. Navegação direta entre os três separadores, a partir de qualquer um
-  for (const url of ['/admin/config', '/admin/config/armazenamento', '/admin/config/automacoes']) {
+  // 4. Separador 4 — Auditoria (antes com entrada própria no menu principal)
+  r = await pedir('/admin/config/auditoria');
+  assert.strictEqual(r.status, 200, 'GET /admin/config/auditoria responde 200');
+  assert.ok(r.corpo.includes(`class="config-tab active" ${TAB4}`), 'auditoria: separador 4 ativo');
+  assert.ok(r.corpo.includes('Administrador') && r.corpo.includes('criar_quota'), 'auditoria: registos listados');
+  assert.ok(r.corpo.includes('Sem registos de auditoria.') === false, 'auditoria: com registos não mostra estado vazio');
+  const menu = r.corpo.split('\n').filter((l) => /sidebar-item/.test(l) && /(config|auditoria)/.test(l)).map((l) => l.trim()).join(' | ');
+  assert.ok(r.corpo.includes('class="sidebar-item active" href="/admin/config"'), 'auditoria: menu lateral mantém Configuração ativa', menu);
+  assert.ok(!r.corpo.includes('href="/admin/auditoria"'), 'auditoria: entrada antiga do menu removida');
+
+  // Estado vazio da auditoria
+  const findAll = models.AuditLog.findAll;
+  models.AuditLog.findAll = async () => [];
+  const vazio = await pedir('/admin/config/auditoria');
+  assert.ok(vazio.corpo.includes('Sem registos de auditoria.'), 'auditoria: estado vazio');
+  models.AuditLog.findAll = findAll;
+
+  // Endereço antigo continua a levar ao separador novo
+  const antigo = await pedir('/admin/auditoria');
+  assert.strictEqual(antigo.status, 302, 'auditoria: endereço antigo responde 302', String(antigo.status));
+  assert.strictEqual(antigo.location, '/admin/config/auditoria', 'auditoria: endereço antigo redireciona para o separador');
+
+  // 5. Navegação direta entre os quatro separadores, a partir de qualquer um
+  for (const url of ['/admin/config', '/admin/config/armazenamento', '/admin/config/automacoes', '/admin/config/auditoria']) {
     const x = await pedir(url);
-    assert.ok([TAB1, TAB2, TAB3].every((t) => x.corpo.includes(t)), `navegação: 3 separadores a partir de ${url}`);
+    assert.ok([TAB1, TAB2, TAB3, TAB4].every((t) => x.corpo.includes(t)), `navegação: 4 separadores a partir de ${url}`);
     assert.ok(x.corpo.includes('class="config-tab active"'), `navegação: um ativo em ${url}`);
   }
 
-  // 5. Rotas de gravação existentes mantêm-se
+  // 6. Rotas de gravação existentes mantêm-se
   const rotas = router.stack.filter((l) => l.route)
     .map((l) => Object.keys(l.route.methods).join(',').toUpperCase() + ' ' + l.route.path);
-  for (const esperada of ['GET /config', 'POST /config', 'GET /config/armazenamento', 'GET /config/automacoes', 'POST /config/automacoes', 'POST /config/drive/opcoes', 'POST /config/drive/testar', 'POST /config/drive/estrutura', 'POST /config/drive/desligar', 'GET /config/drive/ligar', 'GET /config/drive/callback']) {
+  for (const esperada of ['GET /config', 'POST /config', 'GET /config/armazenamento', 'GET /config/automacoes', 'POST /config/automacoes', 'GET /config/auditoria', 'GET /auditoria', 'POST /config/drive/opcoes', 'POST /config/drive/testar', 'POST /config/drive/estrutura', 'POST /config/drive/desligar', 'GET /config/drive/ligar', 'GET /config/drive/callback']) {
     assert.ok(rotas.includes(esperada), `rota preservada: ${esperada}`);
   }
   // Isolamento por condomínio/papel continua aplicado a nível do router.
@@ -153,6 +194,7 @@ const TAB3 = 'href="/admin/config/automacoes"';
 
   models.UserCondominio.findOne = orig.userCondominioFindOne;
   models.BackupLog.findOne = orig.backupLogFindOne;
+  models.AuditLog.findAll = orig.auditLogFindAll;
 
   console.log('✓ Testes dos separadores de Configurações passaram (sem base de dados).');
 })().catch((err) => {

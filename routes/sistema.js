@@ -1,21 +1,13 @@
 const express = require('express');
-const { AuditLog, User } = require('../models');
 const tenant = require('../helpers/tenant');
 const { executarBackup } = require('../jobs/backup');
 
 const router = express.Router();
-// Sistema (auditoria/backup) — módulo de plataforma/condomínio admin.
+// Sistema (backup) — módulo de plataforma/condomínio admin.
+// A auditoria passou para Configurações → separador "Auditoria"
+// (/admin/config/auditoria, em routes/configuracao.js).
 router.use(tenant.comCondominioAtivo);
 router.use(tenant.comPapel('admin'));
-
-router.get('/auditoria', async (req, res) => {
-  const logs = await AuditLog.findAll({
-    include: [{ model: User, as: 'user', attributes: ['nome', 'email'] }],
-    order: [['id', 'DESC']],
-    limit: 300,
-  });
-  res.render('admin/sistema/auditoria', { titulo: 'Auditoria', logs });
-});
 
 router.post('/sistema/backup', async (req, res) => {
   req.flash('success_msg', 'Backup manual iniciado.');
