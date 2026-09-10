@@ -89,6 +89,13 @@
   --sidebar-top-text: var(--nav-text);
 
   /* Espaçamento (escala) */
+  /* Escala tipografica (mobile-first; nada abaixo de 12px) */
+  --font-size-xs: 0.75rem;   /* 12px - labels e texto auxiliar */
+  --font-size-sm: 0.8125rem; /* 13px - texto normal e tabelas */
+  --font-size-md: 0.875rem;  /* 14px - titulos de cartao */
+  --font-size-lg: 1rem;      /* 16px - valores financeiros */
+  --font-size-xl: 1.25rem;   /* 20px - titulo principal e valores destacados */
+
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -874,7 +881,7 @@ a:hover { color: var(--c-primary-dark); }
 .quick-action .material-symbols-outlined { color: var(--c-primary); font-size: 18px; }
 
 /* Gráficos do Painel com altura contida */
-#chartFinanceiro, #chartCategorias { max-height: 200px; }
+#chartFinanceiro, #chartCategorias { height: 200px; width: 100%; }
 
 /* ── Login: logótipo novo ─────────────────────────────────────────── */
 .login-logo {
@@ -1126,7 +1133,17 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
 
 /* ── Barra inferior móvel (acessos rápidos) ── */
 .mobile-bottom-bar { display: none; }
-.mobile-bottom-bar .mb-item { color: var(--nav-text-muted); text-decoration: none; }
+.mobile-bottom-bar .mb-item {
+  color: var(--nav-text-muted);
+  text-decoration: none;
+  /* o item "Menu" e um <button> (abre o drawer existente): reset visual */
+  appearance: none;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.mobile-bottom-bar .mb-item.menu-aberto { color: var(--nav-active); background: var(--nav-active-bg); font-weight: 600; }
 .mobile-bottom-bar .mb-item:hover { color: var(--nav-text); background: var(--nav-hover); }
 .mobile-bottom-bar .mb-item.mb-item-ativo { color: var(--nav-active); font-weight: 600; }
 .mobile-bottom-bar .mb-item:focus-visible { outline: 2px solid var(--nav-focus); outline-offset: -3px; }
@@ -1417,3 +1434,125 @@ hr { border-color: var(--c-border); opacity: 1; }
 .badge.text-bg-dark { background: var(--c-text) !important; color: var(--c-surface) !important; }
 .alert-light { background: var(--c-surface-2); color: var(--c-text-muted); }
 .alert-secondary { background: var(--c-surface-2); color: var(--c-text-muted); }
+
+/* ===================================================================
+   Experiencia mobile (<= 767.98px) - tema claro e tema escuro.
+   Tudo por tokens; tipografia minima de 12px.
+   =================================================================== */
+@media (max-width: 767.98px) {
+  body { font-size: var(--font-size-sm); }
+  .page-heading h1 { font-size: var(--font-size-xl); line-height: 1.25; }
+  .page-heading .subtitle { font-size: var(--font-size-sm); }
+  .section-title { font-size: var(--font-size-xs); margin: var(--sp-4) 0 var(--sp-2); }
+  .card-header { font-size: var(--font-size-md); }
+  .card-body { padding: 14px; }
+  .card-body .card-body { padding: 0; }
+  .form-label { font-size: var(--font-size-xs); }
+  .form-control, .form-select { font-size: var(--font-size-sm); }
+  .form-text, .text-muted, small { font-size: var(--font-size-xs); }
+  .table { font-size: var(--font-size-sm); }
+  .table thead th { font-size: var(--font-size-xs); }
+  .badge { font-size: var(--font-size-xs); }
+  .btn { font-size: var(--font-size-sm); }
+  .btn-sm { font-size: var(--font-size-xs); }
+  .alert { font-size: var(--font-size-sm); }
+  .dropdown-item, .dropdown-item-text { font-size: var(--font-size-sm); }
+  .quick-action { font-size: var(--font-size-sm); }
+  .stat-label, .mini-stat-label, .strip-label { font-size: var(--font-size-xs); }
+  .stat-sub, .mini-stat-sub { font-size: var(--font-size-xs); }
+  .stat-value, .mini-stat-value { font-size: var(--font-size-xl); }
+  .sidebar-item { font-size: var(--font-size-sm); }
+  .sidebar-group-title { font-size: var(--font-size-xs); }
+  .login-logo { max-height: 56px; }
+
+  .app-content { padding: var(--sp-4) var(--sp-4) calc(76px + env(safe-area-inset-bottom, 0)); }
+  .page-heading { margin-bottom: var(--sp-4); }
+
+  .app-header {
+    padding-left: max(var(--sp-3), env(safe-area-inset-left));
+    padding-right: max(var(--sp-3), env(safe-area-inset-right));
+    gap: var(--sp-1);
+  }
+  .icon-btn { width: 44px; height: 44px; flex: 0 0 auto; }
+  .icon-btn .material-symbols-outlined { font-size: 24px; }
+  .condominio-pill { padding: var(--sp-1); gap: 0; min-height: 44px; min-width: 44px; justify-content: center; }
+  .condominio-pill .material-symbols-outlined { font-size: 22px; }
+  .user-chip { padding: 4px; min-height: 44px; }
+  .user-chip .avatar { width: 32px; height: 32px; font-size: 0.78rem; }
+
+  .strip-item { padding: 4px 12px; }
+  .strip-label { margin-bottom: 3px; }
+  .strip-value { font-size: var(--font-size-lg); text-align: right; font-variant-numeric: tabular-nums; }
+  .painel-strip { row-gap: var(--sp-3); }
+
+  .quick-actions { gap: var(--sp-2); }
+  .quick-action { min-height: 44px; padding: 8px 14px; border-radius: var(--radius-sm); white-space: nowrap; }
+  .quick-action .material-symbols-outlined { font-size: 20px; }
+
+  .table-responsive { -webkit-overflow-scrolling: touch; }
+  .table td.text-end, .table th.text-end { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .table td, .table th { padding: 0.5rem 0.6rem; }
+
+  #chartFinanceiro, #chartCategorias { height: 240px; }
+}
+
+@media (max-width: 575.98px) {
+  .app-content { padding-left: var(--sp-3); padding-right: var(--sp-3); }
+  .painel-strip .strip-item { flex: 1 1 45%; }
+  .quick-action { padding: 8px 12px; }
+  .condominio-pill { padding: var(--sp-1) var(--sp-2); gap: var(--sp-1); }
+}
+
+@media (min-width: 390px) and (max-width: 767.98px) {
+  .condominio-pill-text {
+    display: inline-block;
+    max-width: 30vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .condominio-pill { gap: var(--sp-2); }
+}
+
+@media (max-width: 767.98px) {
+  .mobile-bottom-bar .mb-item {
+    min-height: 48px;
+    gap: 3px;
+    padding: .35rem .25rem;
+    font-size: var(--font-size-xs);
+    line-height: 1.15;
+  }
+  .mobile-bottom-bar .mb-item .mb-label {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mobile-bottom-bar .mb-item .material-symbols-outlined { font-size: 22px; }
+  .mobile-bottom-bar .mb-item.mb-item-ativo .mb-label { font-weight: 600; }
+  .mobile-bottom-bar .mb-item-menu { position: relative; }
+  .mobile-bottom-bar .mb-item-menu::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 20%; bottom: 20%;
+    width: 1px;
+    background: var(--nav-border);
+  }
+}
+
+@media (max-width: 359.98px) {
+  .mobile-bottom-bar .mb-item { font-size: 0.6875rem; }
+}
+
+/* Tablets em modo drawer (768-991px): alvos de toque e minimos de legibilidade */
+@media (max-width: 991.98px) {
+  .icon-btn { width: 44px; height: 44px; }
+  .icon-btn .material-symbols-outlined { font-size: 24px; }
+  .condominio-pill { min-height: 44px; }
+  .user-chip { min-height: 44px; }
+  .stat-label, .mini-stat-label, .strip-label { font-size: var(--font-size-xs); }
+  .form-text, .text-muted, small { font-size: var(--font-size-xs); }
+  .badge { font-size: var(--font-size-xs); }
+  .table thead th { font-size: var(--font-size-xs); }
+}

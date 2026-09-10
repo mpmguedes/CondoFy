@@ -219,8 +219,8 @@
 
     <div class="app-body">
       <header class="app-header">
-        <button class="icon-btn sidebar-toggle" id="sidebarToggle" type="button" aria-label="Alternar menu">
-          <span class="material-symbols-outlined">menu</span>
+        <button class="icon-btn sidebar-toggle" id="sidebarToggle" type="button" aria-label="Alternar menu" aria-expanded="false" aria-controls="sidebar">
+          <span class="material-symbols-outlined" aria-hidden="true">menu</span>
         </button>
         <a class="condominio-pill" id="condominioPill" href="/condominios" title="Trocar de condomínio">
           <span class="material-symbols-outlined">sync</span>
@@ -232,8 +232,8 @@
         </a>
         <div class="app-header-spacer"></div>
         {{> _tema-toggle}}
-        <button class="icon-btn" type="button" title="Notificações">
-          <span class="material-symbols-outlined">notifications</span>
+        <button class="icon-btn" type="button" title="Notificações" aria-label="Notificações">
+          <span class="material-symbols-outlined" aria-hidden="true">notifications</span>
         </button>
         <div class="dropdown">
           <button class="user-chip dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">

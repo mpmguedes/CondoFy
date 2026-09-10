@@ -132,16 +132,16 @@
   </div>
   <div class="col-12 col-lg-7">
     <div class="row g-3">
-      <div class="col-7">
+      <div class="col-12 col-md-7">
         <div class="card h-100">
           <div class="card-header bg-white small fw-semibold">Evolução financeira {{anoAtual}}</div>
-          <div class="card-body"><canvas id="chartFinanceiro" height="120"></canvas></div>
+          <div class="card-body"><canvas id="chartFinanceiro" role="img" aria-label="Gráfico de barras com receitas e despesas por mês de {{anoAtual}}"></canvas></div>
         </div>
       </div>
-      <div class="col-5">
+      <div class="col-12 col-md-5">
         <div class="card h-100">
           <div class="card-header bg-white small fw-semibold">Despesas por categoria</div>
-          <div class="card-body"><canvas id="chartCategorias" height="120"></canvas></div>
+          <div class="card-body"><canvas id="chartCategorias" role="img" aria-label="Gráfico circular com a distribuição das despesas por categoria"></canvas></div>
         </div>
       </div>
     </div>
@@ -172,6 +172,11 @@
       return v || alternativa;
     };
     const texto = cor('--c-text-muted', '#567086');
+    // Mobile: gráficos maiores e rótulos legíveis (mínimo 11px).
+    const ecraPequeno = window.innerWidth < 768;
+    const fonteLegenda = ecraPequeno ? 12 : 10;
+    const fonteEixos = ecraPequeno ? 11 : 9;
+    const legenda = { position: 'bottom', labels: { boxWidth: ecraPequeno ? 14 : 10, padding: ecraPequeno ? 10 : 6, font: { size: fonteLegenda }, color: texto } };
 
     new Chart(document.getElementById('chartFinanceiro'), {
       type: 'bar',
@@ -182,23 +187,42 @@
           { label: 'Despesas', data: financeiro.despesas, backgroundColor: cor('--c-error', '#D8475C'), borderRadius: 3 },
         ],
       },
-      options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }, color: texto } } }, scales: { y: { beginAtZero: true, ticks: { font: { size: 9 }, color: texto } }, x: { ticks: { color: texto } } } },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false, // altura definida no CSS (maior em mobile)
+        interaction: { mode: 'index', intersect: false }, // toque mostra o valor de cada série
+        plugins: { legend: legenda, tooltip: { displayColors: true } },
+        scales: {
+          y: { beginAtZero: true, ticks: { font: { size: fonteEixos }, color: texto } },
+          x: { ticks: { font: { size: fonteEixos }, color: texto } },
+        },
+      },
     });
 
     new Chart(document.getElementById('chartCategorias'), {
       type: 'doughnut',
       data: {
         labels: categorias.labels,
-        datasets: [{ data: categorias.valores, backgroundColor: [
-          cor('--c-primary', '#075B9B'),
-          cor('--c-success', '#20C83F'),
-          cor('--c-warning', '#D98A16'),
-          cor('--c-text-subtle', '#7B91A2'),
-          cor('--c-error', '#D8475C'),
-          cor('--c-info', '#087FC2'),
-        ] }],
+        datasets: [{
+          data: categorias.valores,
+          borderColor: cor('--c-surface', '#FFFFFF'),
+          borderWidth: 2,
+          backgroundColor: [
+            cor('--c-primary', '#075B9B'),
+            cor('--c-success', '#20C83F'),
+            cor('--c-warning', '#D98A16'),
+            cor('--c-text-subtle', '#7B91A2'),
+            cor('--c-error', '#D8475C'),
+            cor('--c-info', '#087FC2'),
+          ],
+        }],
       },
-      options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 9 }, color: texto } } }, cutout: '62%' },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: legenda, tooltip: { displayColors: true } },
+        cutout: '58%',
+      },
     });
   })();
 </script>

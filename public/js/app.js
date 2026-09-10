@@ -23,31 +23,61 @@ document.querySelectorAll('.alert-dismissible').forEach((a) => {
 });
 
 // Sidebar: recolher (desktop) / drawer (mobile)
+// O mesmo comportamento serve o botão do cabeçalho e o item "Menu" da barra
+// inferior (não existe um segundo menu/drawer).
 (function () {
   const shell = document.getElementById('appShell');
   const sidebar = document.getElementById('sidebar');
   const backdrop = document.getElementById('sidebarBackdrop');
-  const toggle = document.getElementById('sidebarToggle');
-  if (!shell || !toggle) return;
+  const toggleTopo = document.getElementById('sidebarToggle');
+  const toggleMenu = document.getElementById('sidebarToggleBottom');
+  if (!shell || (!toggleTopo && !toggleMenu)) return;
 
-  if (localStorage.getItem('condofy_sidebar_collapsed') === '1' && window.innerWidth > 991) {
-    shell.classList.add('collapsed');
+  const botoes = [toggleTopo, toggleMenu].filter(Boolean);
+  const mobile = () => window.innerWidth <= 991;
+
+  // Estado visual/semântico: item "Menu" ativo enquanto o drawer estiver aberto.
+  function sincronizar() {
+    const aberto = mobile() && sidebar.classList.contains('open');
+    if (toggleMenu) {
+      toggleMenu.classList.toggle('menu-aberto', aberto);
+      toggleMenu.setAttribute('aria-expanded', aberto ? 'true' : 'false');
+    }
+    if (toggleTopo) toggleTopo.setAttribute('aria-expanded', aberto ? 'true' : 'false');
+    if (backdrop) backdrop.classList.toggle('show', aberto);
   }
 
-  toggle.addEventListener('click', () => {
-    if (window.innerWidth <= 991) {
-      const open = sidebar.classList.toggle('open');
-      if (backdrop) backdrop.classList.toggle('show', open);
+  function alternar() {
+    if (mobile()) {
+      sidebar.classList.toggle('open');
     } else {
       shell.classList.toggle('collapsed');
       localStorage.setItem('condofy_sidebar_collapsed', shell.classList.contains('collapsed') ? '1' : '0');
     }
+    sincronizar();
+  }
+
+  function fechar() {
+    sidebar.classList.remove('open');
+    sincronizar();
+  }
+
+  if (localStorage.getItem('condofy_sidebar_collapsed') === '1' && !mobile()) {
+    shell.classList.add('collapsed');
+  }
+
+  botoes.forEach((b) => b.addEventListener('click', alternar));
+  if (backdrop) backdrop.addEventListener('click', fechar);
+
+  // Teclado: ESC fecha o drawer.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && sidebar.classList.contains('open')) fechar();
   });
 
-  if (backdrop) {
-    backdrop.addEventListener('click', () => {
-      sidebar.classList.remove('open');
-      backdrop.classList.remove('show');
-    });
-  }
+  // Ao passar para desktop, garantir que o drawer não fica aberto.
+  window.addEventListener('resize', () => {
+    if (!mobile() && sidebar.classList.contains('open')) fechar();
+  });
+
+  sincronizar();
 })();
