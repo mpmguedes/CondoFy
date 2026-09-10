@@ -311,6 +311,11 @@ function ligacaoParaBackup(provedor) {
     const tokens = _cache.tokens.get(c.chave);
     if (tokens) return { condominioId: c.cid, conta: tokens.conta || null, origem: 'condominio' };
   }
+  // Ligação legada por variável de ambiente (só Google Drive): é da instalação,
+  // por isso não há conta associada nem aviso de "conta de condomínio".
+  if (provedor === 'google_drive' && String(process.env.GOOGLE_REFRESH_TOKEN || '').trim()) {
+    return { condominioId: null, conta: null, origem: 'plataforma' };
+  }
   return { condominioId: null, conta: null, origem: null };
 }
 

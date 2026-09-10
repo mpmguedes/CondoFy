@@ -173,6 +173,13 @@ const TAB4 = 'href="/admin/config/auditoria"';
     for (const acao of ['ligar', 'desligar', 'testar']) {
       assert.ok(new RegExp(`ROTAS_DRIVE\\.${acao}`).test(fonteRotas), `armazenamento: rota genérica delega o ${acao} do Drive`);
     }
+    // Regressão: quando a conta é revogada no fornecedor, o teste falha e os
+    // tokens guardados são removidos. A página tem de recarregar o estado (senão
+    // o serviço continuava a aparecer "Ligado ✓" sem forma de o desligar) e
+    // dizer explicitamente que a ligação foi removida.
+    assert.ok(/await storage\.inicializar\(\)\.catch/.test(fonteRotas), 'armazenamento: testar recarrega o estado após falha');
+    assert.ok(/await drive\.inicializar\(\)\.catch/.test(fonteRotas), 'armazenamento: testar do Drive recarrega o estado após falha');
+    assert.ok(fonteRotas.includes('A ligação foi removida porque a autorização já não é válida'), 'armazenamento: explica que a ligação inválida foi removida');
   } finally {
     delete process.env.DROPBOX_ENABLED;
     delete process.env.DROPBOX_APP_KEY;

@@ -372,6 +372,58 @@ async function testarAmbitoPlataforma() {
   }
 }
 
+// ── 8.1 Âmbito no Google Drive: a ligação do condomínio e a da plataforma ──
+// Regressão grave: drive.desligar() não recebia âmbito nenhum — apagava sempre a
+// ligação da PLATAFORMA (a dos backups). No cartão de um condomínio com conta
+// própria, "Desligar" não removia nada (a página continuava a mostrar
+// "Ligado ✓") e ainda derrubava a ligação usada por todos os condomínios.
+async function testarAmbitoPlataformaDrive() {
+  loja.clear();
+  ligacoes.limparCache();
+  const amb = {
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    GOOGLE_REFRESH_TOKEN: process.env.GOOGLE_REFRESH_TOKEN,
+  };
+  // Sem credenciais OAuth a revogação no Google é ignorada: o teste fica offline
+  // e verifica apenas QUAL das ligações é removida.
+  delete process.env.GOOGLE_CLIENT_ID;
+  delete process.env.GOOGLE_CLIENT_SECRET;
+  delete process.env.GOOGLE_REFRESH_TOKEN;
+  try {
+    const driveProv = storage.obterProvedor('google_drive');
+    const chaveCondominio = ligacoes.chaveTokens('google_drive', 7);
+    const chavePlataforma = ligacoes.chaveTokensPlataforma('google_drive');
+
+    await ligacoes.guardarTokens('google_drive', null, { refresh_token: 'plataforma-tok', conta: 'plataforma@gmail.com' });
+    await ligacoes.guardarTokens('google_drive', 7, { refresh_token: 'condominio-tok', conta: 'condominio@gmail.com' });
+
+    // Desligar a conta de um condomínio remove só a ligação desse condomínio.
+    await driveProv.desligar(7);
+    assert.strictEqual(loja.get(chaveCondominio), null, 'Drive: ligação do condomínio removida');
+    assert.ok(loja.get(chavePlataforma), 'Drive: ligação da plataforma preservada ao desligar um condomínio');
+
+    // Desligar a plataforma exige âmbito explícito (protege os backups).
+    await assert.rejects(
+      () => driveProv.desligar(null),
+      /condominioId é obrigatório/i,
+      'Drive: sem âmbito não desliga a ligação da instalação'
+    );
+    assert.ok(loja.get(chavePlataforma), 'Drive: ligação da plataforma intacta após tentativa sem âmbito');
+
+    await driveProv.desligar(null, { plataforma: true });
+    assert.strictEqual(loja.get(chavePlataforma), null, 'Drive: ligação da plataforma removida com âmbito explícito');
+    assert.strictEqual(ligacoes.tokensSync('google_drive', null, { plataforma: true }).tokens, null, 'Drive: cache sem tokens da plataforma');
+    await ligacoes.inicializar();
+    assert.strictEqual(ligacoes.tokensSync('google_drive', null, { plataforma: true }).tokens, null, 'Drive: sem cache obsoleta depois de reinicializar');
+  } finally {
+    for (const [k, v] of Object.entries(amb)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+
 // ── 9. URL de autorização: pede sempre a escolha da conta ───────────
 function testarUrlAutorizacao() {
   const envAntes = {
@@ -472,6 +524,7 @@ function testarFachada() {
   await testarBackups();
   await testarEstadoInterface();
   await testarAmbitoPlataforma();
+  await testarAmbitoPlataformaDrive();
   testarUrlAutorizacao();
   await testarLeituraPorLocalizador();
   testarFachada();

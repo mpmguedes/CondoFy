@@ -204,6 +204,28 @@ assert.ok(!html.includes('Ligar para backups'), 'armazenamento: não volta a ped
 assert.ok(!html.includes('ambito=plataforma'), 'armazenamento: sem ligações de plataforma duplicadas');
 assert.ok(html.includes('Destino atual') && html.includes('Último backup'), 'armazenamento: destino e último backup visíveis');
 
+// Google Drive ligado pela conta da plataforma (caso histórico: o condomínio não
+// tem ligação própria). A ligação pertence à instalação, por isso Testar e
+// Desligar têm de usar o âmbito da plataforma — sem isso o "Desligar" não fazia
+// nada (apagava a chave do condomínio, que nem existia) e o cartão continuava a
+// mostrar "Ligado ✓" com uma conta que o administrador queria remover.
+const provedoresBase = estadoArm().provedores;
+const comDrive = (overDrive) => estadoArm({
+  provedores: [{ ...provedoresBase[0], ...overDrive }, provedoresBase[1], provedoresBase[2]],
+});
+html = armazenamento({ ...ctxArm, driveLigado: true, driveOpcoes: opcoesBase, ultimoBackup: null, armazenamento: comDrive({ contaPlataforma: true }) });
+assert.ok(html.includes('/admin/config/armazenamento/google_drive/desligar?ambito=plataforma'), 'armazenamento: desligar a conta da plataforma usa o âmbito da plataforma');
+assert.ok(html.includes('/admin/config/armazenamento/google_drive/testar?ambito=plataforma'), 'armazenamento: testar a conta da plataforma usa o âmbito da plataforma');
+assert.ok(html.includes('conta da plataforma'), 'armazenamento: identifica a ligação como sendo da plataforma');
+assert.ok(!html.includes('/admin/config/armazenamento/dropbox/desligar?'), 'armazenamento: ligação do condomínio sem âmbito de plataforma');
+
+// Ligação legada definida na configuração técnica da instalação
+// (GOOGLE_REFRESH_TOKEN): não pode ser desligada pela página, por isso não se
+// mostra um "Desligar" que não faria nada — explica-se onde a remover.
+html = armazenamento({ ...ctxArm, driveLigado: true, driveOpcoes: opcoesBase, ultimoBackup: null, armazenamento: comDrive({ contaPlataforma: false, estado: { viaEnv: true } }) });
+assert.ok(html.includes('GOOGLE_REFRESH_TOKEN'), 'armazenamento: explica a ligação definida na configuração técnica');
+assert.ok(!html.includes('/admin/config/armazenamento/google_drive/desligar'), 'armazenamento: sem desligar quando a ligação vem do servidor');
+
 // Aviso quando o destino dos backups é a conta de um condomínio (o dump contém
 // dados de todos os condomínios).
 html = armazenamento({

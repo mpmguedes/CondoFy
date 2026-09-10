@@ -38,17 +38,32 @@
         {{#if ligado}}
           <p class="small mb-3 text-truncate" title="{{conta}}">
             <i class="bi bi-person-circle me-1" aria-hidden="true"></i>{{#if conta}}{{conta}}{{else}}conta autorizada{{/if}}
+            {{#if contaPlataforma}}<span class="badge text-bg-light border ms-1">conta da plataforma</span>{{/if}}
           </p>
+          {{#if estado.viaEnv}}
+          <p class="text-muted small">
+            Esta ligação vem da configuração técnica da instalação (variável <code>GOOGLE_REFRESH_TOKEN</code>)
+            e não pode ser desligada por esta página: remova-a no ficheiro <code>.env</code> do servidor e
+            reinicie o GesCondu.
+          </p>
+          {{else if contaPlataforma}}
+          <p class="text-muted small">
+            Esta ligação é da instalação (a mesma usada pelos backups): desligá-la aqui remove-a em todo o GesCondu.
+            Para usar uma conta Google só deste condomínio, ligue uma conta própria.
+          </p>
+          {{/if}}
           <div class="d-flex gap-2 mt-auto">
-            <form action="/admin/config/armazenamento/{{nome}}/testar" method="POST">
+            <form action="/admin/config/armazenamento/{{nome}}/testar{{#if contaPlataforma}}?ambito=plataforma{{/if}}" method="POST">
               <button type="submit" class="btn btn-sm btn-outline-secondary" title="Testar ligação" aria-label="Testar ligação a {{rotulo}}">
                 <i class="bi bi-plug" aria-hidden="true"></i>
               </button>
             </form>
-            <form action="/admin/config/armazenamento/{{nome}}/desligar" method="POST" class="flex-fill"
-                  data-confirmar="Desligar {{rotulo}}? Os ficheiros já guardados não são apagados e a conta não é afetada." data-confirmar-perigo="1">
+            {{#unless estado.viaEnv}}
+            <form action="/admin/config/armazenamento/{{nome}}/desligar{{#if contaPlataforma}}?ambito=plataforma{{/if}}" method="POST" class="flex-fill"
+                  data-confirmar="{{#if contaPlataforma}}Desligar {{rotulo}} da plataforma? Esta ligação é usada por todos os condomínios e pelos backups. Os ficheiros já guardados não são apagados.{{else}}Desligar {{rotulo}} deste condomínio? Os ficheiros já guardados não são apagados e a conta não é afetada.{{/if}}" data-confirmar-perigo="1">
               <button type="submit" class="btn btn-sm btn-outline-danger w-100">Desligar</button>
             </form>
+            {{/unless}}
           </div>
         {{else}}
           {{#if disponivel}}

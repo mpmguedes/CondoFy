@@ -152,6 +152,10 @@ function obterRedirectUri(req) {
 
 // URL para o utilizador autorizar a aplicação (scope mínimo: ficheiros
 // criados/abertos pela aplicação no Drive).
+// O âmbito (conta do condomínio ou da plataforma) NÃO vai no URL: viaja no
+// `state` assinado pela sessão e é aplicado no callback (trocarCodigo).
+// `prompt: 'consent'` garante que o Google volta a pedir a escolha da conta,
+// para ser possível ligar contas diferentes em condomínios diferentes.
 function construirUrlAutorizacao({ redirectUri, state }) {
   const cliente = criarCliente();
   return cliente.generateAuthUrl({
@@ -164,7 +168,12 @@ function construirUrlAutorizacao({ redirectUri, state }) {
 }
 
 // Troca o código de autorização pelos tokens e guarda-os na BD.
-async function trocarCodigo({ code, redirectUri }) {
+// `condominioId` define o âmbito da ligação: com condomínio, a conta fica na
+// chave do condomínio; sem ele (undefined/null), é a ligação da plataforma
+// (historicamente a única existente, usada pelos backups e como fallback dos
+// condomínios sem conta própria).
+async function trocarCodigo({ code, redirectUri, condominioId }) {
+  const cid = ligacoes.normalizarCondominio(condominioId);
   const cliente = criarCliente();
   const { tokens } = await cliente.getToken({ code, redirect_uri: redirectUri });
   cliente.setCredentials(tokens);
@@ -186,14 +195,31 @@ async function trocarCodigo({ code, redirectUri }) {
     expiry_date: tokens.expiry_date != null ? tokens.expiry_date : tokens.expires_in ? Date.now() + tokens.expires_in * 1000 : null,
     conta,
   };
-  return gravarTokens(dados);
+  return gravarTokens(dados, cid);
 }
 
 // Desliga: revoga o token no Google (melhor esforço) e remove os tokens da BD.
 // Os ficheiros já existentes no Drive NÃO são apagados.
-async function desligar() {
-  const dbTokens = await obterTokensDb();
-  const refresh = (dbTokens && dbTokens.refresh_token) || refreshTokenEnv();
+//
+// ÂMBITO: a ligação de UM condomínio (por omissão) ou a da plataforma
+// (`{ plataforma: true }`). Os dois âmbitos são independentes:
+//   · a ligação de plataforma alimenta os backups e todos os condomínios que não
+//     tenham conta própria — por isso nunca é removida sem âmbito explícito, e
+//     desligar a conta de um condomínio não lhe toca (antes era exatamente isto
+//     que acontecia: "Desligar" no cartão de um condomínio não removia a conta
+//     do condomínio e apagava a ligação da instalação).
+//   · uma leitura com fallback (lerTokens) devolveria os tokens da plataforma a
+//     um condomínio sem conta própria; aqui lê-se SEMPRE a chave exata do âmbito.
+async function desligar(condominioId, opcoes = {}) {
+  const plataforma = Boolean(opcoes && opcoes.plataforma);
+  const cid = plataforma ? null : ligacoes.normalizarCondominio(condominioId);
+  if (!cid && !plataforma) {
+    throw new Error('condominioId é obrigatório para desligar a ligação ao Google Drive.');
+  }
+
+  const chave = cid ? ligacoes.chaveTokens(PROVEDOR, cid) : ligacoes.chaveTokensPlataforma(PROVEDOR);
+  const guardados = await ligacoes.carregarCredenciais(chave).catch(() => null);
+  const refresh = (guardados && guardados.refresh_token) || (cid ? '' : refreshTokenEnv());
   if (refresh && temCredenciais()) {
     try {
       await criarCliente().revokeToken(refresh);
@@ -201,7 +227,7 @@ async function desligar() {
       // revogação é melhor esforço — segue em frente
     }
   }
-  await limparTokens();
+  await limparTokens(cid);
 }
 
 // ── Tratamento de erros da API ──────────────────────────────────────
@@ -237,33 +263,56 @@ function erroDriveParaMensagem(err) {
   return `Não foi possível comunicar com o Google Drive: ${mensagem}`;
 }
 
+// Remove APENAS a ligação cujos tokens falharam. Uma conta revogada de um
+// condomínio não pode derrubar a ligação da plataforma (que serve os backups e
+// todos os condomínios sem conta própria) — antes, `limparTokens()` era chamado
+// sem âmbito e apagava sempre a ligação da instalação.
+// Devolve a origem removida ('condominio'|'plataforma') ou null quando a
+// ligação vem do `.env` (GOOGLE_REFRESH_TOKEN) e não é removível pela aplicação.
+async function limparLigacaoUsada(condominioId) {
+  const { origem } = ligacoes.tokensSync(PROVEDOR, condominioId);
+  if (origem === 'condominio') {
+    await limparTokens(condominioId).catch(() => {});
+    return 'condominio';
+  }
+  if (origem === 'plataforma' || origem === 'plataforma_fallback') {
+    await limparTokens(null).catch(() => {});
+    return 'plataforma';
+  }
+  return null;
+}
+
 // Executa uma operação da API com tratamento de erros centralizado.
-// Se a autorização tiver sido revogada, remove os tokens (fica "Não ligado").
-async function operacaoDrive(fn) {
+// Se a autorização tiver sido revogada, remove os tokens DA LIGAÇÃO USADA
+// (fica "Não ligado" na página, sem afetar as restantes ligações).
+async function operacaoDrive(fn, condominioId) {
   try {
     return await fn();
   } catch (err) {
     const { revogado } = analisarErro(err);
     if (revogado) {
-      await limparTokens().catch(() => {});
+      await limparLigacaoUsada(condominioId);
     }
     throw new Error(erroDriveParaMensagem(err));
   }
 }
 
 // Testa a ligação atual ao Google Drive (sem alterar nada).
-async function testarLigacao() {
-  if (!isConfigured()) {
+// `condominioId` opcional: testa a conta do condomínio (com fallback à da
+// plataforma quando o condomínio não tem conta própria). Sem ele testa a
+// ligação da plataforma — é o que a página faz no cartão da plataforma.
+async function testarLigacao(condominioId) {
+  if (!isConfigured(condominioId)) {
     return { ok: false, erro: 'Google Drive não está ligado.' };
   }
   try {
     const resultado = await operacaoDrive(async () => {
-      const about = await google.drive({ version: 'v3', auth: obterClienteAutenticado() }).about.get({
+      const about = await google.drive({ version: 'v3', auth: obterClienteAutenticado(condominioId) }).about.get({
         fields: 'user(emailAddress, displayName)',
       });
       const u = about.data.user || {};
       return { conta: u.emailAddress || u.displayName || null };
-    });
+    }, condominioId);
     return { ok: true, conta: resultado.conta };
   } catch (err) {
     return { ok: false, erro: err.message };
@@ -274,21 +323,24 @@ async function testarLigacao() {
 // Procura uma pasta pelo nome EXATO dentro da pasta-mãe (comparação local,
 // sem interpolar o nome numa query do Drive — nomes com aspas/acentos são
 // seguros) e devolve o id ou null.
-async function encontrarPastaPorNome(nome, parentId) {
+// `condominioId` escolhe a CONTA usada (a do condomínio, com fallback à da
+// plataforma): sem isto, a árvore de um condomínio com conta própria era criada
+// na conta da plataforma.
+async function encontrarPastaPorNome(nome, parentId, condominioId) {
   return operacaoDrive(async () => {
     let q = `mimeType='application/vnd.google-apps.folder' and trashed=false`;
     if (parentId) q += ` and '${parentId}' in parents`;
-    const res = await getDrive().files.list({ q, fields: 'files(id, name)', pageSize: 1000 });
+    const res = await getDrive(condominioId).files.list({ q, fields: 'files(id, name)', pageSize: 1000 });
     const alvo = String(nome || '').toLowerCase();
     const f = (res.data.files || []).find((x) => String(x.name || '').toLowerCase() === alvo);
     return f ? f.id : null;
-  });
+  }, condominioId);
 }
 
-// Cria uma pasta nova (pasta-mãe opcional).
-async function criarPasta(nome, parentId) {
+// Cria uma pasta nova (pasta-mãe opcional), na conta indicada.
+async function criarPasta(nome, parentId, condominioId) {
   return operacaoDrive(async () => {
-    const res = await getDrive().files.create({
+    const res = await getDrive(condominioId).files.create({
       requestBody: {
         name: String(nome),
         mimeType: 'application/vnd.google-apps.folder',
@@ -297,7 +349,7 @@ async function criarPasta(nome, parentId) {
       fields: 'id',
     });
     return res.data.id;
-  });
+  }, condominioId);
 }
 
 // Encontra uma pasta pelo nome (e pasta-mãe) ou cria-a — nunca duplica.
@@ -464,7 +516,7 @@ async function descargarArquivo(fileId, condominioId) {
     const chunks = [];
     for await (const c of res.data) chunks.push(c);
     return Buffer.concat(chunks);
-  });
+  }, condominioId);
 }
 
 // Abre um ficheiro do Drive como FLUXO (para servir ao cliente através do
@@ -481,7 +533,7 @@ async function abrirFluxo(fileId, condominioId) {
       tamanho: res.headers && res.headers['content-length'] ? Number(res.headers['content-length']) : null,
       nome: null,
     };
-  });
+  }, condominioId);
 }
 
 // Remove um ficheiro do Drive (usado pela retenção dos backups).
@@ -489,7 +541,7 @@ async function apagarArquivo(fileId, condominioId) {
   return operacaoDrive(async () => {
     await getDrive(condominioId).files.delete({ fileId });
     return true;
-  });
+  }, condominioId);
 }
 
 // ── Upload ──────────────────────────────────────────────────────────
@@ -519,7 +571,7 @@ async function uploadArquivo({ nome, mimeType, buffer, parentFolderId, condomini
       url: res.data.webViewLink || null,
       tamanho: res.data.size ? parseInt(res.data.size, 10) : null,
     };
-  });
+  }, condominioId);
 }
 
 module.exports = {

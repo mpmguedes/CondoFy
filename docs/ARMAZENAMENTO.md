@@ -127,6 +127,25 @@ por outro — e, fora do Google Drive (que tem conta de plataforma desde o
 início), não existe fallback para a conta da plataforma (testado em
 `scripts/test-storage-provedores.js`).
 
+**Âmbito ao desligar (Ligar/Desligar):** cada cartão de Configurações →
+Armazenamento e Backups atua apenas sobre a ligação que mostra:
+
+* cartão ligado por conta **do condomínio** → desliga a chave
+  `storage:tokens:<provedor>:c<id>` (a conta da plataforma não é tocada);
+* cartão ligado pela conta **da plataforma** (caso histórico do Google Drive,
+  marcado na página como “conta da plataforma”) → desliga
+  `storage:tokens:<provedor>:plataforma` / `google_drive_tokens`, a mesma
+  ligação usada pelos backups (e o destino de backups é libertado);
+* ligação definida na configuração técnica da instalação
+  (`GOOGLE_REFRESH_TOKEN`) → não há botão Desligar: a página explica que tem de
+  ser removida no `.env` do servidor, em vez de oferecer uma ação sem efeito.
+
+Sem âmbito explícito, desligar **sem** condomínio é recusado (`condominioId é
+obrigatório…`): a ligação de plataforma nunca é removida por engano a partir do
+cartão de um condomínio. Se a conta for revogada no fornecedor, o botão de
+testar deteta-o, remove os tokens inválidos e a página passa a mostrar
+“Não ligado”, com a indicação de que é preciso voltar a ligar a conta.
+
 ## 2.1 Credenciais cifradas em repouso
 
 Os tokens OAuth de armazenamento **nunca são guardados em texto simples** na

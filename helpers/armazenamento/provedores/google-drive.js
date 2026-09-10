@@ -51,7 +51,8 @@ module.exports = {
 
   trocarCodigo: (opcoes) => drive.trocarCodigo(opcoes),
 
-  desligar: (condominioId) => drive.desligar(condominioId),
+  // Âmbito explícito: a ligação do condomínio ou a da plataforma (backups).
+  desligar: (condominioId, opcoes) => drive.desligar(condominioId, opcoes),
 
   // Escritas
   uploadArquivo: (opcoes) => drive.uploadArquivo(opcoes),

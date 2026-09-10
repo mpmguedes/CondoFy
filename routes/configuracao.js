@@ -236,12 +236,20 @@ router.post('/config/armazenamento/:provedor/testar', async (req, res) => {
     return res.redirect('/admin/config/armazenamento');
   }
   const p = storage.obterProvedor(provedor);
-  const r = await p.testarLigacao(plataforma ? null : req.condominioId);
+  const cidTeste = plataforma ? null : req.condominioId;
+  const r = await p.testarLigacao(cidTeste);
+  // O teste pode detetar que a autorização foi revogada no fornecedor: nesse
+  // caso o adaptador remove os tokens guardados. Recarrega-se o estado para a
+  // página deixar imediatamente de mostrar o serviço como "Ligado".
+  await storage.inicializar().catch(() => {});
   if (r.ok) {
     await audit({ userId: req.user.id, acao: 'testar_armazenamento', entidade: p.rotulo(), detalhes: { ok: true, ambito: plataforma ? 'plataforma' : 'condominio' } }).catch(() => {});
     req.flash('success_msg', r.conta ? `✓ Ligação a ${p.rotulo()} estabelecida (${r.conta}).` : `✓ Ligação a ${p.rotulo()} estabelecida.`);
   } else {
-    req.flash('error_msg', `✕ Não foi possível testar ${p.rotulo()}: ${r.erro}`);
+    const removida = !p.isConfigured(cidTeste)
+      ? ' A ligação foi removida porque a autorização já não é válida — ligue a conta novamente.'
+      : '';
+    req.flash('error_msg', `✕ Não foi possível testar ${p.rotulo()}: ${r.erro}${removida}`);
   }
   return res.redirect('/admin/config/armazenamento');
 });
@@ -502,7 +510,7 @@ router.get('/config/drive/callback', async (req, res) => {
 router.post('/config/drive/desligar', async (req, res) => {
   const plataforma = req.query.ambito === 'plataforma' || req.body.ambito === 'plataforma';
   try {
-    await drive.desligar(plataforma ? null : req.condominioId);
+    await drive.desligar(plataforma ? null : req.condominioId, { plataforma });
     await drive.inicializar();
     if (plataforma && (await storage.destinoDeBackup()) === 'google_drive') {
       await storage.definirDestinoDeBackup(null);
@@ -542,12 +550,19 @@ router.post('/config/drive/opcoes', async (req, res) => {
 router.post('/config/drive/testar', async (req, res) => {
   // Âmbito: a ligação da plataforma (backups) ou a do condomínio ativo.
   const plataforma = req.query.ambito === 'plataforma' || req.body.ambito === 'plataforma';
-  const r = await drive.testarLigacao(plataforma ? null : req.condominioId);
+  const cidTeste = plataforma ? null : req.condominioId;
+  const r = await drive.testarLigacao(cidTeste);
+  // Uma autorização revogada no Google faz o teste falhar e os tokens são
+  // removidos: recarrega-se o estado para a página deixar de mostrar "Ligado".
+  await drive.inicializar().catch(() => {});
   if (r.ok) {
-    await audit({ userId: req.user.id, acao: 'testar_google_drive', entidade: 'GoogleDrive', detalhes: { ok: true } }).catch(() => {});
+    await audit({ userId: req.user.id, acao: 'testar_google_drive', entidade: 'GoogleDrive', detalhes: { ok: true, ambito: plataforma ? 'plataforma' : 'condominio' } }).catch(() => {});
     req.flash('success_msg', r.conta ? `✓ Ligação ao Google Drive estabelecida (${r.conta}).` : '✓ Ligação ao Google Drive estabelecida.');
   } else {
-    req.flash('error_msg', `✕ Não foi possível testar o Google Drive: ${r.erro}`);
+    const removida = !drive.isConfigured(cidTeste)
+      ? ' A ligação foi removida porque a autorização já não é válida — ligue a conta novamente.'
+      : '';
+    req.flash('error_msg', `✕ Não foi possível testar o Google Drive: ${r.erro}${removida}`);
   }
   res.redirect('/admin/config/armazenamento#google-drive');
 });
