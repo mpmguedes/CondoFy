@@ -26,11 +26,11 @@ const FONTE = 'Helvetica';
 const FONTE_BOLD = 'Helvetica-Bold';
 
 // Cores institucionais discretas (sem blocos coloridos)
-const COR_INK = '#1c2733';
-const COR_TEXTO = '#262c33';
-const COR_MUTED = '#6a7380';
-const COR_LINHA = '#c3cbd4';
-const COR_RODAPE = '#7c8794';
+const COR_INK = '#06213F';
+const COR_TEXTO = '#102B46';
+const COR_MUTED = '#567086';
+const COR_LINHA = '#D7E4ED';
+const COR_RODAPE = '#7B91A2';
 
 // Colunas do cabeçalho
 const LCOL_W = 268; // largura da coluna esquerda (edifício)
@@ -144,7 +144,7 @@ function compor(doc, nivel, desenhar, docObj) {
   sp(12, 6);
 
   if (T.linhaIdentificacao) {
-    texto(T.linhaIdentificacao, { size: 9.6, bold: true, cor: '#3c4856', align: 'center' });
+    texto(T.linhaIdentificacao, { size: 9.6, bold: true, cor: '#0B2E56', align: 'center' });
     sp(3, 2);
   }
   if (T.localData) {

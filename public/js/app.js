@@ -24,35 +24,25 @@ document.querySelectorAll('.alert-dismissible').forEach((a) => {
 
 // Sidebar: recolher (desktop) / drawer (mobile)
 // O mesmo comportamento serve o botão do cabeçalho e o item "Menu" da barra
-// inferior (não existe um segundo menu/drawer).
+// inferior (não existe um segundo menu/drawer). Delegação de eventos: funciona
+// mesmo que os botões sejam renderizados depois do script.
 (function () {
   const shell = document.getElementById('appShell');
   const sidebar = document.getElementById('sidebar');
   const backdrop = document.getElementById('sidebarBackdrop');
-  const toggleTopo = document.getElementById('sidebarToggle');
-  const toggleMenu = document.getElementById('sidebarToggleBottom');
-  if (!shell || (!toggleTopo && !toggleMenu)) return;
+  if (!shell || !sidebar) return;
 
-  const botoes = [toggleTopo, toggleMenu].filter(Boolean);
   const mobile = () => window.innerWidth <= 991;
-
-  // Estado visual/semântico: item "Menu" ativo enquanto o drawer estiver aberto.
-  function sincronizar() {
-    const aberto = mobile() && sidebar.classList.contains('open');
-    if (toggleMenu) {
-      toggleMenu.classList.toggle('menu-aberto', aberto);
-      toggleMenu.setAttribute('aria-expanded', aberto ? 'true' : 'false');
-    }
-    if (toggleTopo) toggleTopo.setAttribute('aria-expanded', aberto ? 'true' : 'false');
-    if (backdrop) backdrop.classList.toggle('show', aberto);
-  }
+  const botoes = () => Array.prototype.slice.call(document.querySelectorAll('[data-sidebar-toggle]'));
 
   function alternar() {
     if (mobile()) {
       sidebar.classList.toggle('open');
     } else {
       shell.classList.toggle('collapsed');
-      localStorage.setItem('condofy_sidebar_collapsed', shell.classList.contains('collapsed') ? '1' : '0');
+      try {
+        localStorage.setItem('condofy_sidebar_collapsed', shell.classList.contains('collapsed') ? '1' : '0');
+      } catch (e) { /* localStorage indisponível: ignora */ }
     }
     sincronizar();
   }
@@ -62,12 +52,31 @@ document.querySelectorAll('.alert-dismissible').forEach((a) => {
     sincronizar();
   }
 
-  if (localStorage.getItem('condofy_sidebar_collapsed') === '1' && !mobile()) {
-    shell.classList.add('collapsed');
+  // Estado visual/semântico: item "Menu" ativo enquanto o drawer estiver aberto.
+  function sincronizar() {
+    const aberto = mobile() && sidebar.classList.contains('open');
+    botoes().forEach((b) => b.setAttribute('aria-expanded', aberto ? 'true' : 'false'));
+    const menu = document.getElementById('sidebarToggleBottom');
+    if (menu) menu.classList.toggle('menu-aberto', aberto);
+    if (backdrop) backdrop.classList.toggle('show', aberto);
   }
 
-  botoes.forEach((b) => b.addEventListener('click', alternar));
-  if (backdrop) backdrop.addEventListener('click', fechar);
+  try {
+    if (localStorage.getItem('condofy_sidebar_collapsed') === '1' && !mobile()) {
+      shell.classList.add('collapsed');
+    }
+  } catch (e) { /* localStorage indisponível: ignora */ }
+
+  // Um único listener para todos os botões (cabeçalho + barra inferior).
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-sidebar-toggle]');
+    if (btn) {
+      e.preventDefault();
+      alternar();
+      return;
+    }
+    if (backdrop && e.target === backdrop) fechar();
+  });
 
   // Teclado: ESC fecha o drawer.
   document.addEventListener('keydown', (e) => {

@@ -548,7 +548,9 @@ async function testPdfUmaPagina() {
   assert.ok(texto.includes('Fração A'), 'fração visível');
   assert.ok(texto.includes('125'), 'permilagem visível');
   assert.ok(texto.includes('TRF123456') && texto.includes('MB WAY') && texto.includes('XYZ789'), 'métodos/referências dos pagamentos visíveis');
-  assert.ok(texto.includes('GesCondu - Gestão de Condomínios'), 'rodapé com assinatura GesCondu');
+  // O rodapé identifica a plataforma de forma discreta (o documento é do
+  // condomínio): "Documento processado através da plataforma GesCondu".
+  assert.ok(texto.includes('Documento processado') && texto.includes('plataforma GesCondu'), 'rodapé identifica a plataforma GesCondu');
   assert.ok(!texto.includes('Condomínio Condomínio'), 'rodapé/cabeçalho sem duplicar a palavra Condomínio');
 
   // Nomes longos: colunas do cabeçalho nunca se sobrepõem e fica numa página.
