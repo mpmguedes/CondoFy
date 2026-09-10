@@ -55,7 +55,7 @@
           </td>
           <td class="text-end">
             <button form="cat-{{id}}" class="btn btn-sm btn-outline-primary" title="Guardar"><span class="material-symbols-outlined">check</span></button>
-            <form action="/admin/categorias/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar esta categoria?');">
+            <form action="/admin/categorias/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Eliminar esta categoria?" data-confirmar-perigo="1">
               <button class="btn btn-sm btn-outline-danger" title="Eliminar"><span class="material-symbols-outlined">delete</span></button>
             </form>
           </td>

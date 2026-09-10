@@ -71,7 +71,7 @@
           <div class="d-flex align-items-center gap-2">
             {{#if (urlDocumento this 'gestao')}}<a href="{{urlDocumento this 'gestao'}}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>{{/if}}
             {{#if (urlDocumentoExterno this)}}<a href="{{urlDocumentoExterno this}}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary" title="Link externo"><span class="material-symbols-outlined">link</span></a>{{/if}}
-            <form action="/admin/assembleias/{{../assembleia.id}}/anexos/{{id}}/eliminar" method="POST" onsubmit="return confirm('Eliminar este anexo?');">
+            <form action="/admin/assembleias/{{../assembleia.id}}/anexos/{{id}}/eliminar" method="POST" data-confirmar="Eliminar este anexo?" data-confirmar-perigo="1">
               <button class="btn btn-sm btn-outline-danger" title="Eliminar"><span class="material-symbols-outlined">delete</span></button>
             </form>
           </div>
@@ -117,7 +117,7 @@
               <button class="btn btn-sm btn-outline-primary" title="Guardar"><span class="material-symbols-outlined">check</span></button>
             </form>
           </div>
-          <form action="/admin/assembleias/{{../assembleia.id}}/agenda/{{id}}/eliminar" method="POST" onsubmit="return confirm('Remover este ponto?');">
+          <form action="/admin/assembleias/{{../assembleia.id}}/agenda/{{id}}/eliminar" method="POST" data-confirmar="Remover este ponto?" data-confirmar-perigo="1">
             <button class="btn btn-sm btn-outline-danger" title="Remover"><span class="material-symbols-outlined">delete</span></button>
           </form>
         </li>

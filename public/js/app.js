@@ -90,3 +90,75 @@ document.querySelectorAll('.alert-dismissible').forEach((a) => {
 
   sincronizar();
 })();
+
+// ── Caixa de confirmação no layout da aplicação ──────────────────────
+// Substitui o confirm() nativo do browser: qualquer formulário com
+// data-confirmar abre a modal do GesCondu (Bootstrap, nas cores da app) e só
+// submete depois de confirmado. Atributos opcionais: data-confirmar-titulo,
+// data-confirmar-acao, data-confirmar-perigo="1".
+(function () {
+  var modalEl = document.getElementById('modalConfirmarGesCondu');
+  if (!modalEl || typeof bootstrap === 'undefined') return;
+  var modal = new bootstrap.Modal(modalEl);
+  var formPendente = null;
+  var respostaPendente = null;
+
+  var titulo = document.getElementById('modalConfirmarTitulo');
+  var mensagem = document.getElementById('modalConfirmarMensagem');
+  var botaoAcao = document.getElementById('modalConfirmarAcao');
+  var cabecalho = document.getElementById('modalConfirmarCabecalho');
+
+  function mostrar(opcoes) {
+    if (titulo) titulo.textContent = opcoes.titulo || 'Confirmar';
+    if (mensagem) mensagem.textContent = opcoes.mensagem || 'Tem a certeza?';
+    if (botaoAcao) {
+      botaoAcao.textContent = opcoes.acao || 'Confirmar';
+      botaoAcao.className = 'btn ' + (opcoes.perigo ? 'btn-danger' : 'btn-primary');
+    }
+    if (cabecalho) cabecalho.className = 'modal-header text-white ' + (opcoes.perigo ? 'bg-danger' : 'bg-primary');
+    modal.show();
+  }
+
+  document.addEventListener('submit', function (ev) {
+    var form = ev.target;
+    if (!form || !form.getAttribute || !form.hasAttribute('data-confirmar')) return;
+    if (form.getAttribute('data-confirmado') === '1') { form.removeAttribute('data-confirmado'); return; }
+    ev.preventDefault();
+    formPendente = form;
+    respostaPendente = null;
+    mostrar({
+      mensagem: form.getAttribute('data-confirmar'),
+      titulo: form.getAttribute('data-confirmar-titulo'),
+      acao: form.getAttribute('data-confirmar-acao'),
+      perigo: form.getAttribute('data-confirmar-perigo') === '1',
+    });
+  }, true);
+
+  if (botaoAcao) {
+    botaoAcao.addEventListener('click', function () {
+      modal.hide();
+      if (respostaPendente) { var r = respostaPendente; respostaPendente = null; r(true); return; }
+      if (!formPendente) return;
+      var form = formPendente;
+      formPendente = null;
+      form.setAttribute('data-confirmado', '1');
+      if (typeof form.requestSubmit === 'function') form.requestSubmit(); else form.submit();
+    });
+  }
+
+  modalEl.addEventListener('hidden.bs.modal', function () {
+    formPendente = null;
+    if (respostaPendente) { var r = respostaPendente; respostaPendente = null; r(false); }
+  });
+
+  // API para mensagens dinâmicas (não cabem num atributo):
+  //   if (await GesConduConfirmar('…', { perigo: true })) { … }
+  window.GesConduConfirmar = function (mensagemTexto, opcoes) {
+    opcoes = opcoes || {};
+    return new Promise(function (resolve) {
+      respostaPendente = resolve;
+      formPendente = null;
+      mostrar({ mensagem: mensagemTexto, titulo: opcoes.titulo, acao: opcoes.acao, perigo: opcoes.perigo });
+    });
+  };
+})();

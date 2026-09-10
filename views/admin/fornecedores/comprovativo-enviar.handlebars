@@ -17,7 +17,7 @@
     <div class="card">
       <div class="card-header bg-white"><i class="bi bi-send me-1"></i>Mensagem</div>
       <div class="card-body">
-        <form action="/admin/fornecedores/{{fornecedorId}}/pagamentos/{{pagamento.id}}/comprovativo/enviar" method="POST" onsubmit="return confirmarDestinatario();">
+        <form action="/admin/fornecedores/{{fornecedorId}}/pagamentos/{{pagamento.id}}/comprovativo/enviar" method="POST" onsubmit="return confirmarDestinatario(this);">
           <div class="mb-3">
             <label class="form-label">Para (email do fornecedor)</label>
             <input type="email" class="form-control" name="para" id="campoPara" value="{{emailFornecedor}}" required />
@@ -47,11 +47,20 @@
 </div>
 
 <script>
-function confirmarDestinatario() {
+// Confirmação com mensagem dinâmica: usa a caixa da aplicação (GesConduConfirmar)
+// em vez do confirm() nativo do browser.
+function confirmarDestinatario(form) {
   var para = document.getElementById('campoPara');
   var original = document.getElementById('emailOriginal');
   if (para && original && para.value.trim().toLowerCase() !== original.value.trim().toLowerCase()) {
-    return confirm('O email foi alterado (o email registado do fornecedor é ' + original.value + '). Enviar para ' + para.value.trim() + '?');
+    var mensagem = 'O email foi alterado (o email registado do fornecedor é ' + original.value + '). Enviar para ' + para.value.trim() + '?';
+    if (typeof GesConduConfirmar === 'function') {
+      GesConduConfirmar(mensagem, { titulo: 'Enviar para outro email', acao: 'Enviar' }).then(function (ok) {
+        if (ok && form) form.submit();
+      });
+      return false;
+    }
+    return confirm(mensagem);
   }
   return true;
 }

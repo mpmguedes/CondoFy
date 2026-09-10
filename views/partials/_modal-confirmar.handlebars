@@ -1,0 +1,21 @@
+{{!-- Modal única de confirmação (layout da aplicação).
+     Qualquer <form data-confirmar="mensagem"> abre esta caixa em vez do
+     confirm() nativo do browser; atributos opcionais:
+       data-confirmar-titulo="…"  data-confirmar-acao="…"  data-confirmar-perigo="1" --}}
+<div class="modal fade" id="modalConfirmarGesCondu" tabindex="-1" aria-labelledby="modalConfirmarTitulo" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header text-white bg-primary" id="modalConfirmarCabecalho">
+        <h5 class="modal-title" id="modalConfirmarTitulo">Confirmar</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-0" id="modalConfirmarMensagem">Tem a certeza?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="modalConfirmarAcao">Confirmar</button>
+      </div>
+    </div>
+  </div>
+</div>

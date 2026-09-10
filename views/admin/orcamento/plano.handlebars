@@ -1,7 +1,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
   <h1>{{titulo}}</h1>
   <div>
-    <form action="/admin/orcamento/{{orcamento.id}}/plano" method="POST" class="d-inline" onsubmit="return confirm('Recalcular o plano de quotas?');">
+    <form action="/admin/orcamento/{{orcamento.id}}/plano" method="POST" class="d-inline" data-confirmar="Recalcular o plano de quotas?">
       <button class="btn btn-primary"><i class="bi bi-arrow-repeat me-1"></i>Recalcular plano</button>
     </form>
     <a href="/admin/orcamento/{{orcamento.id}}" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>

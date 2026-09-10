@@ -148,7 +148,7 @@
             {{/if}}
             <a href="/admin/quotas/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
             <a href="/admin/quotas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
-            <form action="/admin/quotas/{{id}}/anular" method="POST" class="d-inline" onsubmit="return confirm('Anular esta quota?');">
+            <form action="/admin/quotas/{{id}}/anular" method="POST" class="d-inline" data-confirmar="Anular esta quota?" data-confirmar-perigo="1">
               <button class="btn btn-sm btn-outline-danger" title="Anular"><span class="material-symbols-outlined">block</span></button>
             </form>
           </td>

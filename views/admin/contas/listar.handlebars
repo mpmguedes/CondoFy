@@ -52,7 +52,7 @@
           <td>{{#if ativa}}<span class="badge text-bg-success">Ativa</span>{{else}}<span class="badge text-bg-secondary">Inativa</span>{{/if}}</td>
           <td class="text-end">
             <a href="/admin/contas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
-            <form action="/admin/contas/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar esta conta?');">
+            <form action="/admin/contas/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Eliminar esta conta?" data-confirmar-perigo="1">
               <button class="btn btn-sm btn-outline-danger" title="Eliminar"><span class="material-symbols-outlined">delete</span></button>
             </form>
           </td>

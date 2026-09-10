@@ -56,7 +56,7 @@
                 <button type="submit" class="btn btn-outline-secondary w-100"><i class="bi bi-plug me-1"></i>Testar ligação</button>
               </form>
               <form action="/admin/config/armazenamento/{{nome}}/desligar" method="POST" class="flex-fill"
-                    onsubmit="return confirm('Desligar {{rotulo}} deste condomínio? Os ficheiros já guardados não são apagados.');">
+                    data-confirmar="Desligar {{rotulo}} deste condomínio? Os ficheiros já guardados não são apagados." data-confirmar-perigo="1">
                 <button type="submit" class="btn btn-outline-danger w-100"><i class="bi bi-x-circle me-1"></i>Desligar</button>
               </form>
             </div>
@@ -152,7 +152,7 @@
                   <button type="submit" class="btn btn-sm btn-outline-secondary">Testar</button>
                 </form>
                 <form action="/admin/config/armazenamento/{{nome}}/desligar?ambito=plataforma" method="POST"
-                      onsubmit="return confirm('Desligar {{rotulo}} da plataforma? Os backups já guardados não são apagados.');">
+                      data-confirmar="Desligar {{rotulo}} da plataforma? Os backups já guardados não são apagados." data-confirmar-perigo="1">
                   <button type="submit" class="btn btn-sm btn-outline-danger">Desligar</button>
                 </form>
               {{else if disponivel}}

@@ -26,6 +26,7 @@ const parciais = {
   '_quotas-tabs': ler('partials/_quotas-tabs.handlebars'),
   '_assembleias-tabs': ler('partials/_assembleias-tabs.handlebars'),
   '_config-tabs': ler('partials/_config-tabs.handlebars'),
+  '_modal-confirmar': ler('partials/_modal-confirmar.handlebars'),
 };
 Object.keys(parciais).forEach((k) => handlebars.registerPartial(k, parciais[k]));
 
@@ -524,6 +525,25 @@ const fontePainel = ler('admin/dashboard.handlebars');
 assert.ok(fontePainel.includes('{{@root.armazenamentoRotulo}}: {{#if sistema.driveLigado}}'), 'painel: estado nomeia o serviço ativo');
 assert.ok(fontePainel.includes('{{@root.armazenamentoRotulo}} desligado'), 'painel: aviso nomeia o serviço ativo');
 assert.ok(fontePainel.includes('{{@root.armazenamentoIcone}}'), 'painel: ícone do serviço ativo');
+
+// 17.2 Confirmações: nenhuma vista usa o confirm() nativo do browser (todas
+// passam pela modal da aplicação, definida no layout e controlada pelo app.js).
+const vistasConf = [
+  'admin/quotas/listar.handlebars', 'admin/documentos/listar.handlebars',
+  'admin/configuracao/armazenamento.handlebars', 'admin/utilizadores/listar.handlebars',
+  'admin/fornecedores/listar.handlebars', 'admin/orcamento/detalhe.handlebars',
+];
+for (const v of vistasConf) {
+  const fonte = ler(v);
+  assert.ok(!/onsubmit="return confirm\(/.test(fonte), `${v}: sem confirm() nativo`);
+  assert.ok(fonte.includes('data-confirmar='), `${v}: usa a modal de confirmação da aplicação`);
+}
+const layoutFonte = parciais_conf_layout();
+function parciais_conf_layout() { return ler('layouts/main.handlebars'); }
+assert.ok(layoutFonte.includes('{{> _modal-confirmar}}'), 'layout inclui a modal de confirmação');
+const appJsFonte = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app.js'), 'utf8');
+assert.ok(appJsFonte.includes('modalConfirmarGesCondu') && appJsFonte.includes('data-confirmar'), 'app.js trata as confirmações da aplicação');
+assert.ok(appJsFonte.includes('GesConduConfirmar'), 'app.js expõe confirmação para mensagens dinâmicas');
 assert.ok(!fontePainel.includes('Google Drive'), 'painel: sem "Google Drive" fixo');
 
 // 18. Área do Condómino — páginas de consulta (Fase 1)

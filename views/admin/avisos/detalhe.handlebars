@@ -85,7 +85,7 @@
                 </form>
                 {{/if}}
                 {{#if (and (ne estado 'enviado') (ne estado 'cancelado'))}}
-                <form action="/admin/emails/{{id}}/cancelar" method="POST" class="d-inline" onsubmit="return confirm('Cancelar este envio?');">
+                <form action="/admin/emails/{{id}}/cancelar" method="POST" class="d-inline" data-confirmar="Cancelar este envio?" data-confirmar-perigo="1">
                   <button class="btn btn-sm btn-outline-danger" title="Cancelar"><span class="material-symbols-outlined">close</span></button>
                 </form>
                 {{/if}}

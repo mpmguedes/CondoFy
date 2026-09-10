@@ -35,7 +35,7 @@
               <li><a class="dropdown-item" href="/admin/documentos/{{id}}/email">Enviar por email</a></li>
               <li><hr class="dropdown-divider" /></li>
               <li>
-                <form action="/admin/documentos/{{id}}/eliminar" method="POST" onsubmit="return confirm('Eliminar este documento?');">
+                <form action="/admin/documentos/{{id}}/eliminar" method="POST" data-confirmar="Eliminar este documento?" data-confirmar-perigo="1">
                   <button class="dropdown-item text-danger">Eliminar</button>
                 </form>
               </li>

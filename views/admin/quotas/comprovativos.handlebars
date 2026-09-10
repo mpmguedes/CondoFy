@@ -80,7 +80,7 @@
               </button>
               <a href="/admin/quotas/recibos" class="btn btn-sm btn-outline-secondary px-1" title="Emitir recibo (Quotas → Recibos)"><span class="material-symbols-outlined" style="font-size:1rem">receipt_long</span></a>
               <a href="/admin/pagamentos/{{id}}" class="btn btn-sm btn-outline-secondary px-1" title="Ver detalhe"><span class="material-symbols-outlined" style="font-size:1rem">visibility</span></a>
-              <form action="/admin/pagamentos/{{id}}/anular" method="POST" class="d-inline" onsubmit="return confirm('Anular este pagamento?');">
+              <form action="/admin/pagamentos/{{id}}/anular" method="POST" class="d-inline" data-confirmar="Anular este pagamento?" data-confirmar-perigo="1">
                 <button class="btn btn-sm btn-outline-danger px-1" title="Anular pagamento"><span class="material-symbols-outlined" style="font-size:1rem">block</span></button>
               </form>
             {{/if}}

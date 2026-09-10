@@ -47,7 +47,7 @@
           <td class="text-end text-nowrap">
             <a href="/admin/fornecedores/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
             <a href="/admin/fornecedores/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
-            <form action="/admin/fornecedores/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar este fornecedor? As despesas associadas ficam sem fornecedor.');">
+            <form action="/admin/fornecedores/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Eliminar este fornecedor? As despesas associadas ficam sem fornecedor." data-confirmar-perigo="1">
               <button class="btn btn-sm btn-outline-danger" title="Apagar"><span class="material-symbols-outlined">delete</span></button>
             </form>
           </td>

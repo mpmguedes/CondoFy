@@ -91,7 +91,7 @@
         {{else}}
           {{#if (eq pagamento.estado 'confirmado')}}
           <p class="text-muted small mb-3">Recibo ainda não emitido para este pagamento. A emissão cria um único RCP com a discriminação das quotas e Quotas Extra.</p>
-          <form action="/admin/pagamentos/{{pagamento.id}}/recibo/emitir" method="POST" onsubmit="return confirm('Emitir um recibo único (RCP) para este pagamento?');">
+          <form action="/admin/pagamentos/{{pagamento.id}}/recibo/emitir" method="POST" data-confirmar="Emitir um recibo único (RCP) para este pagamento?">
             <button class="btn btn-primary"><i class="bi bi-receipt me-1"></i>Emitir recibo</button>
           </form>
           {{else}}

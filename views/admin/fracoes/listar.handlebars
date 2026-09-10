@@ -39,7 +39,7 @@
           <td class="text-end">
             <a href="/admin/fracoes/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
             <a href="/admin/fracoes/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
-            <form action="/admin/fracoes/{{id}}/eliminar" method="POST" class="d-inline" onsubmit="return confirm('Eliminar esta fração?');">
+            <form action="/admin/fracoes/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Eliminar esta fração?" data-confirmar-perigo="1">
               <button class="btn btn-sm btn-outline-danger" title="Eliminar"><span class="material-symbols-outlined">delete</span></button>
             </form>
           </td>

@@ -20,7 +20,7 @@
     </form>
     {{/if}}
     {{#if acoes.podeAnular}}
-    <form action="/admin/quotas-extra/{{extra.id}}/anular" method="POST" onsubmit="return confirm('Anular esta quota extraordinária? Parcelas não pagas serão anuladas (pagas permanecem).');">
+    <form action="/admin/quotas-extra/{{extra.id}}/anular" method="POST" data-confirmar="Anular esta quota extraordinária? Parcelas não pagas serão anuladas (pagas permanecem)." data-confirmar-perigo="1">
       <button class="btn btn-outline-danger"><span class="material-symbols-outlined me-1">block</span>Anular</button>
     </form>
     {{/if}}
@@ -103,7 +103,7 @@
           </td>
           <td class="text-end text-nowrap">
             {{#if (eq estado 'paga')}}
-            <form action="/admin/quotas-extra/parcelas/{{id}}/desfazer" method="POST" class="d-inline" onsubmit="return confirm('Reverter este pagamento? A parcela volta ao estado anterior.');">
+            <form action="/admin/quotas-extra/parcelas/{{id}}/desfazer" method="POST" class="d-inline" data-confirmar="Reverter este pagamento? A parcela volta ao estado anterior." data-confirmar-perigo="1">
               <button class="btn btn-sm btn-outline-secondary" title="Desfazer pagamento"><span class="material-symbols-outlined">undo</span></button>
             </form>
             {{else if (eq estado 'anulada')}}—

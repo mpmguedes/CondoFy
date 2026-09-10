@@ -36,7 +36,7 @@
           </td>
           <td class="text-end">
             <a href="/admin/despesas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
-            <form action="/admin/despesas/{{id}}/anular" method="POST" class="d-inline" onsubmit="return confirm('Anular esta despesa?');">
+            <form action="/admin/despesas/{{id}}/anular" method="POST" class="d-inline" data-confirmar="Anular esta despesa?" data-confirmar-perigo="1">
               <button class="btn btn-sm btn-outline-danger" title="Anular"><span class="material-symbols-outlined">block</span></button>
             </form>
           </td>
