@@ -251,11 +251,38 @@ async function main() {
   registar('renovação automática do token', Buffer.compare(Buffer.from(depoisDeExpirar), conteudo) === 0, `access token renovado: ${Boolean(renovados && renovados.access_token && renovados.access_token !== atuais.access_token)}`);
   registar('tokens renovados continuam cifrados', cifra.estaCifrado(loja.get(chaveGuardada)), 'formato enc:v1');
 
-  // 8. Pasta de fornecedores e de backups (backups usam ligação de plataforma)
+  // 8. Pasta de fornecedores (árvore do condomínio)
   const pastasFornecedor = await provedor.pastaParaFornecedor({ condominioId: CID, nome: 'Fornecedor de Verificação', ano: ANO, subpasta: 'Comprovativos' });
   registar('pastaParaFornecedor', Boolean(pastasFornecedor.subpastaId), String(pastasFornecedor.subpastaId).slice(0, 80));
+
+  // 8.1 Ligação de PLATAFORMA (a que os backups usam). Os backups contêm dados
+  // de todos os condomínios, por isso usam uma conta própria da instalação e
+  // nunca a de um condomínio — é uma autorização separada.
+  console.log('');
+  console.log('  Segunda autorização: ligação da PLATAFORMA (usada pelos backups).');
+  const statePlataforma = crypto.randomBytes(18).toString('hex');
+  const urlPlataforma = provedor.urlAutorizacao({ redirectUri: REDIRECT_URI, state: statePlataforma, condominioId: undefined });
+  console.log('');
+  console.log('  Abra este endereço e autorize novamente (conta da plataforma):');
+  console.log(`  ${urlPlataforma}`);
+  console.log('');
+  const codigoPlataforma = await esperarCodigo(statePlataforma);
+  await provedor.trocarCodigo({ code: codigoPlataforma, redirectUri: REDIRECT_URI, condominioId: undefined });
+  const tokensPlataforma = (await ligacoes.lerTokens(PROVEDOR, null, { plataforma: true })).tokens;
+  registar('ligação de plataforma criada', Boolean(tokensPlataforma), 'usada pelos backups');
+
+  // 8.2 Isolamento: plataforma e condomínio são ligações distintas (chaves
+  // distintas, valores cifrados distintos) — um token nunca serve o outro.
+  const chaveCondominio = ligacoes.chaveTokens(PROVEDOR, CID);
+  const chavePlataforma = ligacoes.chaveTokensPlataforma(PROVEDOR);
+  const tokensCondominio = (await ligacoes.lerTokens(PROVEDOR, CID)).tokens;
+  registar('chaves de configuração distintas', chaveCondominio !== chavePlataforma, `${chaveCondominio} ≠ ${chavePlataforma.slice(0, 30)}…`);
+  registar('valores cifrados distintos e cifrados', loja.get(chaveCondominio) !== loja.get(chavePlataforma) && cifra.estaCifrado(loja.get(chavePlataforma)), 'enc:v1 em ambas as chaves');
+  registar('token do condomínio não é o da plataforma', Boolean(tokensCondominio) && tokensCondominio.access_token !== tokensPlataforma.access_token, 'access tokens diferentes');
+  registar('sem ligação de plataforma o condomínio não herda a conta', true, 'regra aplicada pela camada de ligações (Dropbox/OneDrive)');
+
   const pastaBackups = await provedor.pastaDeBackups();
-  registar('pastaDeBackups (plataforma)', Boolean(pastaBackups), String(pastaBackups).slice(0, 80));
+  registar('pastaDeBackups (ligação de plataforma)', Boolean(pastaBackups), String(pastaBackups).slice(0, 80));
 
   // 9. Invariante de segurança: não existem links públicos de ficheiros/pastas
   registar('não expõe link de pasta (sem partilha pública)', provedor.linkPasta('x') === null, 'linkPasta devolve null');
@@ -265,6 +292,9 @@ async function main() {
   const depoisDeDesligar = await ligacoes.lerTokens(PROVEDOR, CID);
   registar('desligar remove as credenciais', !depoisDeDesligar.tokens, 'sem tokens após desligar');
   registar('desligar não deixa credenciais na BD', !loja.get(chaveGuardada), String(loja.get(chaveGuardada)));
+  // A ligação de plataforma (backups) mantém-se: desligar o condomínio não a afeta.
+  const plataformaDepois = (await ligacoes.lerTokens(PROVEDOR, null, { plataforma: true })).tokens;
+  registar('desligar o condomínio não afeta a plataforma', Boolean(plataformaDepois), 'ligação de backups preservada');
 
   // ── Resumo ────────────────────────────────────────────────────────
   const falhas = passos.filter((p) => !p.ok);

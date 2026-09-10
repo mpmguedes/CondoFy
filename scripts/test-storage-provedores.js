@@ -229,7 +229,8 @@ async function testarPrincipal() {
     originais[nome] = { uploadArquivo: p.uploadArquivo, pastaParaDocumento: p.pastaParaDocumento };
     p.uploadArquivo = async (opcoes) => {
       chamadas.push(['upload', nome, opcoes.condominioId]);
-      return { provedorFileId: 'x', localizador: locator.montar(nome, 'x'), tamanho: 1, pastaId: 'p' };
+      // O adaptador devolve o id em BRUTO (é a fachada que acrescenta o prefixo).
+      return { provedorFileId: 'x', localizador: 'x', tamanho: 1, pastaId: 'p' };
     };
     p.pastaParaDocumento = async (tipo, ano, cid) => {
       chamadas.push(['pasta', nome, cid]);
@@ -238,8 +239,13 @@ async function testarPrincipal() {
   }
   try {
     await storage.pastaParaDocumento('recibo', 2026, 2);
-    await storage.uploadArquivo({ nome: 'r.pdf', buffer: Buffer.from('x'), parentFolderId: 'pasta-do-provedor', condominioId: 2 });
+    const up = await storage.uploadArquivo({ nome: 'r.pdf', buffer: Buffer.from('x'), parentFolderId: 'pasta-do-provedor', condominioId: 2 });
     assert.deepStrictEqual(chamadas, [['pasta', 'onedrive', 2], ['upload', 'onedrive', 2]], 'escritas vão para o armazenamento principal do condomínio');
+    // O localizador devolvido pela FACHADA tem de trazer o prefixo do provedor:
+    // sem ele, um ficheiro guardado fora do Drive seria lido como se fosse Drive.
+    assert.strictEqual(up.localizador, 'od:x', 'fachada devolve o localizador com prefixo do provedor');
+    assert.strictEqual(locator.ler(up.localizador).provedor, 'onedrive', 'localizador identifica o provedor correto');
+    assert.strictEqual(locator.ler(up.localizador).id, 'x', 'id do provedor preservado');
   } finally {
     for (const nome of PROVEDORES) {
       const p = storage.obterProvedor(nome);

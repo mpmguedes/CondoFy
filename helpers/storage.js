@@ -182,7 +182,15 @@ async function uploadArquivo(opcoes = {}) {
   if (!p.isConfigured(opcoes.condominioId)) {
     throw new Error(`O armazenamento principal do condomínio (${p.rotulo()}) não está ligado.`);
   }
-  return p.uploadArquivo(opcoes);
+  const r = await p.uploadArquivo(opcoes);
+  // O valor guardado em documentos.drive_file_id tem SEMPRE o prefixo do
+  // provedor (dbx:/od:; o Google Drive mantém o id simples, compatível com os
+  // valores já gravados). Os adaptadores devolvem o id em bruto — é aqui, no
+  // ponto único, que o localizador fica pronto a usar. Sem isto, um ficheiro
+  // guardado fora do Drive seria lido como se fosse do Drive.
+  const lido = locator.ler(r.provedorFileId || r.localizador || null);
+  const localizador = lido.id ? locator.montar(p.nome(), lido.id) : r.localizador || null;
+  return { ...r, localizador };
 }
 
 async function pastaParaDocumento(tipo, ano, condominioId) {
