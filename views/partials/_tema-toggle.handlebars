@@ -1,4 +1,36 @@
-{{!-- Botão de tema: alterna claro/escuro e fixa a preferência (GesConduTema). --}}
+{{!-- Aparência: tema (claro/escuro) e tamanho do texto (acessibilidade).
+     Os dois controlos usam o mesmo padrão (preferência local + atributo em
+     <html>): data-tema-toggle é tratado por GesConduTema e as opções do menu
+     por GesConduFonte (public/js/tema.js).
+     O botão do tamanho fica ao lado do de claro/escuro e abre um menu com os
+     três níveis (Normal · Grande · Muito grande). O nível escolhido é indicado
+     por marca visual e aria-checked — nunca apenas pela cor. --}}
 <button class="icon-btn tema-toggle" type="button" data-tema-toggle aria-label="Alternar tema claro/escuro" title="Alternar tema claro/escuro" aria-pressed="false">
   <span class="material-symbols-outlined" aria-hidden="true">dark_mode</span>
 </button>
+<div class="dropdown">
+  <button class="icon-btn" type="button" data-fonte-toggle data-bs-toggle="dropdown" data-bs-auto-close="true" aria-expanded="false" aria-haspopup="true" aria-label="Tamanho do texto: Normal" title="Tamanho do texto: Normal">
+    <span class="material-symbols-outlined" aria-hidden="true">format_size</span>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end" aria-label="Tamanho do texto">
+    <li><h6 class="dropdown-header">Tamanho do texto</h6></li>
+    <li>
+      <button class="dropdown-item d-flex align-items-center gap-2" type="button" role="menuitemradio" aria-checked="true" data-fonte-opcao="normal">
+        <span class="material-symbols-outlined" data-fonte-marca aria-hidden="true">check</span>
+        <span>Normal</span>
+      </button>
+    </li>
+    <li>
+      <button class="dropdown-item d-flex align-items-center gap-2" type="button" role="menuitemradio" aria-checked="false" data-fonte-opcao="large">
+        <span class="material-symbols-outlined invisible" data-fonte-marca aria-hidden="true">check</span>
+        <span>Grande</span>
+      </button>
+    </li>
+    <li>
+      <button class="dropdown-item d-flex align-items-center gap-2" type="button" role="menuitemradio" aria-checked="false" data-fonte-opcao="xlarge">
+        <span class="material-symbols-outlined invisible" data-fonte-marca aria-hidden="true">check</span>
+        <span>Muito grande</span>
+      </button>
+    </li>
+  </ul>
+</div>

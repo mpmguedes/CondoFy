@@ -96,6 +96,11 @@
   --font-size-lg: 1rem;      /* 16px - valores financeiros */
   --font-size-xl: 1.25rem;   /* 20px - titulo principal e valores destacados */
 
+  /* Escala de texto (acessibilidade): multiplica TODA a tipografia da
+     aplicação. Normal = 1; Grande/Muito grande são definidos em <html
+     data-font> (ver regras abaixo), tal como o tema segue <html data-theme>. */
+  --font-scale: 1;
+
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -171,11 +176,21 @@
 
 html, body { min-height: 100%; }
 
+/* Escala de texto (acessibilidade). O tamanho de referência (rem) acompanha
+   a preferência do utilizador, pelo que os tokens tipográficos e os
+   componentes escalam em conjunto e a hierarquia se mantém:
+     Normal (1) · Grande (1.08) · Muito grande (1.16).
+   As dimensões de layout (sidebar, cabeçalho, espaçamentos em px) não
+   mudam: só a tipografia cresce. */
+html { font-size: calc(100% * var(--font-scale)); }
+html[data-font="large"] { --font-scale: 1.08; }
+html[data-font="xlarge"] { --font-scale: 1.16; }
+
 body {
   margin: 0;
   background: var(--c-bg);
   color: var(--c-text);
-  font-family: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 0.95rem;
 }
 
@@ -183,7 +198,7 @@ a { color: var(--c-primary); text-decoration: none; }
 a:hover { color: var(--c-primary-dark); }
 
 .material-symbols-outlined {
-  font-size: 20px;
+  font-size: calc(20px * var(--font-scale));
   vertical-align: middle;
   line-height: 1;
 }
@@ -331,7 +346,7 @@ a:hover { color: var(--c-primary-dark); }
 .condominio-pill:hover,
 .condominio-pill:focus { background: var(--nav-surface-strong); border-color: var(--nav-border); }
 .condominio-pill:focus-visible { outline: 2px solid var(--nav-focus); outline-offset: 2px; }
-.condominio-pill .material-symbols-outlined { color: var(--nav-active); font-size: 18px; }
+.condominio-pill .material-symbols-outlined { color: var(--nav-active); font-size: calc(18px * var(--font-scale)); }
 /* Nome do condominio: mesma regra que funciona no nome do utilizador (cor fixa,
    sem depender de heranca nem de regras globais de link). */
 .condominio-pill-text,
@@ -523,7 +538,7 @@ a:hover { color: var(--c-primary-dark); }
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 .quick-action:hover { box-shadow: var(--elev-1); border-color: var(--c-primary); color: var(--c-primary-dark); }
-.quick-action .material-symbols-outlined { color: var(--c-primary); font-size: 18px; }
+.quick-action .material-symbols-outlined { color: var(--c-primary); font-size: calc(18px * var(--font-scale)); }
 
 .stat-card { height: 100%; }
 .stat-card .card-body { display: flex; flex-direction: column; gap: var(--sp-1); }
@@ -603,7 +618,7 @@ a:hover { color: var(--c-primary-dark); }
 
 /* ── Empty state ─────────────────────────────────────────────────── */
 .empty-state { text-align: center; padding: var(--sp-7) var(--sp-4); }
-.empty-state-icon { font-size: 52px; color: var(--c-text-muted); opacity: 0.45; }
+.empty-state-icon { font-size: calc(52px * var(--font-scale)); color: var(--c-text-muted); opacity: 0.45; }
 .empty-state-title { font-size: 1.1rem; font-weight: 600; margin: var(--sp-3) 0 var(--sp-1); }
 .empty-state-text { color: var(--c-text-muted); margin: 0 0 var(--sp-4); max-width: 420px; margin-left: auto; margin-right: auto; }
 
@@ -702,7 +717,7 @@ a:hover { color: var(--c-primary-dark); }
   justify-content: center;
   padding: 0;
 }
-.cv-ponto-btn .material-symbols-outlined { font-size: 18px; }
+.cv-ponto-btn .material-symbols-outlined { font-size: calc(18px * var(--font-scale)); }
 
 /* Segunda convocatória (info automática) */
 .cv-segunda {
@@ -753,7 +768,7 @@ a:hover { color: var(--c-primary-dark); }
 .cv-editor-details summary::before {
   content: 'expand_more';
   font-family: 'Material Symbols Outlined';
-  font-size: 20px;
+  font-size: calc(20px * var(--font-scale));
   transition: transform 0.15s ease;
 }
 .cv-editor-details[open] summary::before { transform: rotate(180deg); }
@@ -863,8 +878,8 @@ a:hover { color: var(--c-primary-dark); }
   padding: 5px var(--sp-3);
   margin-bottom: 1px;
 }
-.sidebar-item .material-symbols-outlined { font-size: 17px; }
-.sidebar-item-text { letter-spacing: 0.01em; }
+.sidebar-item .material-symbols-outlined { font-size: calc(17px * var(--font-scale)); }
+.sidebar-item-text { letter-spacing: 0.01em; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 /* Painel — ações rápidas suaves (sem bold, cores discretas) */
 .quick-actions { gap: 6px; }
@@ -878,7 +893,7 @@ a:hover { color: var(--c-primary-dark); }
   border: 1px solid var(--c-border);
 }
 .quick-action:hover { background: var(--c-surface-2); color: var(--c-primary-dark); border-color: var(--c-border-strong); }
-.quick-action .material-symbols-outlined { color: var(--c-primary); font-size: 18px; }
+.quick-action .material-symbols-outlined { color: var(--c-primary); font-size: calc(18px * var(--font-scale)); }
 
 /* Gráficos do Painel com altura contida */
 #chartFinanceiro, #chartCategorias { height: 200px; width: 100%; }
@@ -895,14 +910,14 @@ a:hover { color: var(--c-primary-dark); }
    Sobreposições globais: tipografia menor, controlos densos,
    cartões discretos e tabelas compactas.
    ══════════════════════════════════════════════════════════════════ */
-body { font-size: 13.5px; }
+body { font-size: calc(13.5px * var(--font-scale)); }
 
 .page-heading { margin-bottom: 14px; }
-.page-heading h1 { font-size: 22px; margin-bottom: 2px; }
-.page-heading .subtitle { font-size: 12.5px; margin: 0; }
+.page-heading h1 { font-size: calc(22px * var(--font-scale)); margin-bottom: 2px; }
+.page-heading .subtitle { font-size: calc(12.5px * var(--font-scale)); margin: 0; }
 
 .section-title {
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--c-text-muted);
@@ -917,7 +932,7 @@ body { font-size: 13.5px; }
 }
 .card-header {
   padding: 8px 14px;
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   background: var(--c-surface-2);
   border-bottom: 1px solid var(--c-border);
 }
@@ -925,56 +940,56 @@ body { font-size: 13.5px; }
 .card-body .card-body { padding: 0; }
 
 /* Tipografia secundária */
-.form-text { font-size: 11px; margin-top: 3px; }
-.text-muted, small { font-size: 12px; }
+.form-text { font-size: calc(11px * var(--font-scale)); margin-top: 3px; }
+.text-muted, small { font-size: calc(12px * var(--font-scale)); }
 
 /* Controlos de formulário densos */
-.form-label { font-size: 12px; margin-bottom: 3px; font-weight: 600; color: var(--c-text-muted); }
+.form-label { font-size: calc(12px * var(--font-scale)); margin-bottom: 3px; font-weight: 600; color: var(--c-text-muted); }
 .form-control,
 .form-select {
   min-height: 36px;
   padding: 5px 10px;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--font-scale));
   border-radius: 7px;
 }
 textarea.form-control { min-height: auto; }
 .form-check-input { width: 1em; height: 1em; margin-top: 0.18em; }
-.input-group-text { padding: 5px 10px; font-size: 13px; }
+.input-group-text { padding: 5px 10px; font-size: calc(13px * var(--font-scale)); }
 .mb-3 { margin-bottom: 0.8rem !important; }
 
 /* Botões compactos */
-.btn { font-size: 13px; padding: 5px 12px; border-radius: 7px; }
-.btn-lg { font-size: 14px; padding: 7px 16px; }
-.btn-sm { font-size: 12px; padding: 3px 9px; }
+.btn { font-size: calc(13px * var(--font-scale)); padding: 5px 12px; border-radius: 7px; }
+.btn-lg { font-size: calc(14px * var(--font-scale)); padding: 7px 16px; }
+.btn-sm { font-size: calc(12px * var(--font-scale)); padding: 3px 9px; }
 
 /* Tabelas compactas */
-.table { font-size: 13px; }
+.table { font-size: calc(13px * var(--font-scale)); }
 .table > :not(caption) > * > * { padding: 0.45rem 0.6rem; }
-.table thead th { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--c-text-muted); font-weight: 600; }
-.table .badge { font-size: 11px; }
+.table thead th { font-size: calc(11.5px * var(--font-scale)); text-transform: uppercase; letter-spacing: 0.04em; color: var(--c-text-muted); font-weight: 600; }
+.table .badge { font-size: calc(11px * var(--font-scale)); }
 
 /* Badges e listas */
-.badge { font-weight: 600; font-size: 11.5px; padding: 0.35em 0.6em; }
+.badge { font-weight: 600; font-size: calc(11.5px * var(--font-scale)); padding: 0.35em 0.6em; }
 .list-group-item { padding: 0.5rem 0.85rem; }
 
 /* KPIs discretos e alinhados */
 .stat-card .card-body { padding: 10px 12px; }
-.stat-label { font-size: 11px; letter-spacing: 0.03em; color: var(--c-text-muted); font-weight: 600; }
-.stat-value { font-size: 22px; line-height: 1.2; font-weight: 700; }
-.stat-sub { font-size: 11.5px; color: var(--c-text-muted); }
+.stat-label { font-size: calc(11px * var(--font-scale)); letter-spacing: 0.03em; color: var(--c-text-muted); font-weight: 600; }
+.stat-value { font-size: calc(22px * var(--font-scale)); line-height: 1.2; font-weight: 700; }
+.stat-sub { font-size: calc(11.5px * var(--font-scale)); color: var(--c-text-muted); }
 
 /* Ações rápidas compactas (altura ~36px) */
 .quick-actions { gap: 6px; }
 .quick-action {
   min-height: 36px;
   padding: 6px 12px;
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   border-radius: 8px;
 }
-.quick-action .material-symbols-outlined { font-size: 18px; }
+.quick-action .material-symbols-outlined { font-size: calc(18px * var(--font-scale)); }
 
 /* Alertas/mensagens menos volumosos */
-.alert { font-size: 13px; padding: 8px 12px; border-radius: 8px; }
+.alert { font-size: calc(13px * var(--font-scale)); padding: 8px 12px; border-radius: 8px; }
 
 /* Formulários com menos espaço vertical */
 .row.g-3 > [class*='col-'] { padding-top: 0.5rem; }
@@ -995,13 +1010,13 @@ textarea.form-control { min-height: auto; }
 }
 .strip-item:first-child { border-left: none; padding-left: 0; }
 .strip-label {
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
   letter-spacing: 0.03em;
   color: var(--c-text-muted);
   font-weight: 600;
 }
 .strip-value {
-  font-size: 17px;
+  font-size: calc(17px * var(--font-scale));
   line-height: 1.2;
   font-weight: 700;
 }
@@ -1278,8 +1293,8 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
 
 /* ===== Tipografia reutilizavel para resumos e descricoes =====
    (base para uniformizar valores globais / textos explicativos) */
-.valor-resumo { font-size: 18px; font-family: Arial, Helvetica, sans-serif; }
-.texto-descricao { font-size: 14px; font-family: Arial, Helvetica, sans-serif; }
+.valor-resumo { font-size: calc(18px * var(--font-scale)); font-family: Arial, Helvetica, sans-serif; }
+.texto-descricao { font-size: calc(14px * var(--font-scale)); font-family: Arial, Helvetica, sans-serif; }
 /* ============================================================
    Auth shell GesCondu — Login + "Os meus condominios"
    Fonte unica da composicao: logo topo-esquerda, slogan
@@ -1339,10 +1354,10 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
 .auth-panel-center { justify-content: center; }
 .auth-titulo { font-size: 1.5rem; font-weight: 700; color: var(--c-text); margin: 0 0 .1rem; }
 .auth-sub { font-size: 1.02rem; font-weight: 500; color: var(--c-text); margin: 0 0 .2rem; }
-.auth-hint { font-size: 12.5px; color: var(--c-text-muted); margin: 0 0 1.4rem; }
+.auth-hint { font-size: calc(12.5px * var(--font-scale)); color: var(--c-text-muted); margin: 0 0 1.4rem; }
 .auth-form .form-label { font-size: .86rem; font-weight: 600; color: var(--c-text); }
-.auth-form .form-control { height: 48px; border-radius: 10px; }
-.auth-btn { height: 48px; border-radius: 10px; font-weight: 600; }
+.auth-form .form-control { min-height: 48px; border-radius: 10px; }
+.auth-btn { min-height: 48px; border-radius: 10px; font-weight: 600; }
 .auth-recuperar { margin-top: 1.1rem; }
 .auth-recuperar a { font-size: .82rem; color: var(--c-link); }
 .auth-recuperar a:hover { color: var(--c-link-hover); text-decoration: underline; }
@@ -1506,9 +1521,9 @@ hr { border-color: var(--c-border); opacity: 1; }
     gap: var(--sp-1);
   }
   .icon-btn { width: 44px; height: 44px; flex: 0 0 auto; }
-  .icon-btn .material-symbols-outlined { font-size: 24px; }
+  .icon-btn .material-symbols-outlined { font-size: calc(24px * var(--font-scale)); }
   .condominio-pill { padding: var(--sp-1); gap: 0; min-height: 44px; min-width: 44px; justify-content: center; }
-  .condominio-pill .material-symbols-outlined { font-size: 22px; }
+  .condominio-pill .material-symbols-outlined { font-size: calc(22px * var(--font-scale)); }
   .user-chip { padding: 4px; min-height: 44px; }
   .user-chip .avatar { width: 32px; height: 32px; font-size: 0.78rem; }
 
@@ -1519,7 +1534,7 @@ hr { border-color: var(--c-border); opacity: 1; }
 
   .quick-actions { gap: var(--sp-2); }
   .quick-action { min-height: 44px; padding: 8px 14px; border-radius: var(--radius-sm); white-space: nowrap; }
-  .quick-action .material-symbols-outlined { font-size: 20px; }
+  .quick-action .material-symbols-outlined { font-size: calc(20px * var(--font-scale)); }
 
   .table-responsive { -webkit-overflow-scrolling: touch; }
   .table td.text-end, .table th.text-end { white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -1561,7 +1576,7 @@ hr { border-color: var(--c-border); opacity: 1; }
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .mobile-bottom-bar .mb-item .material-symbols-outlined { font-size: 22px; }
+  .mobile-bottom-bar .mb-item .material-symbols-outlined { font-size: calc(22px * var(--font-scale)); }
   .mobile-bottom-bar .mb-item.mb-item-ativo .mb-label { font-weight: 600; }
   .mobile-bottom-bar .mb-item-menu { position: relative; }
   .mobile-bottom-bar .mb-item-menu::before {
@@ -1580,7 +1595,7 @@ hr { border-color: var(--c-border); opacity: 1; }
 /* Tablets em modo drawer (768-991px): alvos de toque e minimos de legibilidade */
 @media (max-width: 991.98px) {
   .icon-btn { width: 44px; height: 44px; }
-  .icon-btn .material-symbols-outlined { font-size: 24px; }
+  .icon-btn .material-symbols-outlined { font-size: calc(24px * var(--font-scale)); }
   .condominio-pill { min-height: 44px; }
   .user-chip { min-height: 44px; }
   .stat-label, .mini-stat-label, .strip-label { font-size: var(--font-size-xs); }
