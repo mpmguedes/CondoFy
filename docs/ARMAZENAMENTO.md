@@ -241,6 +241,29 @@ no upload.
 
 ## 5. Notas e trabalho seguinte
 
+### Verificação real das APIs (Dropbox e OneDrive)
+
+Os adaptadores são validados offline (contrato, pastas, upload, descarga,
+streaming, cifragem e isolamento). Para os validar contra as APIs reais, na
+máquina onde tiver as credenciais técnicas:
+
+```
+$env:DROPBOX_APP_KEY='...'; $env:DROPBOX_APP_SECRET='...'
+npm run verificar:provedores -- --provedor dropbox
+
+$env:ONEDRIVE_CLIENT_ID='...'; $env:ONEDRIVE_CLIENT_SECRET='...'
+npm run verificar:provedores -- --provedor onedrive
+```
+
+O script (`scripts/verificar-provedores-reais.js`) abre o OAuth com retorno em
+`http://127.0.0.1:53682/callback` (que tem de estar registado na app do
+fornecedor), e depois verifica, no mesmo processo e com o código verdadeiro dos
+adaptadores: identificação da conta, cifragem das credenciais em repouso,
+estrutura de pastas, upload de um PDF de teste, descarga, streaming, renovação
+automática do token, pasta de fornecedores, pasta de backups e desligar (sem
+criar qualquer partilha pública). Não precisa de base de dados nem do `.env` da
+aplicação, e nunca imprime tokens, segredos ou chaves.
+
 * Os uploads de documentos passam todos pela fachada (`helpers/storage`) e usam
   o **armazenamento principal do condomínio** — incluindo as automações de
   documentos (`helpers/document-actions.js`), assembleias, convocatórias,

@@ -12,3 +12,6 @@ storage/email_anexos/
 # Comprovativos de pagamento (ficheiros privados: nunca entram no repositório)
 storage/comprovativos/
 .DS_Store
+
+# Relatorios locais de verificacao dos provedores (podem conter nomes de pastas)
+storage/verificacao-*
