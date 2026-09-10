@@ -166,6 +166,12 @@ const TAB4 = 'href="/admin/config/auditoria"';
     const fonteRotas = require('fs').readFileSync(require('path').join(__dirname, '..', 'routes', 'configuracao.js'), 'utf8');
     assert.ok(/p\.desligar\(plataforma \? null : req\.condominioId, \{ plataforma \}\)/.test(fonteRotas), 'armazenamento: desligar passa o âmbito de plataforma');
     assert.ok(/plataforma: guardado\.ambito === 'plataforma'/.test(fonteRotas), 'armazenamento: callback indica o âmbito de plataforma');
+    // Regressão: o Google Drive tem rotas próprias (Redirect URI registado no
+    // Google); as rotas genéricas têm de delegar nelas, senão "Ligar/Desligar/
+    // Testar" no Drive não fazia nada.
+    for (const acao of ['ligar', 'desligar', 'testar']) {
+      assert.ok(new RegExp(`ROTAS_DRIVE\\.${acao}`).test(fonteRotas), `armazenamento: rota genérica delega o ${acao} do Drive`);
+    }
   } finally {
     delete process.env.DROPBOX_ENABLED;
     delete process.env.DROPBOX_APP_KEY;

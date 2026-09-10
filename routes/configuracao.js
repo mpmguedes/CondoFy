@@ -24,6 +24,14 @@ router.use(tenant.comPapel('admin'));
 // rotas históricas /admin/config/drive/*, sem alterações).
 const PROVEDORES_OAUTH = new Set(['dropbox', 'onedrive']);
 
+// O Google Drive mantém as rotas próprias (Redirect URI registado na consola
+// Google e estado OAuth próprio): as rotas genéricas delegam nelas.
+const ROTAS_DRIVE = {
+  ligar: '/admin/config/drive/ligar',
+  desligar: '/admin/config/drive/desligar',
+  testar: '/admin/config/drive/testar',
+};
+
 const VAR_REDIRECT = {
   dropbox: 'DROPBOX_REDIRECT_URI',
   onedrive: 'ONEDRIVE_REDIRECT_URI',
@@ -104,6 +112,10 @@ router.get('/config/armazenamento', async (req, res) => {
 router.get('/config/armazenamento/:provedor/ligar', async (req, res) => {
   const provedor = String(req.params.provedor || '').toLowerCase();
   const ambito = req.query.ambito === 'plataforma' ? 'plataforma' : 'condominio';
+  if (provedor === 'google_drive') {
+    // O Drive usa as rotas próprias (Redirect URI registado no Google).
+    return res.redirect(`${ROTAS_DRIVE.ligar}?ambito=${ambito}`);
+  }
   if (!PROVEDORES_OAUTH.has(provedor)) {
     return res.redirect('/admin/config/armazenamento');
   }
@@ -180,6 +192,10 @@ router.get('/config/armazenamento/:provedor/callback', async (req, res) => {
 router.post('/config/armazenamento/:provedor/desligar', async (req, res) => {
   const provedor = String(req.params.provedor || '').toLowerCase();
   const plataforma = req.query.ambito === 'plataforma' || req.body.ambito === 'plataforma';
+  if (provedor === 'google_drive') {
+    // 307 preserva o POST e o âmbito.
+    return res.redirect(307, `${ROTAS_DRIVE.desligar}?ambito=${plataforma ? 'plataforma' : 'condominio'}`);
+  }
   if (!PROVEDORES_OAUTH.has(provedor)) {
     return res.redirect('/admin/config/armazenamento');
   }
@@ -213,6 +229,9 @@ router.post('/config/armazenamento/:provedor/desligar', async (req, res) => {
 router.post('/config/armazenamento/:provedor/testar', async (req, res) => {
   const provedor = String(req.params.provedor || '').toLowerCase();
   const plataforma = req.query.ambito === 'plataforma' || req.body.ambito === 'plataforma';
+  if (provedor === 'google_drive') {
+    return res.redirect(307, `${ROTAS_DRIVE.testar}?ambito=${plataforma ? 'plataforma' : 'condominio'}`);
+  }
   if (!PROVEDORES_OAUTH.has(provedor)) {
     return res.redirect('/admin/config/armazenamento');
   }
@@ -514,7 +533,9 @@ router.post('/config/drive/opcoes', async (req, res) => {
 
 // Testa a ligação atual ao Google Drive (sem criar pastas nem enviar nada).
 router.post('/config/drive/testar', async (req, res) => {
-  const r = await drive.testarLigacao();
+  // Âmbito: a ligação da plataforma (backups) ou a do condomínio ativo.
+  const plataforma = req.query.ambito === 'plataforma' || req.body.ambito === 'plataforma';
+  const r = await drive.testarLigacao(plataforma ? null : req.condominioId);
   if (r.ok) {
     await audit({ userId: req.user.id, acao: 'testar_google_drive', entidade: 'GoogleDrive', detalhes: { ok: true } }).catch(() => {});
     req.flash('success_msg', r.conta ? `✓ Ligação ao Google Drive estabelecida (${r.conta}).` : '✓ Ligação ao Google Drive estabelecida.');

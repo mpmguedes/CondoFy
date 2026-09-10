@@ -158,17 +158,17 @@ const ctxArm = { titulo: 'Armazenamento e Backups' };
 const estadoArm = (over = {}) => ({
   principal: 'google_drive',
   provedores: [
-    { nome: 'google_drive', rotulo: 'Google Drive', disponivel: true, ligado: true, contaPlataforma: false, ligadoPlataforma: true, principal: true, conta: 'admin@gmail.com', estado: {} },
-    { nome: 'dropbox', rotulo: 'Dropbox', disponivel: true, ligado: true, contaPlataforma: false, ligadoPlataforma: false, principal: false, conta: 'gestao@exemplo.pt', estado: {} },
-    { nome: 'onedrive', rotulo: 'Microsoft OneDrive', disponivel: true, ligado: false, contaPlataforma: false, ligadoPlataforma: false, principal: false, conta: null, estado: {} },
+    { nome: 'google_drive', rotulo: 'Google Drive', icone: 'bi bi-google', disponivel: true, ligado: true, contaPlataforma: false, ligadoPlataforma: true, principal: true, conta: 'admin@gmail.com', estado: {} },
+    { nome: 'dropbox', rotulo: 'Dropbox', icone: 'bi bi-dropbox', disponivel: true, ligado: true, contaPlataforma: false, ligadoPlataforma: false, principal: false, conta: 'gestao@exemplo.pt', estado: {} },
+    { nome: 'onedrive', rotulo: 'Microsoft OneDrive', icone: 'bi bi-microsoft', disponivel: true, ligado: false, contaPlataforma: false, ligadoPlataforma: false, principal: false, conta: null, estado: {} },
   ],
   backup: { destino: 'dropbox', rotulo: 'Dropbox', ligadoPlataforma: true },
   // Estado da cifragem das credenciais (chave da instalação configurada).
   cifra: { configurada: true, kid: 'abc123', formato: 'enc:v1', algoritmo: 'AES-256-GCM', anteriores: 0, erro: null, mensagem: null, erroOperacional: null },
   plataforma: [
-    { nome: 'google_drive', rotulo: 'Google Drive', disponivel: true, ligado: true },
-    { nome: 'dropbox', rotulo: 'Dropbox', disponivel: true, ligado: true },
-    { nome: 'onedrive', rotulo: 'Microsoft OneDrive', disponivel: false, ligado: false },
+    { nome: 'google_drive', rotulo: 'Google Drive', icone: 'bi bi-google', disponivel: true, ligado: true, conta: 'plataforma@gmail.com' },
+    { nome: 'dropbox', rotulo: 'Dropbox', icone: 'bi bi-dropbox', disponivel: true, ligado: true, conta: 'backups@exemplo.pt' },
+    { nome: 'onedrive', rotulo: 'Microsoft OneDrive', icone: 'bi bi-microsoft', disponivel: false, ligado: false, conta: null },
   ],
   ...over,
 });
@@ -196,6 +196,32 @@ assert.ok(html.includes('/admin/config/armazenamento/backups'), 'armazenamento: 
 assert.ok(/id="destinoBackups"[\s\S]{0,400}value="dropbox"[\s\S]{0,80}selected/.test(html), 'armazenamento: destino de backups selecionado');
 assert.ok(html.includes('/admin/config/armazenamento/dropbox/testar?ambito=plataforma'), 'armazenamento: testar ligação de plataforma');
 assert.ok(html.includes('/admin/config/armazenamento/dropbox/desligar?ambito=plataforma'), 'armazenamento: desligar ligação de plataforma');
+
+// Cada serviço mostra o seu ícone e a conta autorizada (um condomínio pode ter
+// contas diferentes no principal e nos backups).
+assert.ok(html.includes('bi bi-dropbox') && html.includes('bi bi-google'), 'armazenamento: ícone de cada serviço');
+assert.ok(html.includes('gestao@exemplo.pt'), 'armazenamento: conta do cartão visível');
+assert.ok(html.includes('backups@exemplo.pt'), 'armazenamento: conta da ligação de plataforma visível');
+assert.ok(html.includes('plataforma@gmail.com'), 'armazenamento: conta da plataforma nos backups visível');
+
+// Serviço ligado através da conta da plataforma: o "Desligar" do cartão tem de
+// usar o âmbito de plataforma (é a única ligação existente).
+html = armazenamento({
+  ...ctxArm,
+  driveLigado: true,
+  driveOpcoes: opcoesBase,
+  ultimoBackup: null,
+  armazenamento: estadoArm({
+    provedores: [
+      { nome: 'google_drive', rotulo: 'Google Drive', icone: 'bi bi-google', disponivel: true, ligado: true, contaPlataforma: true, ligadoPlataforma: true, principal: true, conta: 'plataforma@gmail.com', estado: {} },
+      { nome: 'dropbox', rotulo: 'Dropbox', icone: 'bi bi-dropbox', disponivel: true, ligado: true, contaPlataforma: false, ligadoPlataforma: false, principal: false, conta: 'gestao@exemplo.pt', estado: {} },
+      { nome: 'onedrive', rotulo: 'Microsoft OneDrive', icone: 'bi bi-microsoft', disponivel: false, ligado: false, contaPlataforma: false, ligadoPlataforma: false, principal: false, conta: null, estado: {} },
+    ],
+  }),
+});
+assert.ok(/armazenamento\/google_drive\/desligar\?ambito=plataforma/.test(html), 'armazenamento: desligar usa o âmbito de plataforma quando a conta é da plataforma');
+assert.ok(/armazenamento\/dropbox\/desligar"/.test(html), 'armazenamento: desligar do serviço próprio mantém o âmbito do condomínio');
+assert.ok(html.includes('conta da plataforma'), 'armazenamento: identifica a conta da plataforma');
 assert.ok(!html.includes('Abrir Google Drive'), 'armazenamento: sem atalhos diretos ao fornecedor');
 
 // Serviço sem credenciais na instalação: mensagem amigável (nunca .env).
@@ -206,9 +232,9 @@ html = armazenamento({
   ultimoBackup: null,
   armazenamento: estadoArm({
     provedores: [
-      { nome: 'google_drive', rotulo: 'Google Drive', disponivel: false, ligado: false, contaPlataforma: false, ligadoPlataforma: false, principal: true, conta: null, estado: {} },
-      { nome: 'dropbox', rotulo: 'Dropbox', disponivel: false, ligado: false, contaPlataforma: false, ligadoPlataforma: false, principal: false, conta: null, estado: {} },
-      { nome: 'onedrive', rotulo: 'Microsoft OneDrive', disponivel: false, ligado: false, contaPlataforma: false, ligadoPlataforma: false, principal: false, conta: null, estado: {} },
+      { nome: 'google_drive', rotulo: 'Google Drive', icone: 'bi bi-google', disponivel: false, ligado: false, contaPlataforma: false, ligadoPlataforma: false, principal: true, conta: null, estado: {} },
+      { nome: 'dropbox', rotulo: 'Dropbox', icone: 'bi bi-dropbox', disponivel: false, ligado: false, contaPlataforma: false, ligadoPlataforma: false, principal: false, conta: null, estado: {} },
+      { nome: 'onedrive', rotulo: 'Microsoft OneDrive', icone: 'bi bi-microsoft', disponivel: false, ligado: false, contaPlataforma: false, ligadoPlataforma: false, principal: false, conta: null, estado: {} },
     ],
     backup: { destino: null, rotulo: null, ligadoPlataforma: false },
   }),
@@ -250,9 +276,9 @@ html = armazenamento({
   ultimoBackup: null,
   armazenamento: estadoArm({
     plataforma: [
-      { nome: 'google_drive', rotulo: 'Google Drive', disponivel: true, ligado: true },
-      { nome: 'dropbox', rotulo: 'Dropbox', disponivel: true, ligado: false },
-      { nome: 'onedrive', rotulo: 'Microsoft OneDrive', disponivel: false, ligado: false },
+      { nome: 'google_drive', rotulo: 'Google Drive', icone: 'bi bi-google', disponivel: true, ligado: true },
+      { nome: 'dropbox', rotulo: 'Dropbox', icone: 'bi bi-dropbox', disponivel: true, ligado: false },
+      { nome: 'onedrive', rotulo: 'Microsoft OneDrive', icone: 'bi bi-microsoft', disponivel: false, ligado: false },
     ],
     backup: { destino: 'google_drive', rotulo: 'Google Drive', ligadoPlataforma: true },
   }),

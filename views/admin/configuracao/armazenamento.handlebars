@@ -31,7 +31,7 @@
   <div class="col-12 col-lg-4">
     <div class="card h-100" id="{{nome}}">
       <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <span class="fw-semibold">{{rotulo}}</span>
+        <span class="fw-semibold"><i class="{{icone}} me-1" aria-hidden="true"></i>{{rotulo}}</span>
         {{#if principal}}<span class="badge text-bg-primary">Principal</span>{{/if}}
       </div>
       <div class="card-body d-flex flex-column">
@@ -43,6 +43,7 @@
           {{#if conta}}<p class="small fw-semibold mb-1"><i class="bi bi-person-circle me-1"></i>{{conta}}</p>{{/if}}
           <p class="text-muted small">
             {{#if principal}}É neste serviço que ficam os documentos deste condomínio.{{else}}Disponível para ser usado como armazenamento principal.{{/if}}
+            {{#if contaPlataforma}}A conta é da plataforma (partilhada): desligá-la aqui remove também a ligação usada pelos backups.{{/if}}
           </p>
           <div class="d-grid gap-2 mt-auto">
             {{#unless principal}}
@@ -52,13 +53,21 @@
             </form>
             {{/unless}}
             <div class="d-flex gap-2">
-              <form action="/admin/config/armazenamento/{{nome}}/testar" method="POST" class="flex-fill">
+              <form action="/admin/config/armazenamento/{{nome}}/testar{{#if contaPlataforma}}?ambito=plataforma{{/if}}" method="POST" class="flex-fill">
                 <button type="submit" class="btn btn-outline-secondary w-100"><i class="bi bi-plug me-1"></i>Testar ligação</button>
               </form>
+              {{#if contaPlataforma}}
+              {{!-- A conta pertence à plataforma: desligar só é possível nesse âmbito. --}}
+              <form action="/admin/config/armazenamento/{{nome}}/desligar?ambito=plataforma" method="POST" class="flex-fill"
+                    data-confirmar="Desligar {{rotulo}} da plataforma? Este serviço está ligado através da conta da plataforma (a mesma usada pelos backups), por isso a ligação é removida em ambos os sítios. Os ficheiros já guardados não são apagados." data-confirmar-perigo="1">
+                <button type="submit" class="btn btn-outline-danger w-100"><i class="bi bi-x-circle me-1"></i>Desligar</button>
+              </form>
+              {{else}}
               <form action="/admin/config/armazenamento/{{nome}}/desligar" method="POST" class="flex-fill"
                     data-confirmar="Desligar {{rotulo}} deste condomínio? Os ficheiros já guardados não são apagados." data-confirmar-perigo="1">
                 <button type="submit" class="btn btn-outline-danger w-100"><i class="bi bi-x-circle me-1"></i>Desligar</button>
               </form>
+              {{/if}}
             </div>
           </div>
         {{else}}
@@ -141,10 +150,11 @@
           {{#each armazenamento.plataforma}}
           <li class="d-flex justify-content-between align-items-center flex-wrap gap-2 py-1">
             <span>
-              {{rotulo}}
+              <i class="{{icone}} me-1" aria-hidden="true"></i>{{rotulo}}
               {{#if ligado}}<span class="badge text-bg-success ms-1">Ligado ✓</span>
               {{else}}<span class="badge text-bg-secondary ms-1">Não ligado</span>{{/if}}
               {{#if (eq nome ../armazenamento.backup.destino)}}<span class="badge text-bg-primary ms-1">Destino</span>{{/if}}
+              {{#if conta}}<span class="text-muted ms-1">· {{conta}}</span>{{/if}}
             </span>
             <span class="d-flex gap-1">
               {{#if ligado}}

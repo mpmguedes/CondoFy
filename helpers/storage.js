@@ -131,6 +131,7 @@ async function estadoDoCondominio(condominioId) {
     provedores.push({
       nome: chave,
       rotulo: p.rotulo(),
+      icone: typeof p.icone === 'function' ? p.icone() : 'bi bi-hdd-network',
       capacidades: p.capacidades(),
       // A instalação tem as credenciais técnicas para disponibilizar o serviço?
       disponivel: Boolean(p.temCredenciais && p.temCredenciais()),
@@ -161,12 +162,19 @@ async function estadoDoCondominio(condominioId) {
       ligadoPlataforma: Boolean(pBackup && pBackup.isConfigured && pBackup.isConfigured(null)),
     },
     // Serviços com ligação de plataforma (podem servir de destino de backups).
-    plataforma: Object.entries(REGISTO).map(([chave, p]) => ({
-      nome: chave,
-      rotulo: p.rotulo(),
-      disponivel: Boolean(p.temCredenciais && p.temCredenciais()),
-      ligado: Boolean(p.isConfigured && p.isConfigured(null)),
-    })),
+    // Inclui a conta autorizada e o ícone, para a interface os identificar
+    // (um condomínio pode ter contas diferentes em cada secção).
+    plataforma: Object.entries(REGISTO).map(([chave, p]) => {
+      const tokens = ligacoes.tokensSync(chave, null).tokens;
+      return {
+        nome: chave,
+        rotulo: p.rotulo(),
+        icone: typeof p.icone === 'function' ? p.icone() : 'bi bi-hdd-network',
+        disponivel: Boolean(p.temCredenciais && p.temCredenciais()),
+        ligado: Boolean(tokens && (tokens.access_token || tokens.refresh_token)),
+        conta: (tokens && tokens.conta) || null,
+      };
+    }),
   };
 }
 
