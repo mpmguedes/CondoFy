@@ -200,7 +200,12 @@ async function inicializar() {
     if (estadoCifra.configurada) {
       for (const chave of [CHAVE_TOKENS_LEGADO, ...locator.provedores().filter((p) => p !== 'google_drive').map((p) => chaveTokensPlataforma(p))]) {
         const bruto = await getConfig(chave, null).catch(() => null);
-        if (bruto == null) continue;
+        if (bruto == null) {
+          // Sem valor: garante que a cache não guarda uma ligação antiga (por
+          // exemplo depois de desligar o serviço usado para backups).
+          aplicarTokensNaCache(chave, null);
+          continue;
+        }
         const r = await migrarSeNecessario(chave, bruto);
         if (r.alterado) migrados++;
         const d = decodificar(r.alterado ? await getConfig(chave, null).catch(() => null) : bruto, chave);

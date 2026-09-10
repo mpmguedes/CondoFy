@@ -161,6 +161,11 @@ const TAB4 = 'href="/admin/config/auditoria"';
     assert.ok(rDropbox.corpo.includes('Ligar Dropbox'), 'armazenamento: texto do botão de ligar');
     assert.ok(rDropbox.corpo.includes('href="/admin/config/armazenamento/dropbox/ligar?ambito=plataforma"'), 'armazenamento: ligar Dropbox para backups');
     assert.ok(!rDropbox.corpo.includes('href="/admin/config/armazenamento/onedrive/ligar"'), 'armazenamento: OneDrive sem credenciais não mostra ligação');
+    // Regressão: "Desligar (plataforma)" tem de passar o âmbito ao adaptador,
+    // senão a ligação de backups fica sempre a aparecer como ligada.
+    const fonteRotas = require('fs').readFileSync(require('path').join(__dirname, '..', 'routes', 'configuracao.js'), 'utf8');
+    assert.ok(/p\.desligar\(plataforma \? null : req\.condominioId, \{ plataforma \}\)/.test(fonteRotas), 'armazenamento: desligar passa o âmbito de plataforma');
+    assert.ok(/plataforma: guardado\.ambito === 'plataforma'/.test(fonteRotas), 'armazenamento: callback indica o âmbito de plataforma');
   } finally {
     delete process.env.DROPBOX_ENABLED;
     delete process.env.DROPBOX_APP_KEY;

@@ -185,7 +185,11 @@ router.post('/config/armazenamento/:provedor/desligar', async (req, res) => {
   }
   const p = storage.obterProvedor(provedor);
   try {
-    await p.desligar(plataforma ? null : req.condominioId);
+    // O âmbito tem de ser explícito: sem chave de condomínio, os adaptadores
+    // recusam-se a apagar uma ligação (protege a ligação de um condomínio de
+    // ser removida por engano). Sem este argumento, "Desligar (plataforma)"
+    // não fazia nada e o serviço continuava a aparecer ligado.
+    await p.desligar(plataforma ? null : req.condominioId, { plataforma });
     await storage.inicializar();
     // Desligar o serviço de backup liberta o destino configurado.
     if (plataforma && (await storage.destinoDeBackup()) === provedor) {

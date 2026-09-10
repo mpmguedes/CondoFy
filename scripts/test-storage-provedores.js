@@ -332,7 +332,47 @@ async function testarEstadoInterface() {
   delete process.env.GOOGLE_DRIVE_ENABLED;
 }
 
-// ── 8. URL de autorização: pede sempre a escolha da conta ───────────
+// ── 8. Âmbito de plataforma (backups): ligar e desligar ─────────────
+// Regressão: a rota de "Desligar (plataforma)" não passava o âmbito e a
+// ligação de backups ficava sempre como ligada.
+async function testarAmbitoPlataforma() {
+  loja.clear();
+  ligacoes.limparCache();
+  const fetchReal = global.fetch;
+  // Sem rede nos testes: a revogação/renovação é melhor esforço e é ignorada.
+  global.fetch = async () => { throw new Error('rede desativada nos testes'); };
+  try {
+    const dropbox = storage.obterProvedor('dropbox');
+    const chavePlataforma = ligacoes.chaveTokensPlataforma('dropbox');
+
+    await ligacoes.guardarTokens('dropbox', null, { refresh_token: 'plataforma-tok', conta: 'backups@exemplo.pt' });
+    assert.strictEqual((await ligacoes.lerTokens('dropbox', null, { plataforma: true })).tokens.refresh_token, 'plataforma-tok', 'ligação de plataforma guardada');
+
+    // Sem âmbito explícito, desligar sem condomínio NÃO apaga nada (protege a
+    // ligação de um condomínio de ser removida por engano).
+    await dropbox.desligar(null);
+    assert.ok(loja.get(chavePlataforma), 'desligar sem âmbito não apaga a ligação de plataforma');
+
+    // Com o âmbito (o que a rota passa agora), remove os tokens.
+    await dropbox.desligar(null, { plataforma: true });
+    assert.strictEqual((await ligacoes.lerTokens('dropbox', null, { plataforma: true })).tokens, null, 'desligar com âmbito de plataforma remove os tokens');
+    assert.strictEqual(ligacoes.tokensSync('dropbox', null, { plataforma: true }).tokens, null, 'cache sem tokens após desligar');
+
+    await ligacoes.inicializar();
+    assert.strictEqual(ligacoes.tokensSync('dropbox', null, { plataforma: true }).tokens, null, 'sem cache obsoleta depois de reinicializar');
+
+    // No âmbito de documentos continua a ser obrigatório o condomínio.
+    await assert.rejects(
+      () => dropbox.trocarCodigo({ code: 'x', redirectUri: 'https://exemplo.pt/cb' }),
+      /condominioId é obrigatório/i,
+      'ligação de documentos exige condomínio'
+    );
+  } finally {
+    global.fetch = fetchReal;
+  }
+}
+
+// ── 9. URL de autorização: pede sempre a escolha da conta ───────────
 function testarUrlAutorizacao() {
   const envAntes = {
     DROPBOX_APP_KEY: process.env.DROPBOX_APP_KEY,
@@ -364,7 +404,7 @@ function testarUrlAutorizacao() {
   }
 }
 
-// ── 9. Leitura pelo localizador (nunca pelo provedor "atual") ───────
+// ── 10. Leitura pelo localizador (nunca pelo provedor "atual") ───────
 async function testarLeituraPorLocalizador() {
   const chamadas = [];
   // Substitui temporariamente os métodos dos provedores para observar o encaminhamento.
@@ -431,6 +471,7 @@ function testarFachada() {
   await testarPrincipal();
   await testarBackups();
   await testarEstadoInterface();
+  await testarAmbitoPlataforma();
   testarUrlAutorizacao();
   await testarLeituraPorLocalizador();
   testarFachada();
