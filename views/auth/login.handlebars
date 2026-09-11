@@ -5,35 +5,46 @@
   .auth-body { background: var(--auth-bg); padding: 0; }
   .auth-flash { max-width: 480px; margin: 0 auto; padding-top: 1rem; }
 
-  /* Logótipo da entrada: versão horizontal com fundo transparente, pensada para
-     superfícies escuras, maior do que nas restantes páginas públicas. No
-     telemóvel é dimensionado pela largura para caber bem. */
-  .auth-logo img { height: clamp(104px, 9.5vw, 150px); width: auto; max-width: 100%; }
+  /* Coluna esquerda: logótipo por cima do slogan, ambos centrados na vertical
+     dentro da coluna (deixa de estar no canto superior). */
+  .auth-message {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0.9rem;
+  }
+  .auth-message h2 { margin: 0; }
+
+  /* Logótipo: versão horizontal com fundo transparente, pensada para superfícies
+     escuras. No telemóvel é dimensionado pela largura. */
+  .auth-logo img { height: clamp(96px, 9vw, 144px); width: auto; max-width: 100%; }
   @media (max-width: 575.98px) {
-    .auth-logo img { height: auto; width: min(60vw, 220px); }
+    .auth-logo img { height: auto; width: min(62vw, 230px); }
   }
 
-  /* Caixa de entrada mais alta (centrada): o cabeçalho fica mais compacto e,
-     nos ecrãs de menor altura, a caixa encolhe ao conteúdo em vez de forçar a
-     altura mínima definida — assim o conjunto cabe na janela e fica centrado
-     em vez de “cair” para baixo. */
-  .auth-head { padding-bottom: 0; }
   .auth-stage { padding-top: 0; }
+
+  /* Logótipo + slogan e caixa ficam alinhados no mesmo eixo vertical, um pouco
+     acima do centro. Ambos sobem o MESMO valor absoluto (6vh), para não
+     desalinharem entre si; em janelas baixas fica tudo centrado e a caixa
+     encolhe ao conteúdo, para não cortar. Só no layout de duas colunas. */
+  @media (min-width: 992px) and (min-height: 700px) {
+    .auth-message,
+    .auth-panel-col { transform: translateY(-6vh); }
+  }
   @media (max-height: 860px) {
     .auth-panel-inner { min-height: 0; }
-    .auth-head { padding-top: clamp(20px, 3vh, 34px); }
+    .auth-stage { padding-top: clamp(16px, 2.5vh, 28px); }
   }
 </style>
 
 <div class="auth-page">
-  <header class="auth-head">
-    <a class="auth-logo" href="/" title="GesCondu">
-      <img src="/img/gescondu-logo-ativo.png" alt="GesCondu" />
-    </a>
-  </header>
-
   <div class="auth-stage">
     <section class="auth-message">
+      <a class="auth-logo" href="/" title="GesCondu">
+        <img src="/img/gescondu-logo-ativo.png" alt="GesCondu" />
+      </a>
       <h2>A gestão do seu condomínio,<br />simplificada</h2>
       <p class="auth-message-apoio">Gestão simples, organizada e transparente.</p>
     </section>
