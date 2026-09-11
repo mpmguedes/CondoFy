@@ -25,14 +25,9 @@
 
   .auth-stage { padding-top: 0; }
 
-  /* Logótipo + slogan e caixa ficam alinhados no mesmo eixo vertical, um pouco
-     acima do centro. Ambos sobem o MESMO valor absoluto (6vh), para não
-     desalinharem entre si; em janelas baixas fica tudo centrado e a caixa
-     encolhe ao conteúdo, para não cortar. Só no layout de duas colunas. */
-  @media (min-width: 992px) and (min-height: 700px) {
-    .auth-message,
-    .auth-panel-col { transform: translateY(-6vh); }
-  }
+  /* Tudo centrado na vertical: o logótipo+slogan e a caixa ficam no meio da
+     janela, alinhados entre si (é o alinhamento central da grelha). Em janelas
+     baixas a caixa encolhe ao conteúdo, para não cortar. */
   @media (max-height: 860px) {
     .auth-panel-inner { min-height: 0; }
     .auth-stage { padding-top: clamp(16px, 2.5vh, 28px); }
