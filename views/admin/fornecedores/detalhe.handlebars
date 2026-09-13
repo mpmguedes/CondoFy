@@ -29,6 +29,88 @@
         </dl>
       </div>
     </div>
+
+    {{!-- Situação com o condomínio (saldo inicial/transitado + faturado − pago) --}}
+    <div class="card mb-3">
+      <div class="card-header bg-white"><i class="bi bi-cash-coin me-1"></i>Situação com o condomínio</div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-7 fw-normal text-muted">Saldo inicial / transitado</dt>
+          <dd class="col-5 text-end mb-1">{{eur divida.saldoInicial}}</dd>
+          <dt class="col-7 fw-normal text-muted">Total faturado</dt>
+          <dd class="col-5 text-end mb-1">{{eur divida.faturado}}</dd>
+          <dt class="col-7 fw-normal text-muted">Total pago</dt>
+          <dd class="col-5 text-end mb-1">{{eur divida.pago}}</dd>
+          {{#if divida.emDivida}}
+          <dt class="col-7 fw-semibold">Em dívida</dt>
+          <dd class="col-5 text-end mb-0 fw-semibold text-danger">{{eur divida.saldo}}</dd>
+          {{else}}
+          <dt class="col-7 fw-semibold">Crédito a favor do condomínio</dt>
+          <dd class="col-5 text-end mb-0 fw-semibold text-success">{{eur divida.credito}}</dd>
+          {{/if}}
+        </dl>
+      </div>
+    </div>
+
+    {{!-- Saldos iniciais / transitados (dívida anterior à plataforma) --}}
+    <div class="card mb-3">
+      <div class="card-header bg-white"><i class="bi bi-hourglass-split me-1"></i>Saldo inicial / transitado</div>
+      <div class="card-body pb-0">
+        <p class="text-muted small">
+          Registe aqui a dívida (ou o crédito) que já existia antes de usar a plataforma. Não são criadas faturas nem pagamentos fictícios — este valor entra apenas no cálculo da dívida deste fornecedor.
+        </p>
+      </div>
+      {{#if saldos.length}}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr><th>Data</th><th>Descrição</th><th>Tipo</th><th class="text-end">Valor</th><th class="text-end">Ações</th></tr>
+          </thead>
+          <tbody>
+            {{#each saldos}}
+            <tr>
+              <td class="text-nowrap">{{#if data}}{{formatDate data}}{{else}}—{{/if}}</td>
+              <td>{{#if descricao}}{{descricao}}{{else}}—{{/if}}</td>
+              <td>{{#if (eq tipo 'saldo_transitado')}}<span class="badge text-bg-info">Transitado</span>{{else}}<span class="badge text-bg-primary">Saldo inicial</span>{{/if}}</td>
+              <td class="text-end fw-semibold">{{eur valor}}</td>
+              <td class="text-end">
+                <form action="/admin/fornecedores/{{../fornecedor.id}}/saldos/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Remover este saldo inicial?" data-confirmar-perigo="1">
+                  <button class="btn btn-sm btn-outline-danger" title="Remover"><span class="material-symbols-outlined">delete</span></button>
+                </form>
+              </td>
+            </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+      {{/if}}
+      <div class="card-body">
+        <form action="/admin/fornecedores/{{fornecedor.id}}/saldos" method="POST" class="row g-2 align-items-end">
+          <div class="col-12 col-md-3">
+            <label class="form-label small" for="saldo_data">Data</label>
+            <input type="date" class="form-control form-control-sm" id="saldo_data" name="data" />
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label small" for="saldo_valor">Valor (€)</label>
+            <input type="text" class="form-control form-control-sm" id="saldo_valor" name="valor" placeholder="0,00" required />
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label small" for="saldo_tipo">Tipo</label>
+            <select class="form-select form-select-sm" id="saldo_tipo" name="tipo">
+              <option value="saldo_inicial">Saldo inicial</option>
+              <option value="saldo_transitado">Saldo transitado</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label small" for="saldo_descricao">Descrição</label>
+            <input type="text" class="form-control form-control-sm" id="saldo_descricao" name="descricao" placeholder="ex.: dívida de 2025" />
+          </div>
+          <div class="col-12">
+            <button class="btn btn-sm btn-primary"><span class="material-symbols-outlined me-1">add</span>Registar saldo</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 
   <div class="col-12 col-lg-7">

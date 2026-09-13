@@ -43,6 +43,7 @@ const {
   ReciboExtraParcela,
   Despesa,
   Fornecedor,
+  FornecedorSaldo,
   PagamentoFornecedor,
   Documento,
   DocumentoCategoria,
@@ -207,6 +208,11 @@ Fornecedor.hasMany(Despesa, { foreignKey: 'fornecedor_id', as: 'despesas' });
 // Pagamentos a fornecedores
 PagamentoFornecedor.belongsTo(Fornecedor, { foreignKey: 'fornecedor_id', as: 'fornecedor' });
 Fornecedor.hasMany(PagamentoFornecedor, { foreignKey: 'fornecedor_id', as: 'pagamentos' });
+// Saldos iniciais/transitados do fornecedor (dívida anterior à plataforma)
+FornecedorSaldo.belongsTo(Fornecedor, { foreignKey: 'fornecedor_id', as: 'fornecedor' });
+Fornecedor.hasMany(FornecedorSaldo, { foreignKey: 'fornecedor_id', as: 'saldos_iniciais' });
+FornecedorSaldo.belongsTo(Condominio, { foreignKey: 'condominio_id', as: 'condominio' });
+FornecedorSaldo.belongsTo(User, { foreignKey: 'created_by', as: 'criador' });
 PagamentoFornecedor.belongsTo(Despesa, { foreignKey: 'despesa_id', as: 'despesa' });
 PagamentoFornecedor.belongsTo(MetodoPagamento, { foreignKey: 'metodo_pagamento_id', as: 'metodo_pagamento' });
 PagamentoFornecedor.belongsTo(ContaBancaria, { foreignKey: 'conta_bancaria_id', as: 'conta_bancaria' });

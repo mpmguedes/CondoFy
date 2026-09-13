@@ -183,6 +183,9 @@ app.use('/admin', require('./routes/emails'));
 app.use('/admin', require('./routes/configuracao'));
 app.use('/admin', require('./routes/sistema'));
 app.use('/admin', require('./routes/fornecedores'));
+// Relatórios do condomínio (Relatório Financeiro / balancete) — ver
+// routes/relatorios.js. Montado antes dos placeholders.
+app.use('/admin', require('./routes/relatorios'));
 app.use('/admin', require('./routes/placeholders'));
 app.use('/condomino', require('./routes/condomino'));
 // Link temporário de documento (destinatários sem conta) — rota pública

@@ -1,0 +1,278 @@
+<div class="relatorio-financeiro">
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Relatório financeiro</h1>
+    <p class="subtitle">Balancete do condomínio: receitas, despesas, síntese, contas e dívidas</p>
+  </div>
+  <a href="/admin" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Painel</a>
+</div>
+
+<form action="/admin/relatorios/financeiro" method="GET" id="formRelatorio">
+  <div class="row g-3">
+    <div class="col-12 col-xl-7">
+      <div class="card">
+        <div class="card-header bg-white"><i class="bi bi-calendar-range me-1"></i>Período do relatório</div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label" for="inicio">Data de início</label>
+              <input type="date" class="form-control" id="inicio" name="inicio" value="{{inicio}}" required />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label" for="fim">Data de fim</label>
+              <input type="date" class="form-control" id="fim" name="fim" value="{{fim}}" required />
+            </div>
+          </div>
+          <div class="d-flex flex-wrap gap-2 mb-1">
+            {{#each periodosRapidos}}
+            <a class="btn btn-sm btn-outline-secondary" href="/admin/relatorios/financeiro?inicio={{inicio}}&fim={{fim}}">{{etiqueta}}</a>
+            {{/each}}
+          </div>
+          <p class="text-muted small mb-0 mt-2">
+            As receitas e despesas são consideradas pela competência do período (mês da quota e mês de competência da fatura).
+          </p>
+        </div>
+      </div>
+
+      <div class="card mt-3">
+        <div class="card-header bg-white"><i class="bi bi-list-check me-1"></i>Detalhe a incluir</div>
+        <div class="card-body">
+          <p class="text-muted small">As opções de detalhe não alteram os cálculos — só acrescentam informação ao relatório.</p>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="d_notas" name="d_notas" value="1" {{checked opcoes.notas}} />
+            <label class="form-check-label" for="d_notas">Notas detalhadas (execução por rubrica, face ao orçamentado)</label>
+          </div>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="d_dividas_condominos" name="d_dividas_condominos" value="1" {{checked opcoes.dividas_condominos}} />
+            <label class="form-check-label" for="d_dividas_condominos">Discriminação das dívidas dos condóminos (por fração)</label>
+          </div>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="d_dividas_fornecedores" name="d_dividas_fornecedores" value="1" {{checked opcoes.dividas_fornecedores}} />
+            <label class="form-check-label" for="d_dividas_fornecedores">Discriminação das dívidas a fornecedores</label>
+          </div>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="d_despesas_fornecedor" name="d_despesas_fornecedor" value="1" {{checked opcoes.despesas_por_fornecedor}} />
+            <label class="form-check-label" for="d_despesas_fornecedor">Detalhe das despesas por fornecedor (dentro de cada rubrica)</label>
+          </div>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="d_receitas_fracao" name="d_receitas_fracao" value="1" {{checked opcoes.receitas_por_fracao}} />
+            <label class="form-check-label" for="d_receitas_fracao">Detalhe das receitas por fração</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-3">
+        <div class="card-header bg-white"><i class="bi bi-chat-left-text me-1"></i>Descrição / Observações</div>
+        <div class="card-body">
+          <label class="form-label" for="observacoes">Texto livre (aparece no relatório apenas se estiver preenchido)</label>
+          <textarea class="form-control" id="observacoes" name="observacoes" rows="4" placeholder="ex.: Balancete apresentado em assembleia; pendente a regularização do 3.º Dto.">{{opcoes.observacoes}}</textarea>
+        </div>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2 mt-3">
+        <button type="submit" class="btn btn-outline-primary"><span class="material-symbols-outlined me-1">refresh</span>Atualizar pré-visualização</button>
+        <button type="submit" class="btn btn-primary" formaction="/admin/relatorios/financeiro/pdf" formtarget="_blank">
+          <span class="material-symbols-outlined me-1">picture_as_pdf</span>Gerar relatório PDF
+        </button>
+      </div>
+    </div>
+
+    <div class="col-12 col-xl-5">
+      <div class="card">
+        <div class="card-header bg-white"><i class="bi bi-graph-up-arrow me-1"></i>Resumo antes de gerar</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-6">
+              <div class="stat-card h-100"><div class="card-body">
+                <div class="stat-label">Resultado do período</div>
+                <div class="stat-value {{#if resumo.resultadoNegativo}}text-danger{{/if}}">{{resumo.resultado}}</div>
+                <div class="text-muted small">receitas lançadas − despesas faturadas</div>
+              </div></div>
+            </div>
+            <div class="col-6">
+              <div class="stat-card h-100"><div class="card-body">
+                <div class="stat-label">Saldo das contas</div>
+                <div class="stat-value {{#if resumo.saldoContasNegativo}}text-danger{{/if}}">{{resumo.saldoContas}}</div>
+                <div class="text-muted small">tesouraria à data de fim</div>
+              </div></div>
+            </div>
+            <div class="col-6">
+              <div class="stat-card h-100"><div class="card-body">
+                <div class="stat-label">Receitas lançadas</div>
+                <div class="stat-value">{{resumo.receitasLancadas}}</div>
+                <div class="text-muted small">recebido: {{resumo.receitasRecebidas}}</div>
+              </div></div>
+            </div>
+            <div class="col-6">
+              <div class="stat-card h-100"><div class="card-body">
+                <div class="stat-label">Despesas faturadas</div>
+                <div class="stat-value">{{resumo.despesasFaturadas}}</div>
+                <div class="text-muted small">pago: {{resumo.despesasPagas}}</div>
+              </div></div>
+            </div>
+            <div class="col-6">
+              <div class="stat-card h-100"><div class="card-body">
+                <div class="stat-label">Dívida dos condóminos</div>
+                <div class="stat-value">{{resumo.dividaCondominos}}</div>
+                <div class="text-muted small">{{resumo.nFracoesEmDivida}} fração(ões) em dívida</div>
+              </div></div>
+            </div>
+            <div class="col-6">
+              <div class="stat-card h-100"><div class="card-body">
+                <div class="stat-label">Dívida a fornecedores</div>
+                <div class="stat-value">{{resumo.dividaFornecedores}}</div>
+                <div class="text-muted small">{{resumo.nFornecedoresComDivida}} fornecedor(es)</div>
+              </div></div>
+            </div>
+          </div>
+          <dl class="row mt-3 mb-0 small">
+            <dt class="col-7 fw-normal text-muted">Saldo transitado (orçamento)</dt>
+            <dd class="col-5 text-end mb-1">{{resumo.saldoTransitado}}</dd>
+            <dt class="col-7 fw-normal text-muted">Fundo de reserva</dt>
+            <dd class="col-5 text-end mb-1">{{resumo.fundoReserva}}</dd>
+            <dt class="col-7 fw-normal text-muted">Orçamento de referência</dt>
+            <dd class="col-5 text-end mb-1">{{#if orcamento}}{{orcamento.designacao}}{{else}}—{{/if}}</dd>
+            <dt class="col-7 fw-normal text-muted">Quotas lançadas consideradas</dt>
+            <dd class="col-5 text-end mb-1">{{movimentos.nQuotas}}</dd>
+            <dt class="col-7 fw-normal text-muted">Despesas consideradas</dt>
+            <dd class="col-5 text-end mb-1">{{movimentos.nDespesas}}</dd>
+          </dl>
+          {{#if transferencias.n}}
+          <p class="text-muted small mb-0">{{transferencias.n}} movimento(s) de transferência entre contas não são contados como receita nem despesa.</p>
+          {{/if}}
+        </div>
+      </div>
+
+      {{#if avisos.length}}
+      <div class="alert alert-warning mt-3 mb-0">
+        <ul class="mb-0 ps-3">
+          {{#each avisos}}<li class="small">{{this}}</li>{{/each}}
+        </ul>
+      </div>
+      {{/if}}
+    </div>
+  </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-12 col-xl-6">
+      <div class="card">
+        <div class="card-header bg-white"><i class="bi bi-arrow-down-circle me-1"></i>Receitas</div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Rubrica</th>
+                <th class="text-end text-nowrap">Orçamentado</th>
+                <th class="text-end text-nowrap">Lançado</th>
+                <th class="text-end text-nowrap">Recebido</th>
+                <th class="text-end text-nowrap">Em dívida</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{#each receitas}}
+              <tr>
+                <td>{{designacao}}</td>
+                <td class="text-end text-nowrap">{{orcamentado}}</td>
+                <td class="text-end text-nowrap">{{lancado}}</td>
+                <td class="text-end text-nowrap">{{recebido}}</td>
+                <td class="text-end text-nowrap {{#if emDividaNegativa}}text-success{{/if}}">{{emDivida}}</td>
+              </tr>
+              {{else}}
+              <tr><td colspan="5" class="text-center text-muted py-4">Sem lançamentos no período.</td></tr>
+              {{/each}}
+            </tbody>
+            <tfoot class="table-light">
+              <tr class="fw-semibold">
+                <td>Total</td>
+                <td class="text-end text-nowrap">{{totaisReceitas.orcamentado}}</td>
+                <td class="text-end text-nowrap">{{totaisReceitas.lancado}}</td>
+                <td class="text-end text-nowrap">{{totaisReceitas.recebido}}</td>
+                <td class="text-end text-nowrap">{{totaisReceitas.emDivida}}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-xl-6">
+      <div class="card">
+        <div class="card-header bg-white"><i class="bi bi-arrow-up-circle me-1"></i>Despesas</div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Rubrica</th>
+                <th class="text-end text-nowrap">Orçamentado</th>
+                <th class="text-end text-nowrap">Faturado</th>
+                <th class="text-end text-nowrap">Pago</th>
+                <th class="text-end text-nowrap">Por pagar</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{#each despesas}}
+              <tr>
+                <td>{{designacao}}</td>
+                <td class="text-end text-nowrap">{{orcamentado}}</td>
+                <td class="text-end text-nowrap">{{faturado}}</td>
+                <td class="text-end text-nowrap">{{pago}}</td>
+                <td class="text-end text-nowrap">{{porPagar}}</td>
+              </tr>
+              {{else}}
+              <tr><td colspan="5" class="text-center text-muted py-4">Sem despesas no período.</td></tr>
+              {{/each}}
+            </tbody>
+            <tfoot class="table-light">
+              <tr class="fw-semibold">
+                <td>Total</td>
+                <td class="text-end text-nowrap">{{totaisDespesas.orcamentado}}</td>
+                <td class="text-end text-nowrap">{{totaisDespesas.faturado}}</td>
+                <td class="text-end text-nowrap">{{totaisDespesas.pago}}</td>
+                <td class="text-end text-nowrap">{{totaisDespesas.porPagar}}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mt-3">
+    <div class="card-header bg-white"><i class="bi bi-bank me-1"></i>Contas bancárias</div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Conta</th>
+            <th>Banco</th>
+            <th>Tipo</th>
+            <th>Estado</th>
+            <th class="text-end text-nowrap">Saldo à data de fim</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each contas}}
+          <tr>
+            <td class="fw-semibold">{{nome}}</td>
+            <td>{{#if banco}}{{banco}}{{else}}—{{/if}}</td>
+            <td>
+              {{#if (eq tipo 'fundo_reserva')}}<span class="badge text-bg-warning">Fundo de reserva</span>
+              {{else if (eq tipo 'poupanca')}}<span class="badge text-bg-info">Poupança</span>
+              {{else if (eq tipo 'corrente')}}<span class="badge text-bg-primary">Corrente</span>
+              {{else}}<span class="badge text-bg-secondary">Outra</span>{{/if}}
+            </td>
+            <td>{{#if ativa}}<span class="badge text-bg-success">Ativa</span>{{else}}<span class="badge text-bg-secondary">Inativa</span>{{/if}}</td>
+            <td class="text-end text-nowrap fw-semibold">{{saldo}}</td>
+          </tr>
+          {{else}}
+          <tr><td colspan="5" class="text-center text-muted py-4">Sem contas bancárias registadas.</td></tr>
+          {{/each}}
+        </tbody>
+        <tfoot class="table-light">
+          <tr class="fw-semibold"><td colspan="4">Total</td><td class="text-end text-nowrap">{{totalContas}}</td></tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</form>
+</div>

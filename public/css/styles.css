@@ -1032,7 +1032,7 @@ textarea.form-control { min-height: auto; }
 
 
 /* ---------------------------------------------------------------
-   M�dulo Quotas � Mapa | Comprovativos | Recibos
+   Módulo Quotas — Mapa | Comprovativos | Recibos
    --------------------------------------------------------------- */
 .quotas-tabs {
   display: flex;
@@ -1071,7 +1071,7 @@ textarea.form-control { min-height: auto; }
 .mini-stat-value { font-size: 1.25rem; font-weight: 600; line-height: 1.2; }
 .mini-stat-sub { color: var(--c-text-muted); font-size: 0.72rem; }
 
-/* Mapa � tabela condensada */
+/* Mapa — tabela condensada */
 .qmap thead th {
   font-size: 0.7rem;
   text-transform: uppercase;
@@ -1115,7 +1115,7 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
 
 .modal-transitados-lista { max-height: 45vh; }
 
-/* Recibos � selecao compacta dos meses (grelha de botoes) */
+/* Recibos — selecao compacta dos meses (grelha de botoes) */
 .mes-btn {
   display: block;
   border: 1px solid var(--c-border);
@@ -1605,3 +1605,14 @@ hr { border-color: var(--c-border); opacity: 1; }
   .badge { font-size: var(--font-size-xs); }
   .table thead th { font-size: var(--font-size-xs); }
 }
+
+
+/* ── Relatório financeiro: valores dos cartões de resumo ── */
+/* Montantes longos (ex.: 1.234.567,89 €) cabem no cartão sem transbordar,     */
+/* mesmo com a tipografia no tamanho «Muito grande».                          */
+.relatorio-financeiro .stat-value {
+  font-size: calc(20px * var(--font-scale));
+  overflow-wrap: anywhere;
+  line-height: 1.15;
+}
+.relatorio-financeiro .stat-label { min-height: 2.2em; }

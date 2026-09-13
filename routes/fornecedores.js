@@ -16,6 +16,7 @@ const {
   Categoria,
   Documento,
   PagamentoFornecedor,
+  FornecedorSaldo,
   MetodoPagamento,
   ContaBancaria,
   EmailFila,
@@ -31,6 +32,8 @@ const mailer = require('../helpers/mailer');
 const { compor: comporEmail } = require('../helpers/email-templates');
 const { getCondominio } = require('../helpers/condominio');
 const { validarNif, validarIban } = require('../public/js/validacao-fiscal');
+const { toCents, fromCents } = require('../helpers/money');
+const { pagoDaDespesa, resumoDividaFornecedor } = require('../helpers/relatorio-financeiro');
 
 const router = express.Router();
 // Isolamento: exige condomínio ativo e papel gestor/admin.
@@ -204,7 +207,7 @@ router.get('/fornecedores/:id', async (req, res) => {
   const fornecedor = await carregarFornecedor(req);
   if (!fornecedor) return res.redirect('/admin/fornecedores');
 
-  const [despesas, documentos, pagamentos] = await Promise.all([
+  const [despesas, documentos, pagamentos, saldos] = await Promise.all([
     Despesa.findAll({
       where: escopoFornecedor(req, { fornecedor_id: fornecedor.id }),
       include: [{ model: Categoria, as: 'categoria' }],
@@ -223,7 +226,33 @@ router.get('/fornecedores/:id', async (req, res) => {
       ],
       order: [['data_pagamento', 'DESC'], ['id', 'DESC']],
     }),
+    // Saldos iniciais/transitados do fornecedor (dívida anterior à plataforma).
+    FornecedorSaldo.findAll({
+      where: escopoFornecedor(req, { fornecedor_id: fornecedor.id }),
+      order: [['data', 'ASC'], ['id', 'ASC']],
+    }),
   ]);
+
+  // Situação do fornecedor com o condomínio: saldo inicial/transitado +
+  // faturado − pago. Usa exatamente a mesma fórmula do Relatório Financeiro
+  // (helpers/relatorio-financeiro.js) para não haver dois números diferentes.
+  const pagamentosPorDespesa = new Map();
+  for (const pg of pagamentos) {
+    if (pg.estado !== 'pago' || !pg.despesa_id) continue;
+    const chave = Number(pg.despesa_id);
+    pagamentosPorDespesa.set(chave, (pagamentosPorDespesa.get(chave) || 0) + toCents(pg.valor));
+  }
+  const faturadoC = despesas.reduce((s, d) => (d.estado === 'anulada' ? s : s + toCents(d.valor)), 0);
+  const pagoC = despesas.reduce((s, d) => s + pagoDaDespesa({
+    valorC: toCents(d.valor),
+    estado: d.estado,
+    pagamentosC: pagamentosPorDespesa.get(Number(d.id)) || 0,
+  }), 0);
+  const pagamentosSemFaturaC = pagamentos
+    .filter((pg) => pg.estado === 'pago' && !pg.despesa_id)
+    .reduce((s, pg) => s + toCents(pg.valor), 0);
+  const saldoInicialC = saldos.reduce((s, x) => s + toCents(x.valor), 0);
+  const divida = resumoDividaFornecedor({ saldoInicialC, faturadoC, pagoC, pagamentosSemFaturaC });
 
   // Comunicações: emails associados aos pagamentos deste fornecedor (sempre
   // dentro do condomínio ativo).
@@ -244,8 +273,73 @@ router.get('/fornecedores/:id', async (req, res) => {
     despesas,
     documentos,
     pagamentos,
+    saldos,
+    divida: {
+      saldoInicial: fromCents(saldoInicialC),
+      faturado: fromCents(faturadoC),
+      pago: fromCents(pagoC + pagamentosSemFaturaC),
+      saldo: fromCents(divida.saldoC),
+      emDivida: divida.dividaC > 0,
+      credito: fromCents(divida.creditoC),
+    },
     comunicacoes,
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// SALDOS INICIAIS / TRANSITADOS DO FORNECEDOR
+// (dívida anterior à utilização da plataforma — nunca faturas fictícias)
+// ═══════════════════════════════════════════════════════════════════
+router.post('/fornecedores/:id/saldos', async (req, res) => {
+  const fornecedor = await carregarFornecedor(req);
+  if (!fornecedor) return res.redirect('/admin/fornecedores');
+
+  const valorC = toCents(req.body.valor);
+  if (valorC <= 0) {
+    req.flash('error_msg', 'Indique um valor superior a zero para o saldo inicial.');
+    return res.redirect(`/admin/fornecedores/${fornecedor.id}`);
+  }
+  const tipo = ['saldo_inicial', 'saldo_transitado'].includes(req.body.tipo) ? req.body.tipo : 'saldo_inicial';
+  const data = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.data || '')) ? req.body.data : null;
+
+  await FornecedorSaldo.create({
+    condominio_id: req.condominioId,
+    fornecedor_id: fornecedor.id,
+    data,
+    valor: fromCents(valorC),
+    tipo,
+    descricao: str(req.body.descricao).slice(0, 255) || null,
+    created_by: req.user.id,
+  });
+  await audit({
+    userId: req.user.id,
+    acao: 'criar_saldo_fornecedor',
+    entidade: 'Fornecedor',
+    entidadeId: fornecedor.id,
+    detalhes: { condominioId: req.condominioId, valor: fromCents(valorC), tipo },
+  }).catch(() => {});
+  req.flash('success_msg', 'Saldo inicial registado.');
+  res.redirect(`/admin/fornecedores/${fornecedor.id}`);
+});
+
+router.post('/fornecedores/:id/saldos/:sid/eliminar', async (req, res) => {
+  const fornecedor = await carregarFornecedor(req);
+  if (!fornecedor) return res.redirect('/admin/fornecedores');
+  const saldo = await FornecedorSaldo.findOne({
+    where: escopoFornecedor(req, { id: req.params.sid, fornecedor_id: fornecedor.id }),
+  });
+  if (saldo) {
+    await saldo.destroy();
+    await audit({
+      userId: req.user.id,
+      acao: 'eliminar_saldo_fornecedor',
+      entidade: 'Fornecedor',
+      entidadeId: fornecedor.id,
+      detalhes: { condominioId: req.condominioId, saldoId: req.params.sid },
+    }).catch(() => {});
+    req.flash('success_msg', 'Saldo inicial removido.');
+  }
+  res.redirect(`/admin/fornecedores/${fornecedor.id}`);
 });
 
 // ═══════════════════════════════════════════════════════════════════

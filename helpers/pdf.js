@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
-const { formatEUR } = require('./money');
+const { formatEUR, fromCents } = require('./money');
 const { formatDate, formatDateExtenso } = require('./dates');
 const { gerarConvocatoriaCartaPDF } = require('./pdf-convocatoria');
 
@@ -789,4 +789,306 @@ async function gerarAtaPDF(condominio, d) {
   return toBuffer(doc);
 }
 
-module.exports = { gerarAvisoQuotaPDF, gerarReciboPDF, gerarConvocatoriaPDF, gerarAtaPDF };
+// ═══════════════════════════════════════════════════════════════════
+// RELATÓRIO FINANCEIRO — balancete do condomínio
+//
+// Segue EXATAMENTE o sistema visual do recibo (mesmo Layout, mesma paleta,
+// mesma tipografia, mesmas tabelas/zebra, mesmo rodapé e paginação): o
+// cabeçalho institucional, a régua e o rodapé são desenhados pelo Layout e por
+// finalizarPaginacao, partilhados com o recibo e o aviso de quota.
+//
+// Recebe o resultado de helpers/relatorio-financeiro.js (valores em cêntimos).
+// ═══════════════════════════════════════════════════════════════════
+async function gerarRelatorioFinanceiroPDF(condominio, d) {
+  const doc = criarDocumento();
+  const dados = d || {};
+  const periodo = dados.periodo || {};
+  const eur = (c) => formatEUR(fromCents(c));
+  const H = (texto) => { L.texto(texto, { bold: true, fontSize: T.TEXTO_SIZE, cor: T.MARINHO }); L.espaco(1); };
+
+  // A coluna direita do cabeçalho é desenhada numa única linha (lineBreak:
+  // false, como no recibo): o texto é encurtado com «…» quando não caberia, em
+  // vez de invadir a coluna do condomínio.
+  const larguraCabecalhoDireita = 235;
+  const encurtar = (texto, larguraMax, size, bold) => {
+    const t = String(texto == null ? '' : texto);
+    doc.font(bold ? T.FONTE_BOLD : T.FONTE).fontSize(size);
+    if (doc.widthOfString(t) <= larguraMax) return t;
+    let corte = t;
+    while (corte.length > 4 && doc.widthOfString(`${corte}…`) > larguraMax) corte = corte.slice(0, -1);
+    return `${corte}…`;
+  };
+
+  const L = new Layout(doc, condominio, 'RELATÓRIO FINANCEIRO', [
+    // Coluna direita do cabeçalho no mesmo padrão do recibo (identidade do
+    // documento em destaque + metadados em texto secundário).
+    { texto: 'Relatório Financeiro', tamanho: 13, negrito: true, cor: T.MARINHO },
+    {
+      texto: encurtar(`Período de ${formatDate(periodo.inicio)} a ${formatDate(periodo.fim)}`, larguraCabecalhoDireita, T.TEXTO_SIZE_SMALL, false),
+      tamanho: T.TEXTO_SIZE_SMALL, negrito: false, cor: T.TINTA_2,
+    },
+    {
+      texto: encurtar(
+        dados.orcamento ? `Orçamento: ${dados.orcamento.designacao}` : 'Sem orçamento (não anulado) no período',
+        larguraCabecalhoDireita, T.TEXTO_SIZE_SMALL, false
+      ),
+      tamanho: T.TEXTO_SIZE_SMALL,
+      negrito: false,
+      cor: T.TINTA_2,
+    },
+    {
+      texto: encurtar(`Emitido em ${formatDateExtenso(dados.emitidoEm || new Date())}`, larguraCabecalhoDireita, T.TEXTO_SIZE_SMALL, false),
+      tamanho: T.TEXTO_SIZE_SMALL,
+      negrito: false,
+      cor: T.TINTA_2,
+    },
+  ]);
+
+  // ── Resumo do relatório (o condomínio já está identificado no cabeçalho) ──
+  L.cartao('Resumo do relatório', (C) => {
+    C.grelha([
+      ['Período analisado', `${formatDate(periodo.inicio)} a ${formatDate(periodo.fim)}`],
+      ['Orçamento de referência', encurtar(dados.orcamento ? `${dados.orcamento.designacao} (${dados.orcamento.estado})` : 'Sem orçamento no período', 215, T.TEXTO_SIZE, true)],
+      ['Frações do condomínio', String((dados.dados && dados.dados.nFracoes) || 0)],
+      ['Contas bancárias consideradas', String((dados.contas && dados.contas.contas ? dados.contas.contas.length : 0))],
+      ['Quotas lançadas consideradas', String((dados.dados && dados.dados.nQuotas) || 0)],
+      ['Despesas consideradas', String((dados.dados && dados.dados.nDespesas) || 0)],
+    ], { larguraRotulo: 210 });
+  });
+
+  // ── RECEITAS ─────────────────────────────────────────────────────
+  // Larguras calibradas com as métricas reais das fontes Helvetica: a coluna
+  // mais larga do cabeçalho é «ORÇAMENTADO» (68,9 pt a 8.2 bold + 0.4 de
+  // espaçamento), pelo que as colunas de valores têm 70 pt — sem overflows.
+  L.seccao('RECEITAS');
+  const colunasReceitas = [
+    { titulo: 'Rubrica', x: 0, width: 191 },
+    { titulo: 'Orçamentado', x: 191, width: 70, align: 'right' },
+    { titulo: 'Lançado', x: 261, width: 70, align: 'right' },
+    { titulo: 'Recebido', x: 331, width: 70, align: 'right' },
+    { titulo: 'Em dívida', x: 401, width: 70, align: 'right' },
+  ];
+  const linhasReceitas = (dados.receitas && dados.receitas.rubricas ? dados.receitas.rubricas : []).map((r) => [
+    r.designacao,
+    eur(r.orcamentadoC),
+    eur(r.lancadoC),
+    eur(r.recebidoC),
+    eur(r.emDividaC),
+  ]);
+  if (!linhasReceitas.length) linhasReceitas.push(['Sem lançamentos no período', '—', '—', '—', '—']);
+  const tRec = (dados.receitas && dados.receitas.totais) || { orcamentadoC: 0, lancadoC: 0, recebidoC: 0, emDividaC: 0 };
+  linhasReceitas.push(['TOTAL', eur(tRec.orcamentadoC), eur(tRec.lancadoC), eur(tRec.recebidoC), eur(tRec.emDividaC)]);
+  L.tabelaDados(colunasReceitas, linhasReceitas);
+
+  // ── DESPESAS ─────────────────────────────────────────────────────
+  L.seccao('DESPESAS');
+  const colunasDespesas = [
+    { titulo: 'Rubrica', x: 0, width: 191 },
+    { titulo: 'Orçamentado', x: 191, width: 70, align: 'right' },
+    { titulo: 'Faturado', x: 261, width: 70, align: 'right' },
+    { titulo: 'Pago', x: 331, width: 70, align: 'right' },
+    { titulo: 'Por pagar', x: 401, width: 70, align: 'right' },
+  ];
+  const linhasDespesas = (dados.despesas && dados.despesas.rubricas ? dados.despesas.rubricas : []).map((r) => [
+    r.designacao,
+    eur(r.orcamentadoC),
+    eur(r.faturadoC),
+    eur(r.pagoC),
+    eur(r.porPagarC),
+  ]);
+  if (!linhasDespesas.length) linhasDespesas.push(['Sem despesas no período', '—', '—', '—', '—']);
+  const tDes = (dados.despesas && dados.despesas.totais) || { orcamentadoC: 0, faturadoC: 0, pagoC: 0, porPagarC: 0 };
+  linhasDespesas.push(['TOTAL', eur(tDes.orcamentadoC), eur(tDes.faturadoC), eur(tDes.pagoC), eur(tDes.porPagarC)]);
+  L.tabelaDados(colunasDespesas, linhasDespesas);
+
+  // ── Resultado do período (nunca o saldo bancário) ─────────────────
+  const s = dados.sintese || {};
+  L.blocoTotal('RESULTADO DO PERÍODO', fromCents(s.resultadoC || 0));
+
+  // ── SÍNTESE FINANCEIRA ───────────────────────────────────────────
+  L.seccao('SÍNTESE FINANCEIRA');
+  const paresSintese = [
+    ['Saldo transitado (orçamento)', eur(s.saldoTransitadoC)],
+    ['Total de receitas do período (lançado)', eur(s.totalReceitasLancadasC)],
+    ['Total de receitas recebidas no período', eur(s.totalReceitasRecebidasC)],
+    ['Total de despesas do período (faturado)', eur(s.totalDespesasFaturadasC)],
+    ['Total de despesas pagas no período', eur(s.totalDespesasPagasC)],
+    // Nota: usar hífen simples (o sinal de menos tipográfico "−" não existe na
+    // codificação WinAnsi das fontes Helvetica e sairia como glifo errado).
+    ['Resultado do período (receitas - despesas)', eur(s.resultadoC), { cor: (s.resultadoC || 0) < 0 ? T.TINTA_ERRO : T.TINTA_SUCESSO }],
+    ['Dívida dos condóminos (acumulada)', eur(s.dividaCondominosC), { cor: (s.dividaCondominosC || 0) > 0 ? T.TINTA_ERRO : T.TINTA }],
+    ['— dos quais dívida transitada das frações', eur(s.dividaCondominosTransitadaC)],
+    ['Dívida a fornecedores (acumulada)', eur(s.dividaFornecedoresC), { cor: (s.dividaFornecedoresC || 0) > 0 ? T.TINTA_ERRO : T.TINTA }],
+  ];
+  if ((s.creditoCondominosC || 0) > 0) paresSintese.push(['Créditos a favor de condóminos', eur(s.creditoCondominosC)]);
+  if ((s.dividaFornecedoresSemFornecedorC || 0) > 0) {
+    paresSintese.push(['Despesas por pagar sem fornecedor identificado', eur(s.dividaFornecedoresSemFornecedorC)]);
+  }
+  if ((s.creditoFornecedoresC || 0) > 0) paresSintese.push(['Créditos a favor do condomínio (fornecedores)', eur(s.creditoFornecedoresC)]);
+  paresSintese.push(['Saldo das contas bancárias (à data de fim)', eur(s.saldoContasC), { cor: (s.saldoContasC || 0) < 0 ? T.TINTA_ERRO : T.TINTA }]);
+  if ((s.fundoReservaC || 0) !== 0) paresSintese.push(['— do qual fundo de reserva', eur(s.fundoReservaC)]);
+  L.grelha(paresSintese, { larguraRotulo: 225 });
+
+  // ── CONTAS BANCÁRIAS ─────────────────────────────────────────────
+  L.seccao('CONTAS BANCÁRIAS');
+  const contas = (dados.contas && dados.contas.contas) || [];
+  const linhasContas = contas.map((c) => [
+    c.nome,
+    c.banco || '—',
+    tipoContaLabel(c.tipo) + (c.ativa ? '' : ' (inativa)'),
+    eur(c.saldoC),
+  ]);
+  if (!linhasContas.length) linhasContas.push(['Sem contas bancárias registadas', '—', '—', '—']);
+  linhasContas.push(['TOTAL', '', '', eur((dados.contas && dados.contas.totalC) || 0)]);
+  L.tabelaDados([
+    { titulo: 'Conta', x: 0, width: 140 },
+    { titulo: 'Banco', x: 140, width: 105 },
+    { titulo: 'Tipo', x: 245, width: 90 },
+    // «SALDO À DATA DE FIM» mede 97,4 pt (8.2 bold + 0.4): cabe em 136 pt.
+    { titulo: 'Saldo à data de fim', x: 335, width: 136, align: 'right' },
+  ], linhasContas);
+  L.texto(
+    `Saldos calculados à data de fim (${formatDate(periodo.fim)}): saldo inicial da conta + entradas - saídas confirmadas com data até esse dia.`,
+    { fontSize: T.TEXTO_SIZE_SMALL, cor: T.TINTA_2 }
+  );
+  L.espaco(4);
+  const transf = (dados.contas && dados.contas.transferencias) || { n: 0, valorC: 0 };
+  if (transf.n > 0) {
+    L.texto(
+      `Transferências entre contas no período: ${transf.n} movimento(s), ${eur(transf.valorC)} — não são contabilizadas como receita nem como despesa (o efeito no total das contas é nulo).`,
+      { fontSize: T.TEXTO_SIZE_SMALL, cor: T.TINTA_2 }
+    );
+    L.espaco(4);
+  }
+
+  // ── OBSERVAÇÕES (só quando existem) ──────────────────────────────
+  const observacoes = String((dados.observacoes || '')).trim();
+  if (observacoes) {
+    L.seccao('OBSERVAÇÕES');
+    L.texto(observacoes);
+    L.espaco(4);
+  }
+
+  // ── DETALHE (apenas opções selecionadas) ─────────────────────────
+  const detalhe = dados.detalhe || {};
+  const temDetalhe = !!(
+    (detalhe.notas && (detalhe.notas.receitas.length || detalhe.notas.despesas.length))
+    || (detalhe.dividasCondominos && detalhe.dividasCondominos.length)
+    || (detalhe.dividasFornecedores && detalhe.dividasFornecedores.length)
+    || (detalhe.despesasPorFornecedor && detalhe.despesasPorFornecedor.length)
+    || (detalhe.receitasPorFracao && detalhe.receitasPorFracao.length)
+  );
+
+  if (temDetalhe) {
+    L.seccao('DETALHE');
+
+    if (detalhe.notas) {
+      H('Notas por rubrica — receitas (execução face ao orçamentado)');
+      L.tabelaDados([
+        { titulo: 'Rubrica', x: 0, width: 215 },
+        { titulo: 'Doc.', x: 215, width: 46, align: 'right' },
+        { titulo: 'Orçamentado', x: 261, width: 70, align: 'right' },
+        { titulo: 'Executado', x: 331, width: 70, align: 'right' },
+        { titulo: '%', x: 401, width: 70, align: 'right' },
+      ], detalhe.notas.receitas.length
+        ? detalhe.notas.receitas.map((r) => [r.designacao, String(r.nDocumentos), eur(r.orcamentadoC), eur(r.executadoC), r.percentagem === null ? '—' : `${r.percentagem}%`])
+        : [['Sem lançamentos', '—', '—', '—', '—']]);
+      L.espaco(4);
+      H('Notas por rubrica — despesas (execução face ao orçamentado)');
+      L.tabelaDados([
+        { titulo: 'Rubrica', x: 0, width: 215 },
+        { titulo: 'Faturas', x: 215, width: 46, align: 'right' },
+        { titulo: 'Orçamentado', x: 261, width: 70, align: 'right' },
+        { titulo: 'Executado', x: 331, width: 70, align: 'right' },
+        { titulo: '%', x: 401, width: 70, align: 'right' },
+      ], detalhe.notas.despesas.length
+        ? detalhe.notas.despesas.map((r) => [r.designacao, String(r.nFaturas), eur(r.orcamentadoC), eur(r.executadoC), r.percentagem === null ? '—' : `${r.percentagem}%`])
+        : [['Sem despesas', '—', '—', '—', '—']]);
+      L.espaco(4);
+    }
+
+    if (detalhe.dividasCondominos && detalhe.dividasCondominos.length) {
+      H('Discriminação das dívidas dos condóminos (acumulada até à data de fim)');
+      L.tabelaDados([
+        { titulo: 'Fração', x: 0, width: 140 },
+        { titulo: 'Transitado', x: 140, width: 80, align: 'right' },
+        { titulo: 'Lançado', x: 220, width: 85, align: 'right' },
+        { titulo: 'Recebido', x: 305, width: 85, align: 'right' },
+        { titulo: 'Em dívida', x: 390, width: 81, align: 'right' },
+      ], detalhe.dividasCondominos.map((f) => [
+        f.designacao,
+        eur(f.transitadoC),
+        eur(f.lancadoC + f.extrasC),
+        eur(f.recebidoC),
+        f.creditoC > 0 ? `-${eur(f.creditoC)}` : eur(f.emDividaC),
+      ]));
+      L.espaco(4);
+    }
+
+    if (detalhe.dividasFornecedores && detalhe.dividasFornecedores.length) {
+      H('Discriminação das dívidas a fornecedores (acumulada até à data de fim)');
+      L.tabelaDados([
+        { titulo: 'Fornecedor', x: 0, width: 150 },
+        { titulo: 'Saldo inicial', x: 150, width: 80, align: 'right' },
+        { titulo: 'Faturado', x: 230, width: 80, align: 'right' },
+        { titulo: 'Pago', x: 310, width: 80, align: 'right' },
+        { titulo: 'Em dívida', x: 390, width: 81, align: 'right' },
+      ], detalhe.dividasFornecedores.map((f) => [
+        f.nome,
+        eur(f.saldoInicialC),
+        eur(f.faturadoC),
+        eur(f.pagoC + f.pagamentosSemFaturaC),
+        eur(f.dividaC),
+      ]));
+      L.espaco(4);
+    }
+
+    if (detalhe.despesasPorFornecedor && detalhe.despesasPorFornecedor.length) {
+      H('Detalhe das despesas por fornecedor (por rubrica, no período)');
+      for (const bloco of detalhe.despesasPorFornecedor) {
+        L.texto(bloco.rubrica, { bold: true, fontSize: T.TEXTO_SIZE_SMALL, cor: T.TINTA });
+        L.tabelaDados([
+          { titulo: 'Fornecedor', x: 0, width: 195 },
+          { titulo: 'Faturado', x: 195, width: 90, align: 'right' },
+          { titulo: 'Pago', x: 285, width: 90, align: 'right' },
+          { titulo: 'Por pagar', x: 375, width: 96, align: 'right' },
+        ], bloco.fornecedores.map((f) => [f.nome, eur(f.faturadoC), eur(f.pagoC), eur(f.porPagarC)]));
+        L.espaco(4);
+      }
+    }
+
+    if (detalhe.receitasPorFracao && detalhe.receitasPorFracao.length) {
+      H('Detalhe das receitas por fração (no período)');
+      L.tabelaDados([
+        { titulo: 'Fração', x: 0, width: 195 },
+        { titulo: 'Lançado', x: 195, width: 90, align: 'right' },
+        { titulo: 'Recebido', x: 285, width: 90, align: 'right' },
+        { titulo: 'Em dívida', x: 375, width: 96, align: 'right' },
+      ], detalhe.receitasPorFracao.map((f) => [f.designacao, eur(f.lancadoC), eur(f.recebidoC), eur(f.emDividaC)]));
+      L.espaco(4);
+    }
+  }
+
+  // ── Notas ao relatório (transparência dos critérios) ──────────────
+  if (dados.avisos && dados.avisos.length) {
+    L.caixa('NOTAS AO RELATÓRIO', (C) => {
+      for (const aviso of dados.avisos) C.texto(`• ${aviso}`, { fontSize: T.TEXTO_SIZE_SMALL });
+      C.texto('Orçamentado das receitas: valor previsto no orçamento/plano de quotas para o período.', { fontSize: T.TEXTO_SIZE_SMALL });
+      C.texto('Resultado = receitas lançadas - despesas faturadas: não é o saldo bancário (tesouraria).', { fontSize: T.TEXTO_SIZE_SMALL });
+    }, T.COR_ALERTA);
+  }
+
+  finalizarPaginacao(doc, condominio);
+  return toBuffer(doc);
+}
+
+function tipoContaLabel(tipo) {
+  return {
+    corrente: 'Conta corrente',
+    poupanca: 'Poupança',
+    fundo_reserva: 'Fundo de reserva',
+    outro: 'Outra',
+  }[tipo] || 'Conta';
+}
+
+module.exports = { gerarAvisoQuotaPDF, gerarReciboPDF, gerarConvocatoriaPDF, gerarAtaPDF, gerarRelatorioFinanceiroPDF };
