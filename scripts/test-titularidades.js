@@ -128,6 +128,7 @@ function instalarStubs() {
   FracaoPessoa.findAll = async ({ where } = {}) =>
     vinculos.filter((v) => corresponde(v, where)).map((v) => ({ ...v, fracao: FRACOES[v.fracao_id] }));
   FracaoPessoa.findOne = async ({ where } = {}) => vinculos.find((v) => corresponde(v, where)) || null;
+  FracaoPessoa.create = async (dados) => novoVinculo(dados);
   Fracao.findOne = async ({ where } = {}) => {
     const id = where && where.id;
     return FRACOES[id] || null;
@@ -486,10 +487,10 @@ function testesMudancaProprietario() {
 
   // Compatibilidade: o vínculo antigo continua a ser escrito em paralelo.
   assert.ok(/FracaoPessoa\.findOrCreate\(/.test(admin), 'admin: mantém `fracao_pessoas` em sincronia');
-  // Auditoria relevante: estado anterior e atual da associação (revogação e
-  // reativação ficam registadas no histórico).
-  assert.ok(/associacaoAntes: assoc\.estado/.test(admin), 'admin: auditoria regista o estado anterior da associação');
-  assert.ok(/reativacaoExplicita: decisao\.reativada/.test(admin), 'admin: auditoria marca a reativação explícita');
+  // Auditoria relevante: o estado da conta tem ação própria (desativar/reativar)
+  // e a gravação da ficha não altera o estado do acesso ao condomínio.
+  assert.ok(/await assoc\.update\(\{ role: papelDaAssociacao\(role\) \}\)/.test(admin), 'admin: guardar a ficha altera só o papel');
+  assert.ok(/acao: decisaoConta\.acao \|\| 'editar_utilizador'/.test(admin), 'admin: auditoria da conta com ação própria');
 
   // Ecrã da fração: titular atual, histórico e aviso, sem oferecer apagar nada.
   const vista = ler('views/admin/fracoes/form.handlebars');
@@ -681,45 +682,424 @@ async function cenarioJ() {
   assert.strictEqual(titularidades.eContaDaLigacao(null, conta5), false, 'J26: sem titularidade não autoriza');
 }
 
-// ── Reativação de acesso na administração (explícita, nunca por engano) ──
-function testesReativacaoDeAcesso() {
+// ── Fase 2: conta ≠ acesso ao condomínio, com ações explícitas ─────
+// Cobre os 14 requisitos da Fase 2: os dois estados visíveis (1–4), reativar a
+// conta não reabre associações (5), reativar a associação não mexe na conta (6),
+// encerrar a associação não mexe em titularidades nem noutros condomínios (7–8),
+// auditoria própria nos três casos (9–11), e o que se mantém intacto (12–14).
+function testesAcessoEConta() {
   const admin = ler('routes/admin.js');
-  const vista = ler('views/admin/utilizadores/form.handlebars');
+  const vistaLista = ler('views/admin/utilizadores/listar.handlebars');
+  const vistaForm = ler('views/admin/utilizadores/form.handlebars');
+  const saida = ler('routes/saida-condominio.js');
 
-  // Regra (função pura, tabela de decisão completa).
-  const decidir = (estadoAtual, reativar) => titularidades.decidirEstadoAssociacao({ estadoAtual, reativar });
-  assert.deepStrictEqual(decidir('ativo'), { estavaAtiva: true, reativada: false, estado: 'ativo' }, 'reativação: associação ativa mantém-se ativa');
-  assert.deepStrictEqual(decidir('ativo', '1'), { estavaAtiva: true, reativada: false, estado: 'ativo' }, 'reativação: pedido redundante não altera nada');
-  assert.deepStrictEqual(decidir('inativo'), { estavaAtiva: false, reativada: false, estado: 'inativo' }, 'reativação: guardar sem pedido NÃO reativa');
-  assert.deepStrictEqual(decidir('inativo', undefined), { estavaAtiva: false, reativada: false, estado: 'inativo' }, 'reativação: pedido ausente NÃO reativa');
-  assert.deepStrictEqual(decidir('inativo', '0'), { estavaAtiva: false, reativada: false, estado: 'inativo' }, 'reativação: valor negativo NÃO reativa');
-  for (const marca of ['1', 'on', true, 1]) {
-    assert.deepStrictEqual(decidir('inativo', marca), { estavaAtiva: false, reativada: true, estado: 'ativo' }, `reativação: pedido explícito (${String(marca)}) reativa`);
+  // ── 1–4: os dois estados aparecem em separado, em todas as combinações ──
+  const handlebars = require('handlebars');
+  Object.entries(require('../helpers/handlebars-helpers')).forEach(([k, v]) => handlebars.registerHelper(k, v));
+  const tpl = handlebars.compile(vistaLista);
+  const casos = [
+    { ativo: true, estadoAssoc: 'ativo', conta: 'Ativa', acesso: 'Ativo', rotulo: '1' },
+    { ativo: true, estadoAssoc: 'inativo', conta: 'Ativa', acesso: 'Encerrado', rotulo: '2' },
+    { ativo: false, estadoAssoc: 'ativo', conta: 'Inativa', acesso: 'Ativo', rotulo: '3' },
+    { ativo: false, estadoAssoc: 'inativo', conta: 'Inativa', acesso: 'Encerrado', rotulo: '4' },
+  ];
+  for (const caso of casos) {
+    const html = tpl({
+      titulo: 'Utilizadores',
+      users: [{ id: 1, nome: 'Ana', email: 'ana@exemplo.pt', role: 'condomino', ativo: caso.ativo, estadoAssoc: caso.estadoAssoc }],
+      success_msg: [], error_msg: [], error: null,
+    });
+    assert.ok(new RegExp(`>${caso.conta}<`).test(html), `F2/teste ${caso.rotulo}: conta apresentada como «${caso.conta}»`);
+    assert.ok(new RegExp(`>${caso.acesso}<`).test(html), `F2/teste ${caso.rotulo}: acesso apresentado como «${caso.acesso}»`);
+    assert.ok(/Conta<\/th>/.test(html) && /Acesso a este condomínio<\/th>/.test(html),
+      `F2/teste ${caso.rotulo}: as duas colunas estão identificadas`);
   }
-  assert.strictEqual(titularidades.pedidoDeReativacao('off'), false, 'reativação: "off" não é pedido');
-  assert.strictEqual(titularidades.pedidoDeReativacao('1'), true, 'reativação: "1" é pedido');
+  assert.ok(!/\{\{#if ativo\}\}<span class="badge text-bg-success">Ativo<\/span>/.test(vistaLista),
+    'F2/testes 1–4: a lista já não usa um único badge «Ativo/Inativo» para a conta e o acesso');
+  // A ficha também distingue os dois conceitos.
+  assert.ok(/<h2 class="h6 mb-1">Conta<\/h2>/.test(vistaForm) && /<h2 class="h6 mb-1">Acesso a este condomínio<\/h2>/.test(vistaForm),
+    'F2/testes 1–4: a ficha separa «Conta» de «Acesso a este condomínio»');
+  assert.ok(/titularidades das frações gerem-se na ficha de cada fração/.test(vistaForm),
+    'F2/testes 1–4: a ficha deixa claro que as titularidades não se gerem ali');
+  assert.ok(/Estado atual:/.test(vistaForm) && /assocAtiva/.test(vistaForm),
+    'F2: a ficha mostra o estado do acesso');
+  assert.ok(/assocAtiva,/.test(admin), 'F2: a rota envia o estado do acesso à ficha');
 
-  // A rota usa a regra e regista a decisão.
-  assert.ok(/titularidades\.decidirEstadoAssociacao\(\{/.test(admin), 'reativação: a rota usa a regra única');
-  assert.ok(/estado: decisao\.estado/.test(admin), 'reativação: grava o estado decidido');
-  assert.ok(/acao: decisao\.reativada \? 'reativar_acesso_utilizador' : 'editar_utilizador'/.test(admin), 'reativação: auditoria distingue a reativação');
-  assert.ok(/associacaoAntes: assoc\.estado/.test(admin), 'reativação: auditoria regista o estado anterior');
-  assert.ok(/reativacaoExplicita: decisao\.reativada/.test(admin), 'reativação: auditoria marca se foi explícita');
-  assert.ok(!/assoc\.update\(\{ role: papelDaAssociacao\(role\), estado: 'ativo' \}\)/.test(admin), 'reativação: já não reativa incondicionalmente');
-  assert.ok(/continua encerrado/.test(admin), 'reativação: informa que o acesso continua encerrado');
+  // ── 9: alterar o estado da conta gera auditoria com antes/depois/motivo ──
+  const semConta = (antes, depois) => titularidades.decidirAcaoConta({ antes, depois });
+  assert.deepStrictEqual(semConta(true, false),
+    { mudou: true, desativou: true, reativou: false, acao: 'desativar_conta', exigeMotivo: true },
+    'F2/teste 9: desativar a conta tem ação própria e exige motivo');
+  assert.deepStrictEqual(semConta(false, true),
+    { mudou: true, desativou: false, reativou: true, acao: 'reativar_conta', exigeMotivo: false },
+    'F2/teste 9: reativar a conta tem ação própria');
+  assert.strictEqual(semConta(true, true).acao, null, 'F2/teste 9: sem alteração não há ação de conta');
+  assert.strictEqual(semConta(false, false).acao, null, 'F2/teste 9: conta já inativa mantém-se sem ação');
+  assert.ok(/decisaoConta\.exigeMotivo && !motivo/.test(admin), 'F2/teste 9: motivo obrigatório para desativar');
+  assert.ok(/acao: decisaoConta\.acao \|\| 'editar_utilizador'/.test(admin), 'F2/teste 9: ação desativar_conta/reativar_conta');
+  assert.ok(/estadoAnterior: contaAntes/.test(admin) && /estadoNovo: contaDepois/.test(admin), 'F2/teste 9: auditoria com antes e depois');
+  assert.ok(/motivo: motivo \|\| null/.test(admin), 'F2/teste 9: auditoria com o motivo');
+  assert.ok(/ambito: 'conta \(global — todos os condomínios\)'/.test(admin), 'F2/teste 9: âmbito registado');
+  assert.ok(/condominioContexto: req\.condominioId/.test(admin), 'F2/teste 9: contexto do condomínio registado');
+  // A gravação da ficha não mexe no estado do acesso.
+  assert.ok(/await assoc\.update\(\{ role: papelDaAssociacao\(role\) \}\)/.test(admin),
+    'F2: guardar a ficha altera só o papel (nunca o estado do acesso)');
+  assert.ok(!/await assoc\.update\(\{ role: papelDaAssociacao\(role\), estado/.test(admin),
+    'F2/teste 5: guardar a ficha não reativa (nem encerra) o acesso');
 
-  // A vista só oferece a reativação quando a associação está inativa, e nunca
-  // pré-marcada; e explica que guardar não reabre o acesso.
-  assert.ok(/assocAtiva/.test(vista), 'reativação: a vista conhece o estado da associação');
-  const bloco = vista.match(/\{\{#unless assocAtiva\}\}([\s\S]*?)\{\{\/unless\}\}/);
-  assert.ok(bloco, 'reativação: bloco próprio para associações inativas');
-  assert.ok(/name="reativar_acesso"/.test(bloco[1]), 'reativação: opção explícita presente');
-  assert.ok(!/checked/.test(bloco[1]), 'reativação: a opção nunca vem marcada (não reativa por engano)');
-  assert.ok(/acesso deste utilizador a este condomínio está encerrado/.test(bloco[1]), 'reativação: aviso claro ao administrador');
-  assert.ok(/titularidades de\s*\n?\s*fração não são alteradas/.test(bloco[1]), 'reativação: não altera as regras de titularidade');
+  // ── 10–11: ações próprias de encerrar/reativar acesso ───────────────
+  assert.ok(/router\.post\('\/utilizadores\/:id\/encerrar-acesso'/.test(admin), 'F2/teste 10: existe a ação «Encerrar acesso a este condomínio»');
+  assert.ok(/router\.post\('\/utilizadores\/:id\/reativar-acesso'/.test(admin), 'F2/teste 11: existe a ação inversa «Reativar acesso»');
+  const encerrar = admin.slice(admin.indexOf("router.post('/utilizadores/:id/encerrar-acesso'"), admin.indexOf("router.post('/utilizadores/:id/reativar-acesso'"));
+  const reativar = admin.slice(admin.indexOf("router.post('/utilizadores/:id/reativar-acesso'"), admin.indexOf("router.post('/utilizadores/:id/eliminar'"));
+  assert.ok(/acao: 'encerrar_acesso_condominio'/.test(encerrar), 'F2/teste 10: auditoria própria do encerramento');
+  assert.ok(/acao: 'reativar_acesso_condominio'/.test(reativar), 'F2/teste 11: auditoria própria da reativação');
+  for (const [nome, bloco] of [['encerrar', encerrar], ['reativar', reativar]]) {
+    assert.ok(/await assoc\.update\(\{ estado: '(inativo|ativo)' \}\)/.test(bloco), `F2: ${nome} altera apenas o estado da associação`);
+    assert.ok(!/user\.update|User\.update|users/i.test(bloco), `F2/teste 6: ${nome} não altera a conta`);
+    assert.ok(!/titularidades\.(criar|cessar)/.test(bloco), `F2/teste 7: ${nome} não altera titularidades`);
+    assert.ok(!/\.destroy\(/.test(bloco), `F2: ${nome} não apaga nada`);
+    assert.ok(/titularidadesAlteradas: false/.test(bloco) && /contaAlterada: false/.test(bloco),
+      `F2/teste ${nome === 'encerrar' ? '10' : '11'}: auditoria regista que conta e titularidades ficaram intactas`);
+    assert.ok(/estadoAnterior: '(ativo|inativo)'/.test(bloco) && /estadoNovo: '(ativo|inativo)'/.test(bloco),
+      `F2: ${nome} regista antes/depois na auditoria`);
+    assert.ok(/motivo/.test(bloco), `F2: ${nome} usa o motivo`);
+  }
+  assert.ok(/if \(!motivo\)/.test(encerrar) && /Indique o motivo do encerramento/.test(encerrar),
+    'F2/teste 10: o motivo é obrigatório para encerrar o acesso');
+  assert.ok(/Preparar saída do condomínio/.test(encerrar),
+    'F2/teste 12: encerrar acesso remete para o fluxo de saída próprio (não o substitui)');
+  // A guarda do último gestor é uma regra pura do helper (uma só definição) —
+  // evita constantes soltas na rota (foi um erro real durante esta fase).
+  assert.deepStrictEqual(
+    [
+      titularidades.eUltimoGestorAtivo({ papel: 'admin', nGestores: 1 }),
+      titularidades.eUltimoGestorAtivo({ papel: 'gestor', nGestores: 1 }),
+      titularidades.eUltimoGestorAtivo({ papel: 'admin', nGestores: 2 }),
+      titularidades.eUltimoGestorAtivo({ papel: 'leitura', nGestores: 1 }),
+    ],
+    [true, true, false, false],
+    'F2/teste 12: só bloqueia quando é o último admin/gestor ativo'
+  );
+  assert.deepStrictEqual(titularidades.PAPEIS_GESTAO, ['admin', 'gestor'], 'F2: papéis de gestão definidos num só sítio');
+  const usosSoltos = [...admin.matchAll(/(?<![\w.])PAPEIS_GESTAO\b/g)].length;
+  assert.ok(usosSoltos === 0 || /(?:const|let|var)\s+PAPEIS_GESTAO\b/.test(admin),
+    'F2: PAPEIS_GESTAO em admin.js tem de vir do helper (sem constante solta/local duplicada)');
+  assert.ok(/titularidades\.eUltimoGestorAtivo\(\{ papel: assoc\.role, nGestores: n \}\)/.test(admin),
+    'F2/teste 12: a rota usa a regra do helper');
 
-  // A rota do formulário passa o estado da associação à vista.
-  assert.ok(/assocAtiva,/.test(admin), 'reativação: a rota envia o estado da associação');
+  // 6: reativar a associação não altera users.ativo (a conta é outra decisão).
+  assert.ok(/assoc\.update\(\{ estado: 'ativo' \}\)/.test(reativar) && !/user\.update/.test(reativar),
+    'F2/teste 6: reativar o acesso não altera a conta');
+
+  // ── Correção (b): criação de conta ativa por omissão ───────────────
+  assert.strictEqual(titularidades.contaAtivaDoFormulario(undefined), true,
+    'F2/(b): sem marcação, a conta criada fica ATIVA');
+  assert.strictEqual(titularidades.contaAtivaDoFormulario(null), true, 'F2/(b): valor nulo → conta ativa');
+  assert.strictEqual(titularidades.contaAtivaDoFormulario(''), true, 'F2/(b): campo vazio → conta ativa');
+  for (const marcado of ['on', '1', true, 1]) {
+    assert.strictEqual(titularidades.contaAtivaDoFormulario(marcado), true, `F2/(b): marcação explícita (${String(marcado)}) → ativa`);
+  }
+  for (const desmarcado of ['off', '0', false]) {
+    assert.strictEqual(titularidades.contaAtivaDoFormulario(desmarcado), false, `F2/(b): marcação explícita de inativo (${String(desmarcado)}) → inativa`);
+  }
+  assert.ok(/ativo: titularidades\.contaAtivaDoFormulario\(ativo\),/.test(admin),
+    'F2/(b): a rota de criação usa a regra única (não decide o valor inline)');
+  assert.ok(!/ativo: ativo === 'on' \|\| ativo === '1' \|\| ativo === true,/.test(admin),
+    'F2/(b): a criação já não fica inativa por omissão');
+
+  // ── Correção (d): não deixar um condomínio sem gestão ─────────────
+  // a) último gestor → bloqueado
+  const umCondominio = [{ condominioId: 1, designacao: 'Condomínio A', role: 'admin', estado: 'ativo' }];
+  const afetadosA = titularidades.condominiosSemGestao({ associacoes: umCondominio, gestoresPorCondominio: { 1: 1 } });
+  assert.deepStrictEqual(afetadosA, [{ condominioId: 1, designacao: 'Condomínio A', papel: 'admin' }],
+    'F2/(d-a): último gestor identificado');
+  const motivoA = titularidades.motivoBloqueioDesativacaoConta(afetadosA);
+  assert.ok(motivoA && /último administrador ou gestor/.test(motivoA) && /Condomínio A/.test(motivoA),
+    'F2/(d-a): bloqueia e identifica o condomínio afetado');
+  assert.ok(/Nada foi alterado/.test(motivoA), 'F2/(d-a): a mensagem garante que nada foi alterado');
+
+  // b) dois gestores → permitido
+  assert.deepStrictEqual(
+    titularidades.condominiosSemGestao({ associacoes: umCondominio, gestoresPorCondominio: { 1: 2 } }),
+    [],
+    'F2/(d-b): com outro gestor ativo, a desativação é permitida'
+  );
+  assert.strictEqual(titularidades.motivoBloqueioDesativacaoConta([]), null, 'F2/(d-b): sem afetados não há bloqueio');
+
+  // c) gestor num condomínio + utilizador normal noutro → não bloqueia pelo segundo
+  const misto = [
+    { condominioId: 1, designacao: 'Condomínio A', role: 'gestor', estado: 'ativo' },
+    { condominioId: 2, designacao: 'Condomínio B', role: 'leitura', estado: 'ativo' },
+  ];
+  assert.deepStrictEqual(
+    titularidades.condominiosSemGestao({ associacoes: misto, gestoresPorCondominio: { 1: 1, 2: 1 } }).map((a) => a.condominioId),
+    [1],
+    'F2/(d-c): só conta o condomínio onde é gestor (papel de leitura não bloqueia)'
+  );
+  assert.deepStrictEqual(
+    titularidades.condominiosSemGestao({ associacoes: misto, gestoresPorCondominio: { 1: 3, 2: 1 } }),
+    [],
+    'F2/(d-c): sendo um entre vários gestores, a desativação é permitida'
+  );
+
+  // d) vários condomínios → identifica todos os afetados
+  const varios = [
+    { condominioId: 1, designacao: 'Condomínio A', role: 'admin', estado: 'ativo' },
+    { condominioId: 2, designacao: 'Condomínio B', role: 'gestor', estado: 'ativo' },
+    { condominioId: 3, designacao: 'Condomínio C', role: 'admin', estado: 'ativo' },
+  ];
+  const afetadosD = titularidades.condominiosSemGestao({ associacoes: varios, gestoresPorCondominio: { 1: 1, 2: 1, 3: 4 } });
+  assert.deepStrictEqual(afetadosD.map((a) => a.designacao), ['Condomínio A', 'Condomínio B'],
+    'F2/(d-d): identifica exatamente os condomínios que ficariam sem gestão');
+  const motivoD = titularidades.motivoBloqueioDesativacaoConta(afetadosD);
+  assert.ok(/Condomínio A/.test(motivoD) && /Condomínio B/.test(motivoD) && !/Condomínio C/.test(motivoD),
+    'F2/(d-d): a mensagem lista todos os afetados e só esses');
+  // Associações encerradas não contam (o acesso já não existe).
+  assert.deepStrictEqual(
+    titularidades.condominiosSemGestao({
+      associacoes: [{ condominioId: 1, designacao: 'Condomínio A', role: 'admin', estado: 'inativo' }],
+      gestoresPorCondominio: { 1: 1 },
+    }),
+    [],
+    'F2/(d): associação já encerrada não bloqueia a desativação da conta'
+  );
+  // Estrutura: a guarda corre ANTES de user.update e reutiliza o helper.
+  const rotaConta = admin.slice(admin.indexOf("router.post('/utilizadores/:id'"), admin.indexOf("router.post('/utilizadores/:id/encerrar-acesso'"));
+  const posBloqueio = rotaConta.indexOf('motivoBloqueioDesativacaoConta');
+  const posUpdate = rotaConta.indexOf('await user.update(data)');
+  assert.ok(posBloqueio > -1 && posUpdate > posBloqueio,
+    'F2/(d): a verificação do último gestor corre antes de alterar a conta');
+  assert.ok(/decisaoConta\.desativou\)/.test(rotaConta), 'F2/(d): a guarda só se aplica ao desativar');
+  assert.ok(/titularidades\.condominiosSemGestao\(\{/.test(rotaConta), 'F2/(d): usa a regra única do helper');
+  assert.ok(!/assoc\.destroy|FracaoTitularidade\.update|titularidades\.cessar/.test(rotaConta),
+    'F2/(d): desativar a conta não altera associações nem titularidades');
+
+  // ── 12: preparar saída continua exatamente como estava ─────────────
+  assert.ok(/titularidades\.cessarTitularidadesAtivas\(\{/.test(saida), 'F2/teste 12: a saída continua a encerrar as titularidades');
+  assert.ok(/UserCondominio\.update\(\s*\{ estado: 'inativo' \}/.test(saida), 'F2/teste 12: a saída continua a encerrar a associação');
+  assert.ok(/doisfatores\.verificarTOTP/.test(saida) && /req\.body\.confirmo !== 'on'/.test(saida),
+    'F2/teste 12: a saída mantém reautenticação, 2FA e declaração');
+
+  // ── 13–14: vender uma fração não mexe em conta/associação (Fase 1) ─
+  assert.ok(!/UserCondominio/.test(ler('helpers/titularidades.js')),
+    'F2/teste 13: as titularidades não tocam em associações');
+  // 14: a autorização seguinte à venda é por fração (cenários A–J cobrem o resto).
+  assert.ok(/function eContaDaLigacao/.test(ler('helpers/titularidades.js')),
+    'F2/teste 14: o acesso continua decidido por fração (titularidade em vigor)');
+}
+
+// ── Fase 1 (auditoria): conta ≠ associação ≠ titularidade ──────────
+// Cobre, com o número de cada requisito da auditoria, as regras que garantem que
+// a venda de uma fração nunca mexe na conta nem na associação ao condomínio, e
+// que a ficha do condómino não cria vínculos paralelos nem apaga titularidades.
+async function testesConcordanciaDeEstados() {
+  const admin = ler('routes/admin.js');
+  const globalAdmin = ler('routes/global-admin.js');
+  const helper = ler('helpers/titularidades.js');
+
+  // ── Regras puras (comportamento, não texto) ───────────────────────
+  // 1–3: o mesmo vínculo com OUTRO titular ativo é conflito; a própria pessoa,
+  // uma linha de outra pessoa sem conta e uma linha órfã são casos distintos.
+  const atuais = [
+    { id: 1, pessoa_id: 100, utilizador_id: 1, vinculo: 'proprietario' },
+    { id: 2, pessoa_id: null, utilizador_id: 2, vinculo: 'proprietario' },
+    { id: 3, pessoa_id: 200, utilizador_id: null, vinculo: 'arrendatario' },
+    { id: 4, pessoa_id: null, utilizador_id: null, vinculo: 'proprietario' },
+  ];
+  assert.deepStrictEqual(
+    titularidades.titularesEmConflito(atuais, { pessoaId: 100, vinculo: 'proprietario' }).map((t) => t.id),
+    [2],
+    'F1: conflito é só outra pessoa/conta com o mesmo vínculo (a própria e as órfãs não contam)'
+  );
+  assert.deepStrictEqual(
+    titularidades.titularesEmConflito(atuais, { pessoaId: 300, vinculo: 'arrendatario' }).map((t) => t.id),
+    [3],
+    'F1: conflito detetado para outro vínculo'
+  );
+  assert.deepStrictEqual(
+    titularidades.titularesEmConflito(atuais, { pessoaId: 300, vinculo: 'usufrutuario' }),
+    [],
+    'F1: sem titular do mesmo vínculo não há conflito'
+  );
+
+  // 10: eliminar a ficha só é possível sem titularidades ativas.
+  assert.strictEqual(titularidades.bloqueioEliminacaoCondomino([]), null, 'F1/teste 10: sem titularidades, pode eliminar');
+  assert.ok(
+    titularidades.bloqueioEliminacaoCondomino([{ estado: 'cessada', fracao_id: 10 }]) === null,
+    'F1/teste 10: titularidades cessadas não impedem a eliminação'
+  );
+  const bloqueio = titularidades.bloqueioEliminacaoCondomino([
+    { estado: 'ativa', fracao_id: 10, fracao: { designacao: '1.º Esq' } },
+    { estado: 'ativa', fracao_id: 30, fracao: { designacao: '3.º Dto' } },
+  ]);
+  assert.ok(bloqueio && /Encerre primeiro/.test(bloqueio) && /1º|1\.º Esq/.test(bloqueio),
+    'F1/teste 10: bloqueia e explica onde encerrar (com a fração identificada)');
+
+  // 6: reativar a conta não reativa associações (decisão separada e explícita).
+  assert.deepStrictEqual(
+    titularidades.decidirEstadoAssociacao({ estadoAtual: 'inativo' }),
+    { estavaAtiva: false, reativada: false, estado: 'inativo' },
+    'F1/teste 6: estado da conta não reativa a associação'
+  );
+  // 12: global-admin segue a mesma regra.
+  assert.deepStrictEqual(
+    titularidades.decidirEstadoAssociacao({ estadoAtual: 'inativo', reativar: undefined }),
+    { estavaAtiva: false, reativada: false, estado: 'inativo' },
+    'F1/teste 12: reassociar sem pedido explícito mantém o acesso encerrado'
+  );
+
+  // ── Estrutura: uma só via de escrita da relação pessoa↔fração ─────
+  // 11: a ficha do condómino não pode criar/remover relações paralelas.
+  const rotasCondomino = admin.slice(
+    admin.indexOf("router.post('/condominos'"),
+    admin.indexOf('// ═══════════════════════════════════════════════════════════════════\n// UTILIZADORES')
+  );
+  assert.ok(rotasCondomino.length > 500, 'F1: rotas de condóminos localizadas');
+  assert.ok(!/FracaoPessoa\.destroy\(/.test(rotasCondomino),
+    'F1/teste 11: a ficha do condómino já não apaga vínculos (sem FracaoPessoa.destroy)');
+  assert.ok(!/FracaoPessoa\.create\(/.test(rotasCondomino),
+    'F1/teste 11: a ficha do condómino já não cria vínculos diretos (passa pelos helpers)');
+  // 11 (estrutura + comportamento): a ficha do condómino liga/desliga pelos
+  // helpers de titularidade — a lógica vive num só sítio.
+  assert.ok(/async function ligarPessoaAFracao\(/.test(helper) && /await criarTitularidade\(\{/.test(helper),
+    'F1: ligar pessoa↔fração usa criarTitularidade (helper único, com auditoria)');
+  assert.ok(/async function desligarPessoaDaFracao\(/.test(helper) && /await cessarTitularidade\(\{ titularidadeId: t\.id, dataFim: fim, motivo, userId \}\)/.test(helper),
+    'F1: desligar pessoa↔fração usa cessarTitularidade (helper único, com auditoria)');
+  assert.ok(/await acrescentarRelacao\(\{ req, fracaoId: fid, pessoa, vinculo/.test(rotasCondomino)
+    && /titularidades\.ligarPessoaAFracao\(\{/.test(admin),
+    'F1/teste 11: a ficha do condómino liga pela via das titularidades');
+  assert.ok(/await retirarRelacao\(\{ req, fracaoId: a\.fracaoId, pessoaId: pessoa\.id, motivo: 'removido_ficha_condomino' \}\)/.test(rotasCondomino)
+    && /titularidades\.desligarPessoaDaFracao\(\{/.test(admin),
+    'F1/teste 11: a ficha do condómino desliga encerrando com data de fim e motivo (sem apagar)');
+  assert.ok(/data_fim: null, data_inicio: existente\.data_inicio/.test(helper),
+    'F1: vínculo antigo é reaberto em sincronia (nunca apagado)');
+
+  // 11 (comportamento): ligar/desligar com as regras reais.
+  reiniciar();
+  const originaisUserFindAll = modelos.User.findAll;
+  modelos.User.findAll = async ({ where } = {}) => {
+    const alvo = Number(where && where.pessoa_id);
+    return alvo === 100 ? [{ id: 7, pessoa_id: 100 }] : alvo === 200 ? [{ id: 8, pessoa_id: 200 }, { id: 9, pessoa_id: 200 }] : [];
+  };
+  try {
+    const ligado = await titularidades.ligarPessoaAFracao({
+      condominioId: 1, fracaoId: 10, pessoaId: 100, vinculo: 'proprietario', dataInicio: '2026-09-01', userId: 9, origem: 'teste',
+    });
+    assert.strictEqual(ligado.ok, true, 'F1/teste 11: liga uma fração livre');
+    assert.strictEqual(titulos.length, 1, 'F1/teste 11: cria uma titularidade (histórico)');
+    assert.strictEqual(titulos[0].estado, 'ativa', 'F1/teste 11: titularidade ativa');
+    assert.strictEqual(titulos[0].data_inicio, '2026-09-01', 'F1/teste 11: período com data de início');
+    assert.strictEqual(titulos[0].utilizador_id, 7, 'F1/teste 11: liga a conta quando é inequívoca');
+    assert.strictEqual(vinculos.length, 1, 'F1/teste 11: vínculo antigo escrito em sincronia');
+    assert.ok(auditoria.some((a) => a.acao === 'criar_titularidade'), 'F1/teste 11: criação auditada');
+
+    // Conflito: outro titular ativo do mesmo vínculo na mesma fração.
+    const conflito = await titularidades.ligarPessoaAFracao({
+      condominioId: 1, fracaoId: 10, pessoaId: 200, vinculo: 'proprietario', userId: 9, origem: 'teste',
+    });
+    assert.strictEqual(conflito.ok, false, 'F1/teste 11: recusa criar um segundo proprietário ativo');
+    assert.ok(/já tem um titular/.test(conflito.erro), 'F1/teste 11: explica o motivo ao administrador');
+    assert.strictEqual(titulos.length, 1, 'F1/teste 11: nada é criado quando há conflito');
+    assert.strictEqual(vinculos.length, 1, 'F1/teste 11: nada é escrito no vínculo antigo quando há conflito');
+
+    // Com duas contas associadas, não se adivinha qual é a conta do titular.
+    const semContaInequivoca = await titularidades.ligarPessoaAFracao({
+      condominioId: 1, fracaoId: 30, pessoaId: 200, vinculo: 'proprietario', userId: 9, origem: 'teste',
+    });
+    assert.strictEqual(semContaInequivoca.ok, true, 'F1/teste 11: liga mesmo sem conta inequívoca');
+    const comDuas = titulos.find((t) => t.fracao_id === 30);
+    assert.strictEqual(comDuas.utilizador_id, null, 'F1/teste 11: com duas contas não adivinha (sem acesso)');
+
+    // Desligar: encerra com data de fim; nada é apagado.
+    const antesVinculos = vinculos.length;
+    const resultado = await titularidades.desligarPessoaDaFracao({
+      condominioId: 1, fracaoId: 10, pessoaId: 100, dataFim: '2026-09-14', motivo: 'removido_ficha_condomino', userId: 9,
+    });
+    assert.strictEqual(resultado.titularesEncerrados, 1, 'F1/teste 11: encerra a titularidade ativa');
+    assert.strictEqual(titulos.length, 2, 'F1/teste 11: nenhuma linha de titularidade é apagada (histórico)');
+    assert.strictEqual(titulos[0].estado, 'cessada', 'F1/teste 11: fica cessada');
+    assert.strictEqual(titulos[0].data_fim, '2026-09-14', 'F1/teste 11: com data de fim');
+    assert.strictEqual(titulos[0].motivo_cessacao, 'removido_ficha_condomino', 'F1/teste 11: com motivo');
+    assert.strictEqual(vinculos.length, antesVinculos, 'F1/teste 11: o vínculo antigo não é apagado');
+    assert.ok(auditoria.some((a) => a.acao === 'cessar_titularidade'), 'F1/teste 11: encerramento auditado');
+    const semAcesso = await titularidades.fracoesDoUtilizador({ condominioId: 1, utilizadorId: 7, pessoaId: 100, dataRef: '2026-09-14' });
+    assert.strictEqual(semAcesso.fracoes.length, 0, 'F1/teste 11: a fração deixa de dar acesso após o encerramento');
+
+    // Relação atual: união de titularidade ativa e vínculo antigo em vigor.
+    const relacoes = await titularidades.relacoesAtuaisDaPessoa({ condominioId: 1, pessoaId: 200 });
+    assert.deepStrictEqual(relacoes.map((r) => r.fracaoId), [30], 'F1/teste 11: relação atual lida da titularidade ativa');
+  } finally {
+    modelos.User.findAll = originaisUserFindAll;
+  }
+
+  // 10 (estrutura): a guarda é verificada ANTES de apagar a ficha.
+  const rotaEliminar = admin.slice(admin.indexOf("router.post('/condominos/:id/eliminar'"));
+  const corpoEliminar = rotaEliminar.slice(0, 1200);
+  const posGuarda = corpoEliminar.indexOf('bloqueioEliminacaoCondomino');
+  const posDestroy = corpoEliminar.indexOf('pessoa.destroy()');
+  assert.ok(posGuarda > -1 && posDestroy > posGuarda,
+    'F1/teste 10: verifica titularidades ativas antes de Pessoa.destroy()');
+  assert.ok(/titularidades\.titularesAtivosDaPessoa\(/.test(corpoEliminar),
+    'F1/teste 10: consulta as titularidades ativas da pessoa no condomínio ativo');
+
+  // 12 (estrutura): global-admin reutiliza a regra e não reactiva sozinho.
+  assert.ok(/titularidades\.decidirEstadoAssociacao\(\{/.test(globalAdmin),
+    'F1/teste 12: global-admin usa a regra única decidirEstadoAssociacao');
+  assert.ok(/reativar: req\.body\.reativar_acesso/.test(globalAdmin),
+    'F1/teste 12: reativação depende de pedido explícito');
+  assert.ok(!/associacao\.update\(\{ role: papel, estado: 'ativo' \}\)/.test(globalAdmin),
+    'F1/teste 12: já não reativa incondicionalmente');
+  assert.ok(/associacaoAntes: associacao \? associacao\.estado : null/.test(globalAdmin),
+    'F1/teste 12: auditoria regista o estado anterior da associação');
+  const vistaGlobal = ler('views/admin/global/condominio.handlebars');
+  assert.ok(/name="reativar_acesso"/.test(vistaGlobal), 'F1/teste 12: opção explícita disponível na vista');
+  const blocoGlobal = vistaGlobal.match(/<input class="form-check-input" type="checkbox" id="reativar_acesso_global"[\s\S]{0,160}/);
+  assert.ok(blocoGlobal && !/checked/.test(blocoGlobal[0]),
+    'F1/teste 12: a opção nunca vem marcada (não reativa por engano)');
+
+  // ── Estrutura: os três estados nunca se tocam indevidamente ───────
+  // 9: encerrar titularidade não escreve em users nem em utilizador_condominios.
+  const cessar = helper.slice(helper.indexOf('async function cessarTitularidade('), helper.indexOf('// Encerra todas as titularidades ativas'));
+  assert.ok(!/User\.|UserCondominio/.test(cessar),
+    'F1/teste 9: cessar titularidade não altera a conta nem a associação');
+  // 1–4: criar/cessar titularidade também não (helper inteiro).
+  assert.ok(!/UserCondominio\.(update|create|destroy)/.test(helper),
+    'F1/testes 1–4: as titularidades nunca alteram associações');
+  // 5: conta inativa bloqueia o acesso (comportamento já validado, aqui fixado).
+  assert.ok(/utilizador\.ativo === false/.test(ler('helpers/sessao.js')),
+    'F1/teste 5: conta inativa bloqueia o acesso em cada pedido');
+  assert.ok(/if \(!user\.ativo\)/.test(ler('config/passport.js')),
+    'F1/teste 5: conta inativa não inicia sessão');
+
+  // 7: uma associação inativa afeta apenas aquele condomínio.
+  const tenant = require('../helpers/tenant');
+  const originaisFindAll = modelos.UserCondominio.findAll;
+  const condominios = {
+    1: { id: 1, designacao: 'Condomínio A', estado: 'ativo' },
+    2: { id: 2, designacao: 'Condomínio B', estado: 'ativo' },
+  };
+  modelos.UserCondominio.findAll = async ({ where }) =>
+    [
+      { id: 1, utilizador_id: 1, condominio_id: 1, role: 'leitura', estado: 'ativo' },
+      { id: 2, utilizador_id: 1, condominio_id: 2, role: 'leitura', estado: 'inativo' },
+    ]
+      .filter((a) => Number(a.utilizador_id) === Number(where.utilizador_id) && a.estado === where.estado)
+      .filter((a) => condominios[a.condominio_id])
+      .map((a) => ({ ...a, condominio: condominios[a.condominio_id], toJSON() { return { ...a }; } }));
+  try {
+    const meus = await tenant.listarCondominios(1);
+    assert.deepStrictEqual(meus.map((c) => c.id), [1],
+      'F1/teste 7: associação encerrada só retira aquele condomínio (o outro continua acessível)');
+  } finally {
+    modelos.UserCondominio.findAll = originaisFindAll;
+  }
+
+  // 8: a regra de estado da associação é pura — não toca em titularidades.
+  const antes = JSON.stringify(titulos.map((t) => [t.id, t.estado, t.data_fim]));
+  titularidades.decidirEstadoAssociacao({ estadoAtual: 'inativo', reativar: 'on' });
+  assert.strictEqual(JSON.stringify(titulos.map((t) => [t.id, t.estado, t.data_fim])), antes,
+    'F1/teste 8: decidir o estado da associação não altera titularidades');
 }
 
 // ── Migration: ensaio da lógica (sem BD) ───────────────────────────
@@ -878,7 +1258,8 @@ function testesEstruturais() {
   passo = 'J (regra de autorização)'; await cenarioJ();
   passo = 'saída'; testesFluxoSaida();
   passo = 'mudança de proprietário'; testesMudancaProprietario();
-  passo = 'reativação de acesso'; testesReativacaoDeAcesso();
+  passo = 'conta vs acesso (Fase 2)'; testesAcessoEConta();
+  passo = 'concordância de estados (Fase 1)'; await testesConcordanciaDeEstados();
   passo = 'puros'; testesPuros();
   passo = 'ensaio da migração'; await ensaioDaMigracao();
   passo = 'estruturais'; testesEstruturais();

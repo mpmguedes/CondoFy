@@ -400,6 +400,213 @@ function decidirEstadoAssociacao({ estadoAtual, reativar = false } = {}) {
   };
 }
 
+// ── Estado da CONTA (global) ───────────────────────────────────────
+// A conta vale em todos os condomínios; a alteração tem ação de auditoria
+// própria e desativar exige justificação (motivo obrigatório só neste sentido).
+function decidirAcaoConta({ antes = true, depois = true } = {}) {
+  const mudou = antes !== depois;
+  return {
+    mudou,
+    desativou: mudou && !depois,
+    reativou: mudou && depois,
+    acao: mudou ? (depois ? 'reativar_conta' : 'desativar_conta') : null,
+    exigeMotivo: mudou && !depois,
+  };
+}
+
+// Valor de `users.ativo` a gravar a partir do formulário.
+// Ausente = conta ATIVA: a caixa «Ativo» só existe no ecrã de edição, pelo que
+// uma conta criada pelo administrador não pode nascer inativa por omissão.
+// Desativar tem de ser uma marcação explícita.
+function contaAtivaDoFormulario(valor) {
+  if (valor === undefined || valor === null || valor === '') return true;
+  return valor === 'on' || valor === '1' || valor === true || valor === 1;
+}
+
+// ── Último gestor: não deixar um condomínio sem gestão ─────────────
+// Que condomínios ficariam sem ninguém que os possa gerir se esta conta fosse
+// desativada? (função pura)
+//   associacoes            → [{ condominioId, designacao, role, estado }]
+//   gestoresPorCondominio  → { [condominioId]: n.º de gestores ATIVOS (inclui esta conta) }
+function condominiosSemGestao({ associacoes = [], gestoresPorCondominio = {} } = {}) {
+  return (associacoes || [])
+    .filter((a) => a && String(a.estado || 'ativo') === 'ativo' && PAPEIS_GESTAO.includes(a.role))
+    .filter((a) => Number(gestoresPorCondominio[a.condominioId] || 0) <= 1)
+    .map((a) => ({
+      condominioId: a.condominioId,
+      designacao: a.designacao || `Condomínio #${a.condominioId}`,
+      papel: a.role,
+    }));
+}
+
+// Mensagem de bloqueio da desativação da conta (null quando não há bloqueio).
+function motivoBloqueioDesativacaoConta(afetados = []) {
+  if (!afetados || !afetados.length) return null;
+  const nomes = afetados.map((a) => a.designacao).join(', ');
+  return (
+    `Não é possível desativar esta conta: é o último administrador ou gestor ativo em ${nomes}. ` +
+    'Nomeie ou associe primeiro outro administrador/gestor ativo nesse(s) condomínio(s). ' +
+    'Nada foi alterado: a conta, as associações e as titularidades ficam como estão.'
+  );
+}
+
+// ── Regras de coerência da relação pessoa ↔ fração ─────────────────
+// Usadas pela ficha do condómino, que NÃO pode criar vínculos paralelos ao
+// sistema de titularidades nem apagar história.
+
+// Titulares ativos de uma pessoa num condomínio (com a fração, para mensagens).
+async function titularesAtivosDaPessoa({ condominioId, pessoaId } = {}) {
+  if (!condominioId || !pessoaId) return [];
+  return FracaoTitularidade.findAll({
+    where: { condominio_id: condominioId, pessoa_id: pessoaId, estado: 'ativa' },
+    include: [{ model: Fracao, as: 'fracao', attributes: ['id', 'designacao'], required: false }],
+    order: [['id', 'ASC']],
+  });
+}
+
+// Quem mais, ATIVAMENTE, tem o mesmo vínculo nesta fração? (função pura)
+// Uma linha só conta como titular se identificar alguém (pessoa ou conta); um
+// registo órfão não representa ninguém e não é um conflito.
+function titularesEmConflito(atuais = [], { pessoaId = null, vinculo = 'proprietario' } = {}) {
+  const alvo = normalizarId(pessoaId);
+  const alvoVinculo = normalizarVinculo(vinculo);
+  return (atuais || []).filter((t) => {
+    if (!t) return false;
+    if (normalizarVinculo(t.vinculo) !== alvoVinculo) return false;
+    if (!t.pessoa_id && !t.utilizador_id) return false;
+    return normalizarId(t.pessoa_id) !== alvo;
+  });
+}
+
+// A ficha de um condómino pode ser eliminada? Devolve null quando sim; caso
+// contrário, a razão em PT-PT (nunca se apaga uma ficha com titularidade ativa:
+// a titularidade continuaria a autorizar o acesso pela conta ligada).
+function bloqueioEliminacaoCondomino(titulares = []) {
+  const ativas = (titulares || []).filter((t) => t && String(t.estado || 'ativa') === 'ativa');
+  if (!ativas.length) return null;
+  const fracoes = [
+    ...new Set(ativas.map((t) => (t.fracao && t.fracao.designacao) || `fração #${t.fracao_id}`)),
+  ];
+  return (
+    `Esta pessoa tem ${ativas.length} titularidade(s) ativa(s) (${fracoes.join(', ')}). ` +
+    'Encerre primeiro essas titularidades na ficha da fração (Admin → Frações → Titularidade), ' +
+    'com data de fim, e só depois elimine a ficha do condómino — nada é apagado sem registo.'
+  );
+}
+
+// ── Ligar / desligar uma pessoa de uma fração (via titularidades) ──
+// Operações do domínio usadas pela ficha do condómino: nunca criam vínculos
+// paralelos nem apagam relações — acrescentam períodos e encerram-nos com data.
+
+// Relação ATUAL de uma pessoa com as frações do condomínio: união das
+// titularidades ativas com os vínculos antigos ainda em vigor.
+async function relacoesAtuaisDaPessoa({ condominioId, pessoaId } = {}) {
+  if (!condominioId || !pessoaId) return [];
+  const [ativos, vinculos] = await Promise.all([
+    FracaoTitularidade.findAll({
+      where: { condominio_id: condominioId, pessoa_id: pessoaId, estado: 'ativa' },
+      order: [['id', 'ASC']],
+    }),
+    FracaoPessoa.findAll({
+      where: { pessoa_id: pessoaId, data_fim: null },
+      include: [{ model: Fracao, as: 'fracao', where: { condominio_id: condominioId }, required: true }],
+      order: [['id', 'ASC']],
+    }),
+  ]);
+  const porFracao = new Map();
+  for (const v of vinculos) porFracao.set(Number(v.fracao_id), { fracaoId: Number(v.fracao_id), vinculo: v.vinculo });
+  for (const t of ativos) porFracao.set(Number(t.fracao_id), { fracaoId: Number(t.fracao_id), vinculo: t.vinculo, titularidadeId: t.id });
+  return [...porFracao.values()];
+}
+
+// Acrescenta a relação pessoa ↔ fração. Recusa quando já existe outro titular
+// ativo do mesmo vínculo: encerrar o atual é uma decisão explícita, que se toma
+// na ficha da fração (com data e motivo) e não por omissão.
+async function ligarPessoaAFracao({
+  condominioId, fracaoId, pessoaId, vinculo = 'proprietario', dataInicio = null, userId = null, origem = 'manual',
+} = {}) {
+  if (!condominioId || !fracaoId || !pessoaId) {
+    return { ok: false, erro: 'Falta o condomínio, a fração ou a pessoa.' };
+  }
+  const vinculoNormalizado = normalizarVinculo(vinculo);
+  const inicio = normalizarData(dataInicio) || hojeISO();
+  const atuais = await titularesAtuais({ condominioId, fracaoId });
+  const conflito = titularesEmConflito(atuais, { pessoaId, vinculo: vinculoNormalizado });
+  if (conflito.length) {
+    const nomes = conflito
+      .map((t) => (t.pessoa && t.pessoa.nome) || (t.utilizador && t.utilizador.nome) || 'outro titular')
+      .join(', ');
+    return {
+      ok: false,
+      erro:
+        `Esta fração já tem um titular com o vínculo «${VINCULO_LABEL[vinculoNormalizado]}» em vigor (${nomes}). ` +
+        'Encerre primeiro essa titularidade na ficha da fração (Admin → Frações → Titularidade).',
+      conflito: conflito.map((t) => t.id),
+    };
+  }
+
+  // Conta ligada a esta pessoa, quando for inequívoca (uma só).
+  const contas = await User.findAll({ where: { pessoa_id: pessoaId }, attributes: ['id'], limit: 2 });
+  const titulo = await criarTitularidade({
+    condominioId,
+    fracaoId,
+    pessoaId,
+    utilizadorId: contas.length === 1 ? contas[0].id : null,
+    vinculo: vinculoNormalizado,
+    dataInicio: inicio,
+    userId,
+    origem,
+  });
+
+  // Vínculo antigo em sincronia: reabre a linha fechada, se existir.
+  const existente = await FracaoPessoa.findOne({
+    where: { fracao_id: fracaoId, pessoa_id: pessoaId, vinculo: vinculoNormalizado },
+  });
+  if (existente) {
+    await existente.update({ data_fim: null, data_inicio: existente.data_inicio || inicio });
+  } else {
+    await FracaoPessoa.create({
+      fracao_id: fracaoId, pessoa_id: pessoaId, vinculo: vinculoNormalizado, data_inicio: inicio, data_fim: null,
+    });
+  }
+  return { ok: true, titularidadeId: titulo.id };
+}
+
+// Retira a relação: encerra as titularidades ativas com data de fim e fecha o
+// vínculo antigo. Nada é apagado (o histórico e a auditoria ficam).
+async function desligarPessoaDaFracao({
+  condominioId, fracaoId, pessoaId, dataFim = null, motivo = 'relacao_removida', userId = null,
+} = {}) {
+  if (!condominioId || !fracaoId || !pessoaId) {
+    return { titularesEncerrados: 0, vinculosFechados: 0 };
+  }
+  const fim = normalizarData(dataFim) || hojeISO();
+  const ativas = await FracaoTitularidade.findAll({
+    where: { condominio_id: condominioId, fracao_id: fracaoId, pessoa_id: pessoaId, estado: 'ativa' },
+    order: [['id', 'ASC']],
+  });
+  for (const t of ativas) {
+    await cessarTitularidade({ titularidadeId: t.id, dataFim: fim, motivo, userId });
+  }
+  const vinculos = await FracaoPessoa.findAll({
+    where: { fracao_id: fracaoId, pessoa_id: pessoaId, data_fim: null },
+  });
+  for (const v of vinculos) await v.update({ data_fim: fim });
+  return { titularesEncerrados: ativas.length, vinculosFechados: vinculos.length };
+}
+
+// ── Papéis de gestão e guarda do último gestor ─────────────────────
+// PAPEIS_GESTAO é a fonte única (a mesma regra usada no fluxo de saída): sem
+// pelo menos um destes papéis ativos, o condomínio fica sem quem o possa gerir.
+const PAPEIS_GESTAO = ['admin', 'gestor'];
+
+// Encerrar o acesso deste utilizador deixaria o condomínio sem gestão?
+// (função pura: recebe o papel e o número de gestores ATIVOS, incluindo este)
+function eUltimoGestorAtivo({ papel = null, nGestores = 0 } = {}) {
+  if (!PAPEIS_GESTAO.includes(papel)) return false;
+  return Number(nGestores) <= 1;
+}
+
 // Situação resumida de uma fração (para o ecrã de administração).
 async function situacaoDaFracao({ condominioId, fracaoId, dataRef = hojeISO() } = {}) {
   const [atuais, historico] = await Promise.all([
@@ -425,13 +632,25 @@ module.exports = {
   normalizarId,
   eContaDaLigacao,
   decidirEstadoAssociacao,
+  decidirAcaoConta,
+  contaAtivaDoFormulario,
+  condominiosSemGestao,
+  motivoBloqueioDesativacaoConta,
   pedidoDeReativacao,
+  PAPEIS_GESTAO,
+  eUltimoGestorAtivo,
   diaAnterior,
   estaAtiva,
   vigenteNaData,
   titularesAtuais,
   historicoDaFracao,
   historicoDaPessoa,
+  titularesAtivosDaPessoa,
+  titularesEmConflito,
+  bloqueioEliminacaoCondomino,
+  relacoesAtuaisDaPessoa,
+  ligarPessoaAFracao,
+  desligarPessoaDaFracao,
   fracoesDoUtilizador,
   temAcessoFracao,
   pessoasAtuaisDaFracao,

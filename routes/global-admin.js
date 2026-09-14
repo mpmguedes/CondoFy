@@ -12,6 +12,8 @@ const {
   Fracao,
   AuditLog,
 } = require('../models');
+// Regra única do estado da associação (reativação só quando explícita).
+const titularidades = require('../helpers/titularidades');
 const { eAutenticado } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
 const tenant = require('../helpers/tenant');
@@ -218,11 +220,34 @@ router.post('/global/condominios/:id/associacoes', async (req, res) => {
     where: { utilizador_id: utilizador.id, condominio_id: condominio.id },
     defaults: { utilizador_id: utilizador.id, condominio_id: condominio.id, role: papel, estado: 'ativo' },
   });
+  // Reutiliza a regra única: uma associação inativa (acesso encerrado, por
+  // exemplo pelo próprio utilizador) NÃO volta a ativo só por se voltar a
+  // associar o utilizador — a reativação tem de ser pedida explicitamente.
+  const decisao = titularidades.decidirEstadoAssociacao({
+    estadoAtual: associacao ? associacao.estado : 'ativo',
+    reativar: req.body.reativar_acesso,
+  });
   if (associacao) {
-    await associacao.update({ role: papel, estado: 'ativo' });
+    await associacao.update({ role: papel, estado: decisao.estado });
   }
-  await audit({ userId: req.user.id, acao: 'associar_utilizador_condominio', entidade: 'Condominio', entidadeId: condominio.id, detalhes: { email, papel } });
-  req.flash('success_msg', `Associação atualizada (${email} → ${papel}).`);
+  await audit({
+    userId: req.user.id,
+    acao: decisao.reativada ? 'reativar_acesso_condominio' : 'associar_utilizador_condominio',
+    entidade: 'Condominio',
+    entidadeId: condominio.id,
+    detalhes: {
+      email,
+      papel,
+      associacaoAntes: associacao ? associacao.estado : null,
+      associacao: decisao.estado,
+      reativacaoExplicita: decisao.reativada,
+    },
+  });
+  if (!decisao.estavaAtiva && !decisao.reativada) {
+    req.flash('error_msg', 'Associação atualizada. O acesso deste utilizador a este condomínio continua encerrado — marque «Reativar acesso» para o reabrir.');
+  } else {
+    req.flash('success_msg', `Associação atualizada (${email} → ${papel}).`);
+  }
   return res.redirect(`/admin/global/condominios/${condominio.id}`);
 });
 

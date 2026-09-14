@@ -3,6 +3,9 @@
   <a href="/admin/utilizadores" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
 </div>
 
+{{!-- Três coisas distintas nesta página: os dados/conta (formulário de guardar),
+     o acesso a ESTE condomínio (ações próprias) e as titularidades das frações
+     (que se gerem na ficha de cada fração, nunca aqui). --}}
 <div class="row">
   <div class="col-12 col-lg-8">
     <div class="card">
@@ -50,33 +53,90 @@
           </div>
           {{/unless}}
           {{#if user}}
+          <hr class="my-4" />
+          <h2 class="h6 mb-1">Conta</h2>
+          <p class="text-muted small mb-3">
+            A conta é <strong>global</strong>: ativa ou inativa, vale para todos os condomínios a que a
+            pessoa esteja associada — e é independente do acesso a cada condomínio.
+          </p>
           <div class="form-check form-switch mb-3">
             <input class="form-check-input" type="checkbox" id="ativo" name="ativo" {{#if user.ativo}}checked{{/if}} />
-            <label class="form-check-label" for="ativo">Ativo</label>
-          </div>
-          {{#unless assocAtiva}}
-          {{!-- A associação ao condomínio está inativa (o utilizador encerrou o
-               acesso, por exemplo com «Preparar saída do condomínio»). Guardar
-               os dados NÃO reativa o acesso: é preciso pedi-lo explicitamente. --}}
-          <div class="alert alert-warning" role="status">
-            <div class="fw-semibold">O acesso deste utilizador a este condomínio está encerrado.</div>
-            <div class="small">
-              Os dados podem ser guardados normalmente; o acesso mantém-se encerrado. As titularidades de
-              fração não são alteradas por esta página.
-            </div>
-          </div>
-          <div class="form-check mb-3">
-            <input class="form-check-input" type="checkbox" id="reativar_acesso" name="reativar_acesso" value="1" />
-            <label class="form-check-label" for="reativar_acesso">
-              <strong>Reativar acesso</strong> — volta a dar acesso a este condomínio a esta conta
-              (fica registado na auditoria).
+            <label class="form-check-label" for="ativo">
+              <strong>Conta ativa</strong>
+              <span class="text-muted small">— desativar impede a entrada na plataforma em todos os condomínios</span>
             </label>
           </div>
-          {{/unless}}
+          <div class="mb-3">
+            <label class="form-label" for="motivo_conta">Motivo (obrigatório para desativar a conta)</label>
+            <input type="text" class="form-control" id="motivo_conta" name="motivo_conta" maxlength="180"
+                   placeholder="Ex.: pedido do condómino, conta duplicada, cessação de funções" autocomplete="off" />
+            <div class="form-text">Fica registado na auditoria, com o estado anterior e o novo.</div>
+          </div>
           {{/if}}
           <button type="submit" class="btn btn-primary">Guardar</button>
         </form>
       </div>
     </div>
+
+    {{#if user}}
+    <div class="card mt-3">
+      <div class="card-body">
+        <h2 class="h6 mb-1">Acesso a este condomínio</h2>
+        <p class="text-muted small mb-2">
+          O acesso é <strong>por condomínio</strong> e depende da associação, não da conta: uma conta
+          ativa pode ter o acesso encerrado a este condomínio e continuar a entrar nos restantes.
+          As titularidades das frações gerem-se na ficha de cada fração e não são alteradas aqui.
+        </p>
+        <p class="mb-3">
+          Estado atual:
+          {{#if assocAtiva}}<span class="badge text-bg-success">Ativo</span>
+          {{else}}<span class="badge text-bg-warning-subtle border">Encerrado</span>{{/if}}
+        </p>
+
+        {{#if assocAtiva}}
+        <form action="/admin/utilizadores/{{user.id}}/encerrar-acesso" method="POST"
+              data-confirmar="Encerrar o acesso deste utilizador a este condomínio? A conta e as titularidades não são alteradas."
+              data-confirmar-perigo="1"
+              class="border rounded p-3">
+          <label class="form-label" for="motivo_encerrar">Encerrar acesso a este condomínio</label>
+          <div class="text-muted small mb-2">
+            Só encerra o acesso desta conta a <strong>este</strong> condomínio. A conta, as titularidades e
+            toda a informação do condomínio ficam como estão; a associação mantém-se registada e pode ser
+            reaberta. Para o próprio utilizador deixar o condomínio, com exportação da sua informação,
+            existe «Preparar saída do condomínio» na área dele.
+          </div>
+          <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-8">
+              <input type="text" class="form-control" id="motivo_encerrar" name="motivo" maxlength="180" required
+                     placeholder="Motivo do encerramento do acesso" autocomplete="off" />
+              <div class="form-text">O motivo é obrigatório e fica registado na auditoria.</div>
+            </div>
+            <div class="col-12 col-md-4 d-grid">
+              <button class="btn btn-outline-danger">Encerrar acesso</button>
+            </div>
+          </div>
+        </form>
+        {{else}}
+        <form action="/admin/utilizadores/{{user.id}}/reativar-acesso" method="POST" class="border rounded p-3">
+          <label class="form-label" for="motivo_reativar">Reativar acesso a este condomínio</label>
+          <div class="text-muted small mb-2">
+            Volta a dar acesso a <strong>este</strong> condomínio a esta conta (por exemplo, depois de o
+            próprio utilizador ter preparado a saída, ou de o acesso ter sido encerrado por engano).
+            Não altera a conta nem as titularidades.
+          </div>
+          <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-8">
+              <input type="text" class="form-control" id="motivo_reativar" name="motivo" maxlength="180"
+                     placeholder="Motivo (opcional)" autocomplete="off" />
+            </div>
+            <div class="col-12 col-md-4 d-grid">
+              <button class="btn btn-outline-success">Reativar acesso</button>
+            </div>
+          </div>
+        </form>
+        {{/if}}
+      </div>
+    </div>
+    {{/if}}
   </div>
 </div>

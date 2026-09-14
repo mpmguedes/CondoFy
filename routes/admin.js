@@ -8,6 +8,7 @@ const {
   FracaoTitularidade,
   User,
   UserCondominio,
+  Condominio,
   Categoria,
   MetodoPagamento,
   ContaBancaria,
@@ -564,6 +565,36 @@ async function fracoesDoAtivo(req) {
   return Fracao.findAll({ where: onde(req), attributes: ['id'] });
 }
 
+// ── Relação pessoa ↔ fração pela via das titularidades ─────────────
+// A ficha do condómino NÃO cria vínculos paralelos: qualquer ligação ou remoção
+// passa pelos helpers de titularidade (período com data de início/fim, estado,
+// motivo e auditoria) e mantém `fracao_pessoas` em sincronia. Nunca se apaga uma
+// relação — encerra-se com data de fim.
+async function relacoesAtuaisDaPessoa({ condominioId, pessoaId }) {
+  return titularidades.relacoesAtuaisDaPessoa({ condominioId, pessoaId });
+}
+
+async function acrescentarRelacao({ req, fracaoId, pessoa, vinculo, origem }) {
+  return titularidades.ligarPessoaAFracao({
+    condominioId: req.condominioId,
+    fracaoId,
+    pessoaId: pessoa.id,
+    vinculo,
+    userId: req.user.id,
+    origem,
+  });
+}
+
+async function retirarRelacao({ req, fracaoId, pessoaId, motivo }) {
+  return titularidades.desligarPessoaDaFracao({
+    condominioId: req.condominioId,
+    fracaoId,
+    pessoaId,
+    motivo,
+    userId: req.user.id,
+  });
+}
+
 router.post('/condominos', async (req, res) => {
   const { nome, nif, tipo, observacoes } = req.body;
   const vinculo = req.body.vinculo || 'proprietario';
@@ -597,14 +628,23 @@ router.post('/condominos', async (req, res) => {
   // Guarda os contactos (email/telefone legados ficam sincronizados com o principal).
   await sincronizarContactosPessoa(pessoa, emails, telefones, req.condominioId);
 
-  // Liga apenas frações do condomínio ativo (ignora ids de outros condomínios).
+  // Liga apenas frações do condomínio ativo (ignora ids de outros condomínios),
+  // sempre pelo mecanismo de titularidades (com período e auditoria).
   const validas = new Set((await fracoesDoAtivo(req)).map((f) => f.id));
+  const recusadas = [];
   for (const fid of fracoesSelecionadas) {
-    if (validas.has(fid)) await FracaoPessoa.create({ fracao_id: fid, pessoa_id: pessoa.id, vinculo });
+    if (!validas.has(fid)) continue;
+    const r = await acrescentarRelacao({ req, fracaoId: fid, pessoa, vinculo, origem: 'ficha_condomino' });
+    if (!r.ok) recusadas.push(r.erro);
   }
 
-  await audit({ userId: req.user.id, acao: 'criar_condómino', entidade: 'Pessoa', entidadeId: pessoa.id, detalhes: { fracoes: fracoesSelecionadas.length } });
-  req.flash('success_msg', 'Condómino criado.');
+  await audit({ userId: req.user.id, acao: 'criar_condómino', entidade: 'Pessoa', entidadeId: pessoa.id, detalhes: { fracoes: fracoesSelecionadas.length, recusadas: recusadas.length } });
+  if (recusadas.length) {
+    req.flash('error_msg', recusadas.join(' '));
+    req.flash('success_msg', 'Condómino criado; algumas frações não foram associadas (ver aviso).');
+  } else {
+    req.flash('success_msg', 'Condómino criado.');
+  }
   res.redirect('/admin/condominos');
 });
 
@@ -618,7 +658,10 @@ router.get('/condominos/:id/editar', async (req, res) => {
     return res.redirect('/admin/condominos');
   }
   const fracoes = await Fracao.findAll({ where: onde(req), order: [['designacao', 'ASC']] });
-  const associadasIds = new Set(pessoa.fracoes.map((f) => f.id));
+  // A relação atual é a união das titularidades ativas com os vínculos antigos
+  // ainda em vigor: é isso que a ficha mostra marcado (e o que a gravação usa).
+  const atuais = await relacoesAtuaisDaPessoa({ condominioId: req.condominioId, pessoaId: pessoa.id });
+  const associadasIds = new Set(atuais.map((a) => a.fracaoId));
   // Mostra os contactos existentes; na ausência de registos de um tipo usa o
   // valor legado pessoa.email/telefone (nunca desaparecem da ficha).
   const contactosForm = await contactosParaForm(pessoa);
@@ -679,32 +722,62 @@ router.post('/condominos/:id', async (req, res) => {
   // os contactos são reconstruídos sem duplicar em gravações repetidas.
   await sincronizarContactosPessoa(pessoa, emails, telefones, req.condominioId);
 
-  // Sincronizar frações: remove as desmarcadas, adiciona as novas com o vínculo
-  // escolhido — apenas frações do condomínio ativo.
+  // Frações: acrescenta as novas e ENCERRA as desmarcadas — sempre pelo sistema
+  // de titularidades (data de início/fim, motivo e auditoria). Sem `destroy`.
   const validas = new Set((await fracoesDoAtivo(req)).map((f) => f.id));
   const selecionadasIds = new Set(fracoesSelecionadas.filter((fid) => validas.has(fid)));
-  const atuais = await FracaoPessoa.findAll({ where: { pessoa_id: pessoa.id } });
-  const atuaisIds = new Set(atuais.map((a) => a.fracao_id));
+  const atuais = await relacoesAtuaisDaPessoa({ condominioId: req.condominioId, pessoaId: pessoa.id });
+  const atuaisIds = new Set(atuais.map((a) => a.fracaoId));
 
+  const recusadas = [];
+  let encerradas = 0;
   for (const a of atuais) {
-    if (!selecionadasIds.has(a.fracao_id)) await a.destroy();
+    if (selecionadasIds.has(a.fracaoId)) continue;
+    const r = await retirarRelacao({ req, fracaoId: a.fracaoId, pessoaId: pessoa.id, motivo: 'removido_ficha_condomino' });
+    encerradas += r.titularesEncerrados + r.vinculosFechados;
   }
   for (const fid of selecionadasIds) {
-    if (!atuaisIds.has(fid)) await FracaoPessoa.create({ fracao_id: fid, pessoa_id: pessoa.id, vinculo });
+    if (atuaisIds.has(fid)) continue;
+    const r = await acrescentarRelacao({ req, fracaoId: fid, pessoa, vinculo, origem: 'ficha_condomino' });
+    if (!r.ok) recusadas.push(r.erro);
   }
 
-  await audit({ userId: req.user.id, acao: 'editar_condómino', entidade: 'Pessoa', entidadeId: pessoa.id });
-  req.flash('success_msg', 'Condómino atualizado.');
+  await audit({
+    userId: req.user.id,
+    acao: 'editar_condómino',
+    entidade: 'Pessoa',
+    entidadeId: pessoa.id,
+    detalhes: { fracoes: selecionadasIds.size, relacoesEncerradas: encerradas, relacoesRecusadas: recusadas.length },
+  });
+  if (recusadas.length) {
+    req.flash('error_msg', recusadas.join(' '));
+    req.flash('success_msg', 'Condómino atualizado; algumas frações não foram associadas (ver aviso).');
+  } else {
+    req.flash('success_msg', encerradas
+      ? 'Condómino atualizado. As relações retiradas ficaram encerradas com data de fim, no histórico.'
+      : 'Condómino atualizado.');
+  }
   res.redirect('/admin/condominos');
 });
 
 router.post('/condominos/:id/eliminar', async (req, res) => {
   const pessoa = await carregarPessoa(req);
-  if (pessoa) {
-    await pessoa.destroy();
-    await audit({ userId: req.user.id, acao: 'eliminar_condómino', entidade: 'Pessoa', entidadeId: req.params.id });
+  if (!pessoa) return res.redirect('/admin/condominos');
+  // Não se apaga a ficha de quem tem titularidade ativa: a titularidade ficaria
+  // órfã (pessoa_id NULL) e continuaria a autorizar o acesso pela conta ligada.
+  // O encerramento tem de ser explícito, na ficha da fração, com data e motivo.
+  const ativas = await titularidades.titularesAtivosDaPessoa({
+    condominioId: req.condominioId,
+    pessoaId: pessoa.id,
+  });
+  const bloqueio = titularidades.bloqueioEliminacaoCondomino(ativas);
+  if (bloqueio) {
+    req.flash('error_msg', bloqueio);
+    return res.redirect(`/admin/condominos/${pessoa.id}/editar`);
   }
-  req.flash('success_msg', 'Condómino eliminado.');
+  await pessoa.destroy();
+  await audit({ userId: req.user.id, acao: 'eliminar_condómino', entidade: 'Pessoa', entidadeId: req.params.id });
+  req.flash('success_msg', 'Condómino eliminado. O histórico financeiro e documental do condomínio mantém-se.');
   res.redirect('/admin/condominos');
 });
 
@@ -804,7 +877,10 @@ router.post('/utilizadores', async (req, res) => {
       password_hash: passwordHash,
       role: role || 'condomino',
       pessoa_id: pessoa_id || null,
-      ativo: ativo === 'on' || ativo === '1' || ativo === true,
+      // Sem marcação explícita a conta nasce ATIVA (a caixa «Ativo» só existe no
+      // ecrã de edição): uma conta criada pelo administrador não pode ficar
+      // inativa por omissão e impedir a entrada do próprio utilizador.
+      ativo: titularidades.contaAtivaDoFormulario(ativo),
       // Por convite: o email só fica confirmado quando o utilizador aceitar.
       email_confirmado: enviarConvite ? false : true,
       convite_token: token,
@@ -865,52 +941,188 @@ router.post('/utilizadores/:id', async (req, res) => {
   if (!assoc) return res.redirect('/admin/utilizadores');
   const user = await User.findByPk(req.params.id);
   if (!user) return res.redirect('/admin/utilizadores');
-  const { nome, email, password, role, pessoa_id, ativo, reativar_acesso } = req.body;
-  const data = {
-    nome,
-    email,
-    role: role || 'condomino',
-    pessoa_id: pessoa_id || null,
-    ativo: ativo === 'on' || ativo === '1' || ativo === true,
-  };
+  const { nome, email, password, role, pessoa_id, ativo } = req.body;
+
+  // ── Conta (global: vale em todos os condomínios) ──────────────────
+  const contaAntes = user.ativo === true;
+  const contaDepois = ativo === 'on' || ativo === '1' || ativo === true;
+  const motivo = String(req.body.motivo_conta || '').trim();
+  const decisaoConta = titularidades.decidirAcaoConta({ antes: contaAntes, depois: contaDepois });
+  // Desativar a conta bloqueia a entrada em toda a plataforma: exige
+  // justificação, que fica registada na auditoria.
+  if (decisaoConta.exigeMotivo && !motivo) {
+    req.flash('error_msg', 'Indique o motivo para desativar a conta — fica registado na auditoria.');
+    return res.redirect(`/admin/utilizadores/${user.id}/editar`);
+  }
+  // E não pode deixar nenhum condomínio sem quem o possa gerir: se esta conta for
+  // o último administrador/gestor ativo de algum condomínio, a desativação é
+  // recusada (nada é alterado) e a mensagem identifica os condomínios afetados.
+  if (decisaoConta.desativou) {
+    const assocGestao = await UserCondominio.findAll({
+      where: {
+        utilizador_id: user.id,
+        estado: 'ativo',
+        role: { [Op.in]: titularidades.PAPEIS_GESTAO },
+      },
+      include: [{ model: Condominio, as: 'condominio', attributes: ['id', 'designacao'], required: false }],
+    });
+    const gestoresPorCondominio = {};
+    for (const a of assocGestao) {
+      gestoresPorCondominio[a.condominio_id] = await UserCondominio.count({
+        where: {
+          condominio_id: a.condominio_id,
+          estado: 'ativo',
+          role: { [Op.in]: titularidades.PAPEIS_GESTAO },
+        },
+      });
+    }
+    const afetados = titularidades.condominiosSemGestao({
+      associacoes: assocGestao.map((a) => ({
+        condominioId: a.condominio_id,
+        designacao: a.condominio ? a.condominio.designacao : null,
+        role: a.role,
+        estado: a.estado,
+      })),
+      gestoresPorCondominio,
+    });
+    const bloqueio = titularidades.motivoBloqueioDesativacaoConta(afetados);
+    if (bloqueio) {
+      req.flash('error_msg', bloqueio);
+      return res.redirect(`/admin/utilizadores/${user.id}/editar`);
+    }
+  }
+
+  const data = { nome, email, role: role || 'condomino', pessoa_id: pessoa_id || null, ativo: contaDepois };
   if (password) {
     data.password_hash = await bcrypt.hash(password, 10);
   }
   await user.update(data);
 
-  // ── Associação ao condomínio (é ela que dá acesso) ────────────────
-  // Guardar dados nunca reativa um acesso revogado: quando a associação está
-  // inativa (saída pelo fluxo «Preparar saída do condomínio», por exemplo), só a
-  // escolha explícita «Reativar acesso» a volta a pôr ativa. Se a conta for
-  // desativada (`ativo`), o acesso é cortado em cada pedido por
-  // `sessao.verificarContaAtiva`.
-  const decisao = titularidades.decidirEstadoAssociacao({
-    estadoAtual: assoc.estado,
-    reativar: reativar_acesso,
-  });
-  await assoc.update({ role: papelDaAssociacao(role), estado: decisao.estado });
+  // ── Associação ao condomínio ──────────────────────────────────────
+  // Guardar a ficha altera apenas o papel. O estado do ACESSO a este condomínio
+  // não é alterado aqui: encerrar/reativar acesso são ações próprias e
+  // explícitas (abaixo), para que gravar dados nunca reabra nem feche acessos.
+  await assoc.update({ role: papelDaAssociacao(role) });
 
   await audit({
-    userId: req.user.id,
-    // A reativação fica com ação própria para ser inequívoca na auditoria.
-    acao: decisao.reativada ? 'reativar_acesso_utilizador' : 'editar_utilizador',
+    // A alteração do estado da conta tem ação própria (desativar/reativar conta).
+    acao: decisaoConta.acao || 'editar_utilizador',
     entidade: 'User',
     entidadeId: user.id,
-    detalhes: {
-      papel: papelDaAssociacao(role),
-      associacaoAntes: assoc.estado,
-      associacao: decisao.estado,
-      reativacaoExplicita: decisao.reativada,
-    },
+    detalhes: decisaoConta.mudou
+      ? {
+          estadoAnterior: contaAntes,
+          estadoNovo: contaDepois,
+          motivo: motivo || null,
+          ambito: 'conta (global — todos os condomínios)',
+          condominioContexto: req.condominioId,
+          papel: papelDaAssociacao(role),
+          associacao: assoc.estado,
+          titularidadesAlteradas: false,
+        }
+      : { papel: papelDaAssociacao(role), associacao: assoc.estado },
   });
 
-  if (decisao.reativada) {
-    req.flash('success_msg', 'Utilizador atualizado e acesso a este condomínio reativado (a titularidade não foi alterada por esta ação).');
-  } else if (!decisao.estavaAtiva) {
-    req.flash('success_msg', 'Utilizador atualizado. O acesso a este condomínio continua encerrado — para o reativar, marque «Reativar acesso».');
+  if (decisaoConta.reativou) {
+    req.flash('success_msg', 'Conta reativada: volta a poder iniciar sessão onde as associações e as titularidades o permitirem. Nenhuma associação foi reaberta por esta ação.');
+  } else if (decisaoConta.desativou) {
+    req.flash('success_msg', 'Conta desativada: o acesso à plataforma fica bloqueado em todos os condomínios. As associações ao condomínio e as titularidades não foram alteradas.');
   } else {
     req.flash('success_msg', 'Utilizador atualizado.');
   }
+  res.redirect('/admin/utilizadores');
+});
+
+// ── Acesso a ESTE condomínio (associação) ──────────────────────────
+// Ações administrativas explícitas sobre `utilizador_condominios.estado`.
+// Alteram apenas esse estado: a conta (`users.ativo`) e as titularidades ficam
+// intactas e nada é apagado. Não substituem «Preparar saída do condomínio»
+// (fluxo do próprio utilizador, com exportação, reautenticação, declaração e
+// encerramento das titularidades) — esse mantém-se como está.
+
+// O condomínio não pode ficar sem quem o possa gerir (mesma regra do fluxo de
+// saída, agora num só sítio: helpers/titularidades.js).
+async function deixariaCondominioSemGestao(req, assoc) {
+  if (!titularidades.PAPEIS_GESTAO.includes(assoc.role)) return false;
+  const n = await UserCondominio.count({
+    where: {
+      condominio_id: req.condominioId,
+      estado: 'ativo',
+      role: { [Op.in]: titularidades.PAPEIS_GESTAO },
+    },
+  });
+  return titularidades.eUltimoGestorAtivo({ papel: assoc.role, nGestores: n });
+}
+
+router.post('/utilizadores/:id/encerrar-acesso', async (req, res) => {
+  const assoc = await assocDeUtilizador(req, req.params.id);
+  if (!assoc) return res.redirect('/admin/utilizadores');
+  const destino = `/admin/utilizadores/${req.params.id}/editar`;
+  const motivo = String(req.body.motivo || '').trim();
+  if (!motivo) {
+    req.flash('error_msg', 'Indique o motivo do encerramento do acesso — fica registado na auditoria.');
+    return res.redirect(destino);
+  }
+  if (Number(req.params.id) === Number(req.user.id)) {
+    req.flash('error_msg', 'Para deixar de ter acesso a este condomínio utilize «Preparar saída do condomínio» na sua área.');
+    return res.redirect(destino);
+  }
+  if (assoc.estado !== 'ativo') {
+    req.flash('error_msg', 'O acesso deste utilizador a este condomínio já está encerrado.');
+    return res.redirect(destino);
+  }
+  if (await deixariaCondominioSemGestao(req, assoc)) {
+    req.flash('error_msg', 'É o único administrador ou gestor com acesso ativo a este condomínio. Encerrar este acesso deixaria o condomínio sem quem o possa gerir.');
+    return res.redirect(destino);
+  }
+  await assoc.update({ estado: 'inativo' });
+  await audit({
+    userId: req.user.id,
+    acao: 'encerrar_acesso_condominio',
+    entidade: 'UserCondominio',
+    entidadeId: assoc.id,
+    detalhes: {
+      condominioId: req.condominioId,
+      utilizadorId: assoc.utilizador_id,
+      papel: assoc.role,
+      motivo,
+      estadoAnterior: 'ativo',
+      estadoNovo: 'inativo',
+      contaAlterada: false,
+      titularidadesAlteradas: false,
+    },
+  });
+  req.flash('success_msg', 'Acesso a este condomínio encerrado. A conta e as titularidades não foram alteradas; a associação mantém-se registada (pode ser reaberta).');
+  res.redirect('/admin/utilizadores');
+});
+
+router.post('/utilizadores/:id/reativar-acesso', async (req, res) => {
+  const assoc = await assocDeUtilizador(req, req.params.id);
+  if (!assoc) return res.redirect('/admin/utilizadores');
+  const destino = `/admin/utilizadores/${req.params.id}/editar`;
+  const motivo = String(req.body.motivo || '').trim();
+  if (assoc.estado === 'ativo') {
+    req.flash('error_msg', 'O acesso deste utilizador a este condomínio já está ativo.');
+    return res.redirect(destino);
+  }
+  await assoc.update({ estado: 'ativo' });
+  await audit({
+    userId: req.user.id,
+    acao: 'reativar_acesso_condominio',
+    entidade: 'UserCondominio',
+    entidadeId: assoc.id,
+    detalhes: {
+      condominioId: req.condominioId,
+      utilizadorId: assoc.utilizador_id,
+      papel: assoc.role,
+      motivo: motivo || null,
+      estadoAnterior: 'inativo',
+      estadoNovo: 'ativo',
+      contaAlterada: false,
+      titularidadesAlteradas: false,
+    },
+  });
+  req.flash('success_msg', 'Acesso a este condomínio reativado. A conta não foi alterada e as titularidades continuam como estavam.');
   res.redirect('/admin/utilizadores');
 });
 

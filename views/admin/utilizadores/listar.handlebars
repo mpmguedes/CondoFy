@@ -16,7 +16,8 @@
           <th>Email</th>
           <th>Papel</th>
           <th>Condómino associado</th>
-          <th>Estado</th>
+          <th>Conta</th>
+          <th>Acesso a este condomínio</th>
           <th class="text-end">Ações</th>
         </tr>
       </thead>
@@ -31,13 +32,17 @@
           </td>
           <td>{{#if pessoa}}{{pessoa.nome}}{{else}}<span class="text-muted">—</span>{{/if}}</td>
           <td>
-            {{#if ativo}}<span class="badge text-bg-success">Ativo</span>{{else}}<span class="badge text-bg-secondary">Inativo</span>{{/if}}
+            {{#if ativo}}<span class="badge text-bg-success">Ativa</span>{{else}}<span class="badge text-bg-secondary">Inativa</span>{{/if}}
             {{#if convite_token}}
               {{#if (eq estadoConvite 'aceite')}}<span class="badge text-bg-success-subtle border">Convite aceite</span>
               {{else if (eq estadoConvite 'revogado')}}<span class="badge text-bg-light border">Convite revogado</span>
               {{else if (eq estadoConvite 'expirado')}}<span class="badge text-bg-warning-subtle border">Convite expirado</span>
               {{else}}<span class="badge text-bg-info-subtle border">Convite enviado</span>{{/if}}
             {{/if}}
+          </td>
+          <td>
+            {{#if (eq estadoAssoc 'ativo')}}<span class="badge text-bg-success">Ativo</span>
+            {{else}}<span class="badge text-bg-warning-subtle border">Encerrado</span>{{/if}}
           </td>
           <td class="text-end">
             {{#if podeConvite}}
