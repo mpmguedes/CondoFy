@@ -27,19 +27,9 @@ function toArray(v) {
 }
 
 // Referência externa introduzida pelo administrador (documento sem ficheiro
-// guardado no armazenamento do condomínio). Só http/https: evita
-// javascript:/data: no href das vistas e no corpo dos emails.
-function urlExternaSegura(valor) {
-  const texto = String(valor || '').trim();
-  if (!texto) return null;
-  let u;
-  try {
-    u = new URL(texto);
-  } catch (err) {
-    return null;
-  }
-  return u.protocol === 'http:' || u.protocol === 'https:' ? u.toString() : null;
-}
+// guardado no armazenamento do condomínio). A regra vive em helpers/urls.js
+// (só http/https), para ser a mesma na gravação, na listagem e nas vistas.
+const { urlExternaSegura } = require('../helpers/urls');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -169,12 +159,12 @@ router.get('/documentos', async (req, res) => {
         : [];
       return {
         id: doc.id,
-        url: doc.url,
+        url: urlExternaSegura(doc.url),
         // O ficheiro é sempre servido pelo GesCondu (ver documentos-acesso).
         // `url` fica apenas como referência externa de documentos sem ficheiro
         // guardado no armazenamento do condomínio.
         ficheiroInterno: urlInterna(doc, { area: 'gestao' }),
-        urlExterna: doc.drive_file_id ? null : doc.url || null,
+        urlExterna: doc.drive_file_id ? null : urlExternaSegura(doc.url),
         drive_status: doc.drive_status,
         codigo: rec ? rec.codigo : doc.numero_documento || doc.nome,
         fracao: rec && rec.fracao ? rec.fracao.designacao : null,

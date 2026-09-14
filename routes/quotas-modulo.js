@@ -14,8 +14,6 @@ const { Op } = require('sequelize');
 const sequelize = require('../config/database');
 const {
   Fracao,
-  Pessoa,
-  FracaoPessoa,
   MetodoPagamento,
   ContaBancaria,
   Quota,
@@ -39,6 +37,7 @@ const { gerarReciboPDF } = require('../helpers/pdf');
 const cabecalhos = require('../helpers/cabecalhos-ficheiro');
 const { compor: comporEmail, nomeFicheiro: nomeFicheiroEmail } = require('../helpers/email-templates');
 const { resolverDestinatarios } = require('../helpers/avisos');
+const titulares = require('../helpers/titularidades');
 const { enfileirarEmail } = require('../helpers/email-fila');
 const comprovativos = require('../helpers/comprovativos');
 const recibosHelper = require('../helpers/recibos');
@@ -63,24 +62,19 @@ function nomeCurto(nome) {
   return `${partes[0]} ${partes[partes.length - 1]}`;
 }
 
+// Pessoas que hoje representam a fração (titularidade em vigor; o modelo
+// anterior só decide quando a fração ainda não tem titularidades registadas).
 async function pessoasDaFracao(fracaoId) {
-  const vinculos = await FracaoPessoa.findAll({
-    where: { fracao_id: fracaoId },
-    include: [{ model: Pessoa, as: 'pessoa', required: true }],
-  });
-  return vinculos.map((v) => v.pessoa);
+  const { pessoas } = await titulares.pessoasAtuaisDaFracao({ fracaoId });
+  return pessoas;
 }
 
-// Morador a apresentar nos recibos (primeiro proprietário encontrado).
+// Morador a apresentar nos recibos (proprietário em vigor; arrendatário/outro
+// apenas quando não houver proprietário registado).
 async function nomeMorador(fracaoId) {
-  const vinculos = await FracaoPessoa.findAll({
-    where: { fracao_id: fracaoId },
-    order: [['vinculo', 'ASC'], ['id', 'ASC']],
-    include: [{ model: Pessoa, as: 'pessoa', required: true }],
-  });
-  const comProprietario =
-    vinculos.find((v) => v.vinculo === 'proprietario') || vinculos[0];
-  return comProprietario && comProprietario.pessoa ? nomeCurto(comProprietario.pessoa.nome) : '';
+  const pessoas = await pessoasDaFracao(fracaoId);
+  const escolhida = pessoas.find((p) => p.vinculoAtual === 'proprietario') || pessoas[0];
+  return escolhida ? nomeCurto(escolhida.nome) : '';
 }
 
 // "Fração A — 3.º · Esq." (anda/porta quando existirem).

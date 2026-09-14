@@ -197,11 +197,102 @@ function testarModelosComCondominio() {
   assert.strictEqual(tenant.pertenceAoAtivo(null, reqA), false, 'registo órfão (NULL) → nunca pertence a um condomínio');
 }
 
+// ── 5. Regressões de isolamento corrigidas ──────────────────────────
+// Três pontos que não estavam cobertos e que ficam aqui guardados contra
+// regressão: âmbito do resumo do orçamento, âmbito do envio de recibos em lote
+// e validação do link externo de documentos.
+async function testarRegressoesDeIsolamento() {
+  const ler = (rel) => fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
+
+  // (a) Resumo do orçamento: orçamentado e executado só do condomínio indicado.
+  const saldos = ler('helpers/saldos.js');
+  assert.ok(/async function resumoOrcamento\(ano = new Date\(\)\.getFullYear\(\), condominioId = null\)/.test(saldos),
+    'saldos: resumoOrcamento recebe o condomínio');
+  assert.ok(/where: \{ condominio_id: condominioId, ano, estado: \{ \[Op\.ne\]: 'anulado' \} \}/.test(saldos),
+    'saldos: orçamento filtrado pelo condomínio');
+  assert.ok(/competencia_ano: ano, estado: \{ \[Op\.ne\]: 'anulada' \}, condominio_id: condominioId|condominio_id: condominioId, competencia_ano: ano/.test(saldos),
+    'saldos: despesas filtradas pelo condomínio');
+  assert.ok(!/OrcamentoItem\.sum/.test(saldos), 'saldos: não soma a tabela legada sem condomínio');
+
+  const orcamentoVazio = await require('../helpers/saldos').resumoOrcamento(2026, null);
+  assert.deepStrictEqual(orcamentoVazio, { ano: 2026, orcamentado: 0, executado: 0, percentagem: 0 },
+    'saldos: sem condomínio definido devolve zeros (nunca a soma de todos)');
+
+  // (b) Envio de recibos em lote: pagamentos do condomínio ativo, na listagem e no envio.
+  const financeiro = ler('routes/financeiro.js');
+  assert.ok(/async function contextoEnvioRecibos\(condominioId\)/.test(financeiro), 'recibos: contexto recebe o condomínio');
+  assert.ok(/where: \{ estado: 'confirmado', condominio_id: condominioId \}/.test(financeiro),
+    'recibos: pagamentos filtrados pelo condomínio');
+  const chamadas = financeiro.match(/contextoEnvioRecibos\(req\.condominioId\)/g) || [];
+  assert.strictEqual(chamadas.length, 2, 'recibos: GET e POST passam o condomínio ativo');
+  assert.ok(!/contextoEnvioRecibos\(\)/.test(financeiro), 'recibos: nenhuma chamada sem âmbito');
+
+  // (c) Link externo de documentos: só http/https chega ao href, em qualquer área.
+  const { urlExternaSegura } = require('../helpers/urls');
+  const helpers = require('../helpers/handlebars-helpers');
+  for (const perigoso of ['javascript:alert(1)', 'JavaScript:alert(1)', 'data:text/html;base64,PHNjcmlwdD4=', 'vbscript:msgbox', 'não é uma url', '']) {
+    assert.strictEqual(urlExternaSegura(perigoso), null, `urls: ${perigoso.slice(0, 20)} recusada`);
+    assert.strictEqual(helpers.urlDocumentoExterno({ url: perigoso }), null, 'urls: vista não recebe link inseguro');
+  }
+  assert.strictEqual(helpers.urlDocumentoExterno({ url: 'https://exemplo.pt/ata.pdf' }), 'https://exemplo.pt/ata.pdf',
+    'urls: https válido passa');
+  assert.strictEqual(helpers.urlDocumentoExterno({ url: 'http://exemplo.pt/x' }), 'http://exemplo.pt/x', 'urls: http válido passa');
+  assert.strictEqual(helpers.urlDocumentoExterno({ url: 'https://exemplo.pt/x', drive_file_id: 'abc' }), null,
+    'urls: com ficheiro guardado não há link externo');
+  assert.strictEqual(helpers.urlDocumentoExterno(null), null, 'urls: sem documento, sem link');
+
+  const documentos = ler('routes/documentos.js');
+  assert.ok(/require\('\.\.\/helpers\/urls'\)/.test(documentos), 'documentos: usa a validação partilhada');
+  assert.ok(!/function urlExternaSegura/.test(documentos), 'documentos: sem segunda implementação da regra');
+  assert.ok(/url: urlExternaSegura\(doc\.url\)/.test(documentos), 'documentos: listagem de gestão valida a referência');
+  assert.ok(/urlExterna: doc\.drive_file_id \? null : urlExternaSegura\(doc\.url\)/.test(documentos),
+    'documentos: referência externa validada também na listagem');
+}
+
+// ── 6. Autorização do condómino: a conta só vê o que a relação lhe dá ──
+// Regra (helpers/titularidades.js): a titularidade que nomeia a CONTA decide;
+// a que nomeia apenas uma PESSOA só dá acesso a contas ligadas a essa pessoa
+// (`users.pessoa_id`). Uma conta sem pessoa nunca herda acesso por existir uma
+// titularidade de outra pessoa.
+function testarRegraDeAutorizacaoDoCondomino() {
+  const titularidades = require('../helpers/titularidades');
+  const { eContaDaLigacao } = titularidades;
+
+  // Tabela de decisão do "elo" entre a conta e a titularidade.
+  const conta = { utilizadorId: 5, pessoaId: 9 };
+  const casos = [
+    [{ utilizador_id: 5, pessoa_id: null }, conta, true, 'titularidade nomeia esta conta'],
+    [{ utilizador_id: 5, pessoa_id: 100 }, conta, true, 'conta nomeada manda sobre a pessoa'],
+    [{ utilizador_id: 6, pessoa_id: 9 }, conta, false, 'conta nomeada noutra conta recusa'],
+    [{ utilizador_id: null, pessoa_id: 9 }, conta, true, 'pessoa ligada à conta autoriza'],
+    [{ utilizador_id: null, pessoa_id: 9 }, { utilizadorId: 5, pessoaId: null }, false, 'conta SEM pessoa não herda (caso central)'],
+    [{ utilizador_id: null, pessoa_id: 9 }, { utilizadorId: 5, pessoaId: 8 }, false, 'conta ligada a outra pessoa não herda'],
+    [{ utilizador_id: null, pessoa_id: null }, conta, false, 'titularidade órfã não autoriza'],
+    [{ utilizador_id: null, pessoa_id: 9 }, { utilizadorId: null, pessoaId: null }, false, 'sem conta nem pessoa não autoriza'],
+    [{ utilizador_id: '5', pessoa_id: null }, conta, true, 'ids em texto são normalizados'],
+  ];
+  for (const [titulo, quem, esperado, descricao] of casos) {
+    assert.strictEqual(eContaDaLigacao(titulo, quem), esperado, `autorização: ${descricao}`);
+  }
+  assert.strictEqual(eContaDaLigacao(null, conta), false, 'autorização: sem titularidade não há acesso');
+
+  // A decisão de estado da associação (acesso ao condomínio) nunca reativa por
+  // omissão: é a garantia de que guardar o formulário não reabre o acesso.
+  assert.strictEqual(titularidades.decidirEstadoAssociacao({ estadoAtual: 'inativo' }).estado, 'inativo',
+    'reativação: guardar sem pedido mantém o acesso encerrado');
+  assert.strictEqual(titularidades.decidirEstadoAssociacao({ estadoAtual: 'inativo', reativar: 'on' }).reativada, true,
+    'reativação: só com pedido explícito');
+  assert.strictEqual(titularidades.decidirEstadoAssociacao({ estadoAtual: 'ativo' }).estado, 'ativo',
+    'reativação: utilizadores ativos não são afetados');
+}
+
 async function main() {
   await testarComCondominioAtivo();
   testarPapeis();
   testarRoutersIsolados();
   testarModelosComCondominio();
+  await testarRegressoesDeIsolamento();
+  testarRegraDeAutorizacaoDoCondomino();
   console.log('✓ Testes de isolamento/permissões passaram (sem base de dados).');
 }
 

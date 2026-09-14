@@ -1,5 +1,6 @@
 const { formatEUR } = require('./money');
 const { formatDate, formatDateTime, toDateInput, currentYear, monthName } = require('./dates');
+const { urlExternaSegura } = require('./urls');
 
 // Helpers Handlebars usados nas views.
 module.exports = {
@@ -38,9 +39,12 @@ module.exports = {
   },
   // urlDocumentoExterno(doc) → link externo introduzido pelo administrador
   // (apenas quando NÃO há ficheiro guardado no armazenamento do condomínio).
+  // Passa por `urlExternaSegura`: uma referência gravada antes desta validação
+  // (ou alterada diretamente na base de dados) nunca chega ao href como
+  // `javascript:`/`data:`.
   urlDocumentoExterno: (doc) => {
     if (!doc || doc.drive_file_id) return null;
-    return doc.url || null;
+    return urlExternaSegura(doc.url);
   },
   // startsPath(path, prefix) → true se o path é igual ou está dentro do prefixo
   startsPath: (path, prefix) => Boolean(path && (path === prefix || path.startsWith(prefix + '/'))),

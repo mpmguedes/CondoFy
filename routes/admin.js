@@ -5,6 +5,7 @@ const {
   Fracao,
   Pessoa,
   FracaoPessoa,
+  FracaoTitularidade,
   User,
   UserCondominio,
   Categoria,
@@ -28,6 +29,8 @@ const { audit } = require('../helpers/audit');
 const { getCondominio } = require('../helpers/condominio');
 const { resumoCondominio, resumoFracao, estadoEfetivo } = require('../helpers/saldos');
 const { resumoFinanceiroMes, resumoEmAtraso, orcamentoDoAno } = require('../helpers/dashboard');
+// Histórico de titularidade da fração (relação temporal pessoa/conta ↔ fração).
+const titularidades = require('../helpers/titularidades');
 const { validarNif } = require('../public/js/validacao-fiscal');
 const drive = require('../helpers/drive');
 const { smtpConfigured, sendMail } = require('../helpers/mailer');
@@ -228,7 +231,43 @@ router.get('/fracoes/:id/editar', async (req, res) => {
     return res.redirect('/admin/fracoes');
   }
   const pessoas = await Pessoa.findAll({ where: onde(req, { ativo: true }), order: [['nome', 'ASC']] });
-  res.render('admin/fracoes/form', { titulo: 'Editar fração', fracao, pessoas });
+  // Titularidade: quem é titular agora e o histórico completo (os períodos nunca
+  // são apagados, por isso é possível ver quem foi proprietário e quando).
+  const [titulares, historico] = await Promise.all([
+    titularidades.titularesAtuais({ condominioId: req.condominioId, fracaoId: fracao.id }),
+    titularidades.historicoDaFracao({ condominioId: req.condominioId, fracaoId: fracao.id }),
+  ]);
+  // Uma conta só existe depois de criada/convite aceite (fluxo de Utilizadores).
+  // Sem conta, o titular consta do histórico mas não tem acesso ao GesCondu.
+  const idsPessoasTitulares = [...new Set(titulares.map((t) => t.pessoa_id).filter(Boolean))];
+  const contasPorPessoa = new Map();
+  if (idsPessoasTitulares.length) {
+    const contas = await User.findAll({
+      where: { pessoa_id: { [Op.in]: idsPessoasTitulares } },
+      attributes: ['id', 'pessoa_id'],
+    });
+    contas.forEach((c) => {
+      const chave = Number(c.pessoa_id);
+      contasPorPessoa.set(chave, (contasPorPessoa.get(chave) || 0) + 1);
+    });
+  }
+  const titularesComConta = titulares.map((t) => {
+    const n = contasPorPessoa.get(Number(t.pessoa_id)) || 0;
+    return { ...t.toJSON(), temConta: n > 0, contasMultiplas: n > 1 };
+  });
+
+  res.render('admin/fracoes/form', {
+    titulo: 'Editar fração',
+    fracao,
+    pessoas,
+    titulares: titularesComConta,
+    historico,
+    // Data de hoje no formato dos inputs <input type="date">.
+    hoje: titularidades.hojeISO(),
+    // Dois proprietários ativos ao mesmo tempo é sinal de que uma mudança de
+    // proprietário ficou a meio (o anterior não foi encerrado).
+    proprietariosDuplicados: titularesComConta.filter((t) => t.vinculo === 'proprietario').length > 1,
+  });
 });
 
 router.post('/fracoes/:id', async (req, res) => {
@@ -287,6 +326,24 @@ router.post('/fracoes/:id/pessoas', async (req, res) => {
         data_fim: data_fim || null,
       },
     });
+    // Mantém a titularidade em sincronia: se ainda não existir um período ativo
+    // para esta pessoa/fração/vínculo, regista-o (o histórico não é substituído).
+    const vinculoNormalizado = titularidades.normalizarVinculo(vinculo);
+    const atuais = await titularidades.titularesAtuais({ condominioId: req.condominioId, fracaoId: fracao.id });
+    const jaTemPeriodo = atuais.some((t) => Number(t.pessoa_id) === Number(pessoa.id) && t.vinculo === vinculoNormalizado);
+    if (!jaTemPeriodo) {
+      const contas = await User.findAll({ where: { pessoa_id: pessoa.id }, attributes: ['id'], limit: 2 });
+      await titularidades.criarTitularidade({
+        condominioId: req.condominioId,
+        fracaoId: fracao.id,
+        pessoaId: pessoa.id,
+        utilizadorId: contas.length === 1 ? contas[0].id : null,
+        vinculo: vinculoNormalizado,
+        dataInicio: data_inicio || titularidades.hojeISO(),
+        userId: req.user.id,
+        origem: 'vinculo_pessoa',
+      });
+    }
     await audit({ userId: req.user.id, acao: 'vincular_pessoa_fração', entidade: 'FracaoPessoa' });
     req.flash('success_msg', 'Pessoa associada à fração.');
   } catch (err) {
@@ -299,9 +356,132 @@ router.post('/fracoes/:id/pessoas', async (req, res) => {
 router.post('/fracoes/:id/pessoas/:vinculoId/eliminar', async (req, res) => {
   const fracao = await carregarFracao(req);
   if (!fracao) return res.redirect('/admin/fracoes');
+  const vinculo = await FracaoPessoa.findOne({ where: { id: req.params.vinculoId, fracao_id: fracao.id } });
   await FracaoPessoa.destroy({ where: { id: req.params.vinculoId, fracao_id: fracao.id } });
+  // A titularidade correspondente NÃO é apagada: encerra-se com a data de hoje,
+  // para o histórico e a autorização ficarem coerentes com a remoção do vínculo.
+  if (vinculo) {
+    const ativas = await titularidades.titularesAtuais({ condominioId: req.condominioId, fracaoId: fracao.id });
+    for (const t of ativas) {
+      if (Number(t.pessoa_id) === Number(vinculo.pessoa_id) && t.vinculo === vinculo.vinculo) {
+        await titularidades.cessarTitularidade({
+          titularidadeId: t.id,
+          dataFim: titularidades.hojeISO(),
+          motivo: 'vinculo_removido',
+          userId: req.user.id,
+        });
+      }
+    }
+  }
   await audit({ userId: req.user.id, acao: 'desvincular_pessoa_fração', entidade: 'FracaoPessoa' });
   req.flash('success_msg', 'Associação removida.');
+  res.redirect(`/admin/fracoes/${fracao.id}/editar`);
+});
+
+// ── Titularidade da fração (histórico e mudança de proprietário) ────
+// Registar um titular NUNCA substitui o anterior: ou se cria mais um período, ou
+// se encerra explicitamente o titular atual do mesmo vínculo (mudança de
+// proprietário), ficando ambos no histórico.
+router.post('/fracoes/:id/titulares', async (req, res) => {
+  const fracao = await carregarFracao(req);
+  if (!fracao) return res.redirect('/admin/fracoes');
+  const { pessoa_id, vinculo, data_inicio, encerrar_atual } = req.body;
+  try {
+    const pessoa = await Pessoa.findOne({ where: { id: pessoa_id, condominio_id: req.condominioId } });
+    if (!pessoa) {
+      req.flash('error_msg', 'Pessoa não encontrada neste condomínio.');
+      return res.redirect(`/admin/fracoes/${fracao.id}/editar`);
+    }
+    const vinculoNormalizado = titularidades.normalizarVinculo(vinculo);
+    const inicio = titularidades.normalizarData(data_inicio) || titularidades.hojeISO();
+
+    // Conta associada a esta pessoa, quando for inequívoca (uma só).
+    const contas = await User.findAll({ where: { pessoa_id: pessoa.id }, attributes: ['id'], limit: 2 });
+    const utilizadorId = contas.length === 1 ? contas[0].id : null;
+
+    // Mudança de proprietário: encerrar o titular atual do MESMO vínculo no dia
+    // anterior ao início do novo período (não há sobreposição nem buraco).
+    const encerrados = [];
+    if (encerrar_atual === 'on') {
+      const atuais = await titularidades.titularesAtuais({ condominioId: req.condominioId, fracaoId: fracao.id });
+      for (const t of atuais) {
+        if (t.vinculo !== vinculoNormalizado) continue;
+        const fim = titularidades.diaAnterior(inicio);
+        encerrados.push(await titularidades.cessarTitularidade({
+          titularidadeId: t.id,
+          dataFim: fim,
+          motivo: 'mudanca_titular',
+          userId: req.user.id,
+        }));
+      }
+    }
+
+    const criada = await titularidades.criarTitularidade({
+      condominioId: req.condominioId,
+      fracaoId: fracao.id,
+      pessoaId: pessoa.id,
+      utilizadorId,
+      vinculo: vinculoNormalizado,
+      dataInicio: inicio,
+      userId: req.user.id,
+      origem: 'administracao',
+      motivo: encerrados.length ? 'mudanca_titular' : null,
+    });
+
+    // Manter o vínculo do modelo anterior em sincronia (é o que sustenta os
+    // contactos e as comunicações por fração).
+    await FracaoPessoa.findOrCreate({
+      where: { fracao_id: fracao.id, pessoa_id: pessoa.id, vinculo: vinculoNormalizado },
+      defaults: { fracao_id: fracao.id, pessoa_id: pessoa.id, vinculo: vinculoNormalizado, data_inicio: inicio, data_fim: null },
+    });
+
+    await audit({
+      userId: req.user.id,
+      acao: encerrados.length ? 'alterar_titularidade' : 'registar_titularidade',
+      entidade: 'Fracao',
+      entidadeId: fracao.id,
+      detalhes: {
+        condominioId: req.condominioId,
+        titularidadeId: criada.id,
+        pessoaId: pessoa.id,
+        utilizadorId,
+        vinculo: vinculoNormalizado,
+        inicio,
+        encerrados: encerrados.map((t) => ({ id: t.id, pessoaId: t.pessoa_id, dataFim: t.data_fim })),
+        contaAssociada: utilizadorId ? 'sim' : 'sem conta ligada',
+      },
+    });
+
+    req.flash(
+      'success_msg',
+      encerrados.length
+        ? `Titularidade alterada: ${encerrados.length} período(s) anterior(es) encerrado(s) e novo titular registado. O histórico mantém-se.`
+        : 'Titular registado. O período anterior, se existir, mantém-se no histórico.'
+    );
+  } catch (err) {
+    console.error('[titularidades]', err);
+    req.flash('error_msg', 'Não foi possível registar a titularidade.');
+  }
+  res.redirect(`/admin/fracoes/${fracao.id}/editar`);
+});
+
+router.post('/fracoes/:id/titulares/:tid/cessar', async (req, res) => {
+  const fracao = await carregarFracao(req);
+  if (!fracao) return res.redirect('/admin/fracoes');
+  const titulo = await FracaoTitularidade.findOne({
+    where: { id: req.params.tid, fracao_id: fracao.id, condominio_id: req.condominioId },
+  });
+  if (!titulo) {
+    req.flash('error_msg', 'Titularidade não encontrada nesta fração.');
+    return res.redirect(`/admin/fracoes/${fracao.id}/editar`);
+  }
+  await titularidades.cessarTitularidade({
+    titularidadeId: titulo.id,
+    dataFim: req.body.data_fim,
+    motivo: (req.body.motivo || '').trim() || 'cessacao',
+    userId: req.user.id,
+  });
+  req.flash('success_msg', 'Titularidade encerrada com data de fim. O registo mantém-se no histórico.');
   res.redirect(`/admin/fracoes/${fracao.id}/editar`);
 });
 
@@ -337,6 +517,9 @@ router.get('/fracoes/:id', async (req, res) => {
   res.render('admin/fracoes/detalhe', {
     titulo: `Fração ${fracao.designacao}`,
     fracao: fracao.toJSON(),
+    // Nesta aba mostram-se apenas as relações em vigor: os vínculos já
+    // encerrados ficam no histórico de titularidade (ecrã de edição da fração).
+    pessoasAtuais: fracao.pessoas.filter((p) => !p.FracaoPessoa.data_fim),
     quotas: quotasComEstado,
     pagamentos: pagamentos.map((p) => p.toJSON()),
     documentos: documentos.map((d) => d.toJSON()),
@@ -664,7 +847,17 @@ router.get('/utilizadores/:id/editar', async (req, res) => {
   const userVista = user.toJSON();
   userVista.papel = assoc.role;
   userVista.role = roleLegadoDoPapel(assoc.role);
-  res.render('admin/utilizadores/form', { titulo: 'Editar utilizador', user: userVista, pessoas });
+  // A associação ao condomínio é o que dá acesso: quando está inativa (por
+  // exemplo, depois de «Preparar saída do condomínio»), guardar este formulário
+  // não a reativa — a reativação é uma escolha explícita nesta página.
+  const assocAtiva = assoc.estado === 'ativo';
+  res.render('admin/utilizadores/form', {
+    titulo: 'Editar utilizador',
+    user: userVista,
+    pessoas,
+    assocAtiva,
+    assocEstado: assoc.estado,
+  });
 });
 
 router.post('/utilizadores/:id', async (req, res) => {
@@ -672,7 +865,7 @@ router.post('/utilizadores/:id', async (req, res) => {
   if (!assoc) return res.redirect('/admin/utilizadores');
   const user = await User.findByPk(req.params.id);
   if (!user) return res.redirect('/admin/utilizadores');
-  const { nome, email, password, role, pessoa_id, ativo } = req.body;
+  const { nome, email, password, role, pessoa_id, ativo, reativar_acesso } = req.body;
   const data = {
     nome,
     email,
@@ -684,9 +877,40 @@ router.post('/utilizadores/:id', async (req, res) => {
     data.password_hash = await bcrypt.hash(password, 10);
   }
   await user.update(data);
-  await assoc.update({ role: papelDaAssociacao(role), estado: 'ativo' });
-  await audit({ userId: req.user.id, acao: 'editar_utilizador', entidade: 'User', entidadeId: user.id, detalhes: { papel: papelDaAssociacao(role) } });
-  req.flash('success_msg', 'Utilizador atualizado.');
+
+  // ── Associação ao condomínio (é ela que dá acesso) ────────────────
+  // Guardar dados nunca reativa um acesso revogado: quando a associação está
+  // inativa (saída pelo fluxo «Preparar saída do condomínio», por exemplo), só a
+  // escolha explícita «Reativar acesso» a volta a pôr ativa. Se a conta for
+  // desativada (`ativo`), o acesso é cortado em cada pedido por
+  // `sessao.verificarContaAtiva`.
+  const decisao = titularidades.decidirEstadoAssociacao({
+    estadoAtual: assoc.estado,
+    reativar: reativar_acesso,
+  });
+  await assoc.update({ role: papelDaAssociacao(role), estado: decisao.estado });
+
+  await audit({
+    userId: req.user.id,
+    // A reativação fica com ação própria para ser inequívoca na auditoria.
+    acao: decisao.reativada ? 'reativar_acesso_utilizador' : 'editar_utilizador',
+    entidade: 'User',
+    entidadeId: user.id,
+    detalhes: {
+      papel: papelDaAssociacao(role),
+      associacaoAntes: assoc.estado,
+      associacao: decisao.estado,
+      reativacaoExplicita: decisao.reativada,
+    },
+  });
+
+  if (decisao.reativada) {
+    req.flash('success_msg', 'Utilizador atualizado e acesso a este condomínio reativado (a titularidade não foi alterada por esta ação).');
+  } else if (!decisao.estavaAtiva) {
+    req.flash('success_msg', 'Utilizador atualizado. O acesso a este condomínio continua encerrado — para o reativar, marque «Reativar acesso».');
+  } else {
+    req.flash('success_msg', 'Utilizador atualizado.');
+  }
   res.redirect('/admin/utilizadores');
 });
 

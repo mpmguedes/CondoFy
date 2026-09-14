@@ -117,3 +117,75 @@
   </div>
   {{/if}}
 </div>
+
+{{#if fracoesComResumo.length}}
+{{!-- Saída do condomínio: disponível apenas a quem tem uma relação que possa
+     ser encerrada (titularidade ativa). Não é "terminar sessão", e não se
+     confunde com a administração (caso separado: quem administra transfere
+     primeiro a administração). --}}
+<div class="card mt-3">
+  <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+      <div class="fw-semibold">Deixou de ser titular destas frações?</div>
+      <div class="text-muted small">
+        Prepare a saída deste condomínio: descarregue a informação a que tem direito e encerre o seu acesso.
+        O histórico do condomínio mantém-se e a sua conta GesCondu continua ativa.
+      </div>
+      {{#if (or (eq condominioAtivo.role 'admin') (eq condominioAtivo.role 'gestor'))}}
+      <div class="small text-warning-emphasis mt-2">
+        Como administrador ou gestor deste condomínio, este fluxo não encerra a sua administração.
+        A administração é um caso separado: trate primeiro da sua administração em
+        <a href="/admin/utilizadores">Utilizadores</a>.
+      </div>
+      {{/if}}
+    </div>
+    <a href="/condomino/saida" class="btn btn-outline-secondary">
+      <span class="material-symbols-outlined me-1" aria-hidden="true">logout</span>Preparar saída do condomínio
+    </a>
+  </div>
+</div>
+{{else}}
+{{#if titularidadesTerminadas.length}}
+{{!-- Deixou de ser titular (ex.: venda da fração): explica-se o que aconteceu,
+     permite-se descarregar a informação e oferece-se a saída. O acesso ao
+     condomínio não se mantém sem razão. --}}
+<div class="card">
+  <div class="card-body">
+    <div class="fw-semibold">Deixou de ser titular das frações que tinha neste condomínio.</div>
+    <div class="text-muted small mb-3">
+      O histórico destas relações mantém-se registado no condomínio; a sua conta GesCondu continua ativa
+      e os restantes condomínios não são afetados. Se já não tem qualquer relação com este condomínio,
+      pode encerrar aqui o seu acesso.
+    </div>
+    <ul class="list-group list-group-flush mb-3">
+      {{#each titularidadesTerminadas}}
+      <li class="list-group-item d-flex justify-content-between px-0">
+        <span>Fração {{fracao}} <span class="badge text-bg-light border ms-1">{{vinculo}}</span></span>
+        <span class="text-muted small">{{#if data_fim}}até {{formatDate data_fim}}{{else}}relação encerrada{{/if}}</span>
+      </li>
+      {{/each}}
+    </ul>
+    <form action="/condomino/saida/exportar" method="POST" class="row g-2 align-items-end border-top pt-3 mb-3">
+      <div class="col-12">
+        <label class="form-label" for="password_exportar_dash">Descarregar a minha informação</label>
+        <div class="text-muted small">
+          Inclui o histórico das relações que teve com este condomínio (com datas) e os documentos pessoais que
+          o condomínio guarda sobre si. Não inclui dados de outros condóminos nem documentos internos da administração.
+        </div>
+      </div>
+      <div class="col-12 col-md-5">
+        <input type="password" class="form-control" id="password_exportar_dash" name="password" required autocomplete="current-password" placeholder="Palavra-passe" />
+      </div>
+      <div class="col-12 col-md-auto">
+        <button class="btn btn-outline-primary">
+          <span class="material-symbols-outlined me-1" aria-hidden="true">download</span>Descarregar
+        </button>
+      </div>
+    </form>
+    <a href="/condomino/saida" class="btn btn-outline-secondary">
+      <span class="material-symbols-outlined me-1" aria-hidden="true">logout</span>Preparar saída do condomínio
+    </a>
+  </div>
+</div>
+{{/if}}
+{{/if}}

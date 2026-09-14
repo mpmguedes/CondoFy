@@ -12,8 +12,6 @@ const {
   Pagamento,
   PagamentoQuota,
   Fracao,
-  Pessoa,
-  FracaoPessoa,
   Orcamento,
   OrcamentoRubrica,
   Documento,
@@ -44,6 +42,7 @@ const { gerarAvisoQuotaPDF, gerarReciboPDF } = require('../helpers/pdf');
 const cabecalhos = require('../helpers/cabecalhos-ficheiro');
 const { compor: comporEmail, nomeFicheiro: nomeFicheiroEmail } = require('../helpers/email-templates');
 const { resolverDestinatarios } = require('../helpers/avisos');
+const titulares = require('../helpers/titularidades');
 const { enfileirarEmail } = require('../helpers/email-fila');
 const { estaAtivo } = require('../helpers/notificacoes');
 const { estaAtivo: automacaoAtiva } = require('../helpers/automacoes');
@@ -653,17 +652,12 @@ router.post('/quotas/gerar', async (req, res) => {
 const { enfileirarEmail: enfileirarEmailFila } = require('../helpers/email-fila');
 const { existeEnvioPara, ultimoEnvioConcluido } = require('../helpers/envios');
 
-// Proprietários/condóminos de uma fração (preferência a "proprietario").
+// Proprietários/condóminos ATUAIS de uma fração (titularidade em vigor;
+// preferência a "proprietario"). Depois de uma mudança de proprietário, o
+// anterior deixa de constar — não recebe avisos nem pedidos de pagamento.
 async function pessoasDaFracao(fracaoId) {
-  const vinculos = await FracaoPessoa.findAll({
-    where: { fracao_id: fracaoId },
-    include: [{ model: Pessoa, as: 'pessoa' }],
-  });
-  const ordem = { proprietario: 0, condomino: 1, arrendatario: 2 };
-  return vinculos
-    .filter((v) => v.pessoa)
-    .sort((a, b) => (ordem[a.vinculo] ?? 3) - (ordem[b.vinculo] ?? 3))
-    .map((v) => v.pessoa);
+  const { pessoas } = await titulares.pessoasAtuaisDaFracao({ fracaoId });
+  return pessoas;
 }
 
 function emailsUnicos(pessoas) {
@@ -1098,9 +1092,12 @@ router.post('/pagamentos', (req, res, next) => {
 // ═══════════════════════════════════════════════════════════════════
 // RECIBOS — envio em lote por email (mesmo padrão das quotas)
 // ═══════════════════════════════════════════════════════════════════
-async function contextoEnvioRecibos() {
+async function contextoEnvioRecibos(condominioId) {
+  // Isolamento: a lista (e o envio) só pode conter pagamentos do condomínio
+  // ativo. Sem este filtro, a página mostrava frações/condóminos/emails de
+  // outros condomínios e permitia enviar recibos alheios.
   const pagamentos = await Pagamento.findAll({
-    where: { estado: 'confirmado' },
+    where: { estado: 'confirmado', condominio_id: condominioId },
     include: [
       { model: Fracao, as: 'fracao' },
       { model: MetodoPagamento, as: 'metodo_pagamento' },
@@ -1151,12 +1148,12 @@ async function contextoEnvioRecibos() {
 }
 
 router.get('/pagamentos/enviar-recibos', async (req, res) => {
-  const ctx = await contextoEnvioRecibos();
+  const ctx = await contextoEnvioRecibos(req.condominioId);
   res.render('admin/pagamentos/enviar-recibos', { titulo: 'Enviar recibos por email', driveLigado: storage.isConfigured(req.condominioId), ...ctx });
 });
 
 router.post('/pagamentos/enviar-recibos', async (req, res) => {
-  const ctx = await contextoEnvioRecibos();
+  const ctx = await contextoEnvioRecibos(req.condominioId);
   const pedidoIds = new Set((Array.isArray(req.body.ids) ? req.body.ids : req.body.ids ? [req.body.ids] : []).map(Number));
   const reenviar = req.body.reenviar === '1' || req.body.reenviar === 'on';
   const modoPendentes = req.body.modo === 'pendentes';
@@ -1271,11 +1268,9 @@ router.post('/pagamentos/:id/anular', async (req, res) => {
 
 // ── PDFs ───────────────────────────────────────────────────────────
 async function nomeProprietarioPrincipal(fracaoId) {
-  const vinculo = await FracaoPessoa.findOne({
-    where: { fracao_id: fracaoId, vinculo: 'proprietario' },
-    include: [{ model: Pessoa, as: 'pessoa' }],
-  });
-  return vinculo && vinculo.pessoa ? vinculo.pessoa.nome : 'Condómino';
+  const pessoas = await pessoasDaFracao(fracaoId);
+  const proprietario = pessoas.find((p) => p.vinculoAtual === 'proprietario') || pessoas[0];
+  return proprietario ? proprietario.nome : 'Condómino';
 }
 
 // Gera o buffer do aviso de quota (partilhado entre ver/descarregar e Drive).

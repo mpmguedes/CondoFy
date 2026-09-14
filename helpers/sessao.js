@@ -99,6 +99,35 @@ function middlewareSessao(req, res, next) {
   return next();
 }
 
+// Middleware: a conta continua a poder usar a plataforma?
+//
+// O estado da conta (`ativo`) e a confirmação de email só eram verificados no
+// momento do login, pelo que uma sessão já aberta continuava a valer depois de a
+// conta ser desativada. Esta verificação corre em cada pedido, para que a
+// desativação de uma conta produza efeito imediato — tal como acontece com o
+// acesso a um condomínio, que é revalidado em cada pedido por `tenant`.
+// Só atua quando o estado é explicitamente negativo; contas sem o campo (dados
+// antigos ou objetos de teste incompletos) não são afetadas.
+function verificarContaAtiva(req, res, next) {
+  const utilizador = req.user;
+  if (!req.isAuthenticated || !req.isAuthenticated() || !utilizador) return next();
+  const desativada = utilizador.ativo === false || utilizador.ativo === 0;
+  const emailPorConfirmar = utilizador.email_confirmado === false;
+  if (!desativada && !emailPorConfirmar) return next();
+
+  const encerrar = (cb) => {
+    limparMarcas(req.session);
+    if (typeof req.logout === 'function') req.logout(() => cb());
+    else cb();
+  };
+  encerrar(() => {
+    if (eFetch(req)) {
+      return res.status(401).json({ autenticado: false, contaInativa: true });
+    }
+    return res.redirect('/login?conta=inativa');
+  });
+}
+
 // Encerra a sessão (mantém a sessão express para o redirecionamento) e
 // devolve a resposta adequada ao tipo de pedido.
 function encerrarPorInatividade(req, res) {
@@ -132,5 +161,6 @@ module.exports = {
   marcarAtividade,
   limparMarcas,
   middlewareSessao,
+  verificarContaAtiva,
   encerrarPorInatividade,
 };

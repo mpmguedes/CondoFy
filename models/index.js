@@ -24,6 +24,7 @@ const {
   ContactoPessoa,
   Fracao,
   FracaoPessoa,
+  FracaoTitularidade,
   ContaBancaria,
   Categoria,
   MetodoPagamento,
@@ -115,6 +116,16 @@ Pessoa.belongsToMany(Fracao, {
 });
 FracaoPessoa.belongsTo(Fracao, { foreignKey: 'fracao_id', as: 'fracao' });
 FracaoPessoa.belongsTo(Pessoa, { foreignKey: 'pessoa_id', as: 'pessoa' });
+
+// Histórico de titularidade da fração (relação temporal pessoa/conta ↔ fração).
+// Complementa — não substitui — `fracao_pessoas`, que continua a ser escrita
+// pelo fluxo atual do administrador (em sincronia).
+Fracao.hasMany(FracaoTitularidade, { foreignKey: 'fracao_id', as: 'titularidades' });
+FracaoTitularidade.belongsTo(Fracao, { foreignKey: 'fracao_id', as: 'fracao' });
+FracaoTitularidade.belongsTo(Pessoa, { foreignKey: 'pessoa_id', as: 'pessoa' });
+FracaoTitularidade.belongsTo(User, { foreignKey: 'utilizador_id', as: 'utilizador' });
+FracaoTitularidade.belongsTo(Condominio, { foreignKey: 'condominio_id', as: 'condominio' });
+FracaoTitularidade.belongsTo(User, { foreignKey: 'created_by', as: 'criador' });
 
 // Contactos flexíveis por pessoa (vários emails/telefones)
 Pessoa.hasMany(ContactoPessoa, { foreignKey: 'pessoa_id', as: 'contactos' });

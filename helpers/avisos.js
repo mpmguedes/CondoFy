@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
-const { Pessoa, Fracao, FracaoPessoa } = require('../models');
+const { Pessoa } = require('../models');
+const { pessoasAtuaisDaFracao } = require('./titularidades');
 const { emailsPreferidosPorPessoa } = require('./contactos');
 
 // Resolve destinatários de um aviso numa lista única de {pessoa_id, email, nome}.
@@ -20,22 +21,20 @@ async function resolverDestinatarios(selecao, condominioId) {
     const todas = await Pessoa.findAll({ where: wherePessoa({ ativo: true }) });
     todas.forEach(add);
   } else if (selecao.modo === 'fracoes' && selecao.fracoes && selecao.fracoes.length) {
-    let fracoes = selecao.fracoes.map(Number);
-    if (escopoPessoa) {
-      // Apenas frações do condomínio ativo (evita envio via ids de outro condomínio).
-      const donas = await Fracao.findAll({
-        where: { id: { [Op.in]: fracoes }, condominio_id: condominioId },
-        attributes: ['id'],
-        raw: true,
-      });
-      fracoes = donas.map((f) => f.id);
-    }
+    const fracoes = selecao.fracoes.map(Number);
     if (!fracoes.length) return [];
-    const vinculos = await FracaoPessoa.findAll({
-      where: { fracao_id: { [Op.in]: fracoes } },
-      include: [{ model: Pessoa, as: 'pessoa', where: wherePessoa() }],
-    });
-    vinculos.forEach((v) => add(v.pessoa));
+    // Contactos ATUAIS de cada fração: depois de uma mudança de proprietário, o
+    // anterior deixou de ser titular (ou tem `data_fim`) e não recebe o aviso.
+    // `pessoasAtuaisDaFracao` resolve o condomínio de cada fração, pelo que ids
+    // de outro condomínio não trazem destinatários.
+    const porFracao = await Promise.all(
+      fracoes.map((fid) => pessoasAtuaisDaFracao({ condominioId, fracaoId: fid }))
+    );
+    porFracao.forEach(({ pessoas }) =>
+      pessoas
+        .filter((p) => !condominioId || Number(p.condominio_id) === Number(condominioId))
+        .forEach(add)
+    );
   } else if (selecao.modo === 'pessoas' && selecao.pessoas && selecao.pessoas.length) {
     const ps = await Pessoa.findAll({ where: wherePessoa({ id: { [Op.in]: selecao.pessoas.map(Number) } }) });
     ps.forEach(add);

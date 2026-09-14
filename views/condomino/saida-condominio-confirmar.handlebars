@@ -1,0 +1,85 @@
+{{!-- "Encerrar acesso a este condomínio" — passo 2: confirmação final, com
+     reautenticação (palavra-passe + 2FA quando ativo) e confirmação explícita.
+     A operação só é executada no POST /condomino/saida/concluir. --}}
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Encerrar acesso a este condomínio</h1>
+    <p class="subtitle">{{condominio.designacao}}</p>
+  </div>
+  <a href="/condomino/saida" class="btn btn-outline-secondary">
+    <span class="material-symbols-outlined me-1" aria-hidden="true">arrow_back</span>Voltar
+  </a>
+</div>
+
+<div class="row">
+  <div class="col-12 col-lg-8">
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-exclamation-triangle me-1"></i>Tem a certeza de que pretende encerrar o seu acesso a este condomínio?</div>
+      <div class="card-body">
+        <ul>
+          <li>O seu acesso a <strong>{{condominio.designacao}}</strong> será revogado.</li>
+          {{#if fracoes.length}}
+          <li>As suas titularidades nas frações ({{#each fracoes}}{{designacao}}{{#unless @last}}, {{/unless}}{{/each}}) ficam encerradas com a data de hoje, mantendo-se no histórico.</li>
+          {{else}}
+          <li>Não tem titularidades em vigor neste condomínio; apenas a sua associação de acesso fica inativa.</li>
+          {{/if}}
+          <li>Os seus dados históricos necessários à gestão do condomínio <strong>não serão apagados</strong>.</li>
+          <li>A sua conta GesCondu <strong>continuará ativa</strong>{{#if outrosCondominios}} e mantém o acesso aos outros {{outrosCondominios}} condomínio(s){{/if}}.</li>
+          <li>Para voltar a ter acesso a este condomínio será necessário um novo convite/permissão válida.</li>
+        </ul>
+
+        {{#if bloqueio}}
+        <div class="alert alert-danger mb-0" role="alert">
+          <span class="fw-semibold">Não é possível concluir.</span> {{bloqueio}}
+        </div>
+        {{else}}
+        <div class="alert alert-info">
+          <span class="fw-semibold">Ainda não descarregou a sua informação?</span>
+          Pode <a href="/condomino/saida#exportar">voltar atrás e descarregar</a> antes de concluir. Depois de encerrar o
+          acesso deixa de poder consultar quotas, pagamentos, recibos e documentos a partir da plataforma.
+        </div>
+
+        <form action="/condomino/saida/concluir" method="POST">
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="confirmo" name="confirmo" value="on" required />
+            <label class="form-check-label" for="confirmo">
+              Compreendo que o meu acesso a este condomínio será encerrado e que o histórico do condomínio se mantém.
+            </label>
+          </div>
+          <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-5">
+              <label class="form-label" for="password">Palavra-passe *</label>
+              <input type="password" class="form-control" id="password" name="password" required autocomplete="current-password" />
+            </div>
+            {{#if exige2fa}}
+            <div class="col-12 col-md-4">
+              <label class="form-label" for="codigo_2fa">Código da aplicação *</label>
+              <input type="text" class="form-control" id="codigo_2fa" name="codigo_2fa" inputmode="numeric" autocomplete="one-time-code" placeholder="000000" />
+            </div>
+            {{/if}}
+            <div class="col-12 col-md-auto">
+              <button class="btn btn-danger">
+                <span class="material-symbols-outlined me-1" aria-hidden="true">link_off</span>Encerrar o meu acesso
+              </button>
+            </div>
+          </div>
+        </form>
+        {{/if}}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-4">
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-info-circle me-1"></i>O que não acontece</div>
+      <div class="card-body">
+        <ul class="mb-0">
+          <li>Não apaga quotas, pagamentos, recibos nem comprovativos.</li>
+          <li>Não apaga documentos, assembleias nem atas do condomínio.</li>
+          <li>Não elimina a sua conta GesCondu.</li>
+          <li>Não altera a administração do condomínio.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>

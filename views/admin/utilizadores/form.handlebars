@@ -54,6 +54,25 @@
             <input class="form-check-input" type="checkbox" id="ativo" name="ativo" {{#if user.ativo}}checked{{/if}} />
             <label class="form-check-label" for="ativo">Ativo</label>
           </div>
+          {{#unless assocAtiva}}
+          {{!-- A associação ao condomínio está inativa (o utilizador encerrou o
+               acesso, por exemplo com «Preparar saída do condomínio»). Guardar
+               os dados NÃO reativa o acesso: é preciso pedi-lo explicitamente. --}}
+          <div class="alert alert-warning" role="status">
+            <div class="fw-semibold">O acesso deste utilizador a este condomínio está encerrado.</div>
+            <div class="small">
+              Os dados podem ser guardados normalmente; o acesso mantém-se encerrado. As titularidades de
+              fração não são alteradas por esta página.
+            </div>
+          </div>
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="reativar_acesso" name="reativar_acesso" value="1" />
+            <label class="form-check-label" for="reativar_acesso">
+              <strong>Reativar acesso</strong> — volta a dar acesso a este condomínio a esta conta
+              (fica registado na auditoria).
+            </label>
+          </div>
+          {{/unless}}
           {{/if}}
           <button type="submit" class="btn btn-primary">Guardar</button>
         </form>

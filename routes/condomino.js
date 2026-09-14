@@ -21,6 +21,7 @@ const {
 } = require('../models');
 const { eAutenticado } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
+const titularidades = require('../helpers/titularidades');
 const { resumoFracao, resumoCondominio, resumoOrcamento, estadoEfetivo } = require('../helpers/saldos');
 const { getCondominio } = require('../helpers/condominio');
 const { gerarReciboPDF } = require('../helpers/pdf');
@@ -38,24 +39,34 @@ router.use(tenant.comCondominioAtivo);
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-// Pessoa do utilizador + frações (só do condomínio ativo). null quando a conta
-// não está ligada a nenhum condómino deste condomínio.
+// Pessoa do utilizador + frações a que tem acesso AGORA (só do condomínio
+// ativo). O acesso às frações é determinado pelas TITULARIDADES (relação
+// temporal pessoa/conta ↔ fração): uma relação encerrada deixa de dar acesso,
+// mesmo que a sessão do browser seja antiga, porque esta consulta corre em cada
+// pedido. Sem titularidades registadas (dados anteriores), mantém-se o
+// comportamento antigo a partir de `users.pessoa_id` + `fracao_pessoas`,
+// também já a respeitar `data_fim`. null quando a conta não está ligada a
+// nenhum condómino deste condomínio.
 async function contextoFracoes(req) {
-  if (!req.user.pessoa_id) return { pessoa: null, fracoes: [] };
-  const pessoa = await Pessoa.findOne({
-    where: { id: req.user.pessoa_id, condominio_id: req.condominioId },
-    include: [
-      {
-        model: Fracao,
-        as: 'fracoes',
-        through: { attributes: ['vinculo'] },
-        where: { condominio_id: req.condominioId },
-        required: false,
-      },
-    ],
+  const pessoa = req.user.pessoa_id
+    ? await Pessoa.findOne({ where: { id: req.user.pessoa_id, condominio_id: req.condominioId } })
+    : null;
+
+  const { fracoes } = await titularidades.fracoesDoUtilizador({
+    condominioId: req.condominioId,
+    utilizadorId: req.user.id,
+    pessoaId: req.user.pessoa_id,
   });
-  const fracoes = pessoa && pessoa.fracoes ? pessoa.fracoes : [];
-  return { pessoa, fracoes };
+
+  // Forma compatível com o que as vistas e o resto do módulo já esperam:
+  // `fracao.vinculoAtual` e `fracao.FracaoPessoa.vinculo`.
+  const lista = fracoes.map(({ fracao, vinculo }) => {
+    fracao.vinculoAtual = vinculo || null;
+    fracao.FracaoPessoa = { vinculo: vinculo || null };
+    return fracao;
+  });
+
+  return { pessoa, fracoes: lista };
 }
 
 function formatarPermilagem(valor) {
@@ -71,6 +82,16 @@ router.get('/', async (req, res) => {
   const { pessoa, fracoes } = await contextoFracoes(req);
   const ids = fracoes.map((f) => f.id);
 
+  // Sem frações: distinguir "nunca teve relação" de "deixou de ser titular"
+  // (mudança de proprietário). No segundo caso explica-se o que aconteceu e
+  // dá-se saída — o acesso ao condomínio não deve manter-se sem razão.
+  const historico = pessoa ? await titularidades.historicoDaPessoa({ condominioId: req.condominioId, pessoaId: pessoa.id }) : [];
+  const titularidadesTerminadas = fracoes.length
+    ? []
+    : historico
+        .filter((t) => !titularidades.estaAtiva(t) && t.fracao)
+        .map((t) => ({ fracao: t.fracao.designacao, vinculo: t.vinculo, data_fim: t.data_fim }));
+
   const fracoesComResumo = await Promise.all(
     fracoes.map(async (f) => {
       const base = f.toJSON();
@@ -85,7 +106,7 @@ router.get('/', async (req, res) => {
       return {
         ...base,
         resumo,
-        vinculo: f.FracaoPessoa ? f.FracaoPessoa.vinculo : null,
+        vinculo: f.vinculoAtual || (f.FracaoPessoa ? f.FracaoPessoa.vinculo : null),
         extrasPendentes: extras.map((p) => ({
           id: p.id,
           designacao: p.extra_quota ? p.extra_quota.designacao : 'Quota extraordinária',
@@ -99,7 +120,7 @@ router.get('/', async (req, res) => {
 
   const [resumo, orcamento, avisos, assembleiasProximas, documentosRecentes] = await Promise.all([
     resumoCondominio(req.condominioId),
-    resumoOrcamento(),
+    resumoOrcamento(new Date().getFullYear(), req.condominioId),
     Aviso.findAll({ where: { condominio_id: req.condominioId }, order: [['id', 'DESC']], limit: 5 }),
     Assembleia.findAll({
       where: { condominio_id: req.condominioId, estado: { [Op.in]: ['agendada', 'convocada'] } },
@@ -123,6 +144,7 @@ router.get('/', async (req, res) => {
     assembleiasProximas,
     documentosRecentes,
     nFracoesProprias: ids.length,
+    titularidadesTerminadas,
   });
 });
 

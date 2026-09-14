@@ -79,6 +79,12 @@ app.use(flash());
 // sem atividade. Corre antes das rotas e dos ficheiros estáticos não conta.
 app.use(sessao.middlewareSessao);
 
+// A conta continua válida? O estado da conta e a confirmação de email eram
+// verificados apenas no login; esta passagem garante que desativar uma conta
+// corta de imediato uma sessão já aberta (a autorização por condomínio e por
+// fração já é revalidada em cada pedido).
+app.use(sessao.verificarContaAtiva);
+
 // ── Variáveis globais nas views ────────────────────────────────────
 app.use(async (req, res, next) => {
   res.locals.success_msg = req.flash('success_msg');
@@ -188,6 +194,9 @@ app.use('/admin', require('./routes/fornecedores'));
 app.use('/admin', require('./routes/relatorios'));
 app.use('/admin', require('./routes/placeholders'));
 app.use('/condomino', require('./routes/condomino'));
+// "Preparar saída do condomínio" (fluxo próprio do condómino, distinto de
+// terminar sessão) — ver routes/saida-condominio.js.
+app.use('/condomino', require('./routes/saida-condominio'));
 // Link temporário de documento (destinatários sem conta) — rota pública
 // protegida por token assinado e com validade limitada; ver o cabeçalho de
 // routes/documentos-link.js. Nunca serve documentos sem token válido.

@@ -1,0 +1,121 @@
+{{!-- "Preparar saída do condomínio" — passo 1: explicar e permitir descarregar a
+     informação. Distinto de "Terminar sessão" (que só fecha o browser). --}}
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Preparar saída do condomínio</h1>
+    <p class="subtitle">{{condominio.designacao}}</p>
+  </div>
+  <a href="/condomino" class="btn btn-outline-secondary">
+    <span class="material-symbols-outlined me-1" aria-hidden="true">arrow_back</span>Voltar à minha área
+  </a>
+</div>
+
+<div class="alert alert-warning" role="status">
+  <span class="fw-semibold">Está a preparar a saída deste condomínio.</span>
+  Este passo não encerra nada: serve para explicar o que vai acontecer e para descarregar a
+  informação a que tem direito antes de perder o acesso. Nada é apagado do condomínio.
+</div>
+
+{{#if bloqueio}}
+<div class="alert alert-danger" role="alert">
+  <span class="fw-semibold">Não é possível encerrar o acesso agora.</span> {{bloqueio}}
+</div>
+{{/if}}
+
+<div class="row g-4">
+  <div class="col-12 col-lg-7">
+    <div class="card mb-3">
+      <div class="card-header bg-white"><i class="bi bi-box-arrow-right me-1"></i>O que vai acontecer</div>
+      <div class="card-body">
+        <ul class="mb-0">
+          <li>O acesso a <strong>{{condominio.designacao}}</strong> será encerrado.</li>
+          <li>O <strong>histórico do condomínio não é apagado</strong>: quotas, pagamentos, recibos, comprovativos, documentos, assembleias e atas permanecem no condomínio.</li>
+          <li>Os registos necessários à gestão e à prestação de contas mantêm-se, mesmo que deixe de ser titular.</li>
+          <li>As suas <strong>titularidades</strong> ficam encerradas com data de fim (o histórico fica registado — não é substituído nem apagado).</li>
+          <li>A sua <strong>conta GesCondu continua ativa</strong>{{#if outrosCondominios}} (tem {{outrosCondominios}} outro(s) condomínio(s) associado(s)){{/if}}.</li>
+          <li>Para voltar a ter acesso a este condomínio será necessário um novo convite ou uma nova titularidade.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card mb-3" id="exportar">
+      <div class="card-header bg-white"><i class="bi bi-download me-1"></i>Passo 1 — Descarregar a minha informação</div>
+      <div class="card-body">
+        <p class="mb-2">
+          A exportação inclui os dados e documentos a que tem direito enquanto titular: os seus dados de
+          identificação, as suas frações{{#if fracoes.length}} ({{#each fracoes}}{{designacao}}{{#unless @last}}, {{/unless}}{{/each}}){{/if}},
+          quotas, quotas extraordinárias, pagamentos, comprovativos, recibos, documentos disponibilizados aos
+          condóminos, assembleias e comunicações gerais.
+        </p>
+        {{#unless fracoes.length}}
+        <p class="text-muted small">
+          Já não tem titularidades em vigor neste condomínio: a exportação inclui o histórico das relações que
+          teve, com as datas de início e de fim, e os documentos pessoais que o condomínio guarda sobre si.
+        </p>
+        {{/unless}}
+        <p class="text-muted small">
+          Não inclui dados pessoais de outros condóminos, comprovativos de outras frações nem documentos internos da
+          administração. A exportação é registada na auditoria e vem acompanhada de um manifesto com o que foi incluído.
+        </p>
+
+        <form action="/condomino/saida/exportar" method="POST" class="row g-2 align-items-end">
+          <div class="col-12 col-md-5">
+            <label class="form-label" for="password_exportar">Palavra-passe *</label>
+            <input type="password" class="form-control" id="password_exportar" name="password" required autocomplete="current-password" />
+          </div>
+          {{#if exige2fa}}
+          <div class="col-12 col-md-4">
+            <label class="form-label" for="codigo_2fa_exportar">Código da aplicação *</label>
+            <input type="text" class="form-control" id="codigo_2fa_exportar" name="codigo_2fa" inputmode="numeric" autocomplete="one-time-code" placeholder="000000" />
+          </div>
+          {{/if}}
+          <div class="col-12 col-md-auto">
+            <button class="btn btn-primary">
+              <span class="material-symbols-outlined me-1" aria-hidden="true">download</span>Descarregar a minha informação
+            </button>
+          </div>
+        </form>
+        {{#if exige2fa}}
+        <p class="text-muted small mt-2 mb-0">Tem a verificação em duas etapas ativa: é pedido o código atual da aplicação autenticadora.</p>
+        {{/if}}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-shield-lock me-1"></i>Passo 2 — Encerrar o acesso</div>
+      <div class="card-body">
+        <p class="mb-2">
+          Depois de descarregar o que precisa, pode encerrar o seu acesso a este condomínio. Será pedida
+          novamente a confirmação (palavra-passe{{#if exige2fa}} e código de autenticação{{/if}}) e uma
+          declaração explícita de que compreende as consequências.
+        </p>
+        <a class="btn btn-outline-danger {{#if bloqueio}}disabled{{/if}}" href="/condomino/saida/confirmar">
+          <span class="material-symbols-outlined me-1" aria-hidden="true">link_off</span>Continuar para encerrar o acesso
+        </a>
+        <a class="btn btn-link" href="/condomino">Não encerrar agora</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-5">
+    <div class="card mb-3">
+      <div class="card-header bg-white"><i class="bi bi-info-circle me-1"></i>Não confundir com</div>
+      <div class="card-body">
+        <p class="mb-2"><strong>Terminar sessão</strong> — apenas fecha a sessão neste dispositivo; não altera nada nas suas relações com os condomínios.</p>
+        <p class="mb-0"><strong>Transferir administração</strong> — se administra o condomínio e quer passar essa função a outra pessoa, esse é um processo próprio (a entregar em breve) e não passa por aqui.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-person-check me-1"></i>O que mantém</div>
+      <div class="card-body">
+        <ul class="mb-0">
+          <li>A sua conta GesCondu e a palavra-passe.</li>
+          <li>O acesso aos outros condomínios{{#if outrosCondominios}} ({{outrosCondominios}}){{/if}}.</li>
+          <li>Os documentos que já descarregou consigo.</li>
+          <li>O direito a pedir, mais tarde, a informação a que tinha direito — contacte o administrador do condomínio.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>

@@ -4,7 +4,8 @@ const {
   Pagamento,
   Despesa,
   ContaBancaria,
-  OrcamentoItem,
+  Orcamento,
+  OrcamentoRubrica,
 } = require('../models');
 const { toCents, fromCents } = require('./money');
 const { saldoContaMovimentos } = require('./movimentos');
@@ -107,19 +108,34 @@ async function resumoCondominio(condominioId) {
   };
 }
 
-// Execução global do orçamento de um ano.
-async function resumoOrcamento(ano = new Date().getFullYear()) {
-  const [orcamentado, executado] = await Promise.all([
-    OrcamentoItem.sum('valor_orcamentado', { where: { ano } }),
-    Despesa.sum('valor', { where: { competencia_ano: ano, estado: { [Op.ne]: 'anulada' } } }),
+// Execução do orçamento de um ano.
+//
+// MULTI-CONDOMÍNIO: `condominioId` é obrigatório na prática — o orçamento
+// orçamentado é lido do modelo ATUAL (`orcamentos` + `orcamento_rubricas`), que
+// tem `condominio_id`, e as despesas são filtradas pelo mesmo condomínio. Sem
+// âmbito definido devolvem-se zeros em vez de somar todos os condomínios (a
+// versão anterior somava `orcamento_itens` — tabela legada, sem condomínio, já
+// migrada para o modelo novo e partilhada por todos os condomínios).
+async function resumoOrcamento(ano = new Date().getFullYear(), condominioId = null) {
+  if (!condominioId) {
+    return { ano, orcamentado: 0, executado: 0, percentagem: 0 };
+  }
+  const [orcamento, executado] = await Promise.all([
+    Orcamento.findOne({
+      where: { condominio_id: condominioId, ano, estado: { [Op.ne]: 'anulado' } },
+      include: [{ model: OrcamentoRubrica, as: 'rubricas', where: { ativo: true }, required: false }],
+      order: [['data_inicio', 'DESC']],
+    }),
+    Despesa.sum('valor', { where: { condominio_id: condominioId, competencia_ano: ano, estado: { [Op.ne]: 'anulada' } } }),
   ]);
-  const oC = toCents(orcamentado);
-  const eC = toCents(executado);
+  const orcamentadoC = (orcamento ? orcamento.rubricas || [] : []).reduce((s, r) => s + toCents(r.valor_anual), 0);
+  const executadoC = toCents(executado);
+  const eC = orcamentadoC ? Math.round((executadoC / orcamentadoC) * 100) : 0;
   return {
     ano,
-    orcamentado: fromCents(oC),
-    executado: fromCents(eC),
-    percentagem: oC > 0 ? Math.round((eC / oC) * 100) : 0,
+    orcamentado: fromCents(orcamentadoC),
+    executado: fromCents(executadoC),
+    percentagem: orcamentadoC > 0 ? eC : 0,
   };
 }
 
