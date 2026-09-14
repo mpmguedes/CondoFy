@@ -1,0 +1,96 @@
+{{!-- Mockup 3 — Relatório financeiro (balancete) tal como sai em PDF, com a
+     mesma linguagem visual dos recibos: cabeçalho, tabelas com faixa azul-marinho
+     e blocos de totais. Valores fictícios. --}}
+<div class="mk" role="img" aria-label="Exemplo do relatório financeiro do GesCondu: receitas com valor orçamentado, lançado e recebido, despesas por rubrica com faturado e pago, resultado do período, dívida dos condóminos e saldo das contas bancárias.">
+  <div class="mk-topo">
+    <span class="mk-pontos" aria-hidden="true"><span></span><span></span><span></span></span>
+    <span class="mk-url">gescondu.xyz/admin/relatorios/financeiro</span>
+  </div>
+
+  <div class="mk-principal">
+    <div class="mk-cabeca">
+      <div>
+        <p class="mk-titulo">Relatório financeiro</p>
+        <p class="mk-sub">Período de 01/01/2026 a 31/12/2026 · Orçamento 2026</p>
+      </div>
+      <span class="mk-botoes">
+        <span class="mk-botao mk-botao-suave">Detalhe</span>
+        <span class="mk-botao">Gerar relatório PDF</span>
+      </span>
+    </div>
+
+    <div class="mk-conteudo">
+      <div class="mk-cartao">
+        <div class="mk-cartao-titulo"><span>Receitas</span><span class="mk-meta">Rubrica · orçamentado · lançado · recebido</span></div>
+        <table class="mk-tabela">
+          <colgroup>
+          <col />
+          <col class="num" />
+          <col class="num" />
+          <col class="num" />
+          <col class="num" />
+          </colgroup>
+          <thead>
+            <tr><th>Rubrica</th><th class="mk-num">Orçamentado</th><th class="mk-num">Lançado</th><th class="mk-num">Recebido</th><th class="mk-num">Em dívida</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Quotas ordinárias — 2026</td><td class="mk-num">9.000,00 €</td><td class="mk-num">9.000,00 €</td><td class="mk-num">8.340,00 €</td><td class="mk-num">660,00 €</td></tr>
+            <tr><td>Quota extraordinária — obras de fachada</td><td class="mk-num">9.000,00 €</td><td class="mk-num">9.000,00 €</td><td class="mk-num">7.020,00 €</td><td class="mk-num">1.980,00 €</td></tr>
+            <tr><td class="mk-forte">Total</td><td class="mk-num mk-forte">18.000,00 €</td><td class="mk-num mk-forte">18.000,00 €</td><td class="mk-num mk-forte">15.360,00 €</td><td class="mk-num mk-forte">2.640,00 €</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mk-cartao">
+        <div class="mk-cartao-titulo"><span>Despesas</span><span class="mk-meta">Rubrica · orçamentado · faturado · pago</span></div>
+        <table class="mk-tabela">
+          <colgroup>
+          <col />
+          <col class="num" />
+          <col class="num" />
+          <col class="num" />
+          <col class="num" />
+          </colgroup>
+          <thead>
+            <tr><th>Rubrica</th><th class="mk-num">Orçamentado</th><th class="mk-num">Faturado</th><th class="mk-num">Pago</th><th class="mk-num">Por pagar</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Elevadores</td><td class="mk-num">2.400,00 €</td><td class="mk-num">2.350,00 €</td><td class="mk-num">2.350,00 €</td><td class="mk-num">0,00 €</td></tr>
+            <tr><td>Eletricidade</td><td class="mk-num">1.800,00 €</td><td class="mk-num">1.320,00 €</td><td class="mk-num">1.200,00 €</td><td class="mk-num">120,00 €</td></tr>
+            <tr><td>Limpeza</td><td class="mk-num">1.440,00 €</td><td class="mk-num">1.440,00 €</td><td class="mk-num">1.440,00 €</td><td class="mk-num">0,00 €</td></tr>
+            <tr><td class="mk-forte">Total</td><td class="mk-num mk-forte">5.640,00 €</td><td class="mk-num mk-forte">5.110,00 €</td><td class="mk-num mk-forte">4.990,00 €</td><td class="mk-num mk-forte">120,00 €</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mk-stats">
+        <div class="mk-stat">
+          <div class="mk-stat-rotulo">Resultado do período</div>
+          <div class="mk-stat-valor mk-stat-positivo" data-hp-contar="1025000" data-hp-formato="eur">10.250,00 €</div>
+          <div class="mk-stat-sub">receitas lançadas − despesas faturadas</div>
+        </div>
+        <div class="mk-stat">
+          <div class="mk-stat-rotulo">Dívida dos condóminos</div>
+          <div class="mk-stat-valor mk-stat-alerta" data-hp-contar="264000" data-hp-formato="eur">2.640,00 €</div>
+          <div class="mk-stat-sub">inclui valores anteriores ao período</div>
+        </div>
+        <div class="mk-stat">
+          <div class="mk-stat-rotulo">Saldo das contas</div>
+          <div class="mk-stat-valor" data-hp-contar="1248050" data-hp-formato="eur">12.480,50 €</div>
+          <div class="mk-stat-sub">saldo real à data de fim</div>
+        </div>
+      </div>
+
+      <div class="mk-cartao">
+        <div class="mk-cartao-titulo"><span>Síntese e contas bancárias</span><span class="mk-meta">Incluída no PDF</span></div>
+        <div class="mk-conteudo" style="padding: 0.8em 0.75em;">
+          <div class="mk-linhas">
+            <div class="mk-linha"><span class="mk-linha-rotulo">Saldo transitado (orçamento)</span><span class="mk-linha-valor">1.250,50 €</span></div>
+            <div class="mk-linha"><span class="mk-linha-rotulo">Dívida a fornecedores</span><span class="mk-linha-valor">1.370,00 €</span></div>
+            <div class="mk-linha"><span class="mk-linha-rotulo">Fundo comum de reserva</span><span class="mk-linha-valor">2.200,00 €</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

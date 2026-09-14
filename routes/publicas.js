@@ -31,6 +31,7 @@
 // Ao rever o texto, atualizar VERSAO e ATUALIZADO (aparece nas duas páginas).
 // ─────────────────────────────────────────────────────────────────────
 const express = require('express');
+const homePublica = require('../helpers/home-publica');
 
 const router = express.Router();
 
@@ -92,6 +93,49 @@ router.get('/termos', (req, res) => {
     titulo: 'Termos de Utilização',
     legal: dadosLegais(req),
   });
+});
+
+// Pedir acesso (pública): o registo não é aberto nesta aplicação — as contas de
+// condóminos e de outros membros são criadas por convite. Esta página explica
+// como pedir acesso e apresenta o canal de contacto definido no ambiente
+// (ACESSO_EMAIL ou, na falta dele, LEGAL_EMAIL). Sem configuração, di-lo de
+// forma explícita, em vez de apresentar um endereço inventado.
+router.get('/pedir-acesso', (req, res) => {
+  res.render('publicas/pedir-acesso', {
+    layout: 'blank',
+    ...homePublica.dadosPedidoAcesso(req),
+  });
+});
+
+// ── SEO técnico: /robots.txt e /sitemap.xml ─────────────────────────
+// Servidos a partir do domínio do próprio pedido (não há domínio fixo no
+// código): funcionam em produção e em ambiente de teste sem configuração.
+// Só entram páginas públicas — as áreas autenticadas ficam excluídas.
+const PAGINAS_PUBLICAS = ['/', '/pedir-acesso', '/politica-privacidade', '/termos'];
+const AREAS_PRIVADAS = ['/admin', '/condomino', '/conta', '/login', '/logout', '/documentos'];
+
+router.get('/robots.txt', (req, res) => {
+  const base = homePublica.urlBase(req);
+  const linhas = [
+    'User-agent: *',
+    'Allow: /',
+    ...AREAS_PRIVADAS.map((area) => `Disallow: ${area}`),
+  ];
+  if (base) linhas.push(`Sitemap: ${base}/sitemap.xml`);
+  res.type('text/plain').send(`${linhas.join('\n')}\n`);
+});
+
+router.get('/sitemap.xml', (req, res) => {
+  const base = homePublica.urlBase(req);
+  if (!base) {
+    return res.status(503).type('text/plain').send('Domínio indisponível.\n');
+  }
+  const urls = PAGINAS_PUBLICAS.map(
+    (caminho) => `  <url><loc>${base}${caminho}</loc></url>`
+  ).join('\n');
+  res
+    .type('application/xml')
+    .send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
 });
 
 module.exports = router;

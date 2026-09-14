@@ -1,0 +1,103 @@
+{{!-- Mockup 1 — Painel do administrador (composição própria, com os mesmos
+     componentes, cores e tipografia da aplicação). Dados fictícios e coerentes
+     com o resto da página. --}}
+<div class="mk" role="img" aria-label="Exemplo do painel do administrador no GesCondu: quotas previstas, recebidas, valores em atraso, saldo das contas, gráfico de receitas e despesas e movimentos recentes do condomínio.">
+  <div class="mk-topo">
+    <span class="mk-pontos" aria-hidden="true"><span></span><span></span><span></span></span>
+    <span class="mk-url">gescondu.xyz/admin</span>
+  </div>
+  <div class="mk-corpo">
+    <div class="mk-lateral" aria-hidden="true">
+      <div class="mk-lateral-marca">GesCondu</div>
+      <div class="mk-lateral-grupo">Painel</div>
+      <div class="mk-item mk-item-ativo"><span class="material-symbols-outlined">dashboard</span>Painel</div>
+      <div class="mk-lateral-grupo">Condomínio</div>
+      <div class="mk-item"><span class="material-symbols-outlined">apartment</span>Frações</div>
+      <div class="mk-item"><span class="material-symbols-outlined">groups</span>Condóminos</div>
+      <div class="mk-lateral-grupo">Finanças</div>
+      <div class="mk-item"><span class="material-symbols-outlined">account_balance_wallet</span>Orçamento</div>
+      <div class="mk-item"><span class="material-symbols-outlined">receipt_long</span>Quotas</div>
+      <div class="mk-item"><span class="material-symbols-outlined">credit_card</span>Despesas</div>
+      <div class="mk-item"><span class="material-symbols-outlined">account_balance</span>Contas</div>
+      <div class="mk-lateral-grupo">Documentos</div>
+      <div class="mk-item"><span class="material-symbols-outlined">folder</span>Documentos</div>
+    </div>
+
+    <div class="mk-principal">
+      <div class="mk-cabeca">
+        <div>
+          <p class="mk-titulo">Painel</p>
+          <p class="mk-sub">Condomínio Jardins do Tejo · exercício de 2026</p>
+        </div>
+        <span class="mk-botoes">
+          <span class="mk-botao mk-botao-suave">2026</span>
+          <span class="mk-botao">Gerar quotas</span>
+        </span>
+      </div>
+
+      <div class="mk-conteudo">
+        <div class="mk-stats">
+          <div class="mk-stat">
+            <div class="mk-stat-rotulo">Quotas previstas</div>
+            <div class="mk-stat-valor" data-hp-contar="240000" data-hp-formato="eur">2.400,00 €</div>
+            <div class="mk-stat-sub">mês de setembro</div>
+          </div>
+          <div class="mk-stat">
+            <div class="mk-stat-rotulo">Quotas recebidas</div>
+            <div class="mk-stat-valor mk-stat-positivo" data-hp-contar="224000" data-hp-formato="eur">2.240,00 €</div>
+            <div class="mk-stat-sub">93% do previsto</div>
+          </div>
+          <div class="mk-stat">
+            <div class="mk-stat-rotulo">Em atraso</div>
+            <div class="mk-stat-valor mk-stat-alerta" data-hp-contar="16000" data-hp-formato="eur">160,00 €</div>
+            <div class="mk-stat-sub">2 frações</div>
+          </div>
+          <div class="mk-stat">
+            <div class="mk-stat-rotulo">Saldo das contas</div>
+            <div class="mk-stat-valor" data-hp-contar="1248050" data-hp-formato="eur">12.480,50 €</div>
+            <div class="mk-stat-sub">3 contas bancárias</div>
+          </div>
+        </div>
+
+        <div class="mk-cartao">
+          <div class="mk-cartao-titulo">
+            <span>Receitas e despesas por mês</span>
+            <span class="mk-meta">Receitas · Despesas</span>
+          </div>
+          <div class="mk-grafico" aria-hidden="true">
+            <div class="mk-barra" style="--v: 58%"><span class="mk-barra-dupla"></span><span class="mk-barra-legenda">Jan</span></div>
+            <div class="mk-barra" style="--v: 72%"><span class="mk-barra-dupla"></span><span class="mk-barra-legenda">Fev</span></div>
+            <div class="mk-barra" style="--v: 64%"><span class="mk-barra-dupla"></span><span class="mk-barra-legenda">Mar</span></div>
+            <div class="mk-barra" style="--v: 81%"><span class="mk-barra-dupla"></span><span class="mk-barra-legenda">Abr</span></div>
+            <div class="mk-barra" style="--v: 69%"><span class="mk-barra-dupla"></span><span class="mk-barra-legenda">Mai</span></div>
+            <div class="mk-barra" style="--v: 92%"><span class="mk-barra-dupla"></span><span class="mk-barra-legenda">Jun</span></div>
+            <div class="mk-barra" style="--v: 76%"><span class="mk-barra-dupla"></span><span class="mk-barra-legenda">Jul</span></div>
+            <div class="mk-barra" style="--v: 66%"><span class="mk-barra-dupla"></span><span class="mk-barra-legenda">Ago</span></div>
+            <div class="mk-barra" style="--v: 88%"><span class="mk-barra-dupla"></span><span class="mk-barra-legenda">Set</span></div>
+          </div>
+        </div>
+
+        <div class="mk-cartao">
+          <div class="mk-cartao-titulo"><span>Movimentos recentes</span><span class="mk-meta">Setembro 2026</span></div>
+          <table class="mk-tabela">
+            <colgroup>
+            <col class="data" />
+            <col />
+            <col class="num" />
+            <col class="estado" />
+            </colgroup>
+            <thead>
+              <tr><th>Data</th><th>Descrição</th><th class="mk-num">Valor</th><th>Estado</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>08/09</td><td>Quota de setembro — 1.º Esq</td><td class="mk-num mk-forte">+ 75,00 €</td><td><span class="mk-etiqueta mk-etiqueta-ok">Recebido</span></td></tr>
+              <tr><td>08/09</td><td>Quota de setembro — 2.º Dto</td><td class="mk-num mk-forte">+ 75,00 €</td><td><span class="mk-etiqueta mk-etiqueta-ok">Recebido</span></td></tr>
+              <tr><td>10/09</td><td>Eletricidade — EDP Comercial</td><td class="mk-num mk-forte">- 110,00 €</td><td><span class="mk-etiqueta mk-etiqueta-info">Pago</span></td></tr>
+              <tr><td>12/09</td><td>Limpeza — Limpezas Almeida</td><td class="mk-num mk-forte">- 120,00 €</td><td><span class="mk-etiqueta mk-etiqueta-neutra">Registada</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

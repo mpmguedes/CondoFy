@@ -76,6 +76,7 @@ docker compose up -d --build
 
 ## Funcionalidades
 
+- **Página pública**: homepage de apresentação do produto em `/` (o acesso é por convite), com pedido de acesso em `/pedir-acesso`, páginas legais e ligação para entrar em `/login`. Sem sessão, a raiz já não redireciona para o login.
 - **Condomínio**: configuração completa (designação, NIF, morada, IBAN, logótipo/identidade visual).
 - **Frações e condóminos**: gestão com relações por ID (proprietários/arrendatários).
 - **Financeiro**: quotas (geração manual/automática), pagamentos com distribuição parcial, despesas, contas bancárias, categorias, orçamento anual com execução.

@@ -1,0 +1,81 @@
+{{!-- Mockup 2 — Mapa de quotas: o que foi lançado, recebido e está em atraso,
+     por fração e por período (dados fictícios). --}}
+<div class="mk" role="img" aria-label="Exemplo do mapa de quotas do GesCondu: valores lançados, recebidos e em atraso, com o estado de cada fração e a permilagem respetiva.">
+  <div class="mk-topo">
+    <span class="mk-pontos" aria-hidden="true"><span></span><span></span><span></span></span>
+    <span class="mk-url">gescondu.xyz/admin/quotas</span>
+  </div>
+  <div class="mk-corpo">
+    <div class="mk-principal">
+      <div class="mk-cabeca">
+        <div>
+          <p class="mk-titulo">Quotas de 2026</p>
+          <p class="mk-sub">Condomínio Jardins do Tejo · 8 frações</p>
+        </div>
+        <span class="mk-botoes">
+          <span class="mk-botao mk-botao-suave">Mapa</span>
+          <span class="mk-botao mk-botao-suave">Recibos</span>
+          <span class="mk-botao">Emitir recibos</span>
+        </span>
+      </div>
+
+      <div class="mk-conteudo">
+        <div class="mk-stats">
+          <div class="mk-stat">
+            <div class="mk-stat-rotulo">Lançado no ano</div>
+            <div class="mk-stat-valor" data-hp-contar="900000" data-hp-formato="eur">9.000,00 €</div>
+            <div class="mk-stat-sub">12 quotas por fração</div>
+          </div>
+          <div class="mk-stat">
+            <div class="mk-stat-rotulo">Recebido</div>
+            <div class="mk-stat-valor mk-stat-positivo" data-hp-contar="834000" data-hp-formato="eur">8.340,00 €</div>
+            <div class="mk-stat-sub">93% do lançado</div>
+          </div>
+          <div class="mk-stat">
+            <div class="mk-stat-rotulo">Em atraso</div>
+            <div class="mk-stat-valor mk-stat-alerta" data-hp-contar="66000" data-hp-formato="eur">660,00 €</div>
+            <div class="mk-stat-sub">2 frações com valores vencidos</div>
+          </div>
+        </div>
+
+        <div class="mk-cartao">
+          <div class="mk-cartao-titulo"><span>Por fração</span><span class="mk-meta">Permilagem · pago · em dívida</span></div>
+          <table class="mk-tabela">
+            <colgroup>
+            <col />
+            <col class="estreita" />
+            <col class="num" />
+            <col class="num" />
+            <col class="num" />
+            <col class="estado" />
+            </colgroup>
+            <thead>
+              <tr><th>Fração</th><th class="mk-num">‰</th><th class="mk-num">Lançado</th><th class="mk-num">Recebido</th><th class="mk-num">Em dívida</th><th>Estado</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>1.º Esq</td><td class="mk-num">125</td><td class="mk-num">1.125,00 €</td><td class="mk-num">1.125,00 €</td><td class="mk-num">0,00 €</td><td><span class="mk-etiqueta mk-etiqueta-ok">Em dia</span></td></tr>
+              <tr><td>1.º Dto</td><td class="mk-num">125</td><td class="mk-num">1.125,00 €</td><td class="mk-num">1.050,00 €</td><td class="mk-num">75,00 €</td><td><span class="mk-etiqueta mk-etiqueta-aviso">1 em atraso</span></td></tr>
+              <tr><td>2.º Esq</td><td class="mk-num">125</td><td class="mk-num">1.125,00 €</td><td class="mk-num">1.125,00 €</td><td class="mk-num">0,00 €</td><td><span class="mk-etiqueta mk-etiqueta-ok">Em dia</span></td></tr>
+              <tr><td>2.º Dto</td><td class="mk-num">125</td><td class="mk-num">1.125,00 €</td><td class="mk-num">975,00 €</td><td class="mk-num">150,00 €</td><td><span class="mk-etiqueta mk-etiqueta-erro">2 em atraso</span></td></tr>
+              <tr><td>3.º Esq</td><td class="mk-num">125</td><td class="mk-num">1.125,00 €</td><td class="mk-num">1.140,00 €</td><td class="mk-num">0,00 €</td><td><span class="mk-etiqueta mk-etiqueta-info">Adiantado</span></td></tr>
+              <tr><td>3.º Dto</td><td class="mk-num">125</td><td class="mk-num">1.125,00 €</td><td class="mk-num">1.125,00 €</td><td class="mk-num">0,00 €</td><td><span class="mk-etiqueta mk-etiqueta-ok">Em dia</span></td></tr>
+              <tr><td>4.º Esq</td><td class="mk-num">125</td><td class="mk-num">1.125,00 €</td><td class="mk-num">1.125,00 €</td><td class="mk-num">0,00 €</td><td><span class="mk-etiqueta mk-etiqueta-ok">Em dia</span></td></tr>
+              <tr><td>4.º Dto</td><td class="mk-num">125</td><td class="mk-num">1.125,00 €</td><td class="mk-num">675,00 €</td><td class="mk-num">450,00 €</td><td><span class="mk-etiqueta mk-etiqueta-erro">Em atraso</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="mk-cartao">
+          <div class="mk-cartao-titulo"><span>Quota extraordinária — obras de fachada</span><span class="mk-etiqueta mk-etiqueta-info">6 parcelas</span></div>
+          <div class="mk-conteudo" style="padding: 0.8em 0.75em;">
+            <div class="mk-linha">
+              <span class="mk-linha-rotulo">Recebido</span>
+              <span class="mk-progresso mk-progresso-ok" style="flex: 1 1 40%;"><i style="--v: 78%"></i></span>
+              <span class="mk-linha-valor">7.020,00 € de 9.000,00 €</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

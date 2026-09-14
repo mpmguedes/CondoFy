@@ -1,0 +1,102 @@
+{{!-- ═══════════════════════════════════════════════════════════════
+     Pedir acesso ao GesCondu
+
+     Explica, sem prometer nada que não exista: o acesso é por convite, como se
+     pede e o que é preciso indicar. O canal de contacto vem da configuração
+     (ACESSO_EMAIL, com LEGAL_EMAIL como alternativa); se não estiver definido,
+     a página di-lo claramente em vez de inventar um endereço.
+
+     Não há formulário de registo: o registo público não existe nesta aplicação,
+     e as contas são criadas por convite de quem administra o condomínio.
+     ═══════════════════════════════════════════════════════════════ --}}
+{{> _home-cabecalho}}
+
+<main id="conteudo">
+  <section class="hp-sec" aria-labelledby="hpAcessoTitulo">
+    <div class="hp-wrap">
+      <div class="hp-cabeca hp-reveal">
+        <p class="hp-eyebrow">Acesso por convite</p>
+        <h1 class="hp-h2 hp-mt-2" id="hpAcessoTitulo">Pedir acesso ao GesCondu</h1>
+        <p class="hp-lead">
+          O GesCondu está em utilização por condomínios e o acesso é feito por convite. Se
+          administra um condomínio e quer conhecer a plataforma, comece por pedir acesso:
+          explicamos o que é necessário e, estando tudo em ordem, enviamos o convite para criar
+          a conta.
+        </p>
+      </div>
+
+      <div class="hp-grid hp-grid-3 hp-mt-5">
+        <article class="hp-card hp-reveal">
+          <div class="hp-card-topo">
+            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">edit_note</span></span>
+            <h2 class="hp-h4">1. Escreva-nos</h2>
+          </div>
+          <p>Diga-nos quem é e qual é o condomínio. Quanto mais claro for o pedido, mais rápida é a resposta.</p>
+        </article>
+        <article class="hp-card hp-reveal hp-reveal-2">
+          <div class="hp-card-topo">
+            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">support_agent</span></span>
+            <h2 class="hp-h4">2. Confirmamos consigo</h2>
+          </div>
+          <p>Vemos se o GesCondu se adequa ao que precisa e combinamos os passos seguintes.</p>
+        </article>
+        <article class="hp-card hp-reveal hp-reveal-3">
+          <div class="hp-card-topo">
+            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">mark_email_read</span></span>
+            <h2 class="hp-h4">3. Recebe o convite</h2>
+          </div>
+          <p>O convite chega por email com uma ligação para definir a palavra-passe e entrar no GesCondu.</p>
+        </article>
+      </div>
+
+      {{#if acessoLink}}
+      <div class="hp-cta-final hp-mt-5 hp-reveal">
+        <h2 class="hp-h2">Peça acesso por email</h2>
+        <p class="hp-lead">
+          A mensagem já vai preparada com os dados que precisamos. Basta preencher e enviar.
+        </p>
+        <div class="hp-acoes hp-acoes-centro hp-mt-4">
+          <a class="btn btn-primary hp-btn-grande" href="{{acessoLink}}">
+            <span class="material-symbols-outlined me-1" aria-hidden="true">mail</span>
+            Escrever para {{acessoEmail}}
+          </a>
+          <a class="btn btn-outline-light hp-btn-grande" href="/login">Já tenho conta — Entrar</a>
+        </div>
+        <p class="hp-nota-convite hp-mt-3" style="justify-content: center;">
+          <span class="material-symbols-outlined" aria-hidden="true">info</span>
+          Acesso atualmente disponível por convite.
+        </p>
+      </div>
+      {{else}}
+      <div class="alert alert-warning hp-mt-5" role="status">
+        <span class="fw-semibold">Canal de contacto por configurar nesta instalação.</span>
+        O endereço para pedidos de acesso é definido pela variável <code>ACESSO_EMAIL</code>
+        (ou <code>LEGAL_EMAIL</code>) no ficheiro <code>.env</code> do servidor. Enquanto não
+        estiver definido, não é apresentado nenhum endereço inventado.
+      </div>
+      {{/if}}
+
+      <div class="hp-card hp-mt-5 hp-reveal">
+        <h2 class="hp-h4">O que ajuda indicar</h2>
+        <ul class="hp-lista mt-2">
+          <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Nome de quem pede e forma de contacto.</li>
+          <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Designação e localidade do condomínio.</li>
+          <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Número aproximado de frações.</li>
+          <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Função: administrador do condomínio, empresa de administração ou condómino.</li>
+        </ul>
+      </div>
+
+      <p class="hp-realce hp-mt-4">
+        Não há registo público nem criação livre de contas. As contas de condóminos e de outros
+        membros são criadas por convite de quem administra o condomínio — é isso que mantém a
+        informação de cada condomínio reservada a quem deve ter acesso.
+      </p>
+
+      <p class="hp-mt-4">
+        <a class="hp-link" href="/">Voltar à página inicial do GesCondu</a>
+      </p>
+    </div>
+  </section>
+</main>
+
+{{> _home-rodape}}

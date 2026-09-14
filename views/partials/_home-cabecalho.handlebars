@@ -1,0 +1,47 @@
+{{!-- Cabeçalho da homepage pública e das páginas públicas de produto.
+     Reaproveita a barra da aplicação (mesmo gradiente, mesma tipografia e o
+     logótipo já usado na barra lateral e nas páginas de entrada) e não inclui
+     controlos de aparência: esses existem apenas depois de iniciar sessão.
+
+     Menu mobile em <details>: funciona sem JavaScript.
+     As ligações de secção usam «/#…» para funcionarem tanto na homepage como
+     nas páginas de produto. --}}
+<a class="hp-skip" href="#conteudo">Saltar para o conteúdo</a>
+
+<header class="hp-nav">
+  <div class="hp-wrap hp-nav-linha">
+    <a class="hp-marca" href="/" title="GesCondu — início">
+      <img src="/img/gescondu-logo-ativo.png" alt="GesCondu" width="735" height="327" />
+    </a>
+
+    <nav class="hp-nav-menu" aria-label="Navegação principal">
+      <a class="hp-nav-link" href="/#plataforma">Plataforma</a>
+      <a class="hp-nav-link" href="/#funcionalidades">Funcionalidades</a>
+      <a class="hp-nav-link" href="/#para-quem">Para quem é</a>
+      <a class="hp-nav-link" href="/#seguranca">Segurança</a>
+      <a class="hp-nav-link" href="/#faq">FAQ</a>
+      <span class="hp-nav-acoes">
+        <a class="btn btn-sm btn-outline-light" href="/login">Entrar</a>
+        <a class="btn btn-sm btn-primary" href="/pedir-acesso">Pedir acesso</a>
+      </span>
+    </nav>
+
+    <details class="hp-menu-mobile" id="hpMenuMobile">
+      <summary aria-label="Abrir menu">
+        <span class="material-symbols-outlined" aria-hidden="true">menu</span>
+        Menu
+      </summary>
+      <div class="hp-menu-painel">
+        <a class="hp-nav-link" href="/#plataforma">Plataforma</a>
+        <a class="hp-nav-link" href="/#funcionalidades">Funcionalidades</a>
+        <a class="hp-nav-link" href="/#para-quem">Para quem é</a>
+        <a class="hp-nav-link" href="/#seguranca">Segurança</a>
+        <a class="hp-nav-link" href="/#faq">FAQ</a>
+        <div class="hp-acoes">
+          <a class="btn btn-sm btn-outline-light" href="/login">Entrar</a>
+          <a class="btn btn-sm btn-primary" href="/pedir-acesso">Pedir acesso</a>
+        </div>
+      </div>
+    </details>
+  </div>
+</header>
