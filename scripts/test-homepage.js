@@ -143,9 +143,9 @@ const TERMOS_PT = [
 
 // ── 3. Secções e mockups obrigatórios ─────────────────────────────
 const SECOES = [
-  'problema', 'plataforma', 'funcionalidades', 'administrador', 'condomino',
-  'transparencia', 'automacao', 'documentos', 'relatorios', 'portugal',
-  'para-quem', 'acessibilidade', 'seguranca', 'faq', 'conteudo',
+  'problema', 'para-quem', 'plataforma', 'funcionalidades', 'em-utilizacao', 'demonstracoes',
+  'administrador', 'condomino', 'transparencia', 'automacao', 'documentos', 'relatorios',
+  'acessibilidade', 'seguranca', 'portugal', 'titularidade', 'faq', 'conteudo',
 ];
 
 async function main() {
@@ -295,6 +295,35 @@ async function main() {
   for (const ficheiro of ['views/publicas/home.handlebars', 'views/publicas/pedir-acesso.handlebars', 'views/partials/_home-cabecalho.handlebars', 'views/partials/_home-rodape.handlebars']) {
     assert.ok(!ler(ficheiro).includes('_tema-toggle'), `${ficheiro}: sem controlos de aparência`);
   }
+
+  // ── Mudança de proprietário: as mensagens de confiança ────────────
+  // A funcionalidade existe e está validada; a homepage comunica-a sem entrar em
+  // detalhes técnicos e sem prometer nada que a aplicação não faça. O texto é
+  // comparado com os espaços normalizados (no HTML vem partido por linhas).
+  const htmlSeguido = html.replace(/\s+/g, ' ');
+  for (const mensagem of [
+    'O condomínio continua. As pessoas mudam.',
+    'o histórico do condomínio mantém-se — mas o acesso de cada pessoa continua separado',
+    'O novo proprietário recebe o seu próprio acesso.',
+    'não recebe a conta, as credenciais ou os dados privados do proprietário anterior',
+    'Antes de encerrar o acesso, o anterior titular pode preparar a sua saída',
+    'Cada pessoa tem o seu próprio acesso',
+    'O histórico do condomínio não desaparece porque as pessoas mudam.',
+    'Vai deixar o condomínio?',
+    'as mudanças de proprietário não interrompem a continuidade do condomínio',
+  ]) {
+    assert.ok(htmlSeguido.includes(mensagem), `titularidade: mensagem presente na homepage (${mensagem})`);
+  }
+  assert.ok(/id="hpTitularidadeTitulo">O condomínio continua\. As pessoas mudam\.<\/h2>/.test(html), 'titularidade: título exato');
+  for (const proibido of ['fracao_titularidades', 'utilizador_condominio', 'middleware', 'user_id', 'tenant', 'sessão antiga']) {
+    assert.ok(!html.includes(proibido), `titularidade: sem detalhes de implementação (${proibido})`);
+  }
+  assert.ok(!/votar na plataforma|vota[çc][ãa]o eletr[óo]nica/i.test(html), 'titularidade: sem promessa de votações online');
+  assert.ok(/sujeitos a vota[çc][ãa]o|assinalados como sujeitos a vota[çc][ãa]o/.test(html),
+    'assembleias: os pontos sujeitos a votação são apresentados como marcação na ordem de trabalhos');
+  // A demonstração da mudança de proprietário é um mockup real descrito.
+  assert.ok(mockups.some((m) => semAcentos(m).toLowerCase().includes('mudanca de proprietario')),
+    'titularidade: visual descrito para leitores de ecrã');
 
   // ── Honestidade ───────────────────────────────────────────────────
   for (const [regex, motivo] of PROIBIDO) {

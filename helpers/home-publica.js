@@ -23,12 +23,44 @@ const RECURSO_JS = '/js/home.js?v=20260910b';
 
 const TITULO_HOME = 'GesCondu — Gestão de condomínios simples, organizada e transparente';
 const DESCRICAO_HOME =
-  'O GesCondu centraliza a gestão do condomínio: quotas, contas, documentos, assembleias, comunicações e muito mais numa única plataforma.';
+  'O GesCondu centraliza a gestão do condomínio: quotas, recibos, despesas, documentos, assembleias e comunicações numa plataforma portuguesa, criada para a realidade dos condomínios em Portugal.';
 const DESCRICAO_ACESSO =
   'O acesso ao GesCondu está disponível por convite. Veja como pedir acesso à plataforma de gestão de condomínios.';
 
 // ── Perguntas frequentes (texto visível + JSON-LD) ──────────────────
 const FAQ = [
+  {
+    pergunta: 'O GesCondu é português?',
+    resposta: [
+      'Sim. É um produto português, pensado desde o início para a realidade dos condomínios em Portugal: usa a linguagem e os processos desta realidade — frações e permilagem, quotas ordinárias e extraordinárias, orçamento anual, prestação de contas em assembleia, ata, recibo e documentação do edifício.',
+    ],
+  },
+  {
+    pergunta: 'Os dados de cada condomínio ficam separados?',
+    resposta: [
+      'Sim. Cada condomínio tem o seu espaço próprio e a informação de um não se mistura com a dos restantes. O acesso é sempre verificado no momento do pedido: cada pessoa vê apenas os condomínios a que está associada e as frações que a sua relação atual justifica.',
+    ],
+  },
+  {
+    pergunta: 'O que acontece quando uma fração muda de proprietário?',
+    resposta: [
+      'A fração continua no mesmo condomínio e o histórico mantém-se: quotas, pagamentos, recibos, documentos e atas ficam onde estão. O que é atualizado é a relação das pessoas com a fração — quem era titular deixa de o ser e o novo proprietário passa a ter o seu próprio acesso.',
+      'O novo proprietário não recebe a conta nem os dados privados do proprietário anterior: cada pessoa tem a sua conta e as suas permissões.',
+    ],
+  },
+  {
+    pergunta: 'O que acontece à conta do proprietário anterior?',
+    resposta: [
+      'Continua a ser dele. Antes de encerrar o acesso ao condomínio, o anterior titular pode preparar a saída e descarregar a informação que lhe diz respeito; depois da confirmação, o acesso a esse condomínio é revogado e o histórico do condomínio permanece intacto.',
+      'Se essa pessoa tiver outros condomínios associados, a conta GesCondu continua ativa e o acesso aos restantes não é afetado.',
+    ],
+  },
+  {
+    pergunta: 'O histórico do condomínio perde-se quando as pessoas mudam?',
+    resposta: [
+      'Não. A informação necessária à gestão e à prestação de contas — quotas, pagamentos, recibos, despesas, documentos e atas — continua associada ao histórico do condomínio. A visibilidade dessa informação depende sempre das permissões de quem a consulta.',
+    ],
+  },
   {
     pergunta: 'O GesCondu substitui o administrador do condomínio?',
     resposta: [

@@ -36,9 +36,8 @@
         <h1 class="hp-h1" id="hpHeroTitulo">A gestão do seu condomínio, finalmente num só lugar.</h1>
 
         <p class="hp-lead">
-          Quotas, contas, documentos, assembleias e comunicação organizados numa única
-          plataforma — para uma administração mais simples e transparente, tanto para
-          quem administra como para quem vive no condomínio.
+          Quotas, recibos, despesas, documentos, assembleias e comunicações, organizados numa
+          plataforma criada para a realidade dos condomínios em Portugal.
         </p>
 
         <div class="hp-acoes hp-hero-acoes">
@@ -63,7 +62,7 @@
       </div>
 
       <div class="hp-hero-mock hp-reveal">
-        {{> _home-mock-dashboard}}
+        {{> _home-mock-financas}}
       </div>
     </div>
   </section>
@@ -166,216 +165,215 @@
     </div>
   </section>
 
-  {{!-- ── 4. A plataforma por áreas ──────────────────────────────── --}}
-  <section class="hp-sec hp-sec-muted" id="plataforma" aria-labelledby="hpPlataformaTitulo">
+  {{!-- ── 4. Para quem é ───────────────────────────────────────── --}}
+  <section class="hp-sec hp-sec-muted" id="para-quem" aria-labelledby="hpParaQuemTitulo">
+    <div class="hp-wrap">
+      <div class="hp-cabeca hp-reveal">
+        <p class="hp-eyebrow">Para quem é</p>
+        <h2 class="hp-h2 hp-mt-2" id="hpParaQuemTitulo">Diferentes formas de administrar, a mesma organização.</h2>
+      </div>
+
+      <div class="hp-grid hp-grid-3 hp-mt-4">
+        <article class="hp-card hp-reveal">
+          <div class="hp-card-topo">
+            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">home_work</span></span>
+            <h3 class="hp-h4">Administração do próprio condomínio</h3>
+          </div>
+          <p>Quando são os próprios condóminos a assumir a administração e precisam de apoio para manter as contas, os documentos e as assembleias em ordem.</p>
+        </article>
+        <article class="hp-card hp-reveal hp-reveal-2">
+          <div class="hp-card-topo">
+            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">business_center</span></span>
+            <h3 class="hp-h4">Administrador profissional</h3>
+          </div>
+          <p>Para quem gere vários condomínios: a mesma conta dá acesso a todos, com os dados, as contas e os documentos de cada um sempre separados.</p>
+        </article>
+        <article class="hp-card hp-reveal hp-reveal-3">
+          <div class="hp-card-topo">
+            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">person</span></span>
+            <h3 class="hp-h4">Condómino</h3>
+          </div>
+          <p>Para acompanhar o seu condomínio sem depender de emails, papéis ou grupos de mensagens: quotas, recibos, documentos e assembleias num só acesso.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  {{!-- ── 5. O produto por áreas ────────────────────────────────── --}}
+  <section class="hp-sec" id="plataforma" aria-labelledby="hpPlataformaTitulo">
     <div class="hp-wrap">
       <div class="hp-cabeca hp-reveal">
         <p class="hp-eyebrow">A plataforma</p>
         <h2 class="hp-h2 hp-mt-2" id="hpPlataformaTitulo">Tudo o que precisa para gerir o condomínio.</h2>
         <p class="hp-lead">
-          Cada área da plataforma foi pensada a partir de uma tarefa concreta da administração
-          de condomínios em Portugal — não de um modelo genérico de gestão.
+          Cada área da plataforma nasceu de uma tarefa concreta da administração de condomínios em
+          Portugal — não de um modelo genérico de gestão.
         </p>
       </div>
 
-      <div id="funcionalidades" class="hp-mt-5">
-        {{!-- Finanças --}}
-        <div class="hp-area hp-reveal">
-          <div class="hp-area-texto">
+      <div id="funcionalidades" class="hp-grid hp-grid-3 hp-mt-5">
+        <article class="hp-card hp-reveal">
+          <div class="hp-card-topo">
             <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">account_balance</span></span>
-            <h3 class="hp-h3 hp-mt-2">Finanças e orçamento</h3>
-            <p class="hp-lead">
-              Tenha uma visão clara da situação financeira do condomínio, desde o orçamento
-              anual aprovado às despesas, aos fornecedores e ao saldo das contas.
-            </p>
-            <ul>
-              <li>Orçamento anual com rubricas e distribuição por fração (permilagem).</li>
-              <li>Despesas por categoria, com fornecedor, fatura e estado de pagamento.</li>
-              <li>Contas bancárias do condomínio e respetivos movimentos.</li>
-            </ul>
+            <h3 class="hp-h4">Finanças e orçamento</h3>
           </div>
-          <div class="hp-area-mock">
-            {{> _home-mock-financas }}
-          </div>
-        </div>
+          <p>Orçamento anual com rubricas e distribuição por fração (permilagem), quotas ordinárias e extraordinárias, pagamentos e recibos.</p>
+          <ul>
+            <li>Despesas por categoria, com fornecedor, fatura e estado de pagamento.</li>
+            <li>Contas bancárias do condomínio e respetivos movimentos.</li>
+          </ul>
+        </article>
 
-        {{!-- Quotas --}}
-        <div class="hp-area hp-area-invertida hp-reveal">
-          <div class="hp-area-texto">
-            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">receipt_long</span></span>
-            <h3 class="hp-h3 hp-mt-2">Quotas e cobranças</h3>
-            <p class="hp-lead">
-              Saiba o que foi lançado, o que foi recebido e o que está em atraso — por fração,
-              por período e por tipo de quota.
-            </p>
-            <ul>
-              <li>Quotas ordinárias mensais, geradas manualmente ou de forma automática.</li>
-              <li>Quotas extraordinárias com parcelamento e plano por fração.</li>
-              <li>Pagamentos com distribuição, comprovativos anexados e recibos emitidos.</li>
-            </ul>
-          </div>
-          <div class="hp-area-mock">
-            {{> _home-mock-quotas}}
-          </div>
-        </div>
-
-        {{!-- Documentos --}}
-        <div class="hp-area hp-reveal">
-          <div class="hp-area-texto">
+        <article class="hp-card hp-reveal hp-reveal-2">
+          <div class="hp-card-topo">
             <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">folder</span></span>
-            <h3 class="hp-h3 hp-mt-2">Documentos do condomínio</h3>
-            <p class="hp-lead">
-              Centralize documentos, recibos, comprovativos, atas e apólices numa biblioteca
-              organizada por área e por ano.
-            </p>
-            <ul>
-              <li>Pastas por tipo de documento, com pesquisa e histórico.</li>
-              <li>Acesso controlado por condomínio e por perfil de utilizador.</li>
-              <li>Possibilidade de guardar no armazenamento do condomínio.</li>
-            </ul>
+            <h3 class="hp-h4">Documentos do condomínio</h3>
           </div>
-          <div class="hp-area-mock">
-            {{> _home-mock-documentos}}
-          </div>
-        </div>
+          <p>Recibos, comprovativos, faturas, convocatórias, atas e apólices numa biblioteca organizada por área e por ano, com acesso controlado.</p>
+          <ul>
+            <li>Guardados no armazenamento do próprio condomínio, quando configurado.</li>
+            <li>Cópias de segurança automáticas da informação do sistema.</li>
+          </ul>
+        </article>
 
-        {{!-- Assembleias --}}
-        <div class="hp-area hp-area-invertida hp-reveal">
-          <div class="hp-area-texto">
+        <article class="hp-card hp-reveal hp-reveal-3">
+          <div class="hp-card-topo">
             <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">forum</span></span>
-            <h3 class="hp-h3 hp-mt-2">Assembleias de condóminos</h3>
-            <p class="hp-lead">
-              Organize convocatórias, ordem de trabalhos, documentação, presenças e atas num
-              único espaço — com o histórico das assembleias anteriores.
-            </p>
-            <ul>
-              <li>Convocatória em PDF, pronta a enviar aos condóminos.</li>
-              <li>Ordem de trabalhos com pontos sujeitos a votação assinalados.</li>
-              <li>Registo de presenças por fração e permilagem presente.</li>
-              <li>Ata anexada à assembleia, consultável por quem tem acesso.</li>
-            </ul>
+            <h3 class="hp-h4">Assembleias de condóminos</h3>
           </div>
-          <div class="hp-area-mock">
-            {{> _home-mock-assembleia}}
-          </div>
-        </div>
-      </div>
+          <p>Convocatória em PDF, ordem de trabalhos, documentação, presenças e ata no mesmo espaço, com o histórico das assembleias anteriores.</p>
+          <ul>
+            <li>Pontos da ordem de trabalhos assinalados como sujeitos a votação.</li>
+            <li>Registo de presenças por fração e permilagem presente.</li>
+          </ul>
+        </article>
 
-      {{!-- Outras capacidades (sem mockup: cartões) --}}
-      <div class="hp-grid hp-grid-3 hp-mt-5">
         <article class="hp-card hp-reveal">
           <div class="hp-card-topo">
             <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">campaign</span></span>
-            <h3 class="hp-h4">Comunicações</h3>
+            <h3 class="hp-h4">Comunicação com os condóminos</h3>
           </div>
-          <p>Avisos aos condóminos, envio por email com PDF em anexo, mensagens programadas e histórico de envios.</p>
+          <p>Avisos, informação dirigida a uma fração ou a todo o condomínio, com envio por email e histórico do que foi enviado.</p>
+          <ul>
+            <li>Avisos à distância de um clique, com PDF em anexo quando faz sentido.</li>
+            <li>Envio de quotas e recibos por email, com reenvio controlado.</li>
+          </ul>
         </article>
+
         <article class="hp-card hp-reveal hp-reveal-2">
           <div class="hp-card-topo">
             <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">apartment</span></span>
             <h3 class="hp-h4">Frações e condóminos</h3>
           </div>
-          <p>Estrutura do edifício, permilagem de cada fração, proprietários, arrendatários e contactos.</p>
+          <p>Estrutura do edifício, permilagem de cada fração e contactos das pessoas ligadas a cada uma — proprietários, arrendatários e usufrutuários.</p>
+          <ul>
+            <li>A relação de cada pessoa com a fração é registada com datas de início e de fim.</li>
+            <li>Mudança de proprietário sem perder o que ficou para trás.</li>
+          </ul>
         </article>
+
         <article class="hp-card hp-reveal hp-reveal-3">
           <div class="hp-card-topo">
-            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">local_shipping</span></span>
-            <h3 class="hp-h4">Fornecedores</h3>
+            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">trending_up</span></span>
+            <h3 class="hp-h4">Relatórios</h3>
           </div>
-          <p>Ficha do fornecedor com despesas associadas, pagamentos, comprovativos e saldos em aberto.</p>
-        </article>
-        <article class="hp-card hp-reveal">
-          <div class="hp-card-topo">
-            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">mail</span></span>
-            <h3 class="hp-h4">Emails e avisos</h3>
-          </div>
-          <p>Envio de quotas e recibos por email, com registo do que foi enviado e possibilidade de reenvio.</p>
-        </article>
-        <article class="hp-card hp-reveal hp-reveal-2">
-          <div class="hp-card-topo">
-            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">cloud_sync</span></span>
-            <h3 class="hp-h4">Armazenamento e backups</h3>
-          </div>
-          <p>Documentos no armazenamento do condomínio, com backups automáticos do sistema.</p>
-        </article>
-        <article class="hp-card hp-reveal hp-reveal-3">
-          <div class="hp-card-topo">
-            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">schedule</span></span>
-            <h3 class="hp-h4">Automatizações</h3>
-          </div>
-          <p>Tarefas agendadas: lançamento automático de quotas, lembretes de pagamento e manutenção da informação.</p>
+          <p>Informação financeira clara sobre receitas, despesas e situação do condomínio, pronta a apresentar em assembleia.</p>
+          <ul>
+            <li>Orçamentado, lançado, recebido, faturado, pago e em dívida.</li>
+            <li>Relatório em PDF, para um ano completo ou para um período específico.</li>
+          </ul>
         </article>
       </div>
     </div>
   </section>
 
-  {{!-- ── 5. Para quem administra ────────────────────────────────── --}}
-  <section class="hp-sec" id="administrador" aria-labelledby="hpAdminTitulo">
+  {{!-- ── 6. O produto em utilização ────────────────────────────── --}}
+  <section class="hp-sec hp-sec-muted" id="em-utilizacao" aria-labelledby="hpEmUtilizacaoTitulo">
     <div class="hp-wrap">
-      <div class="hp-duplo">
-        <div class="hp-reveal">
-          <p class="hp-eyebrow">Para quem administra</p>
-          <h2 class="hp-h2 hp-mt-2" id="hpAdminTitulo">Mais controlo para quem administra.</h2>
-          <p class="hp-lead">
-            O GesCondu centraliza o trabalho do administrador, reduzindo a necessidade de
-            alternar entre folhas de cálculo, emails, documentos e ferramentas diferentes.
-          </p>
-          <p class="hp-realce hp-mt-4">
-            Um só sítio para lançar quotas, registar pagamentos, controlar despesas, guardar
-            documentos e prestar contas aos condóminos.
-          </p>
-          <div class="hp-grid hp-grid-2 hp-mt-4">
-            <ul class="hp-lista">
-              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Estrutura do condomínio e frações</li>
-              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Condóminos, contactos e acessos</li>
-              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Orçamento, rubricas e plano de quotas</li>
-            </ul>
-            <ul class="hp-lista">
-              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Pagamentos, comprovativos e recibos</li>
-              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Despesas, fornecedores e contas bancárias</li>
-              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Documentos, assembleias e avisos</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="hp-reveal hp-reveal-2">
-          {{> _home-mock-condominios }}
-        </div>
+      <div class="hp-cabeca hp-reveal">
+        <p class="hp-eyebrow">Em utilização</p>
+        <h2 class="hp-h2 hp-mt-2" id="hpEmUtilizacaoTitulo">Tudo o que precisa, sem procurar em vários sítios.</h2>
+        <p class="hp-lead">
+          Estas são áreas reais da plataforma, com a informação do dia a dia de um condomínio.
+          Cada exemplo mostra o que se vê e o que se faz ali.
+        </p>
       </div>
-    </div>
-  </section>
 
-  {{!-- ── 6. Portal do condómino ─────────────────────────────────── --}}
-  <section class="hp-sec hp-sec-muted" id="condomino" aria-labelledby="hpCondominoTitulo">
-    <div class="hp-wrap">
-      <div class="hp-duplo">
-        <div class="hp-reveal">
-          <p class="hp-eyebrow">Para o condómino</p>
-          <h2 class="hp-h2 hp-mt-2" id="hpCondominoTitulo">Mais transparência para quem vive no condomínio.</h2>
-          <p class="hp-lead">
-            Cada condómino encontra a informação que lhe diz respeito, de forma simples e
-            acessível — incluindo no telemóvel, que é onde a maioria vai consultar.
-          </p>
-          <div class="hp-grid hp-grid-2 hp-mt-4">
-            <ul class="hp-lista">
-              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Quotas da sua fração e o que está por pagar</li>
-              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Recibos em PDF, para consultar ou descarregar</li>
-              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Pagamentos efetuados e comprovativos</li>
-            </ul>
-            <ul class="hp-lista">
-              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Documentos do condomínio</li>
-              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Assembleias, avisos e calendário</li>
-              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Orçamento e situação financeira global</li>
+      <div id="demonstracoes" class="hp-mt-5">
+        <div class="hp-area hp-reveal">
+          <div class="hp-area-texto">
+            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">savings</span></span>
+            <h3 class="hp-h3 hp-mt-2">Painel financeiro do condomínio</h3>
+            <p class="hp-lead">
+              Quotas previstas e recebidas, valores em atraso e saldo das contas — o estado do
+              condomínio num só ecrã, com a evolução das receitas e das despesas.
+            </p>
+            <ul>
+              <li>Quotas do ano: previstas, recebidas e em atraso.</li>
+              <li>Saldo das contas do condomínio e movimentos recentes.</li>
+              <li>Gráfico de receitas e despesas ao longo do ano.</li>
             </ul>
           </div>
-          <p class="hp-realce hp-mt-4">
-            Sem precisar de pedir a folha de cálculo a ninguém e sem depender do email ou de um
-            grupo de mensagens para saber como está o condomínio.
-          </p>
+          <div class="hp-area-mock">
+            {{> _home-mock-dashboard }}
+          </div>
         </div>
 
-        <div class="hp-reveal hp-reveal-2">
-          {{> _home-mock-mobile}}
+        <div class="hp-area hp-area-invertida hp-reveal">
+          <div class="hp-area-texto">
+            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">receipt_long</span></span>
+            <h3 class="hp-h3 hp-mt-2">Quotas, pagamentos e recibos</h3>
+            <p class="hp-lead">
+              Saiba o que foi lançado, o que foi recebido e o que está em atraso — por fração, por
+              período e por tipo de quota.
+            </p>
+            <ul>
+              <li>Quotas ordinárias mensais, geradas manualmente ou de forma automática.</li>
+              <li>Quotas extraordinárias com parcelamento e plano por fração.</li>
+              <li>Pagamentos com comprovativo anexado e recibo emitido em PDF.</li>
+            </ul>
+          </div>
+          <div class="hp-area-mock">
+            {{> _home-mock-quotas }}
+          </div>
+        </div>
+
+        <div class="hp-area hp-reveal">
+          <div class="hp-area-texto">
+            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">folder_open</span></span>
+            <h3 class="hp-h3 hp-mt-2">Documentos do condomínio</h3>
+            <p class="hp-lead">
+              Cada documento fica na pasta certa e disponível para quem tem permissão para o ver —
+              sem depender de pastas em computadores pessoais.
+            </p>
+            <ul>
+              <li>Recibos, comprovativos, faturas e relatórios.</li>
+              <li>Convocatórias, atas e apólices de seguro.</li>
+              <li>Arquivo organizado por tipo de documento e por ano.</li>
+            </ul>
+          </div>
+          <div class="hp-area-mock">
+            {{> _home-mock-documentos }}
+          </div>
+        </div>
+
+        <div class="hp-area hp-area-invertida hp-reveal">
+          <div class="hp-area-texto">
+            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">history_edu</span></span>
+            <h3 class="hp-h3 hp-mt-2">Assembleias e atas</h3>
+            <p class="hp-lead">
+              Da convocatória à ata: a assembleia fica registada com a ordem de trabalhos, as
+              presenças e os documentos que a sustentam.
+            </p>
+            <ul>
+              <li>Ordem de trabalhos com os pontos sujeitos a votação assinalados.</li>
+              <li>Presenças por fração, com a permilagem presente.</li>
+              <li>Ata anexada e consultável por quem tem acesso.</li>
+            </ul>
+          </div>
+          <div class="hp-area-mock">
+            {{> _home-mock-assembleia }}
+          </div>
         </div>
       </div>
     </div>
@@ -511,12 +509,86 @@
     </div>
   </section>
 
-  {{!-- ── 9. Transparência ──────────────────────────────────────── --}}
+  {{!-- ── 9. Para quem administra ────────────────────────────────── --}}
+  <section class="hp-sec" id="administrador" aria-labelledby="hpAdminTitulo">
+    <div class="hp-wrap">
+      <div class="hp-duplo">
+        <div class="hp-reveal">
+          <p class="hp-eyebrow">Para quem administra</p>
+          <h2 class="hp-h2 hp-mt-2" id="hpAdminTitulo">Uma gestão mais simples para quem tem o condomínio a seu cargo.</h2>
+          <p class="hp-lead">
+            O GesCondu centraliza o trabalho do administrador, reduzindo a necessidade de
+            alternar entre folhas de cálculo, emails, documentos e ferramentas diferentes.
+          </p>
+          <p class="hp-realce hp-mt-4">
+            Um só sítio para lançar quotas, registar pagamentos, controlar despesas, guardar
+            documentos e prestar contas aos condóminos.
+          </p>
+          <div class="hp-grid hp-grid-2 hp-mt-4">
+            <ul class="hp-lista">
+              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Estrutura do condomínio e frações</li>
+              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Condóminos, contactos e acessos</li>
+              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Orçamento, rubricas e plano de quotas</li>
+            </ul>
+            <ul class="hp-lista">
+              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Pagamentos, comprovativos e recibos</li>
+              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Despesas, fornecedores e contas bancárias</li>
+              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Documentos, assembleias e avisos</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="hp-reveal hp-reveal-2">
+          {{> _home-mock-condominios }}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {{!-- ── 10. Portal do condómino ─────────────────────────────────── --}}
+  <section class="hp-sec hp-sec-muted" id="condomino" aria-labelledby="hpCondominoTitulo">
+    <div class="hp-wrap">
+      <div class="hp-duplo">
+        <div class="hp-reveal">
+          <p class="hp-eyebrow">Para o condómino</p>
+          <h2 class="hp-h2 hp-mt-2" id="hpCondominoTitulo">Mais transparência para todos os condóminos.</h2>
+          <p class="hp-lead">
+            Cada condómino consulta a informação que lhe corresponde, de acordo com as permissões e
+            a relação atual com a sua fração — incluindo no telemóvel, que é onde a maioria vai
+            consultar.
+          </p>
+          <div class="hp-grid hp-grid-2 hp-mt-4">
+            <ul class="hp-lista">
+              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Quotas da sua fração e o que está por pagar</li>
+              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Recibos em PDF, para consultar ou descarregar</li>
+              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Pagamentos efetuados e respetivos períodos</li>
+            </ul>
+            <ul class="hp-lista">
+              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Documentos disponibilizados aos condóminos</li>
+              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Avisos do condomínio, no portal e por email</li>
+              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Assembleias, com a ordem de trabalhos e a ata</li>
+              <li><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>Orçamento e situação financeira do condomínio</li>
+            </ul>
+          </div>
+          <p class="hp-realce hp-mt-4">
+            Sem precisar de pedir a folha de cálculo a ninguém e sem depender do email ou de um
+            grupo de mensagens para saber como está o condomínio.
+          </p>
+        </div>
+
+        <div class="hp-reveal hp-reveal-2">
+          {{> _home-mock-mobile}}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {{!-- ── 11. Transparência ──────────────────────────────────────── --}}
   <section class="hp-sec" id="transparencia" aria-labelledby="hpTransparenciaTitulo">
     <div class="hp-wrap">
       <div class="hp-cabeca hp-cabeca-centro hp-reveal">
         <p class="hp-eyebrow">Transparência</p>
-        <h2 class="hp-h2 hp-mt-2" id="hpTransparenciaTitulo">Uma gestão mais transparente.</h2>
+        <h2 class="hp-h2 hp-mt-2" id="hpTransparenciaTitulo">Mais informação. Menos dúvidas.</h2>
         <p class="hp-lead">
           Quando a informação está organizada, a prestação de contas deixa de ser um exercício
           de paciência — passa a ser uma consulta.
@@ -570,13 +642,13 @@
     </div>
   </section>
 
-  {{!-- ── 10. Documentos e armazenamento ────────────────────────── --}}
+  {{!-- ── 12. Documentos e armazenamento ────────────────────────── --}}
   <section class="hp-sec hp-sec-muted" id="documentos" aria-labelledby="hpDocumentosTitulo">
     <div class="hp-wrap">
       <div class="hp-duplo">
         <div class="hp-reveal">
           <p class="hp-eyebrow">Armazenamento</p>
-          <h2 class="hp-h2 hp-mt-2" id="hpDocumentosTitulo">Os documentos do condomínio, onde precisam de estar.</h2>
+          <h2 class="hp-h2 hp-mt-2" id="hpDocumentosTitulo">Os documentos do condomínio, onde devem estar.</h2>
           <p class="hp-lead">
             Os documentos deixam de viver em pastas de computadores pessoais: ficam na biblioteca
             do condomínio, organizados por área e por ano, com acesso controlado.
@@ -629,136 +701,7 @@
     </div>
   </section>
 
-  {{!-- ── 11. Feito para Portugal ───────────────────────────────── --}}
-  <section class="hp-sec" id="portugal" aria-labelledby="hpPortugalTitulo">
-    <div class="hp-wrap">
-      <div class="hp-cabeca hp-cabeca-centro hp-reveal">
-        <p class="hp-portugal"><span class="material-symbols-outlined" aria-hidden="true">architecture</span>Desenvolvido em Portugal</p>
-        <h2 class="hp-h2 hp-mt-3" id="hpPortugalTitulo">Feito para a realidade dos condomínios em Portugal.</h2>
-        <p class="hp-lead">
-          O GesCondu não é um programa estrangeiro traduzido. A plataforma foi construída a partir
-          da forma como os condomínios portugueses funcionam: as frações e a sua permilagem, as
-          quotas ordinárias e extraordinárias, o orçamento anual, a prestação de contas em
-          assembleia, a ata, o recibo e a documentação do edifício.
-        </p>
-      </div>
-
-      <div class="hp-caos hp-mt-4" style="justify-content: center;">
-        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">apartment</span>Frações e permilagem</span>
-        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">groups</span>Condóminos</span>
-        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>Quotas ordinárias</span>
-        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">request_quote</span>Quotas extraordinárias</span>
-        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span>Orçamento</span>
-        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">forum</span>Assembleias</span>
-        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">history_edu</span>Atas</span>
-        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">description</span>Recibos</span>
-        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">verified</span>Comprovativos</span>
-        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">local_shipping</span>Fornecedores</span>
-        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">account_balance</span>Contas do condomínio</span>
-        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">fact_check</span>Prestação de contas</span>
-      </div>
-    </div>
-  </section>
-
-  {{!-- ── 12. Para quem é ───────────────────────────────────────── --}}
-  <section class="hp-sec hp-sec-muted" id="para-quem" aria-labelledby="hpParaQuemTitulo">
-    <div class="hp-wrap">
-      <div class="hp-cabeca hp-reveal">
-        <p class="hp-eyebrow">Para quem é</p>
-        <h2 class="hp-h2 hp-mt-2" id="hpParaQuemTitulo">Diferentes formas de administrar, a mesma organização.</h2>
-      </div>
-
-      <div class="hp-grid hp-grid-3 hp-mt-4">
-        <article class="hp-card hp-reveal">
-          <div class="hp-card-topo">
-            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">home_work</span></span>
-            <h3 class="hp-h4">Administração do próprio condomínio</h3>
-          </div>
-          <p>Quando são os próprios condóminos a assumir a administração e precisam de apoio para manter as contas, os documentos e as assembleias em ordem.</p>
-        </article>
-        <article class="hp-card hp-reveal hp-reveal-2">
-          <div class="hp-card-topo">
-            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">business_center</span></span>
-            <h3 class="hp-h4">Administrador profissional</h3>
-          </div>
-          <p>Para quem gere vários condomínios: a mesma conta dá acesso a todos, com os dados, as contas e os documentos de cada um sempre separados.</p>
-        </article>
-        <article class="hp-card hp-reveal hp-reveal-3">
-          <div class="hp-card-topo">
-            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">person</span></span>
-            <h3 class="hp-h4">Condómino</h3>
-          </div>
-          <p>Para acompanhar o seu condomínio sem depender de emails, papéis ou grupos de mensagens: quotas, recibos, documentos e assembleias num só acesso.</p>
-        </article>
-      </div>
-    </div>
-  </section>
-
-  {{!-- ── 13. Mudança de proprietário ────────────────────────────── --}}
-  <section class="hp-sec" id="titularidade" aria-labelledby="hpTitularidadeTitulo">
-    <div class="hp-wrap">
-      <div class="hp-cabeca hp-reveal">
-        <p class="hp-eyebrow">Mudança de proprietário</p>
-        <h2 class="hp-h2 hp-mt-2" id="hpTitularidadeTitulo">O condomínio continua. As pessoas mudam.</h2>
-        <p class="hp-lead">
-          Uma fração muda de mãos — por venda, herança ou outra razão — e o condomínio não pode
-          perder o fio à meada. No GesCondu a fração e o edifício permanecem exatamente onde estão:
-          o que muda são as pessoas ligadas a cada fração e o acesso de cada uma.
-        </p>
-      </div>
-
-      <div class="hp-grid hp-grid-3 hp-mt-5">
-        <article class="hp-card hp-reveal">
-          <div class="hp-card-topo">
-            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">history</span></span>
-            <h3 class="hp-h4">A fração mantém o seu histórico</h3>
-          </div>
-          <p>
-            O que foi lançado, pago, documentado e decidido sobre a fração continua registado e
-            consultável. Mudar de proprietário não apaga quotas, pagamentos, comprovativos, recibos,
-            atas nem documentos — e fica registado desde quando cada pessoa esteve ligada à fração.
-          </p>
-        </article>
-
-        <article class="hp-card hp-reveal hp-reveal-2">
-          <div class="hp-card-topo">
-            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">badge</span></span>
-            <h3 class="hp-h4">O novo proprietário tem o seu próprio acesso</h3>
-          </div>
-          <p>
-            Cada pessoa entra com a sua própria conta: o novo proprietário tem as suas credenciais e
-            as suas permissões, criadas por convite. Não recebe nem herda a conta, o acesso ou os
-            dados privados de quem estava antes — vê o que diz respeito à fração, a partir do momento
-            em que é titular.
-          </p>
-        </article>
-
-        <article class="hp-card hp-reveal hp-reveal-3">
-          <div class="hp-card-topo">
-            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">download</span></span>
-            <h3 class="hp-h4">Quem sai leva a sua informação</h3>
-          </div>
-          <p>
-            Quem deixa de ser titular pode preparar a saída na sua área: descarrega a informação a
-            que tem acesso e encerra o acesso a esse condomínio, sem apagar nada do condomínio e sem
-            perder a conta para os restantes.
-          </p>
-        </article>
-      </div>
-
-      <p class="hp-realce hp-mt-4">
-        A conta de cada pessoa é só sua, o acesso acompanha sempre a relação atual com a fração e o
-        histórico do condomínio permanece — em qualquer mudança de proprietário.
-      </p>
-
-      <p class="hp-lead hp-mt-3">
-        Encerrar o acesso a um condomínio é um passo próprio e deliberado: é diferente de terminar
-        a sessão no navegador, que não muda nada nas relações de ninguém.
-      </p>
-    </div>
-  </section>
-
-  {{!-- ── 14. Aparência e acessibilidade ─────────────────────────── --}}
+  {{!-- ── 13. Aparência e acessibilidade ─────────────────────────── --}}
   <section class="hp-sec" id="acessibilidade" aria-labelledby="hpAcessibilidadeTitulo">
     <div class="hp-wrap">
       <div class="hp-duplo">
@@ -817,10 +760,11 @@
     <div class="hp-wrap">
       <div class="hp-cabeca hp-reveal">
         <p class="hp-eyebrow">Segurança e confiança</p>
-        <h2 class="hp-h2 hp-mt-2" id="hpSegurancaTitulo">A informação do condomínio, tratada com cuidado.</h2>
+        <h2 class="hp-h2 hp-mt-2" id="hpSegurancaTitulo">Os dados do condomínio merecem controlo.</h2>
         <p class="hp-lead">
-          O GesCondu é uma plataforma web de uso privado: cada condomínio tem o seu espaço,
-          com acesso reservado a quem foi autorizado.
+          O GesCondu é uma plataforma web de uso privado: cada condomínio tem o seu espaço, com
+          acesso reservado a quem foi autorizado. O acesso acompanha a relação atual de cada pessoa
+          com o condomínio — não passa para outra pessoa nem se mantém sem razão.
         </p>
       </div>
 
@@ -872,7 +816,127 @@
     </div>
   </section>
 
-  {{!-- ── 14. Perguntas frequentes ──────────────────────────────── --}}
+  {{!-- ── 15. Feito para Portugal ───────────────────────────────── --}}
+  <section class="hp-sec" id="portugal" aria-labelledby="hpPortugalTitulo">
+    <div class="hp-wrap">
+      <div class="hp-cabeca hp-cabeca-centro hp-reveal">
+        <p class="hp-portugal"><span class="material-symbols-outlined" aria-hidden="true">architecture</span>Desenvolvido em Portugal</p>
+        <h2 class="hp-h2 hp-mt-3" id="hpPortugalTitulo">Feito para os condomínios em Portugal.</h2>
+        <p class="hp-lead">
+          O GesCondu é um produto português, pensado desde o início para a realidade dos condomínios
+          em Portugal. Usa a linguagem e os processos desta realidade — as frações e a sua
+          permilagem, as quotas ordinárias e extraordinárias, o orçamento anual, a prestação de
+          contas em assembleia, a ata, o recibo e a documentação do edifício — em vez de ser um
+          programa estrangeiro traduzido.
+        </p>
+      </div>
+
+      <div class="hp-caos hp-mt-4" style="justify-content: center;">
+        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">apartment</span>Frações e permilagem</span>
+        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">groups</span>Condóminos</span>
+        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>Quotas ordinárias</span>
+        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">request_quote</span>Quotas extraordinárias</span>
+        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span>Orçamento</span>
+        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">forum</span>Assembleias</span>
+        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">history_edu</span>Atas</span>
+        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">description</span>Recibos</span>
+        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">verified</span>Comprovativos</span>
+        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">local_shipping</span>Fornecedores</span>
+        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">account_balance</span>Contas do condomínio</span>
+        <span class="hp-caos-item"><span class="material-symbols-outlined" aria-hidden="true">fact_check</span>Prestação de contas</span>
+      </div>
+    </div>
+  </section>
+
+  {{!-- ── 16. Mudança de proprietário ────────────────────────────── --}}
+  <section class="hp-sec hp-sec-muted" id="titularidade" aria-labelledby="hpTitularidadeTitulo">
+    <div class="hp-wrap">
+      <div class="hp-cabeca hp-reveal">
+        <p class="hp-eyebrow">Mudança de proprietário</p>
+        <h2 class="hp-h2 hp-mt-2" id="hpTitularidadeTitulo">O condomínio continua. As pessoas mudam.</h2>
+        <p class="hp-lead">
+          Quando uma fração muda de proprietário, o histórico do condomínio mantém-se — mas o
+          acesso de cada pessoa continua separado.
+        </p>
+      </div>
+
+      <div class="hp-mt-5 hp-reveal">
+        {{> _home-mock-titularidade }}
+      </div>
+
+      <div class="hp-grid hp-grid-3 hp-mt-5">
+        <article class="hp-card hp-reveal">
+          <p class="hp-passo-num" aria-hidden="true">01</p>
+          <h3 class="hp-h4">O proprietário muda</h3>
+          <p>
+            A fração continua no mesmo condomínio, mas a relação com o proprietário é atualizada.
+            O novo proprietário recebe o seu próprio acesso.
+          </p>
+        </article>
+
+        <article class="hp-card hp-reveal hp-reveal-2">
+          <p class="hp-passo-num" aria-hidden="true">02</p>
+          <h3 class="hp-h4">Cada pessoa tem a sua própria conta</h3>
+          <p>
+            O novo proprietário não recebe a conta, as credenciais ou os dados privados do
+            proprietário anterior. A informação é disponibilizada de acordo com a relação e as
+            permissões atuais.
+          </p>
+        </article>
+
+        <article class="hp-card hp-reveal hp-reveal-3">
+          <p class="hp-passo-num" aria-hidden="true">03</p>
+          <h3 class="hp-h4">Quem sai pode preparar a sua saída</h3>
+          <p>
+            Antes de encerrar o acesso, o anterior titular pode preparar a sua saída e descarregar a
+            informação que lhe diz respeito. Depois da confirmação, o acesso correspondente é
+            revogado.
+          </p>
+        </article>
+      </div>
+
+      <div class="hp-grid hp-grid-2 hp-mt-4">
+        <article class="hp-card hp-reveal">
+          <div class="hp-card-topo">
+            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">person_check</span></span>
+            <h3 class="hp-h4">Cada pessoa tem o seu próprio acesso</h3>
+          </div>
+          <p>
+            Uma mudança de proprietário não significa transferir uma conta. O novo titular recebe o
+            seu próprio acesso e os dados privados do anterior proprietário permanecem protegidos.
+          </p>
+        </article>
+
+        <article class="hp-card hp-reveal hp-reveal-2">
+          <div class="hp-card-topo">
+            <span class="hp-card-icone" aria-hidden="true"><span class="material-symbols-outlined">logout</span></span>
+            <h3 class="hp-h4">Vai deixar o condomínio?</h3>
+          </div>
+          <p>
+            Antes de encerrar o acesso, o GesCondu permite preparar a sua saída e descarregar a
+            informação que lhe diz respeito. Se mantiver outros condomínios, a conta continua ativa.
+          </p>
+        </article>
+      </div>
+
+      <p class="hp-realce hp-mt-4">
+        <strong>O histórico do condomínio não desaparece porque as pessoas mudam.</strong>
+        Quotas, pagamentos e restantes registos necessários à gestão continuam associados ao
+        histórico do condomínio: a saída de um proprietário não apaga a informação necessária à
+        continuidade da gestão. A visibilidade dessa informação depende sempre das permissões de
+        quem a consulta.
+      </p>
+
+      <p class="hp-lead hp-mt-3">
+        <strong>Para quem administra:</strong> as mudanças de proprietário não interrompem a
+        continuidade do condomínio. O histórico permanece e a alteração de titularidade fica
+        registada, sem reutilizar a conta do proprietário anterior. A mudança de proprietário e a
+        transferência da administração são processos distintos.
+      </p>
+    </div>
+  </section>
+
+  {{!-- ── 17. Perguntas frequentes ──────────────────────────────── --}}
   <section class="hp-sec" id="faq" aria-labelledby="hpFaqTitulo">
     <div class="hp-wrap">
       <div class="hp-cabeca hp-cabeca-centro hp-reveal">
@@ -896,13 +960,13 @@
     </div>
   </section>
 
-  {{!-- ── 15. CTA final ─────────────────────────────────────────── --}}
+  {{!-- ── 18. CTA final ─────────────────────────────────────────── --}}
   <section class="hp-sec" aria-labelledby="hpCtaTitulo">
     <div class="hp-wrap">
       <div class="hp-cta-final hp-reveal">
-        <h2 class="hp-h2" id="hpCtaTitulo">O seu condomínio pode ser muito mais simples.</h2>
+        <h2 class="hp-h2" id="hpCtaTitulo">Pronto para deixar a gestão do condomínio mais organizada?</h2>
         <p class="hp-lead">
-          Conheça o GesCondu e descubra uma forma mais organizada de administrar o seu condomínio.
+          Conheça o GesCondu e veja como fica a informação do seu condomínio num só lugar.
         </p>
         <div class="hp-acoes hp-acoes-centro hp-mt-4">
           <a class="btn btn-primary hp-btn-grande" href="/pedir-acesso">

@@ -808,6 +808,35 @@ body.blank-page.home-publica .blank-flash:empty { display: none; }
   .hp-card:hover { transform: none; }
 }
 
+/* ── Mudança de proprietário: passos e visual (3 blocos) ─────── */
+/* Numeração dos passos (01/02/03) — o número faz parte da composição, mas não
+   é lido em voz alta (aria-hidden no HTML). */
+.hp-passo-num {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--c-primary);
+  font-variant-numeric: tabular-nums;
+}
+/* Visual da titularidade: três blocos lado a lado no desktop e empilhados no
+   telemóvel (sem fluxograma horizontal em ecrãs pequenos). */
+.hp-titular-fluxo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.6em;
+}
+.hp-titular-passo { flex: 1 1 14em; min-width: 0; }
+.hp-titular-fracao { border-color: var(--c-border-strong); }
+.hp-titular-seta { align-self: center; }
+@media (max-width: 767.98px) {
+  /* No telemóvel o visual de titularidade empilha (um bloco por linha) e as
+     setas desaparecem: sem fluxograma horizontal apertado. */
+  .hp-titular-passo { flex-basis: 100%; }
+  .hp-titular-seta { display: none; }
+}
+
 /* ── Pontos de quebra ───────────────────────────────────────── */
 @media (max-width: 991.98px) {
   .hp-hero-grelha { grid-template-columns: minmax(0, 1fr); }
