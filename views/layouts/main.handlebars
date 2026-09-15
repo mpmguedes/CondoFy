@@ -1,9 +1,17 @@
 <!DOCTYPE html>
-<html lang="pt">
+<html lang="pt-PT">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{{#if titulo}}{{titulo}} · {{/if}}{{condominio.designacao}}</title>
+  {{!-- Título: o nome do condomínio só entra depois de haver condomínio ativo
+       escolhido (sessão autenticada). Nas páginas sem sessão — entrada,
+       verificação em duas etapas, recuperação, erro — o título refere a
+       aplicação (GesCondu) e nunca um condomínio concreto. --}}
+  <title>{{#if titulo}}{{titulo}} · {{/if}}{{#if condominioAtivo}}{{condominioAtivo.designacao}}{{else}}GesCondu{{/if}}</title>
+  {{!-- Metadados próprios da página (opcionais): as páginas que não os passam
+       ficam exatamente como estavam. --}}
+  {{#if descricao}}<meta name="description" content="{{descricao}}" />{{/if}}
+  {{#if metaRobots}}<meta name="robots" content="{{metaRobots}}" />{{/if}}
   <script>
     // Aparência antes do CSS (evita flash): tema (claro/escuro) e escala de
     // texto (Normal · Grande · Muito grande), ambas preferências locais.
@@ -31,7 +39,13 @@
 </head>
 <body>
   <a class="skip-link" href="#conteudo">Saltar para o conteúdo</a>
-  {{#if user}}
+  {{!-- Casca: uma página que se identifica como parte do sistema de entrada
+       (`corpoClass: 'auth-shell'` — entrada, segundo fator, recuperação,
+       redefinição e convite) é apresentada SEMPRE fora do workspace, mesmo
+       quando existe sessão. Quem já tem sessão e abre uma destas páginas é
+       reencaminhado pela própria rota (ver routes/auth.js); o layout não decide
+       destinos, apenas não mistura as duas cascas. --}}
+  {{#if (and user (not corpoClass))}}
   <div class="app-shell" id="appShell">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">
@@ -169,20 +183,18 @@
         {{else}}
         <div class="sidebar-group">
           <div class="sidebar-group-title">Início</div>
-          <a class="sidebar-item {{#if (eq currentPath '/condomino')}}active{{/if}}" href="/condomino" title="Dashboard">
+          <a class="sidebar-item {{#if (eq currentPath '/condomino')}}active{{/if}}" href="/condomino" title="Início">
             <span class="material-symbols-outlined">home</span>
-            <span class="sidebar-item-text">A minha área</span>
+            <span class="sidebar-item-text">Início</span>
           </a>
         </div>
         <div class="sidebar-group">
           <div class="sidebar-group-title">A minha fração</div>
-          <a class="sidebar-item {{isActive currentPath '/condomino/quotas'}}" href="/condomino/quotas" title="As minhas quotas">
+          {{!-- Quotas, Pagamentos e Recibos são uma só área (separadores no topo),
+               pela mesma ordem da navegação do telemóvel. --}}
+          <a class="sidebar-item {{#if (or (isActive currentPath '/condomino/quotas') (isActive currentPath '/condomino/pagamentos'))}}active{{/if}}" href="/condomino/quotas" title="Quotas, pagamentos e recibos">
             <span class="material-symbols-outlined">receipt_long</span>
             <span class="sidebar-item-text">Quotas</span>
-          </a>
-          <a class="sidebar-item {{isActive currentPath '/condomino/pagamentos'}}" href="/condomino/pagamentos" title="Os meus pagamentos">
-            <span class="material-symbols-outlined">payments</span>
-            <span class="sidebar-item-text">Pagamentos</span>
           </a>
           <a class="sidebar-item {{isActive currentPath '/condomino/recibos'}}" href="/condomino/recibos" title="Os meus recibos">
             <span class="material-symbols-outlined">receipt</span>
@@ -195,21 +207,17 @@
             <span class="material-symbols-outlined">folder</span>
             <span class="sidebar-item-text">Documentos</span>
           </a>
+          <a class="sidebar-item {{isActive currentPath '/condomino/avisos'}}" href="/condomino/avisos" title="Avisos do condomínio">
+            <span class="material-symbols-outlined">campaign</span>
+            <span class="sidebar-item-text">Avisos</span>
+          </a>
           <a class="sidebar-item {{isActive currentPath '/condomino/assembleias'}}" href="/condomino/assembleias" title="Assembleias">
             <span class="material-symbols-outlined">forum</span>
             <span class="sidebar-item-text">Assembleias</span>
           </a>
-          <a class="sidebar-item {{isActive currentPath '/condomino/avisos'}}" href="/condomino/avisos" title="Avisos">
-            <span class="material-symbols-outlined">campaign</span>
-            <span class="sidebar-item-text">Avisos</span>
-          </a>
           <a class="sidebar-item {{isActive currentPath '/condomino/calendario'}}" href="/condomino/calendario" title="Calendário">
             <span class="material-symbols-outlined">calendar_month</span>
             <span class="sidebar-item-text">Calendário</span>
-          </a>
-          <a class="sidebar-item {{isActive currentPath '/condomino/orcamento'}}" href="/condomino/orcamento" title="Orçamento">
-            <span class="material-symbols-outlined">account_balance_wallet</span>
-            <span class="sidebar-item-text">Orçamento</span>
           </a>
           <a class="sidebar-item {{isActive currentPath '/condomino/situacao'}}" href="/condomino/situacao" title="Situação financeira">
             <span class="material-symbols-outlined">monitoring</span>
@@ -239,9 +247,19 @@
         </a>
         <div class="app-header-spacer"></div>
         {{> _tema-toggle}}
+        {{#if isAdmin}}
         <button class="icon-btn" type="button" title="Notificações" aria-label="Notificações">
           <span class="material-symbols-outlined" aria-hidden="true">notifications</span>
         </button>
+        {{else}}
+        {{!-- Área do condómino: em vez de um botão sem ação, um atalho real para os
+             avisos do condomínio, com o número de avisos recentes (últimos 14 dias). --}}
+        <a class="icon-btn icon-btn-badge" href="/condomino/avisos" title="Avisos do condomínio"
+           aria-label="Avisos do condomínio{{#if avisosRecentes}} — {{avisosRecentes}} recentes{{/if}}">
+          <span class="material-symbols-outlined" aria-hidden="true">campaign</span>
+          {{#if avisosRecentes}}<span class="icon-badge" aria-hidden="true">{{avisosRecentes}}</span>{{/if}}
+        </a>
+        {{/if}}
         <div class="dropdown">
           <button class="user-chip dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
             <span class="avatar">{{iniciais user.nome}}</span>
@@ -251,6 +269,9 @@
             <li><span class="dropdown-item-text px-3 py-1 small text-muted">{{user.email}}</span></li>
             <li><hr class="dropdown-divider" /></li>
             <li><a class="dropdown-item" href="/conta/seguranca"><span class="material-symbols-outlined me-2">shield</span>Segurança da conta</a></li>
+            {{#unless isAdmin}}
+            <li><a class="dropdown-item" href="/condomino/saida"><span class="material-symbols-outlined me-2">directions_walk</span>Preparar saída do condomínio</a></li>
+            {{/unless}}
             <li><a class="dropdown-item" href="/logout"><span class="material-symbols-outlined me-2">logout</span>Sair</a></li>
           </ul>
         </div>
@@ -301,7 +322,11 @@
   </div>
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   {{else}}
-  <main class="auth-body">
+  {{!-- Fora do workspace: página de entrada ou de conta (recuperação,
+       redefinição, convite) ou visitante anónimo. O `corpoClass` (opcional,
+       como no layout `blank`) identifica a casca de autenticação — fundo e
+       composição partilhados por todas as páginas do fluxo. --}}
+  <main class="auth-body{{#if corpoClass}} {{corpoClass}}{{/if}}">
     <div class="auth-flash">
       {{> _flash}}
     </div>

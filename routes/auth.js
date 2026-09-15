@@ -44,8 +44,40 @@ router.get('/login', (req, res) => {
   if (req.isAuthenticated()) {
     return res.redirect('/');
   }
-  res.render('auth/login', { expirada: req.query.expirada === '1' });
+  res.render('auth/login', {
+    titulo: 'Entrar',
+    expirada: req.query.expirada === '1',
+    // Conta desativada ou email por confirmar: o middleware de sessão termina a
+    // sessão e envia para /login?conta=inativa (ver helpers/sessao.js). Sem esta
+    // mensagem o utilizador era devolvido ao formulário sem qualquer explicação.
+    // Texto neutro: não revela o motivo exato nem dados da conta.
+    contaInativa: req.query.conta === 'inativa',
+    // Mesma casca de autenticação da verificação em duas etapas
+    // (ver public/css/styles.css, bloco «casca de entrada e 2FA»).
+    corpoClass: 'auth-shell',
+    // Página pública de entrada: identifica a aplicação (GesCondu) e nunca um
+    // condomínio concreto, e não deve ser indexada por motores de busca.
+    descricao: 'Entrar no GesCondu — gestão de condomínios. O acesso é feito por convite.',
+    metaRobots: 'noindex, nofollow',
+  });
 });
+
+// A fase pendente do segundo fator não pode herdar NADA de uma sessão anterior.
+// Se o browser já tiver uma sessão autenticada (por exemplo, outra conta aberta
+// no mesmo browser), a página de verificação em duas etapas era apresentada
+// dentro do workspace dessa sessão — barra lateral, seletor de condomínio,
+// barra mobile e nome do utilizador — e só depois de validar o código é que a
+// identidade mudava, atirando o utilizador de volta para a escolha de
+// condomínio. Aqui termina-se a sessão anterior (o Passport regenera a sessão,
+// o que também protege contra fixação de sessão) e remove-se o condomínio
+// selecionado, deixando apenas o identificador pendente do segundo fator.
+async function limparSessaoAntesDo2fa(req, pendente) {
+  if (typeof req.isAuthenticated === 'function' && req.isAuthenticated()) {
+    await new Promise((resolve) => req.logout(() => resolve()));
+  }
+  if (req.session) delete req.session.condominio_ativo_id;
+  if (pendente && req.session) req.session.pendente2faLogin = pendente;
+}
 
 // ── Estado da sessão (cliente: verificação ao acordar de hibernação) ──
 // Nunca renova a sessão; apenas informa se continua válida e quando expira.
@@ -106,7 +138,11 @@ router.post(
       }
       // 2FA ativo → segundo fator antes de iniciar sessão.
       if (user.two_fa_ativo) {
-        req.session.pendente2faLogin = user.id;
+        // Credenciais válidas, mas a autenticação ainda NÃO está concluída: a
+        // sessão anterior (identidade e condomínio escolhido) é encerrada antes
+        // de se passar à verificação. Nada do workspace pode aparecer antes do
+        // segundo fator.
+        await limparSessaoAntesDo2fa(req, user.id);
         if (user.two_fa_metodo === 'totp') {
           // Aplicação autenticadora: código pedido na página seguinte.
           await audit({ userId: user.id, acao: '2fa_pedido', entidade: 'User', entidadeId: user.id, detalhes: { metodo: 'totp' } }).catch(() => {});
@@ -133,17 +169,32 @@ router.post(
 
 // ── 2FA — segundo fator do login ────────────────────────────────────
 router.get('/2fa/entrar', async (req, res) => {
-  if (!req.session.pendente2faLogin) return res.redirect('/login');
-  const user = await User.findByPk(req.session.pendente2faLogin).catch(() => null);
+  const pendente = req.session.pendente2faLogin;
+  if (!pendente) return res.redirect('/login');
+  // Garantia estrutural: durante a fase pendente não existe identidade
+  // autenticada nem condomínio selecionado, seja qual for o estado anterior do
+  // browser. A página do segundo fator é sempre uma página de entrada neutra.
+  await limparSessaoAntesDo2fa(req, pendente);
+  const user = await User.findByPk(pendente).catch(() => null);
+  if (!user || !user.two_fa_ativo) {
+    delete req.session.pendente2faLogin;
+    return res.redirect('/login');
+  }
   res.render('auth/2fa-entrar', {
     titulo: 'Verificação em duas etapas',
-    metodoTotp: Boolean(user && user.two_fa_metodo === 'totp'),
+    descricao: 'Verificação em duas etapas do GesCondu.',
+    metaRobots: 'noindex, nofollow',
+    // Mesma casca de autenticação da entrada (public/css/styles.css).
+    corpoClass: 'auth-shell',
+    metodoTotp: Boolean(user.two_fa_metodo === 'totp'),
   });
 });
 
 router.post('/2fa/entrar', limite2fa, async (req, res, next) => {
   const userId = req.session.pendente2faLogin;
   if (!userId) return res.redirect('/login');
+  // Mesma garantia do GET: a validação do código corre sem sessão herdada.
+  await limparSessaoAntesDo2fa(req, userId);
   const user = await User.findByPk(userId);
   if (!user || !user.two_fa_ativo) {
     delete req.session.pendente2faLogin;
@@ -364,8 +415,20 @@ router.get('/logout', (req, res, next) => {
 });
 
 // ── Recuperação de palavra-passe ───────────────────────────────────
+// As páginas do fluxo de autenticação (entrada, segundo fator, recuperação,
+// redefinição e convite) partilham a mesma casca (`corpoClass: 'auth-shell'`,
+// ver public/css/styles.css) e não devem ser indexadas: são páginas de conta,
+// não conteúdo público.
 router.get('/recuperar', (req, res) => {
-  res.render('auth/recuperar');
+  // Quem já tem sessão não tem nada a recuperar aqui: segue para a sua área,
+  // como acontece em /login (a página é de conta, não de utilizador autenticado).
+  if (req.isAuthenticated()) return res.redirect('/');
+  res.render('auth/recuperar', {
+    titulo: 'Recuperar palavra-passe',
+    corpoClass: 'auth-shell',
+    descricao: 'Recuperação de palavra-passe do GesCondu.',
+    metaRobots: 'noindex, nofollow',
+  });
 });
 
 router.post('/recuperar', limiteRecuperar, async (req, res) => {
@@ -402,12 +465,19 @@ router.post('/recuperar', limiteRecuperar, async (req, res) => {
 });
 
 router.get('/redefinir/:token', async (req, res) => {
+  if (req.isAuthenticated()) return res.redirect('/');
   const user = await User.findOne({ where: { reset_token: req.params.token } });
   if (!user || !user.reset_token_expires || user.reset_token_expires < new Date()) {
     req.flash('error_msg', 'O link de recuperação é inválido ou expirou.');
     return res.redirect('/login');
   }
-  res.render('auth/redefinir', { token: req.params.token });
+  res.render('auth/redefinir', {
+    titulo: 'Definir nova palavra-passe',
+    token: req.params.token,
+    corpoClass: 'auth-shell',
+    descricao: 'Definição de nova palavra-passe no GesCondu.',
+    metaRobots: 'noindex, nofollow',
+  });
 });
 
 router.post('/redefinir/:token', limiteRedefinir, async (req, res) => {
@@ -441,6 +511,7 @@ async function utilizadorPorConvite(token) {
 }
 
 router.get('/aceitar-convite/:token', async (req, res) => {
+  if (req.isAuthenticated()) return res.redirect('/');
   const user = await utilizadorPorConvite(req.params.token);
   if (!user) {
     req.flash('error_msg', 'Convite inválido.');
@@ -455,7 +526,13 @@ router.get('/aceitar-convite/:token', async (req, res) => {
     req.flash('error_msg', 'Este convite expirou. Peça à administração para o reenviar.');
     return res.redirect('/login');
   }
-  res.render('auth/aceitar-convite', { titulo: 'Aceitar convite', token: req.params.token });
+  res.render('auth/aceitar-convite', {
+    titulo: 'Aceitar convite',
+    token: req.params.token,
+    corpoClass: 'auth-shell',
+    descricao: 'Ativação de conta GesCondu por convite.',
+    metaRobots: 'noindex, nofollow',
+  });
 });
 
 router.post('/aceitar-convite/:token', limiteRedefinir, async (req, res) => {

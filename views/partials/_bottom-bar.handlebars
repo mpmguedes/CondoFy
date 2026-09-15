@@ -14,11 +14,26 @@
     <span class="material-symbols-outlined">campaign</span><span class="mb-label">Avisos</span>
   </a>
   {{else}}
-  <a class="mb-item {{#if (startsPath currentPath '/condomino')}}mb-item-ativo{{/if}}" href="/condomino" title="A minha área">
-    <span class="material-symbols-outlined">home</span><span class="mb-label">A minha área</span>
+  {{!-- Área do condómino: as funções do dia a dia a um toque. O resto (assembleias,
+       calendário, orçamento, situação financeira, condomínios, perfil) fica no
+       menu lateral, aberto pelo item «Menu». --}}
+  <a class="mb-item {{#if (eq currentPath '/condomino')}}mb-item-ativo{{/if}}" href="/condomino" title="Início" aria-label="Início">
+    <span class="material-symbols-outlined" aria-hidden="true">home</span><span class="mb-label">Início</span>
   </a>
-  <a class="mb-item {{#if (startsPath currentPath '/condominios')}}mb-item-ativo{{/if}}" href="/condominios" title="Os meus condomínios">
-    <span class="material-symbols-outlined">apartment</span><span class="mb-label">Condomínios</span>
+  {{#if (or (startsPath currentPath '/condomino/quotas') (or (startsPath currentPath '/condomino/pagamentos') (startsPath currentPath '/condomino/recibos')))}}
+  <a class="mb-item mb-item-ativo" href="/condomino/quotas" title="Quotas, pagamentos e recibos" aria-label="Quotas, pagamentos e recibos" aria-current="page">
+    <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span><span class="mb-label">Quotas</span>
+  </a>
+  {{else}}
+  <a class="mb-item" href="/condomino/quotas" title="Quotas, pagamentos e recibos" aria-label="Quotas, pagamentos e recibos">
+    <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span><span class="mb-label">Quotas</span>
+  </a>
+  {{/if}}
+  <a class="mb-item {{#if (startsPath currentPath '/condomino/documentos')}}mb-item-ativo{{/if}}" href="/condomino/documentos" title="Documentos" aria-label="Documentos">
+    <span class="material-symbols-outlined" aria-hidden="true">folder</span><span class="mb-label">Documentos</span>
+  </a>
+  <a class="mb-item {{#if (startsPath currentPath '/condomino/avisos')}}mb-item-ativo{{/if}}" href="/condomino/avisos" title="Avisos" aria-label="Avisos">
+    <span class="material-symbols-outlined" aria-hidden="true">campaign</span><span class="mb-label">Avisos</span>
   </a>
   {{/if}}
   {{!-- Item "Menu": reutiliza exatamente o menu lateral do cabeçalho

@@ -9,6 +9,8 @@ const passport = require('passport');
 const methodOverride = require('method-override');
 
 const sequelize = require('./config/database');
+const { Op } = require('sequelize');
+const { Aviso } = require('./models');
 const handlebarsHelpers = require('./helpers/handlebars-helpers');
 const { getCondominio } = require('./helpers/condominio');
 const tenant = require('./helpers/tenant');
@@ -94,7 +96,12 @@ app.use(async (req, res, next) => {
   res.locals.isAdmin = !!(req.user && (req.user.role === 'admin' || req.user.role_global === 'super_admin'));
   res.locals.meusCondominios = [];
   res.locals.condominioAtivo = null;
-  let condominio = await getCondominio();
+  // Contexto de condomínio: só existe para quem tem sessão. Num pedido sem
+  // autenticação (entrada, verificação em duas etapas, recuperação de
+  // palavra-passe, página de erro…) não se lê sequer o primeiro condomínio da
+  // base de dados: as páginas públicas são neutras e nunca apresentam o nome de
+  // um condomínio concreto — nem o workspace — antes de a sessão estar validada.
+  let condominio = req.user ? await getCondominio() : null;
   if (req.user) {
     // Multi-condomínio: condomínios do utilizador + ativo (por sessão).
     try {
@@ -146,6 +153,21 @@ app.use(async (req, res, next) => {
   res.locals.armazenamentoAbrePasta = storage.abrePastaNoFornecedor(res.locals.condominioAtivo && res.locals.condominioAtivo.id);
   res.locals.armazenamentoIcone = storage.iconePrincipal(res.locals.condominioAtivo && res.locals.condominioAtivo.id);
   res.locals.tarefas = background.resumo();
+  // Área do condómino: número de avisos RECENTES do condomínio ativo (últimos
+  // 14 dias), para o atalho de avisos no cabeçalho. Não existe estado de
+  // «lido/não lido» no sistema, por isso conta-se o que é factual: avisos
+  // criados recentemente. Uma consulta leve, só para quem usa o portal.
+  res.locals.avisosRecentes = 0;
+  if (req.user && res.locals.condominioAtivo && !res.locals.isAdmin) {
+    try {
+      const desde = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+      res.locals.avisosRecentes = await Aviso.count({
+        where: { condominio_id: res.locals.condominioAtivo.id, createdAt: { [Op.gte]: desde } },
+      });
+    } catch (err) {
+      res.locals.avisosRecentes = 0;
+    }
+  }
   // Dados para o aviso de expiração da sessão no cliente (só quando autenticado).
   res.locals.sessaoExpiraEm = req.user ? sessao.expiraEm(req.session) : null;
   res.locals.sessaoAvisoMs = sessao.AVISO_MS;
@@ -196,7 +218,13 @@ app.use('/admin', require('./routes/placeholders'));
 app.use('/condomino', require('./routes/condomino'));
 // "Preparar saída do condomínio" (fluxo próprio do condómino, distinto de
 // terminar sessão) — ver routes/saida-condominio.js.
-app.use('/condomino', require('./routes/saida-condominio'));
+// Montado na RAIZ: esse router declara já os caminhos completos
+// (`/condomino/saida`, `/condomino/saida/exportar`, …). Montá-lo também sob
+// `/condomino` duplicava o prefixo e o URL efetivo passava a ser
+// `/condomino/condomino/saida` — todas as ligações para /condomino/saida
+// (menu do perfil e painel do Início) respondiam 404. O isolamento não depende
+// do prefixo: o próprio router aplica eAutenticado + tenant.comCondominioAtivo.
+app.use('/', require('./routes/saida-condominio'));
 // Link temporário de documento (destinatários sem conta) — rota pública
 // protegida por token assinado e com validade limitada; ver o cabeçalho de
 // routes/documentos-link.js. Nunca serve documentos sem token válido.

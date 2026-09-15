@@ -24,6 +24,7 @@ const parciais = {
   '_bottom-bar': ler('partials/_bottom-bar.handlebars'),
   '_tema-toggle': ler('partials/_tema-toggle.handlebars'),
   '_quotas-tabs': ler('partials/_quotas-tabs.handlebars'),
+  '_condomino-quotas-tabs': ler('partials/_condomino-quotas-tabs.handlebars'),
   '_assembleias-tabs': ler('partials/_assembleias-tabs.handlebars'),
   '_config-tabs': ler('partials/_config-tabs.handlebars'),
   '_modal-confirmar': ler('partials/_modal-confirmar.handlebars'),
@@ -606,7 +607,10 @@ assert.ok(!fontePainel.includes('Google Drive'), 'painel: sem "Google Drive" fix
 const baseCond = { pessoa: {}, linhas: [], extras: [], anos: [], filtros: { ano: '', estado: '' }, avisos: [], assembleiasProximas: [], documentosRecentes: [], resumo: { saldoContas: 0, fundoReserva: 0, receitas: 0, despesas: 0, contas: [] }, orcamento: { ano: 2026, orcamentado: 0, executado: 0, percentagem: 0 }, pastas: {}, documentos: null, agrupados: [] };
 const comp = (f) => handlebars.compile(ler(f));
 html = comp('condomino/dashboard.handlebars')({ ...baseCond, user: { nome: 'Ana' }, condominio: { designacao: 'X' } });
-assert.ok(html.includes('A minha situação') || html.includes('Situação do condomínio'), 'condómino dashboard renderiza');
+// O Início foi reorganizado (mobile-first): as secções próprias substituíram os
+// blocos antigos («A minha situação» / «Situação do condomínio»).
+assert.ok(html.includes('Ações rápidas') && html.includes('Atividade recente') && html.includes('O condomínio em resumo'),
+  'condómino dashboard renderiza');
 html = comp('condomino/quotas.handlebars')(baseCond);
 assert.ok(html.includes('As minhas quotas'), 'condómino quotas');
 html = comp('condomino/pagamentos.handlebars')(baseCond);

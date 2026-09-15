@@ -1,23 +1,42 @@
-<div class="auth-wrap">
-  <div class="auth-card card shadow-sm">
-    <div class="card-body p-4 p-md-5">
-      <div class="text-center mb-4">
-        <img src="/img/gescondu-logo-refinado-claro.png" alt="GesCondu" class="login-logo mx-auto d-block mb-3" />
-        <h1 class="h4 mb-1">Recuperar palavra-passe</h1>
-        <p class="text-muted mb-0">Indique o seu email para receber instruções.</p>
-      </div>
+{{!-- Recuperar palavra-passe — primeira parte do fluxo de autenticação.
 
-      <form action="/recuperar" method="POST">
-        <div class="mb-3">
-          <label for="email" class="form-label">Email</label>
-          <input type="email" class="form-control" id="email" name="email" autocomplete="email" required autofocus />
+     Usa a MESMA composição da entrada e da verificação em duas etapas
+     (.auth-page / .auth-stage / .auth-message / .auth-panel, definida em
+     public/css/styles.css e marcada no layout com `auth-shell`), para que as
+     páginas de conta pareçam o que são: passos do mesmo sistema de entrada.
+     Sem sidebar, sem barra inferior e sem seletor de condomínio. --}}
+<div class="auth-page">
+  <div class="auth-stage">
+    <section class="auth-message">
+      <a class="auth-logo" href="/" title="GesCondu">
+        <img src="/img/gescondu-logo-ativo.png" alt="GesCondu" />
+      </a>
+      <h2>Recuperar o acesso,<br />sem complicações</h2>
+      <p class="auth-message-apoio">Indique o email da sua conta e enviamos as instruções para definir uma nova palavra-passe.</p>
+    </section>
+
+    <section class="auth-panel-col">
+      <div class="auth-panel">
+        <div class="auth-panel-inner auth-panel-center">
+          <h1 class="auth-titulo">Recuperar palavra-passe</h1>
+          <p class="auth-sub">Instruções por email</p>
+          <p class="auth-hint">Envie o pedido e siga o link que receber. O link é válido durante 1 hora.</p>
+
+          <form action="/recuperar" method="POST" class="auth-form">
+            <div class="mb-3">
+              <label for="email" class="form-label">Email</label>
+              <input type="email" class="form-control" id="email" name="email" autocomplete="email" placeholder="nome@exemplo.pt" required autofocus />
+            </div>
+            <button type="submit" class="btn btn-primary w-100 auth-btn">Enviar instruções</button>
+          </form>
+
+          <div class="text-center auth-recuperar">
+            <a href="/login">Voltar ao início de sessão</a>
+          </div>
         </div>
-        <button type="submit" class="btn btn-primary w-100">Enviar instruções</button>
-      </form>
-
-      <div class="text-center mt-3">
-        <a href="/login" class="small">Voltar ao início de sessão</a>
       </div>
-    </div>
+    </section>
   </div>
+
+  <footer class="auth-foot">© 2026 GesCondu. Todos os direitos reservados. · <a href="/politica-privacidade">Política de Privacidade</a> · <a href="/termos">Termos de Utilização</a></footer>
 </div>

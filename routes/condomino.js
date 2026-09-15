@@ -81,6 +81,7 @@ function formatarPermilagem(valor) {
 router.get('/', async (req, res) => {
   const { pessoa, fracoes } = await contextoFracoes(req);
   const ids = fracoes.map((f) => f.id);
+  const hoje = new Date().toISOString().slice(0, 10);
 
   // Sem frações: distinguir "nunca teve relação" de "deixou de ser titular"
   // (mudança de proprietário). No segundo caso explica-se o que aconteceu e
@@ -103,9 +104,26 @@ router.get('/', async (req, res) => {
         order: [['data_vencimento', 'ASC']],
         limit: 5,
       });
+      // Próximo vencimento DESTA fração: a quota ainda por pagar mais próxima.
+      // Por fração, e não uma só para todas as frações do utilizador: a
+      // informação é apresentada dentro do cartão de cada fração, e uma quota
+      // de outra fração não pode aparecer nesse cartão.
+      // Nota: `data_vencimento >= hoje` significa «por vencer»; uma quota com o
+      // vencimento no passado é atraso/dívida (estado efetivo 'vencida', já
+      // contabilizado em `resumo.emDivida`) e não entra aqui.
+      const proximaQuota = await Quota.findOne({
+        where: {
+          condominio_id: req.condominioId,
+          fracao_id: f.id,
+          estado: { [Op.in]: ['pendente', 'parcialmente_paga', 'vencida'] },
+          data_vencimento: { [Op.gte]: hoje },
+        },
+        order: [['data_vencimento', 'ASC'], ['id', 'ASC']],
+      });
       return {
         ...base,
         resumo,
+        proximaQuota,
         vinculo: f.vinculoAtual || (f.FracaoPessoa ? f.FracaoPessoa.vinculo : null),
         extrasPendentes: extras.map((p) => ({
           id: p.id,
@@ -118,31 +136,116 @@ router.get('/', async (req, res) => {
     })
   );
 
-  const [resumo, orcamento, avisos, assembleiasProximas, documentosRecentes] = await Promise.all([
+  // Painel do Início (mobile-first): o que tenho para tratar, o que aconteceu e
+  // o que vem a seguir. Usa apenas dados que já existem (quotas, avisos,
+  // documentos, recibos, assembleias) — nenhuma informação inventada.
+  const [resumo, orcamento, avisos, documentos, recibos, assembleias, avisosProgramados] = await Promise.all([
     resumoCondominio(req.condominioId),
     resumoOrcamento(new Date().getFullYear(), req.condominioId),
     Aviso.findAll({ where: { condominio_id: req.condominioId }, order: [['id', 'DESC']], limit: 5 }),
-    Assembleia.findAll({
-      where: { condominio_id: req.condominioId, estado: { [Op.in]: ['agendada', 'convocada'] } },
-      order: [['data', 'ASC']],
-      limit: 5,
-    }),
     Documento.findAll({
       where: { condominio_id: req.condominioId, disponivel_condominos: true },
       order: [['data', 'DESC'], ['id', 'DESC']],
-      limit: 8,
+      limit: 5,
+    }),
+    ids.length
+      ? Recibo.findAll({
+          where: { condominio_id: req.condominioId, fracao_id: { [Op.in]: ids } },
+          order: [['data_emissao', 'DESC'], ['id', 'DESC']],
+          limit: 5,
+        })
+      : [],
+    Assembleia.findAll({
+      where: {
+        condominio_id: req.condominioId,
+        estado: { [Op.in]: ['agendada', 'convocada'] },
+        data: { [Op.gte]: hoje },
+      },
+      order: [['data', 'ASC'], ['id', 'ASC']],
+      limit: 5,
+    }),
+    // Comunicações programadas para o futuro = próximos acontecimentos no calendário.
+    Aviso.findAll({
+      where: { condominio_id: req.condominioId, data_programada: { [Op.gte]: hoje } },
+      order: [['data_programada', 'ASC']],
+      limit: 5,
     }),
   ]);
 
+  // Atividade recente: uma lista única por data (avisos, documentos e recibos).
+  // Datas para a lista de atividade: `data`, `data_vencimento` e `data_programada`
+  // são DATEONLY (texto «AAAA-MM-DD»), mas `createdAt` é um Date — converter
+  // sempre por Date evita datas sem sentido na vista (ex.: 2001) e mantém a
+  // ordenação cronológica da lista correta.
+  const dataISO = (v) => {
+    if (!v) return '';
+    if (typeof v === 'string') return v.slice(0, 10);
+    const d = v instanceof Date ? v : new Date(v);
+    return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+  };
+  const atividadeRecente = [
+    ...avisos.map((a) => ({
+      tipo: 'aviso',
+      icone: 'campaign',
+      titulo: a.assunto || 'Aviso do condomínio',
+      detalhe: a.mensagem ? String(a.mensagem).split('\n')[0].slice(0, 90) : null,
+      data: dataISO(a.createdAt),
+      link: '/condomino/avisos',
+    })),
+    ...documentos.map((d) => ({
+      tipo: 'documento',
+      icone: 'description',
+      titulo: d.nome,
+      detalhe: d.pasta || null,
+      data: dataISO(d.data),
+      // A vista liga pelo helper urlDocumento (rota interna verificada); aqui
+      // passa-se o documento, nunca um URL de fornecedor.
+      documento: d.toJSON(),
+    })),
+    ...recibos.map((r) => ({
+      tipo: 'recibo',
+      icone: 'receipt_long',
+      titulo: `Recibo ${r.codigo || ''}`.trim(),
+      detalhe: r.valor != null ? `${Number(r.valor).toFixed(2).replace('.', ',')} €` : null,
+      data: dataISO(r.data_emissao),
+      link: '/condomino/recibos',
+    })),
+  ]
+    .sort((a, b) => String(b.data).localeCompare(String(a.data)))
+    .slice(0, 6);
+
+  // Próximos eventos: assembleias futuras + comunicações programadas.
+  const proximosEventos = [
+    ...assembleias.map((a) => ({
+      tipo: 'assembleia',
+      icone: 'forum',
+      titulo: a.numero ? `Assembleia ${a.numero}` : 'Assembleia de condóminos',
+      detalhe: [a.hora, a.local].filter(Boolean).join(' · ') || null,
+      data: dataISO(a.data),
+      link: `/condomino/assembleias/${a.id}`,
+    })),
+    ...avisosProgramados.map((a) => ({
+      tipo: 'comunicacao',
+      icone: 'schedule_send',
+      titulo: a.assunto || 'Comunicação programada',
+      detalhe: 'Comunicação programada',
+      data: dataISO(a.data_programada),
+      link: '/condomino/avisos',
+    })),
+  ]
+    .sort((x, y) => String(x.data).localeCompare(String(y.data)))
+    .slice(0, 4);
+
   res.render('condomino/dashboard', {
-    titulo: 'A minha área',
+    titulo: 'Início',
     pessoa,
     fracoesComResumo,
     resumo,
     orcamento,
     avisos,
-    assembleiasProximas,
-    documentosRecentes,
+    atividadeRecente,
+    proximosEventos,
+    hoje,
     nFracoesProprias: ids.length,
     titularidadesTerminadas,
   });

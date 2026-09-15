@@ -3,6 +3,14 @@
   <p class="subtitle">Transparência financeira agregada do condomínio ({{ano}})</p>
 </div>
 
+{{!-- O orçamento (rubrica a rubrica) é a outra face da transparência: fica a um
+     toque daqui (o Início também tem um atalho direto). --}}
+<p class="mb-3">
+  <a class="quick-action" href="/condomino/orcamento">
+    <span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span>Ver orçamento do ano
+  </a>
+</p>
+
 <div class="row g-3 mb-3">
   <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-icon"><i class="bi bi-cash-stack"></i></div><div class="stat-value">{{eur resumo.saldoContas}}</div><div class="stat-label">Saldo das contas</div></div></div></div>
   <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-icon text-success"><i class="bi bi-arrow-down-circle"></i></div><div class="stat-value">{{eur receitasAno}}</div><div class="stat-label">Receitas ({{ano}})</div></div></div></div>

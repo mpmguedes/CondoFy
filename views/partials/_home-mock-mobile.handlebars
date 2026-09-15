@@ -1,14 +1,16 @@
-{{!-- Mockup 6 — Portal do condómino no telemóvel: quotas, recibos, documentos e
-     avisos da fração. Dados fictícios (sem dados pessoais reais). --}}
-<div class="mk-telemovel" role="img" aria-label="Exemplo do portal do condómino no telemóvel: situação da fração, quota em atraso, último recibo em PDF, documentos do condomínio e avisos.">
+{{!-- Mockup 6 — Portal do condómino no telemóvel: representa a área real do
+     condómino (Início com o resumo da fração, ações rápidas, atividade recente,
+     próximos acontecimentos e a barra inferior Início · Quotas · Documentos ·
+     Avisos). Dados fictícios (sem dados pessoais reais). --}}
+<div class="mk-telemovel" role="img" aria-label="Exemplo do portal do condómino no telemóvel: resumo da fração com quota em atraso e próximo vencimento, atalhos para quotas, recibos, documentos, avisos, assembleias e situação, atividade recente e próximos acontecimentos, com a barra de navegação Início, Quotas, Documentos e Avisos.">
   <div class="mk-telemovel-ecra">
     <div class="mk-telemovel-topo">
       <span class="mk-telemovel-saudacao">Olá, Ana</span>
       <span class="mk-telemovel-fracao">1.º Esq · 125 ‰</span>
       <span class="mk-telemovel-aba">
-        <span class="ativa">Situação</span>
+        <span class="ativa">Início</span>
         <span>Quotas</span>
-        <span>Recibos</span>
+        <span>Avisos</span>
       </span>
     </div>
 
@@ -16,37 +18,46 @@
       <div class="mk-stat">
         <div class="mk-stat-rotulo">Em dívida</div>
         <div class="mk-stat-valor mk-stat-alerta" data-hp-contar="7500" data-hp-formato="eur">75,00 €</div>
-        <div class="mk-stat-sub">1 quota vencida · setembro</div>
+        <div class="mk-stat-sub">Setembro vencida · próxima quota 75,00 € até 08/10</div>
       </div>
 
       <div class="mk-cartao">
-        <div class="mk-cartao-titulo"><span>Quotas de 2026</span><span class="mk-meta">12 meses</span></div>
+        <div class="mk-cartao-titulo"><span>Ações rápidas</span><span class="mk-meta">1 toque</span></div>
         <div class="mk-conteudo" style="padding: 0.7em;">
-          <div class="mk-linhas">
-            <div class="mk-linha"><span class="mk-linha-rotulo">Agosto</span><span class="mk-linha-valor">75,00 €</span><span class="mk-etiqueta mk-etiqueta-ok">Paga</span></div>
-            <div class="mk-linha"><span class="mk-linha-rotulo">Setembro</span><span class="mk-linha-valor">75,00 €</span><span class="mk-etiqueta mk-etiqueta-aviso">Vencida</span></div>
-            <div class="mk-linha"><span class="mk-linha-rotulo">Outubro</span><span class="mk-linha-valor">75,00 €</span><span class="mk-etiqueta mk-etiqueta-neutra">A vencer</span></div>
+          <div class="mk-fluxo">
+            <span class="mk-fluxo-passo"><span class="material-symbols-outlined">receipt_long</span>Quotas</span>
+            <span class="mk-fluxo-passo"><span class="material-symbols-outlined">confirmation_number</span>Recibos</span>
+            <span class="mk-fluxo-passo"><span class="material-symbols-outlined">folder</span>Documentos</span>
+            <span class="mk-fluxo-passo"><span class="material-symbols-outlined">campaign</span>Avisos</span>
+            <span class="mk-fluxo-passo"><span class="material-symbols-outlined">forum</span>Assembleias</span>
           </div>
         </div>
       </div>
 
       <div class="mk-cartao">
-        <div class="mk-cartao-titulo"><span>Último recibo</span><span class="mk-meta">PDF</span></div>
+        <div class="mk-cartao-titulo"><span>Atividade recente</span><span class="mk-etiqueta mk-etiqueta-info">3 novas</span></div>
         <div class="mk-icone-linha">
           <span class="mk-ficheiro" style="flex: 1 1 auto;">
-            <span class="mk-pasta"><span class="material-symbols-outlined mk-icone">receipt_long</span>RCP-2026-0042</span>
+            <span class="mk-pasta"><span class="material-symbols-outlined mk-icone">campaign</span>Manutenção do elevador — 3.ª feira</span>
+          </span>
+          <span class="mk-meta">aviso</span>
+        </div>
+        <div class="mk-icone-linha">
+          <span class="mk-ficheiro" style="flex: 1 1 auto;">
+            <span class="mk-pasta"><span class="material-symbols-outlined mk-icone">description</span>Ata da assembleia de 12/11</span>
+          </span>
+          <span class="mk-meta">documento</span>
+        </div>
+        <div class="mk-icone-linha">
+          <span class="mk-ficheiro" style="flex: 1 1 auto;">
+            <span class="mk-pasta"><span class="material-symbols-outlined mk-icone">receipt_long</span>Recibo RCP-2026-0042</span>
           </span>
           <span class="mk-meta">75,00 €</span>
         </div>
       </div>
 
       <div class="mk-cartao">
-        <div class="mk-cartao-titulo"><span>Avisos e assembleias</span><span class="mk-etiqueta mk-etiqueta-info">2 novas</span></div>
-        <div class="mk-icone-linha">
-          <span class="mk-ficheiro" style="flex: 1 1 auto;">
-            <span class="mk-pasta"><span class="material-symbols-outlined mk-icone">campaign</span>Manutenção do elevador — 3.ª feira</span>
-          </span>
-        </div>
+        <div class="mk-cartao-titulo"><span>Próximos acontecimentos</span><span class="mk-meta">calendário</span></div>
         <div class="mk-icone-linha">
           <span class="mk-ficheiro" style="flex: 1 1 auto;">
             <span class="mk-pasta"><span class="material-symbols-outlined mk-icone">forum</span>Assembleia de 12 de novembro</span>
@@ -57,10 +68,10 @@
     </div>
 
     <div class="mk-telemovel-rodape" aria-hidden="true">
-      <span class="ativo"><span class="material-symbols-outlined">dashboard</span>Situação</span>
+      <span class="ativo"><span class="material-symbols-outlined">home</span>Início</span>
       <span><span class="material-symbols-outlined">receipt_long</span>Quotas</span>
-      <span><span class="material-symbols-outlined">payments</span>Pagamentos</span>
       <span><span class="material-symbols-outlined">folder</span>Documentos</span>
+      <span><span class="material-symbols-outlined">campaign</span>Avisos</span>
     </div>
   </div>
 </div>

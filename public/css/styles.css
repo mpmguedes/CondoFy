@@ -997,6 +997,62 @@ textarea.form-control { min-height: auto; }
 .row.g-3 > [class*='col-'] { padding-top: 0.5rem; }
 .row.g-3 { row-gap: 0.15rem; }
 
+/* ── Área do condómino: Início (mobile-first) ──────────────────────
+   Peças próprias do painel Início: resumo da fração, lista de atividade e
+   atalhos. Tudo com os tokens da aplicação (sem cores nem medidas novas). */
+.portal-resumo .portal-valor {
+  font-size: calc(30px * var(--font-scale));
+  line-height: 1.1;
+  font-weight: 700;
+}
+.portal-linhas { display: flex; flex-direction: column; gap: 6px; }
+.portal-linha { display: flex; align-items: flex-start; gap: 8px; color: var(--c-text-muted); font-size: 0.875rem; }
+.portal-linha .material-symbols-outlined { font-size: calc(18px * var(--font-scale)); color: var(--c-primary); }
+.portal-linha-texto { min-width: 0; }
+.portal-titulo-seccao { color: var(--c-text-muted); letter-spacing: 0.04em; margin-bottom: 10px; }
+.portal-item { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
+a.portal-item:hover .portal-item-titulo { text-decoration: underline; }
+.portal-item-icone {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-primary-light);
+  color: var(--c-primary-dark);
+}
+.portal-item-icone .material-symbols-outlined { font-size: calc(19px * var(--font-scale)); }
+.portal-item-texto { display: flex; flex-direction: column; min-width: 0; }
+.portal-item-titulo { font-weight: 600; color: var(--c-text); }
+.portal-item-meta { color: var(--c-text-muted); font-size: 0.8rem; }
+/* Contador de avisos recentes no atalho do cabeçalho (área do condómino). */
+.icon-btn-badge { position: relative; }
+.icon-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--c-primary);
+  color: var(--c-on-primary);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+@media (max-width: 767.98px) {
+  /* Toque confortável nos itens de lista do Início (48px). */
+  .portal-item { min-height: 48px; }
+}
+/* Alvos de toque dos atalhos do Início: 48px em qualquer largura. A classe é
+   própria do portal para não alterar o painel de administração (onde
+   `.quick-action` fica em 36–44px por ser uso com rato). */
+.portal-atalho { min-height: 48px; }
+
 /* Painel — faixas horizontais agrupadas (sem um card por número) */
 .painel-strip {
   display: flex;
@@ -1365,6 +1421,47 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
 .auth-recuperar a:hover { color: var(--c-link-hover); text-decoration: underline; }
 
 .auth-foot { padding: .9rem 1rem 1.1rem; text-align: center; font-size: .78rem; color: var(--nav-text-muted); }
+
+/* Casca de ENTRADA (/login) e de VERIFICAÇÃO EM DUAS ETAPAS (/2fa/entrar):
+   as duas páginas do mesmo fluxo de autenticação partilham esta composição.
+   O layout sem sessão marca o <main> com `auth-shell` (ver
+   views/layouts/main.handlebars), e as regras comuns vivem aqui — uma só
+   definição — em vez de estarem repetidas no <style> de cada vista.
+   Sem `auth-shell` (ex.: recuperação de palavra-passe, convite), o <main>
+   mantém o fundo e o espaçamento normais da aplicação. */
+.auth-body.auth-shell { background: var(--auth-bg); padding: 0; }
+.auth-shell .auth-flash {
+  max-width: var(--auth-panel-w, 480px); /* alinhado com o cartão */
+  margin: 0 auto;
+  padding-top: 1rem;
+}
+/* Logótipo por cima do slogan, ambos centrados na vertical da coluna. */
+.auth-shell .auth-message {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.9rem;
+}
+.auth-shell .auth-message h2 { margin: 0; }
+/* Na entrada o logótipo é o elemento principal, maior do que no cabeçalho. */
+.auth-shell .auth-logo img { height: clamp(96px, 9vw, 144px); width: auto; max-width: 100%; }
+.auth-shell .auth-stage { padding-top: 0; }
+@media (max-width: 575.98px) {
+  .auth-shell .auth-logo img { height: auto; width: min(62vw, 230px); }
+}
+/* Em janelas baixas não se corta o cartão: encolhe ao conteúdo. */
+@media (max-height: 860px) {
+  .auth-shell .auth-panel-inner { min-height: 0; }
+  .auth-shell .auth-stage { padding-top: clamp(16px, 2.5vh, 28px); }
+}
+/* Código de verificação (seis dígitos): legível e fácil de conferir. */
+.auth-codigo {
+  font-size: 1.35rem;
+  letter-spacing: 0.3em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
 
 @media (min-width: 992px) {
   .auth-stage { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }

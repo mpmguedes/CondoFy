@@ -1,0 +1,14 @@
+{{!-- Separadores da área financeira do condómino (Quotas, Pagamentos e Recibos
+     passam a ser uma só área; os URLs antigos continuam válidos).
+     Recebe "ativo": quotas | pagamentos | recibos. --}}
+<nav class="quotas-tabs" aria-label="Secções das minhas quotas">
+  <a class="quotas-tab {{#if (eq ativo 'quotas')}}active{{/if}}" href="/condomino/quotas" {{#if (eq ativo 'quotas')}}aria-current="page"{{/if}}>
+    <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>Quotas
+  </a>
+  <a class="quotas-tab {{#if (eq ativo 'pagamentos')}}active{{/if}}" href="/condomino/pagamentos" {{#if (eq ativo 'pagamentos')}}aria-current="page"{{/if}}>
+    <span class="material-symbols-outlined" aria-hidden="true">payments</span>Pagamentos
+  </a>
+  <a class="quotas-tab {{#if (eq ativo 'recibos')}}active{{/if}}" href="/condomino/recibos" {{#if (eq ativo 'recibos')}}aria-current="page"{{/if}}>
+    <span class="material-symbols-outlined" aria-hidden="true">confirmation_number</span>Recibos
+  </a>
+</nav>

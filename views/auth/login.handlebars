@@ -1,39 +1,3 @@
-<style>
-  /* Contexto Login: a página vive dentro de <main.auth-body> (layout sem
-     sessão). A composição usa as classes .auth-* do styles.css (mesma
-     estrutura que "Os meus condomínios"). */
-  .auth-body { background: var(--auth-bg); padding: 0; }
-  .auth-flash { max-width: 480px; margin: 0 auto; padding-top: 1rem; }
-
-  /* Coluna esquerda: logótipo por cima do slogan, ambos centrados na vertical
-     dentro da coluna (deixa de estar no canto superior). */
-  .auth-message {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 0.9rem;
-  }
-  .auth-message h2 { margin: 0; }
-
-  /* Logótipo: versão horizontal com fundo transparente, pensada para superfícies
-     escuras. No telemóvel é dimensionado pela largura. */
-  .auth-logo img { height: clamp(96px, 9vw, 144px); width: auto; max-width: 100%; }
-  @media (max-width: 575.98px) {
-    .auth-logo img { height: auto; width: min(62vw, 230px); }
-  }
-
-  .auth-stage { padding-top: 0; }
-
-  /* Tudo centrado na vertical: o logótipo+slogan e a caixa ficam no meio da
-     janela, alinhados entre si (é o alinhamento central da grelha). Em janelas
-     baixas a caixa encolhe ao conteúdo, para não cortar. */
-  @media (max-height: 860px) {
-    .auth-panel-inner { min-height: 0; }
-    .auth-stage { padding-top: clamp(16px, 2.5vh, 28px); }
-  }
-</style>
-
 <div class="auth-page">
   <div class="auth-stage">
     <section class="auth-message">
@@ -47,13 +11,19 @@
     <section class="auth-panel-col">
       <div class="auth-panel">
         <div class="auth-panel-inner auth-panel-center">
-          <h1 class="auth-titulo">Bem-vindo</h1>
-          <p class="auth-sub">ao seu serviço de condomínio</p>
+          <h1 class="auth-titulo">Bem-vindo ao GesCondu</h1>
+          <p class="auth-sub">A sua área de gestão de condomínios</p>
           <p class="auth-hint">Autentique-se para aceder ao serviço</p>
 
           {{#if expirada}}
           <div class="alert alert-warning py-2 px-3 small mb-3" role="status">
             A sua sessão expirou por inatividade. Inicie sessão novamente.
+          </div>
+          {{/if}}
+
+          {{#if contaInativa}}
+          <div class="alert alert-warning py-2 px-3 small mb-3" role="status">
+            A sua conta encontra-se inativa. Contacte um administrador para voltar a ter acesso.
           </div>
           {{/if}}
 

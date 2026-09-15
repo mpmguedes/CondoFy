@@ -453,10 +453,24 @@ function testesFluxoSaida() {
   // Dependências montadas e porta de entrada.
   const app = ler('app.js');
   assert.ok(app.includes("require('./routes/saida-condominio')"), 'saída: router montado no app.js');
+  // O router declara já os caminhos completos (`/condomino/saida`, …): montá-lo
+  // sob `/condomino` duplicava o prefixo e o URL efetivo passava a ser
+  // `/condomino/condomino/saida`, deixando todas as ligações (perfil do
+  // condómino e painel do Início) a responder 404. A montagem tem de ser na raiz.
+  assert.ok(/app\.use\('\/',\s*require\('\.\/routes\/saida-condominio'\)\)/.test(app),
+    'saída: router montado na raiz (senão /condomino/saida devolve 404)');
+  assert.ok(!/app\.use\('\/condomino',\s*require\('\.\/routes\/saida-condominio'\)\)/.test(app),
+    'saída: router não é montado outra vez sob /condomino');
+  assert.ok(/router\.get\('\/condomino\/saida'/.test(rota), 'saída: o caminho declarado continua /condomino/saida');
   const dashboard = ler('views/condomino/dashboard.handlebars');
-  assert.ok(/href="\/condomino\/saida"/.test(dashboard), 'saída: ligação a partir da área do condómino');
-  assert.ok(/{{#if fracoesComResumo.length}}[\s\S]*Preparar saída do condomínio/.test(dashboard), 'saída: só é oferecida a quem tem frações');
-  assert.ok(/eq condominioAtivo\.role 'admin'/.test(dashboard), 'saída: avisa o administrador de que a administração é caso separado');
+  // A ação de saída vive no perfil do cabeçalho (e, no Início, apenas para quem
+  // já não tem frações); o aviso ao administrador está no próprio fluxo.
+  const layout = ler('views/layouts/main.handlebars');
+  assert.ok(/href="\/condomino\/saida"/.test(layout), 'saída: ligação a partir do perfil do condómino');
+  assert.ok(/\{\{#unless isAdmin\}\}[\s\S]{0,200}href="\/condomino\/saida"/.test(layout), 'saída: não é oferecida a quem administra');
+  assert.ok(/href="\/condomino\/saida"/.test(dashboard), 'saída: ligação a partir do bloco de antigo titular');
+  assert.ok(/transfira primeiro a administração/.test(rota) && /motivoIndisponivel: eGestor/.test(rota),
+    'saída: avisa o administrador de que a administração é caso separado');
   assert.ok(!/Terminar sessão[\s\S]{0,200}condomino\/saida/.test(dashboard), 'saída: não é confundida com terminar sessão');
   assert.ok(/titularidadesTerminadas/.test(dashboard), 'saída: explica ao antigo titular o que aconteceu');
   const condomino = ler('routes/condomino.js');
