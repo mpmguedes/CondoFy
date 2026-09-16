@@ -306,7 +306,70 @@ router.get('/quotas', async (req, res) => {
         pagamentoId: pago.pagamentoId || null,
       };
     })
-    .filter((l) => !estado || l.estadoEfetivo === estado);
+    .filter((l) => !estado || l.estadoEfetivo === estado)
+    // Estado APRESENTADO no portal, derivado dos pagamentos confirmados que a
+    // rota já calculou (`pago` vs `valor`). Não altera o estado guardado na base
+    // de dados: uma quota paga em parte e já vencida é «parcialmente paga», não
+    // «vencida». Uma quota anulada continua anulada — nunca vira pendente.
+    .map((l) => {
+      let estadoApresentado;
+      if (l.estado === 'anulada') estadoApresentado = 'anulada';
+      else if (l.estado === 'paga') estadoApresentado = 'paga';
+      else {
+        const pagoC = Math.round((Number(l.pago) || 0) * 100);
+        const valorC = Math.round((Number(l.valor) || 0) * 100);
+        const venceu = Boolean(l.data_vencimento) && String(l.data_vencimento).slice(0, 10) < hoje;
+        if (valorC > 0 && pagoC >= valorC) estadoApresentado = 'paga';
+        else if (pagoC > 0) estadoApresentado = 'parcialmente_paga';
+        else if (venceu) estadoApresentado = 'vencida';
+        else estadoApresentado = 'pendente';
+      }
+      return { ...l, estadoApresentado };
+    });
+
+  // Resumo por fração e do conjunto — calculado sobre as linhas já carregadas
+  // (nenhuma consulta nova) e respeitando o filtro de ano em vigor. Cada fração
+  // tem o seu próprio resumo: os valores nunca são misturados.
+  const resumoAno = [];
+  const porFracao = new Map();
+  linhas.forEach((l) => {
+    const chave = l.fracao_id != null ? l.fracao_id : 0;
+    if (!porFracao.has(chave)) {
+      porFracao.set(chave, {
+        fracao_id: chave,
+        designacao: l.fracaoDesignacao,
+        pagas: 0,
+        parciais: 0,
+        vencidas: 0,
+        pendentes: 0,
+        anuladas: 0,
+        total: 0,
+        pago: 0,
+        proximaQuota: null,
+      });
+    }
+    const g = porFracao.get(chave);
+    g.total += Number(l.valor) || 0;
+    g.pago += Number(l.pago) || 0;
+    if (l.estadoApresentado === 'paga') g.pagas += 1;
+    else if (l.estadoApresentado === 'parcialmente_paga') g.parciais += 1;
+    else if (l.estadoApresentado === 'vencida') g.vencidas += 1;
+    else if (l.estadoApresentado === 'anulada') g.anuladas += 1;
+    else g.pendentes += 1;
+    // Próxima quota desta fração: o vencimento mais próximo que ainda não está
+    // resolvido (as anuladas não contam). Só entre as quotas carregadas.
+    if (l.estadoApresentado !== 'paga' && l.estadoApresentado !== 'anulada' && l.data_vencimento) {
+      const venc = String(l.data_vencimento).slice(0, 10);
+      if (venc >= hoje && (!g.proximaQuota || venc < g.proximaQuota.data_vencimento)) {
+        g.proximaQuota = { valor: l.valor, data_vencimento: venc, mes: l.mes, ano: l.ano };
+      }
+    }
+  });
+  const totaisAno = { pagas: 0, parciais: 0, vencidas: 0, pendentes: 0, anuladas: 0, total: 0, pago: 0 };
+  porFracao.forEach((g) => {
+    resumoAno.push(g);
+    ['pagas', 'parciais', 'vencidas', 'pendentes', 'anuladas', 'total', 'pago'].forEach((k) => { totaisAno[k] += g[k]; });
+  });
 
   const anos = await Quota.findAll({
     attributes: [[require('sequelize').fn('DISTINCT', require('sequelize').col('ano')), 'ano']],
@@ -349,8 +412,19 @@ router.get('/quotas', async (req, res) => {
         vencimento: p.data_vencimento,
         estadoLabel,
         extraEstado: extra ? extra.estado : null,
+        // `valor_pago` já existe no modelo da parcela: é passado à vista tal como
+        // está, sem qualquer consulta adicional.
+        valorPago: base.valor_pago,
       };
     }),
+    resumoAno,
+    totaisAno,
+    hoje,
+    // Contexto de apresentação: o mês corrente só é realçado quando o ano em
+    // causa é o ano em curso (sem isso, o realce seria ambíguo). A designação da
+    // fração em cada linha só é necessária quando há mais do que uma.
+    currentMonth: new Date().getMonth() + 1,
+    temVariasFracoes: resumoAno.length > 1,
     filtros: { ano: ano || '', estado: estado || '' },
     anos: anos.map((a) => a.ano),
   });

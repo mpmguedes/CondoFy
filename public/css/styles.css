@@ -1110,6 +1110,47 @@ a.portal-item:hover .portal-item-titulo { text-decoration: underline; }
   .portal-atalhos { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
 
+/* ── Área Quotas do condómino: lista de quotas ─────────────────────
+   No telemóvel cada quota é um bloco (não obriga a scroll horizontal); a
+   tabela completa aparece a partir de 768px. A mesma informação nas duas. */
+.portal-quota-lista { list-style: none; margin: 0 0 1rem; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.portal-quota {
+  border: 1px solid var(--c-border);
+  border-left: 3px solid var(--c-border-strong);
+  border-radius: 12px;
+  background: var(--c-surface);
+  padding: 10px 12px;
+}
+.portal-quota-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.portal-quota-periodo { font-weight: 600; color: var(--c-text); min-width: 0; overflow-wrap: anywhere; }
+.portal-quota-valor { font-size: calc(20px * var(--font-scale)); font-weight: 700; color: var(--c-text); margin-top: 4px; }
+.portal-quota-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--c-text-muted); font-size: calc(12px * var(--font-scale)); margin-top: 4px; }
+/* Mês corrente: realce discreto (não altera o estado da quota). */
+.portal-quota-atual { border-left-color: var(--c-primary); background: var(--c-primary-light); }
+.portal-quota-selo {
+  display: inline-block;
+  font-size: calc(10px * var(--font-scale));
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--c-primary-dark);
+  background: var(--c-primary-light);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+/* A lista é a apresentação móvel; a tabela é a de desktop. */
+.portal-quota-tabela { display: none; }
+@media (min-width: 768px) {
+  .portal-quota-lista { display: none; }
+  .portal-quota-tabela { display: block; }
+  .portal-quota-selo { background: var(--c-surface-2); color: var(--c-text-muted); }
+}
+/* Separadores da área financeira ao toque: alvo confortável no telemóvel
+   (a regra base fica compacta para o desktop). */
+@media (max-width: 767.98px) {
+  .quotas-tab { min-height: 48px; padding: 10px 12px; }
+}
+
 /* Painel — faixas horizontais agrupadas (sem um card por número) */
 .painel-strip {
   display: flex;

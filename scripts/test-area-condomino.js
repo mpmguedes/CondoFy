@@ -332,6 +332,186 @@ function testeAreaQuotas() {
   assert.ok(/class="quotas-tab active"[^>]*href="\/condomino\/pagamentos"/.test(html), 'separadores: marca visual no ativo');
 }
 
+// ── 3b. Página de Quotas: situação, estados e multi-fração ────────
+// Reproduz a derivação de estado que a rota faz para cada linha (a partir do
+// valor pago confirmado que já calculou) e verifica o que a vista apresenta.
+const HOJE = '2026-09-20';
+function linhasDaRota(quotas, pagoPorQuota) {
+  return quotas.map((q) => {
+    const l = { ...q, pago: pagoPorQuota[q.id] || 0 };
+    let estadoApresentado;
+    if (l.estado === 'anulada') estadoApresentado = 'anulada';
+    else if (l.estado === 'paga') estadoApresentado = 'paga';
+    else {
+      const pagoC = Math.round((Number(l.pago) || 0) * 100);
+      const valorC = Math.round((Number(l.valor) || 0) * 100);
+      const venceu = Boolean(l.data_vencimento) && String(l.data_vencimento).slice(0, 10) < HOJE;
+      if (valorC > 0 && pagoC >= valorC) estadoApresentado = 'paga';
+      else if (pagoC > 0) estadoApresentado = 'parcialmente_paga';
+      else if (venceu) estadoApresentado = 'vencida';
+      else estadoApresentado = 'pendente';
+    }
+    return { ...l, estadoApresentado, mesNome: MESES[l.mes - 1] };
+  });
+}
+const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+// Resumo por fração, tal como a rota o constrói sobre as linhas carregadas.
+function resumoDaRota(linhas) {
+  const mapa = new Map();
+  linhas.forEach((l) => {
+    if (!mapa.has(l.fracao_id)) {
+      mapa.set(l.fracao_id, { fracao_id: l.fracao_id, designacao: l.fracaoDesignacao, pagas: 0, parciais: 0, vencidas: 0, pendentes: 0, anuladas: 0, total: 0, pago: 0, proximaQuota: null });
+    }
+    const g = mapa.get(l.fracao_id);
+    g.total += Number(l.valor) || 0;
+    g.pago += Number(l.pago) || 0;
+    if (l.estadoApresentado === 'paga') g.pagas += 1;
+    else if (l.estadoApresentado === 'parcialmente_paga') g.parciais += 1;
+    else if (l.estadoApresentado === 'vencida') g.vencidas += 1;
+    else if (l.estadoApresentado === 'anulada') g.anuladas += 1;
+    else g.pendentes += 1;
+    if (l.estadoApresentado !== 'paga' && l.estadoApresentado !== 'anulada' && l.data_vencimento) {
+      const venc = String(l.data_vencimento).slice(0, 10);
+      if (venc >= HOJE && (!g.proximaQuota || venc < g.proximaQuota.data_vencimento)) {
+        g.proximaQuota = { valor: l.valor, data_vencimento: venc, mes: l.mes, ano: l.ano };
+      }
+    }
+  });
+  return [...mapa.values()];
+}
+const paginaQuotas = (quotas, pagoPorQuota, extras = []) => {
+  const linhas = linhasDaRota(quotas, pagoPorQuota);
+  const resumoAno = resumoDaRota(linhas);
+  return render('views/condomino/quotas.handlebars', {
+    pessoa: { id: 10 }, linhas, extras, resumoAno, hoje: HOJE,
+    currentYear: 2026, currentMonth: 9, temVariasFracoes: resumoAno.length > 1,
+    filtros: { ano: '', estado: '' }, anos: [2026],
+  }).replace(/\s+/g, ' ');
+};
+
+function testePaginaQuotas() {
+  // ── Estado normal: tudo pago, com próxima quota ───────────────────
+  // Nesta fixture as quotas do ano estão pagas (total pago = total), mas existe
+  // uma quota futura por vencer: o emblema não pode dizer «Tudo pago» — seria
+  // contraditório com a próxima quota apresentada ao lado.
+  const normais = paginaQuotas([
+    { id: 1, fracao_id: 5, fracaoDesignacao: '1.º Esq', ano: 2026, mes: 8, valor: 75, data_vencimento: '2026-08-10', estado: 'paga' },
+    { id: 2, fracao_id: 5, fracaoDesignacao: '1.º Esq', ano: 2026, mes: 10, valor: 75, data_vencimento: '2026-10-10', estado: 'pendente' },
+  ], { 1: 75 });
+  assert.ok(/Valores por regularizar/.test(normais) && !/Tudo pago/.test(normais),
+    'quotas: com uma quota futura por pagar não diz «Tudo pago»');
+  assert.ok(/portal-hero-ok/.test(normais), 'quotas: cartão da fração sem atraso');
+  assert.ok(/Próxima quota: <strong>75,00 €<\/strong> até 10\/10\/2026/.test(normais),
+    'quotas: mostra a próxima quota da própria fração');
+  assert.ok(/1 paga\(s\) · 1 pendente\(s\)/.test(normais), 'quotas: resumo anual conta pagas e pendentes');
+  assert.ok(/75,00 € de 150,00 € no ano/.test(normais), 'quotas: total pago e total do ano');
+  assert.ok(/Fração 1\.º Esq/.test(normais), 'quotas: o resumo identifica a fração');
+
+  // ── Tudo pago: nenhuma quota do ano por pagar ─────────────────────
+  const tudoPago = paginaQuotas([
+    { id: 1, fracao_id: 5, fracaoDesignacao: '1.º Esq', ano: 2026, mes: 8, valor: 75, data_vencimento: '2026-08-10', estado: 'paga' },
+    { id: 2, fracao_id: 5, fracaoDesignacao: '1.º Esq', ano: 2026, mes: 9, valor: 75, data_vencimento: '2026-09-10', estado: 'paga' },
+  ], { 1: 75, 2: 75 });
+  assert.ok(/Tudo pago/.test(tudoPago), 'tudo pago: emblema correto quando nada está por pagar');
+  assert.ok(/150,00 € de 150,00 € no ano/.test(tudoPago), 'tudo pago: total pago igual ao total do ano');
+  assert.ok(/Sem quotas por vencer registadas/.test(tudoPago),
+    'tudo pago: diz que não há quotas por vencer em vez de inventar uma');
+  assert.ok(/2 paga\(s\) · 0 pendente\(s\)/.test(tudoPago), 'tudo pago: contagem só de pagas');
+
+  // ── Dívida: quota vencida e sem pagamento ─────────────────────────
+  const divida = paginaQuotas([
+    { id: 1, fracao_id: 5, fracaoDesignacao: '1.º Esq', ano: 2026, mes: 7, valor: 100, data_vencimento: '2026-07-10', estado: 'pendente' },
+    { id: 2, fracao_id: 5, fracaoDesignacao: '1.º Esq', ano: 2026, mes: 10, valor: 75, data_vencimento: '2026-10-10', estado: 'pendente' },
+  ], {});
+  assert.ok(/1 quota\(s\) em atraso/.test(divida), 'quotas: assinala as quotas em atraso');
+  assert.ok(/portal-hero-divida/.test(divida), 'quotas: cartão da fração assume o estado de atraso');
+  assert.ok(/Vencida/.test(divida) && /badge text-bg-danger">Vencida/.test(divida),
+    'quotas: a quota vencida mostra o emblema «Vencida»');
+  assert.ok(/0 paga\(s\) · 1 pendente\(s\) · 1 em atraso/.test(divida),
+    'quotas: contagem correta (atraso separado dos pendentes)');
+
+  // ── Parcialmente paga: 100 € de quota, 50 € pagos, vencimento passado ──
+  const parcial = paginaQuotas([
+    { id: 1, fracao_id: 5, fracaoDesignacao: '1.º Esq', ano: 2026, mes: 6, valor: 100, data_vencimento: '2026-06-10', estado: 'parcialmente_paga' },
+  ], { 1: 50 });
+  assert.ok(/badge text-bg-info">Parcialmente paga/.test(parcial),
+    'parcial: uma quota paga em parte aparece como «Parcialmente paga»');
+  assert.ok(!/badge text-bg-danger">Vencida/.test(parcial),
+    'parcial: NÃO é apresentada como «Vencida» apesar do vencimento ultrapassado');
+  assert.ok(/Pago 50,00 €/.test(parcial), 'parcial: mostra o valor já pago');
+  assert.ok(/1 parcialmente paga\(s\)/.test(parcial), 'parcial: contada à parte no resumo anual');
+
+  // O estado derivado nunca contradiz os valores pagos.
+  const casos = linhasDaRota([
+    { id: 1, valor: 100, data_vencimento: '2026-01-10', estado: 'pendente' },      // 0 pago, vencida
+    { id: 2, valor: 100, data_vencimento: '2026-01-10', estado: 'pendente' },      // 50 pago, vencida
+    { id: 3, valor: 100, data_vencimento: '2026-12-10', estado: 'pendente' },      // 0 pago, futura
+    { id: 4, valor: 100, data_vencimento: '2026-01-10', estado: 'pendente' },      // 100 pago
+    { id: 5, valor: 100, data_vencimento: '2026-01-10', estado: 'anulada' },       // anulada
+  ], { 2: 50, 4: 100 });
+  assert.deepStrictEqual(casos.map((c) => c.estadoApresentado),
+    ['vencida', 'parcialmente_paga', 'pendente', 'paga', 'anulada'],
+    'estados: paga / parcialmente paga / vencida / pendente / anulada, pela ordem certa');
+
+  // ── Quotas anuladas: nunca viram «Pendente» ───────────────────────
+  const comAnulada = paginaQuotas([
+    { id: 1, fracao_id: 5, fracaoDesignacao: '1.º Esq', ano: 2026, mes: 5, valor: 75, data_vencimento: '2026-05-10', estado: 'anulada' },
+    { id: 2, fracao_id: 5, fracaoDesignacao: '1.º Esq', ano: 2026, mes: 6, valor: 75, data_vencimento: '2026-06-10', estado: 'paga' },
+  ], { 2: 75 });
+  assert.ok(/badge text-bg-secondary">Anulada/.test(comAnulada), 'anuladas: apresentadas como «Anulada»');
+  assert.ok(/1 anulada\(s\)/.test(comAnulada), 'anuladas: contadas à parte, nunca como pendentes');
+  assert.ok(!/badge text-bg-warning">Pendente/.test(comAnulada), 'anuladas: nenhuma é apresentada como «Pendente»');
+
+  // ── Várias frações: um resumo por fração, sem misturar valores ────
+  const multi = paginaQuotas([
+    { id: 1, fracao_id: 5, fracaoDesignacao: '1.º Esq', ano: 2026, mes: 9, valor: 75, data_vencimento: '2026-09-10', estado: 'paga' },
+    { id: 2, fracao_id: 5, fracaoDesignacao: '1.º Esq', ano: 2026, mes: 10, valor: 75, data_vencimento: '2026-10-10', estado: 'pendente' },
+    { id: 3, fracao_id: 6, fracaoDesignacao: '2.º Dto', ano: 2026, mes: 9, valor: 42.5, data_vencimento: '2026-09-05', estado: 'pendente' },
+    { id: 4, fracao_id: 6, fracaoDesignacao: '2.º Dto', ano: 2026, mes: 11, valor: 42.5, data_vencimento: '2026-11-05', estado: 'pendente' },
+  ], { 1: 75 });
+  assert.strictEqual((multi.match(/portal-hero-valor/g) || []).length, 2,
+    'multi-fração: um cartão de resumo por fração');
+  assert.ok(/Fração 1\.º Esq/.test(multi) && /Fração 2\.º Dto/.test(multi),
+    'multi-fração: cada resumo identifica a sua fração');
+  assert.ok(/75,00 € de 150,00 € no ano/.test(multi), 'multi-fração: totais da fração A');
+  assert.ok(/0,00 € de 85,00 € no ano/.test(multi), 'multi-fração: totais da fração C (2 × 42,50 €, nada pago)');
+  assert.ok(!/117,50 € de 235,00 €/.test(multi),
+    'multi-fração: nenhum agregado que junte as duas frações');
+  assert.ok(/Próxima quota: <strong>75,00 €<\/strong> até 10\/10\/2026/.test(multi),
+    'multi-fração: próxima quota da fração A');
+  assert.ok(/Próxima quota: <strong>42,50 €<\/strong> até 05\/11\/2026/.test(multi),
+    'multi-fração: próxima quota da fração C');
+  assert.strictEqual((multi.match(/Próxima quota:/g) || []).length, 2,
+    'multi-fração: uma próxima quota por fração, sem repetir');
+  assert.ok(/· 1\.º Esq/.test(multi) && /· 2\.º Dto/.test(multi),
+    'multi-fração: a fração é identificada em cada linha do ano');
+
+  // ── Sem quotas por vencer: mensagem neutra, sem inventar valores ──
+  const semProxima = paginaQuotas([
+    { id: 1, fracao_id: 5, fracaoDesignacao: '1.º Esq', ano: 2026, mes: 1, valor: 75, data_vencimento: '2026-01-10', estado: 'paga' },
+  ], { 1: 75 });
+  assert.ok(/Sem quotas por vencer registadas/.test(semProxima), 'sem vencimento: mensagem neutra');
+  assert.ok(!/Próxima quota:/.test(semProxima), 'sem vencimento: não inventa uma próxima quota');
+  assert.ok(/Tudo pago/.test(semProxima), 'sem vencimento e sem atraso: «Tudo pago»');
+
+  // ── Página sem quotas ─────────────────────────────────────────────
+  const vazia = paginaQuotas([], {});
+  assert.ok(/Ainda não existem quotas registadas/.test(vazia), 'sem quotas: mensagem neutra');
+  assert.ok(!/portal-hero/.test(vazia), 'sem quotas: nenhum cartão de situação inventado');
+
+  // ── Extraordinárias: separadas das quotas normais ─────────────────
+  const comExtras = paginaQuotas(
+    [{ id: 1, fracao_id: 5, fracaoDesignacao: '1.º Esq', ano: 2026, mes: 9, valor: 75, data_vencimento: '2026-09-10', estado: 'paga' }],
+    { 1: 75 },
+    [{ id: 9, designacao: 'Elevador', fracaoDesignacao: '1.º Esq', parcela_numero: 2, valor: 40, vencimento: '2026-10-01', estado: 'cobrada', estadoLabel: 'Em cobrança', extraEstado: 'processada', valorPago: 0 }],
+  );
+  assert.ok(/Quotas extraordinárias/.test(comExtras), 'extras: secção própria mantida');
+  assert.ok(/Elevador/.test(comExtras) && /Parcela 2/.test(comExtras),
+    'extras: designação e parcela apresentadas');
+  assert.ok(/badge text-bg-info">Em cobrança/.test(comExtras), 'extras: estado apresentado em linguagem clara');
+}
+
 // ── 4. Cabeçalho do portal ────────────────────────────────────────
 function testeCabecalho() {
   const layout = ler('views/layouts/main.handlebars');
@@ -412,6 +592,7 @@ testeBarraInferior();
 testeInicio();
 testeInicioMultiFraccao();
 testeAreaQuotas();
+testePaginaQuotas();
 testeCabecalho();
 testeIntegridade();
 console.log('✓ Testes da área do condómino passaram (mobile-first, sem base de dados).');
