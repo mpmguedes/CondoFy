@@ -98,6 +98,12 @@ router.get('/contas/nova', (req, res) => {
   res.render('admin/contas/form', { titulo: 'Nova conta bancária', conta: null });
 });
 
+// Rotas do Fundo de Reserva registadas AQUI, antes de qualquer `/contas/:id…`:
+// o Express usa a primeira rota que casa, e `transferir-fcr` era apanhado por
+// `/contas/:id` (que respondia "conta não encontrada" e redirecionava para
+// /admin/contas, sem criar movimento nenhum).
+registarRotasFundoReserva();
+
 router.post('/contas', async (req, res) => {
   const { nome, banco, iban, tipo, saldo_inicial } = req.body;
   const ibanValidado = validarIban(iban);
@@ -118,15 +124,25 @@ router.post('/contas', async (req, res) => {
   res.redirect('/admin/contas');
 });
 
-router.get('/contas/:id/editar', async (req, res) => {
+// Rotas paramétricas de conta: o `:id` é restrito a dígitos (`:id(\d+)`) para
+// que nenhum caminho literal futuro de `/contas/...` volte a ser interpretado
+// como id de conta. Um id não numérico não casa aqui (404) em vez de cair num
+// "conta não encontrada" silencioso.
+router.get('/contas/:id(\\d+)/editar', async (req, res) => {
   const conta = await carregarConta(req);
-  if (!conta) return res.redirect('/admin/contas');
+  if (!conta) {
+    req.flash('error_msg', 'Conta bancária não encontrada neste condomínio.');
+    return res.redirect('/admin/contas');
+  }
   res.render('admin/contas/form', { titulo: 'Editar conta bancária', conta });
 });
 
-router.post('/contas/:id', async (req, res) => {
+router.post('/contas/:id(\\d+)', async (req, res) => {
   const conta = await carregarConta(req);
-  if (!conta) return res.redirect('/admin/contas');
+  if (!conta) {
+    req.flash('error_msg', 'Conta bancária não encontrada neste condomínio.');
+    return res.redirect('/admin/contas');
+  }
   const { nome, banco, iban, tipo, saldo_inicial, ativa } = req.body;
   const ibanValidado = validarIban(iban);
   if (!ibanValidado.ok) {
@@ -146,18 +162,24 @@ router.post('/contas/:id', async (req, res) => {
   res.redirect('/admin/contas');
 });
 
-router.post('/contas/:id/eliminar', async (req, res) => {
+router.post('/contas/:id(\\d+)/eliminar', async (req, res) => {
   const conta = await carregarConta(req);
-  if (conta) {
-    await conta.destroy();
-    await audit({ userId: req.user.id, acao: 'eliminar_conta_bancária', entidade: 'ContaBancaria', entidadeId: req.params.id });
+  if (!conta) {
+    req.flash('error_msg', 'Conta bancária não encontrada neste condomínio.');
+    return res.redirect('/admin/contas');
   }
+  await conta.destroy();
+  await audit({ userId: req.user.id, acao: 'eliminar_conta_bancária', entidade: 'ContaBancaria', entidadeId: req.params.id });
   req.flash('success_msg', 'Conta bancária eliminada.');
   res.redirect('/admin/contas');
 });
 
 // ═══════════════════════════════════════════════════════════════════
 // FUNDO DE RESERVA — movimento entre contas, nos dois sentidos
+//
+// (As duas rotas estão registadas ACIMA das rotas paramétricas de conta — ver
+// `/contas/nova` — e as paramétricas limitam o `:id` a dígitos: um caminho
+// literal como `transferir-fcr` nunca pode ser interpretado como `:id`.)
 //
 // · Corrente → Fundo de Reserva: o FCR recebido (parte das quotas efetivamente
 //   pagas que corresponde ao fundo) é passado para a conta do tipo
@@ -168,7 +190,12 @@ router.post('/contas/:id/eliminar', async (req, res) => {
 // Em ambos os sentidos cria-se um par de movimentos (saída na origem, entrada no
 // destino) e a operação é uma transferência entre contas do condomínio: NUNCA
 // receita nem despesa nos relatórios.
+//
+// O corpo das duas rotas vive em `registarRotasFundoReserva`, chamado logo após
+// `/contas/nova` (antes de `/contas/:id(\d+)`), para que a ordem de registo seja
+// impossível de inverter por engano ao editar o ficheiro.
 // ═══════════════════════════════════════════════════════════════════
+function registarRotasFundoReserva() {
 router.get('/contas/transferir-fcr', async (req, res) => {
   const [contas, resumo, fcr, deliberacoes] = await Promise.all([
     ContaBancaria.findAll({ where: { condominio_id: req.condominioId, ativa: true }, order: [['nome', 'ASC']] }),
@@ -276,6 +303,7 @@ router.post('/contas/transferir-fcr', async (req, res) => {
     res.redirect('/admin/contas/transferir-fcr');
   }
 });
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // CATEGORIAS
