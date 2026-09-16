@@ -6,6 +6,11 @@ module.exports = (sequelize) => {
     {
       id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
       conta_bancaria_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+      // Condomínio do movimento. Fica NULL no histórico anterior à migração
+      // 20260101000074 (os registos antigos continuam a ser lidos pela conta,
+      // como sempre) e é preenchido em todas as escritas novas — permite
+      // filtrar movimentos sem depender do join à conta.
+      condominio_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       data: { type: DataTypes.DATEONLY, allowNull: false },
       tipo: {
         type: DataTypes.ENUM('entrada', 'saida', 'transferencia'),
@@ -21,6 +26,10 @@ module.exports = (sequelize) => {
       despesa_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       extra_quota_parcela_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       documento_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+      // Deliberação de assembleia que autoriza esta utilização do FCR
+      // (transferência fundo_reserva → conta corrente). Nula nas transferências
+      // operacionais corrente → FCR e em tudo o resto.
+      deliberacao_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       estado: {
         type: DataTypes.ENUM('confirmado', 'anulado'),
         allowNull: false,

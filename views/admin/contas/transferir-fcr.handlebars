@@ -1,7 +1,7 @@
 <div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
     <h1>Fundo de Reserva</h1>
-    <p class="subtitle">Transferir o FCR recebido para a conta do Fundo de Reserva</p>
+    <p class="subtitle">Movimentos entre a conta corrente e a conta do Fundo de Reserva</p>
   </div>
   <a href="/admin/contas" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar às contas</a>
 </div>
@@ -9,8 +9,8 @@
 <div class="alert alert-info d-flex align-items-start gap-2">
   <span class="material-symbols-outlined">swap_horiz</span>
   <div>
-    <strong>Isto é uma transferência entre contas do condomínio, não é uma despesa.</strong>
-    <div class="small">O valor sai da conta de origem e entra na conta do Fundo de Reserva; não é contabilizado como receita nem como despesa nos relatórios.</div>
+    <strong>Esta operação é uma transferência entre contas e não uma despesa.</strong>
+    <div class="small">O valor sai de uma conta do condomínio e entra noutra; não é contabilizado como receita nem como despesa nos relatórios.</div>
   </div>
 </div>
 
@@ -50,53 +50,79 @@
   <span class="material-symbols-outlined">warning</span>
   <div>
     <strong>Ainda não existe uma conta do tipo Fundo de Reserva.</strong>
-    <div class="small">Crie uma conta com o tipo <em>Fundo de reserva</em> em <a href="/admin/contas/nova">Contas bancárias → Nova conta</a> para poder transferir o FCR recebido.</div>
+    <div class="small">Crie uma conta com o tipo <em>Fundo de reserva</em> em <a href="/admin/contas/nova">Contas bancárias → Nova conta</a> para poder movimentar o FCR.</div>
   </div>
 </div>
 {{/unless}}
 
 <div class="card mb-4">
-  <div class="card-header bg-white"><i class="bi bi-arrow-left-right me-1"></i>Nova transferência</div>
+  <div class="card-header bg-white"><i class="bi bi-arrow-left-right me-1"></i>Novo movimento</div>
   <div class="card-body">
     <form action="/admin/contas/transferir-fcr" method="POST" class="row g-3">
-      <div class="col-md-6">
-        <label class="form-label" for="contaOrigem">Conta de origem (conta corrente) *</label>
+      <div class="col-12">
+        <label class="form-label d-block">Sentido do movimento</label>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="radio" name="sentido" id="sentidoCorrenteFcr" value="corrente_para_fcr" checked onchange="alternarSentidoFcr()" />
+          <label class="form-check-label" for="sentidoCorrenteFcr">Corrente → Fundo de reserva <span class="text-muted small">(guardar o FCR recebido)</span></label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="radio" name="sentido" id="sentidoFcrCorrente" value="fcr_para_corrente" onchange="alternarSentidoFcr()" {{#unless deliberacoes}}disabled{{/unless}} />
+          <label class="form-check-label" for="sentidoFcrCorrente">Fundo de reserva → Conta corrente <span class="text-muted small">(utilizar o FCR aprovado)</span></label>
+        </div>
+      </div>
+
+      {{!-- Deliberação: só no sentido de utilização do fundo --}}
+      <div class="col-md-6 d-none" id="campoDeliberacao">
+        <label class="form-label" for="deliberacaoId">Deliberação aprovada *</label>
+        <select class="form-select" name="deliberacao_id" id="deliberacaoId">
+          <option value="">— Selecionar —</option>
+          {{#each deliberacoes}}
+          <option value="{{id}}">
+            {{#if assembleia.numero}}Assembleia {{assembleia.numero}}{{else}}Assembleia{{/if}} · ponto {{ordem}}: {{descricao}} — disponível {{eur disponivel}}
+          </option>
+          {{/each}}
+        </select>
+        <p class="form-text mb-0">
+          Só aparecem deliberações <strong>aprovadas</strong> com valor ainda disponível.
+          {{#if nDeliberacoesSemSaldo}}<span class="text-muted">{{nDeliberacoesSemSaldo}} deliberação(ões) aprovada(s) sem valor disponível.</span>{{/if}}
+        </p>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label" for="valorUtilizacao">Valor (€) *</label>
+        <input type="number" class="form-control" name="valor" id="valor" step="0.01" min="0.01" required />
+        <p class="form-text mb-0" id="ajudaValor">
+          Máximo: <strong>{{eur fcr.disponivel}}</strong> (FCR recebido e ainda não transferido).
+        </p>
+      </div>
+
+      <div class="col-md-6" id="campoOrigem">
+        <label class="form-label" for="contaOrigem">Conta de origem *</label>
         <select class="form-select" name="conta_origem_id" id="contaOrigem" required>
           <option value="">— Selecionar —</option>
-          {{#each contas}}
-          {{#unless (eq tipo 'fundo_reserva')}}
-          <option value="{{id}}">{{nome}} — saldo {{eur saldo}}</option>
-          {{/unless}}
-          {{/each}}
         </select>
-        <p class="form-text mb-0">De onde sai o dinheiro. Por defeito é a conta corrente onde os pagamentos entram.</p>
+        <p class="form-text mb-0" id="ajudaOrigem">De onde sai o dinheiro.</p>
       </div>
-      <div class="col-md-6">
-        <label class="form-label" for="contaDestino">Conta de destino (Fundo de Reserva) *</label>
-        <select class="form-select" name="conta_destino_id" id="contaDestino" required {{#unless contasFcr}}disabled{{/unless}}>
+      <div class="col-md-6" id="campoDestino">
+        <label class="form-label" for="contaDestino">Conta de destino *</label>
+        <select class="form-select" name="conta_destino_id" id="contaDestino" required>
           <option value="">— Selecionar —</option>
-          {{#each contasFcr}}
-          <option value="{{id}}">{{nome}} — saldo {{eur saldo}}</option>
-          {{/each}}
         </select>
-        <p class="form-text mb-0">Só são aceites contas do tipo <em>Fundo de reserva</em>.</p>
+        <p class="form-text mb-0" id="ajudaDestino">Só são aceites contas do tipo <em>Fundo de reserva</em>.</p>
       </div>
-      <div class="col-md-4">
-        <label class="form-label" for="valorFcr">Valor a transferir (€) *</label>
-        <input type="number" class="form-control" name="valor" id="valorFcr" step="0.01" min="0.01" max="{{fcr.disponivel}}" required />
-        <p class="form-text mb-0">Máximo: <strong>{{eur fcr.disponivel}}</strong> (FCR recebido e ainda não transferido).</p>
-      </div>
+
       <div class="col-md-4">
         <label class="form-label" for="dataFcr">Data do movimento</label>
         <input type="date" class="form-control" name="data" id="dataFcr" value="{{hoje}}" />
       </div>
-      <div class="col-md-4">
+      <div class="col-md-8">
         <label class="form-label" for="descricaoFcr">Descrição (opcional)</label>
-        <input type="text" class="form-control" name="descricao" id="descricaoFcr" maxlength="255" placeholder="Transferência de Fundo de Reserva" />
+        <input type="text" class="form-control" name="descricao" id="descricaoFcr" maxlength="255" placeholder="Descrição do movimento" />
       </div>
+
       <div class="col-12 d-flex gap-2">
-        <button class="btn btn-primary" {{#unless contasFcr}}disabled{{/unless}}>
-          <span class="material-symbols-outlined me-1">swap_horiz</span>Confirmar transferência
+        <button class="btn btn-primary" id="btnMovimento" {{#unless contasFcr}}disabled{{/unless}}>
+          <span class="material-symbols-outlined me-1">swap_horiz</span>Confirmar movimento
         </button>
         <a href="/admin/contas" class="btn btn-outline-secondary">Cancelar</a>
       </div>
@@ -104,8 +130,43 @@
   </div>
 </div>
 
+{{#if deliberacoes}}
+<div class="card mb-4">
+  <div class="card-header bg-white"><i class="bi bi-clipboard-check me-1"></i>Deliberações aprovadas com valor disponível</div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Assembleia</th>
+          <th>Ponto da ordem de trabalhos</th>
+          <th>Finalidade</th>
+          <th class="text-end">Aprovado</th>
+          <th class="text-end">Já utilizado</th>
+          <th class="text-end">Disponível</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each deliberacoes}}
+        <tr>
+          <td>
+            {{#if assembleia.numero}}<a href="/admin/assembleias/{{assembleia.id}}">{{assembleia.numero}}</a>{{else}}<a href="/admin/assembleias/{{assembleia.id}}">Assembleia</a>{{/if}}
+            <div class="small text-muted">{{formatDate assembleia.data}}</div>
+          </td>
+          <td>{{ordem}}. {{descricao}}</td>
+          <td class="text-muted small">{{#if nota}}{{nota}}{{else}}—{{/if}}</td>
+          <td class="text-end">{{eur valorAprovado}}</td>
+          <td class="text-end">{{eur utilizado}}</td>
+          <td class="text-end fw-semibold">{{eur disponivel}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{/if}}
+
 <div class="card">
-  <div class="card-header bg-white"><i class="bi bi-clock-history me-1"></i>Transferências de FCR registadas</div>
+  <div class="card-header bg-white"><i class="bi bi-clock-history me-1"></i>Movimentos do Fundo de Reserva registados</div>
   {{#if fcr.transferencias}}
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
@@ -132,6 +193,54 @@
     </table>
   </div>
   {{else}}
-  <div class="card-body text-muted">Ainda não há transferências de FCR registadas.</div>
+  <div class="card-body text-muted">Ainda não há movimentos de Fundo de Reserva registados.</div>
   {{/if}}
 </div>
+
+<script>
+  // Dados das contas (injetados pelo servidor) para montar as opções conforme o
+  // sentido escolhido: a conta do fundo só pode ser origem na utilização e
+  // destino no reforço.
+  const CONTAS = {{{json contas}}};
+  const LIMITE_FCR = {{{json fcr.disponivel}}};
+
+  function opcoes(lista, selecionado) {
+    let html = '<option value="">— Selecionar —</option>';
+    for (const c of lista) {
+      html += `<option value="${c.id}"${String(c.id) === String(selecionado) ? ' selected' : ''}>${c.nome} — saldo ${Number(c.saldo || 0).toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</option>`;
+    }
+    return html;
+  }
+
+  function alternarSentidoFcr() {
+    const utilizacao = document.getElementById('sentidoFcrCorrente').checked;
+    const origem = document.getElementById('contaOrigem');
+    const destino = document.getElementById('contaDestino');
+    const campoDelib = document.getElementById('campoDeliberacao');
+    const selectDelib = document.getElementById('deliberacaoId');
+    const contasFcr = CONTAS.filter((c) => c.tipo === 'fundo_reserva');
+    const contasNaoFcr = CONTAS.filter((c) => c.tipo !== 'fundo_reserva');
+
+    const origemAntes = origem.value;
+    const destinoAntes = destino.value;
+    if (utilizacao) {
+      origem.innerHTML = opcoes(contasFcr, origemAntes);
+      destino.innerHTML = opcoes(contasNaoFcr, destinoAntes);
+      document.getElementById('ajudaOrigem').textContent = 'Conta do Fundo de Reserva de onde sai o valor aprovado.';
+      document.getElementById('ajudaDestino').textContent = 'Conta corrente que recebe o valor para pagar a despesa.';
+      campoDelib.classList.remove('d-none');
+      selectDelib.required = true;
+      document.getElementById('ajudaValor').textContent = 'Máximo: valor ainda disponível na deliberação escolhida (e saldo da conta do fundo).';
+    } else {
+      origem.innerHTML = opcoes(contasNaoFcr, origemAntes);
+      destino.innerHTML = opcoes(contasFcr, destinoAntes);
+      document.getElementById('ajudaOrigem').textContent = 'De onde sai o dinheiro. Por defeito é a conta corrente onde os pagamentos entram.';
+      document.getElementById('ajudaDestino').textContent = 'Só são aceites contas do tipo Fundo de reserva.';
+      campoDelib.classList.add('d-none');
+      selectDelib.required = false;
+      document.getElementById('ajudaValor').innerHTML = 'Máximo: <strong>' + Number(LIMITE_FCR || 0).toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €</strong> (FCR recebido e ainda não transferido).';
+    }
+  }
+
+  alternarSentidoFcr();
+</script>

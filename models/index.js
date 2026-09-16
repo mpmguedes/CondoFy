@@ -242,6 +242,12 @@ MovimentoBancario.belongsTo(ExtraQuotaParcela, { foreignKey: 'extra_quota_parcel
 ExtraQuotaParcela.hasMany(MovimentoBancario, { foreignKey: 'extra_quota_parcela_id', as: 'movimentos' });
 MovimentoBancario.belongsTo(Documento, { foreignKey: 'documento_id', as: 'documento' });
 MovimentoBancario.belongsTo(User, { foreignKey: 'created_by', as: 'criador' });
+// Condomínio do movimento (nullable: histórico anterior à migração
+// 20260101000074 é lido pela conta, como sempre).
+MovimentoBancario.belongsTo(Condominio, { foreignKey: 'condominio_id', as: 'condominio' });
+// Deliberação que autoriza a utilização do FCR.
+MovimentoBancario.belongsTo(AgendaItem, { foreignKey: 'deliberacao_id', as: 'deliberacao' });
+AgendaItem.hasMany(MovimentoBancario, { foreignKey: 'deliberacao_id', as: 'movimentos_fcr' });
 
 // Orçamento (modelo antigo, mantido por compatibilidade)
 OrcamentoItem.belongsTo(Categoria, { foreignKey: 'categoria_id', as: 'categoria' });
@@ -321,7 +327,6 @@ Fracao.hasMany(ExtraQuotaParcela, { foreignKey: 'fracao_id', as: 'parcelas_extra
 // Itens da ordem de trabalhos
 Assembleia.hasMany(AgendaItem, { foreignKey: 'assembleia_id', as: 'agenda_itens' });
 AgendaItem.belongsTo(Assembleia, { foreignKey: 'assembleia_id', as: 'assembleia' });
-
 db.sequelize = sequelize;
 db.Sequelize = require('sequelize');
 

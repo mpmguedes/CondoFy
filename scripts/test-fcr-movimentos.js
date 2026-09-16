@@ -53,22 +53,47 @@ function comMetodos(linha) {
   return Object.assign(linha, { update: async (v) => Object.assign(linha, v) });
 }
 
-// Igual ao que o Sequelize faz com `include ... required: true`: aplica o
-// filtro do modelo incluído sobre os campos do registo associado.
-function incluir(linhas, include, camposAssoc) {
+// Igual ao que o Sequelize faz com `include ... required: true`: avalia o
+// `where` do modelo incluído sobre o registo associado.
+// `camposAssoc[alias]` (opcional) indica o campo do registo associado que
+// identifica o vínculo (ex.: `pagamento.condominio_id` quando o filtro pede
+// `condominio_id`). As chaves de operador (Symbol) são avaliadas como cláusulas:
+// `Op.or` pode receber uma lista de cláusulas e `Op.in` uma lista de valores.
+function incluir(linhas, include, camposAssoc = {}) {
   if (!include || !include.length) return linhas;
   const inc = include[0];
   const alias = inc.as;
-  const chave = camposAssoc[alias];
-  return linhas.filter((l) => {
-    const assoc = l[alias];
-    if (!assoc) return false;
-    const valor = assoc[chave];
-    const alvo = inc.where ? inc.where[chave] : undefined;
-    if (alvo === undefined) return true;
-    if (alvo && typeof alvo === 'object' && alvo[Op.in]) return alvo[Op.in].map(Number).includes(Number(valor));
-    return String(valor) === String(alvo);
-  });
+  const where = inc.where || {};
+  const alvo = camposAssoc[alias] || null;
+
+  const avaliar = (registro, clausula) => {
+    const simbolos = Object.getOwnPropertySymbols(clausula || {});
+    const chaves = Object.keys(clausula || {});
+    const tudo = [...chaves, ...simbolos.map(String)];
+    return tudo.every((k) => {
+      const ehOperador = k.startsWith('Symbol(');
+      const valor = ehOperador
+        ? clausula[simbolos.find((s) => String(s) === k)]
+        : clausula[k];
+      if (ehOperador) {
+        if (Array.isArray(valor)) return valor.some((sub) => avaliar(registro, sub));
+        if (valor && typeof valor === 'object') return avaliar(registro, valor);
+        return false;
+      }
+      const campo = registro[k] !== undefined ? k : (alvo || k);
+      const atual = registro[campo];
+      if (valor === null) return atual === null || atual === undefined;
+      if (Array.isArray(valor)) return valor.map(String).includes(String(atual));
+      if (valor && typeof valor === 'object') {
+        const sub = Object.getOwnPropertySymbols(valor).map(String);
+        if (sub.some((s) => s.startsWith('Symbol('))) return avaliar(registro, valor);
+        return Object.entries(valor).every(([kk, vv]) => String(registro[kk]) === String(vv));
+      }
+      return String(atual) === String(valor);
+    });
+  };
+
+  return linhas.filter((l) => Boolean(l[alias]) && avaliar(l[alias], where));
 }
 
 const modelos = {
@@ -122,11 +147,9 @@ const modelos = {
         ...a,
         pagamento: db.pagamentos.find((p) => Number(p.id) === Number(a.pagamento_id)) || null,
       }));
-      return incluir(linhas, o.include, { pagamento: 'estado' }).filter((a) => {
-        const inc = (o.include || [])[0];
-        if (!inc || !inc.where || !inc.where.condominio_id) return true;
-        return String(a.pagamento && a.pagamento.condominio_id) === String(inc.where.condominio_id);
-      });
+      // O `include` aplica o filtro do pagamento (estado + condomínio, com
+      // `Op.or` para aceitar registos antigos com condominio_id NULL).
+      return incluir(linhas, o.include, { pagamento: 'estado' });
     },
     create: async (dados) => {
       const a = { id: ++db.proximoId.numeracao, ...dados };
@@ -171,6 +194,20 @@ require.cache[dbPath] = {
   id: dbPath, filename: dbPath, loaded: true, children: [], paths: [],
   exports: { transaction: async () => transacao, Sequelize: {}, Op },
 };
+// Auditoria: duplo que captura o que as rotas registam (sem base de dados).
+const auditorias = [];
+const auditPath = require.resolve(path.join(RAIZ, 'helpers', 'audit'));
+require.cache[auditPath] = {
+  id: auditPath, filename: auditPath, loaded: true, children: [], paths: [],
+  exports: {
+    audit: async ({ userId, acao, entidade, entidadeId, detalhes }) => {
+      auditorias.push({
+        user_id: userId || null, acao, entidade: entidade || null,
+        entidade_id: entidadeId || null, detalhes: detalhes ? JSON.stringify(detalhes) : null,
+      });
+    },
+  },
+};
 
 // O helper real de movimentos é substituído por um duplo controlado: o que está
 // em teste é o encadeamento do FCR (a criação dos dois movimentos é exercida
@@ -180,10 +217,14 @@ const movimentosPath = require.resolve(path.join(RAIZ, 'helpers', 'movimentos'))
 require.cache[movimentosPath] = {
   id: movimentosPath, filename: movimentosPath, loaded: true, children: [], paths: [],
   exports: {
-    registarTransferencia: async ({ contaOrigemId, contaDestinoId, valor, data, descricao, transaction }) => {
+    registarTransferencia: async ({ contaOrigemId, contaDestinoId, valor, data, descricao, transaction, condominioId, deliberacaoId }) => {
       if (!transaction) throw new Error('a transferência do FCR tem de correr numa transação');
       if (falharNoDestino) throw new Error('falha simulada ao gravar o segundo movimento');
-      const base = { data: data || '2026-03-10', valor, descricao: descricao || 'Transferência entre contas', referencia: 'TRANSF', estado: 'confirmado' };
+      const base = {
+        data: data || '2026-03-10', valor, descricao: descricao || 'Transferência entre contas',
+        referencia: 'TRANSF', estado: 'confirmado',
+        condominio_id: condominioId || null, deliberacao_id: deliberacaoId || null,
+      };
       const saida = await modelos.MovimentoBancario.create({ ...base, conta_bancaria_id: contaOrigemId, tipo: 'saida' });
       const entrada = await modelos.MovimentoBancario.create({ ...base, conta_bancaria_id: contaDestinoId, tipo: 'entrada' });
       registoEscritas.push(saida.id, entrada.id);
@@ -198,8 +239,9 @@ require.cache[movimentosPath] = {
       return (toCents(conta.saldo_inicial) + entradasC - saidasC) / 100;
     },
     criarMovimento: async (d) => modelos.MovimentoBancario.create({
-      conta_bancaria_id: d.contaBancariaId, data: d.data || '2026-03-10', tipo: d.tipo, valor: d.valor,
-      descricao: d.descricao || null, referencia: d.referencia || null, pagamento_id: d.pagamentoId || null, estado: 'confirmado',
+      conta_bancaria_id: d.contaBancariaId, condominio_id: d.condominioId || null, data: d.data || '2026-03-10', tipo: d.tipo, valor: d.valor,
+      descricao: d.descricao || null, referencia: d.referencia || null, deliberacao_id: d.deliberacaoId || null,
+      pagamento_id: d.pagamentoId || null, estado: 'confirmado',
     }),
     sincronizarMovimentoDespesa: async () => {},
   },
@@ -220,8 +262,7 @@ function saldoC(contaId) {
 
 // Cria diretamente um pagamento confirmado com as aplicações indicadas (evita
 // depender da ordem de alocação FIFO para montar cenários de FCR).
-function seedPagamento({ id, condominioId = 1, fracaoId = 1, data = '2026-01-20', aplicacoes = [], contaBancariaId = 10 }) {
-  const totalC = aplicacoes.reduce((s, a) => s + toCents(a.valor), 0);
+function seedPagamento({ id, condominioId = 1, fracaoId = 1, data = '2026-01-20', aplicacoes = [], contaBancariaId = 10 }) {  const totalC = aplicacoes.reduce((s, a) => s + toCents(a.valor), 0);
   db.pagamentos.push({ id, condominio_id: condominioId, fracao_id: fracaoId, valor: totalC / 100, data_pagamento: data, estado: 'confirmado' });
   if (contaBancariaId) {
     db.movimentos.push({
@@ -235,6 +276,17 @@ function seedPagamento({ id, condominioId = 1, fracaoId = 1, data = '2026-01-20'
     });
   }
   return { pagamento: db.pagamentos[db.pagamentos.length - 1] };
+}
+
+// Pagamento confirmado ANTIGO: `condominio_id` NULL, como os registos criados
+// antes de a coluna existir.
+function seedPagamentoLegado({ id, quota, valor, data = '2026-01-10' }) {
+  db.pagamentos.push({ id, condominio_id: null, fracao_id: 1, valor: valor, data_pagamento: data, estado: 'confirmado' });
+  db.pagamentoQuotas.push({ id: 1000 + id, pagamento_id: id, quota_id: Number(quota), valor_aplicado: valor });
+  db.movimentos.push({
+    id: ++db.proximoId.movimento, conta_bancaria_id: 10, condominio_id: 1, data,
+    tipo: 'entrada', valor, descricao: `Pagamento ${id}`, referencia: null, pagamento_id: id, estado: 'confirmado',
+  });
 }
 
 // ── Cenário base ───────────────────────────────────────────────────
@@ -502,24 +554,108 @@ async function main() {
   assert.deepStrictEqual(resumoC2.contasFcrIds, [21], 'só a conta FCR do próprio condomínio é considerada');
 
   // Consultas: nenhuma leitura fica sem o condomínio — diretamente no `where`
-  // (quotas, contas, pagamentos) ou por associação obrigatória (os movimentos
-  // bancários não têm condominio_id: são filtrados pela conta do condomínio,
-  // como no resto do projeto).
+  // (quotas, contas), por associação obrigatória cujo `where` filtra o
+  // condomínio (os movimentos bancários pela conta; as aplicações pelo
+  // pagamento, que aceita o histórico com condominio_id NULL — a quota já foi
+  // filtrada por condomínio).
   assert.ok(consultas.length > 0, 'o cenário fez consultas');
+  // As chaves de operadores do Sequelize são Symbols: `JSON.stringify` mostra
+  // «{}», pelo que a verificação tem de percorrer as chaves (símbolos incluídos).
+  const chaves = (obj) => [...Object.keys(obj || {}), ...Object.getOwnPropertySymbols(obj || {}).map(String)];
+  const filtraCondominio = (where, profundidade = 0) => {
+    if (!where || profundidade > 3) return false;
+    if (chaves(where).includes('condominio_id')) return true;
+    return chaves(where).some((k) => {
+      const v = where[k] ?? where[Object.getOwnPropertySymbols(where).find((s) => String(s) === k)];
+      if (!v) return false;
+      if (Array.isArray(v)) return v.some((sub) => filtraCondominio(sub, profundidade + 1));
+      if (typeof v === 'object') return filtraCondominio(v, profundidade + 1);
+      return false;
+    });
+  };
   for (const c of consultas) {
     const where = c.where || {};
-    const porAssociacao = (c.include || []).some((i) => i && i.required && i.where && i.where.condominio_id !== undefined);
+    const porAssociacao = (c.include || []).some((i) => i && i.required && filtraCondominio(i.where));
     assert.ok(
-      where.condominio_id !== undefined || porAssociacao,
-      `${c.nome} tem de filtrar pelo condomínio (where: ${JSON.stringify(where)})`
+      filtraCondominio(where) || porAssociacao,
+      `${c.nome} tem de filtrar pelo condomínio (chaves: ${JSON.stringify(chaves(where))})`
     );
   }
   const todas = consultas.map((c) => ({ nome: c.nome, where: c.where, incl: c.include }));
   assert.ok(todas.some((c) => c.nome === 'MovimentoBancario.findAll' && (c.incl || []).some((i) => i && i.where && i.where.condominio_id !== undefined)), 'os movimentos são filtrados pela conta do condomínio');
   assert.ok(todas.some((c) => c.nome === 'Quota.sum' && String(c.where.condominio_id) === '1'), 'o FCR emitido é somado por condomínio');
   assert.ok(todas.some((c) => c.nome === 'ContaBancaria.findAll' && String(c.where.condominio_id) === '1'), 'as contas são lidas por condomínio');
+  assert.ok(todas.some((c) => c.nome === 'PagamentoQuota.findAll' && (c.incl || []).some((i) => i && filtraCondominio(i.where))), 'as aplicações são lidas com o pagamento confirmado do condomínio (aceitando o histórico sem condominio_id)');
 
-  // ── 13. Registo histórico (transferências antigas) ───────────────
+  // ── 13b. REGRESSÃO: pagamentos antigos (condominio_id NULL) ──────
+  // Causa concreta da falha «Corrente → FCR não fica registado»: os pagamentos
+  // criados antes de existir `pagamentos.condominio_id` ficam com NULL e o
+  // filtro de igualdade excluía-os, fazendo o FCR recebido sair a zero — a
+  // transferência era então recusada com «o valor excede o FCR recebido e ainda
+  // não transferido (0,00 €)» e não criava movimento nenhum.
+  reiniciar();
+  // Três pagamentos confirmados de 55,00 € (50,00 € + 5,00 € de FCR) com
+  // `condominio_id` NULL — exatamente como ficam os pagamentos anteriores à
+  // existência da coluna.
+  seedPagamentoLegado({ id: 1, data: '2026-01-10', quota: 100, valor: 55 });
+  seedPagamentoLegado({ id: 2, data: '2026-01-20', quota: 101, valor: 55 });
+  seedPagamentoLegado({ id: 3, data: '2026-02-10', quota: 103, valor: 55 });
+  const recebidoLegado = await fcr.fcrRecebidoC(1);
+  assert.strictEqual(recebidoLegado.totalC, 1500, 'FCR recebido conta pagamentos antigos (3 quotas pagas × 5,00 €)');
+  assert.strictEqual(recebidoLegado.nAplicacoes, 3, 'as três aplicações antigas são lidas');
+  const resumoLegado = await fcr.resumoFcr(1);
+  assert.strictEqual(resumoLegado.disponivelC, 1500, 'o FCR disponível conta os pagamentos antigos');
+  const movAntes = db.movimentos.length;
+  const transfLegado = await fcr.transferirFcr({
+    condominioId: 1, contaOrigemId: 10, contaDestinoId: 11, valorC: 1000, data: '2026-05-20', userId: 7,
+  });
+  assert.strictEqual(transfLegado.ok, true, 'corrente → FCR de 10,00 € é aceite com pagamentos antigos (era isto que falhava)');
+  assert.strictEqual(db.movimentos.length, movAntes + 2, 'a transferência cria os dois movimentos');
+  const parLegado = db.movimentos.slice(movAntes);
+  assert.strictEqual(parLegado.filter((m) => m.tipo === 'saida' && Number(m.conta_bancaria_id) === 10).length, 1, 'saída na conta à ordem');
+  assert.strictEqual(parLegado.filter((m) => m.tipo === 'entrada' && Number(m.conta_bancaria_id) === 11).length, 1, 'entrada na conta do fundo');
+  assert.ok(parLegado.every((m) => m.referencia === 'TRANSF'), 'os dois movimentos ficam com referencia TRANSF');
+  assert.ok(parLegado.every((m) => Number(m.condominio_id) === 1), `os dois movimentos ficam com o condomínio correto (recebido: ${JSON.stringify(parLegado.map((m) => [m.tipo, m.conta_bancaria_id, m.condominio_id]))})`);
+  assert.ok(parLegado.every((m) => m.deliberacao_id === null || m.deliberacao_id === undefined), 'corrente → FCR não leva deliberação');
+  // Pagamento de OUTRO condomínio continua a não contar (o filtro aceita NULL,
+  // mas nunca o condomínio errado).
+  db.pagamentos.push({ id: 900, condominio_id: 2, fracao_id: 9, valor: '55.00', data_pagamento: '2026-01-20', estado: 'confirmado' });
+  db.pagamentoQuotas.push({ id: 901, pagamento_id: 900, quota_id: 100, valor_aplicado: '55.00' });
+  const comOutroCondominio = await fcr.fcrRecebidoC(1);
+  assert.strictEqual(comOutroCondominio.totalC, 1500, 'um pagamento de outro condomínio continua fora do FCR recebido');
+  db.pagamentoQuotas = db.pagamentoQuotas.filter((a) => a.pagamento_id !== 900);
+  db.pagamentos = db.pagamentos.filter((p) => p.id !== 900);
+
+  // ── 13c. REGRESSÃO: uma utilização não consome o «disponível para transferir» ──
+  // Segundo erro encontrado: a ponta de ENTRADA das utilizações (fundo →
+  // corrente) era somada ao «transferido», esgotando o disponível e bloqueando
+  // as transferências corrente → FCR seguintes.
+  reiniciar();
+  // Dois pagamentos confirmados de 55,00 € (5,00 € de FCR cada) = 10,00 € de FCR
+  // recebido, sem topo nenhum para o fundo.
+  seedPagamento({ id: 1, data: '2026-01-10', aplicacoes: [{ quota: 100, valor: 55 }] });
+  seedPagamento({ id: 2, data: '2026-01-25', aplicacoes: [{ quota: 101, valor: 55 }] });
+  const recebidoAntes = (await fcr.fcrRecebidoC(1)).totalC;
+  assert.strictEqual(recebidoAntes, 1000, 'pré-condição: 10,00 € de FCR recebido');
+  const resumoAntes = await fcr.resumoFcr(1);
+  assert.strictEqual(resumoAntes.disponivelC, 1000, 'pré-condição: 10,00 € disponíveis para transferir');
+  // Transferência corrente → FCR de 5,00 € (o FCR recebido ainda não está no fundo).
+  const topUp1 = await fcr.transferirFcr({ condominioId: 1, contaOrigemId: 10, contaDestinoId: 11, valorC: 500, data: '2026-05-01', userId: 7 });
+  assert.strictEqual(topUp1.ok, true, 'pré-condição: topo o fundo com 5,00 €');
+  assert.strictEqual(topUp1.disponivelC, 500, 'depois do topo, sobram 5,00 € por transferir');
+  // Utilização de 5,00 € (fundo → corrente) marcada com deliberação.
+  db.movimentos.push({ id: 7001, conta_bancaria_id: 11, condominio_id: 1, data: '2026-05-02', tipo: 'saida', valor: '5.00', referencia: 'TRANSF', deliberacao_id: 100, estado: 'confirmado' });
+  db.movimentos.push({ id: 7002, conta_bancaria_id: 10, condominio_id: 1, data: '2026-05-02', tipo: 'entrada', valor: '5.00', referencia: 'TRANSF', deliberacao_id: 100, estado: 'confirmado' });
+  const resumoDepoisUtilizacao = await fcr.resumoFcr(1);
+  assert.strictEqual(resumoDepoisUtilizacao.transferidoC, 500, 'a utilização NÃO conta como transferido para o fundo');
+  assert.strictEqual(resumoDepoisUtilizacao.disponivelC, 500, 'o FCR disponível para transferir mantém-se em 5,00 €');
+  const topUp2 = await fcr.transferirFcr({ condominioId: 1, contaOrigemId: 10, contaDestinoId: 11, valorC: 500, data: '2026-05-03', userId: 7 });
+  assert.strictEqual(topUp2.ok, true, 'depois de uma utilização, ainda é possível transferir corrente → FCR (era isto que falhava)');
+  const historico = await fcr.fcrTransferidoC(1, { incluirDetalhe: true });
+  assert.strictEqual(historico.transferencias.length, 2, 'o histórico de transferências para o fundo mostra as duas transferências reais');
+  assert.ok(historico.transferencias.every((t) => t.contaDestinoId === 11), 'ambas entram na conta do fundo');
+
+  // ── 13d. Registo histórico (transferências antigas) ──────────────
   // Uma transferência antiga gravada como par saída/entrada com referencia
   // TRANSF conta UMA vez (o FCR não é transferido duas vezes por ter dois
   // movimentos), e continua a ser visível como transferência.
@@ -547,9 +683,69 @@ async function main() {
   assert.ok(/resumoFcr\(req\.condominioId/.test(rotas), 'a página mostra o resumo do FCR do condomínio ativo');
   assert.ok(/name="conta_origem_id"/.test(vista) && /name="conta_destino_id"/.test(vista), 'a vista permite escolher as duas contas');
   assert.ok(/name="valor"/.test(vista), 'a vista permite indicar o valor');
-  assert.ok(/não é uma despesa/.test(vista), 'a vista afirma que a operação não é uma despesa');
+  assert.ok(/não uma despesa/.test(vista), 'a vista afirma que a operação não é uma despesa');
   assert.ok(/FCR emitido/.test(vista) && /FCR recebido/.test(vista) && /FCR transferido/.test(vista) && /Disponível para transferir/.test(vista), 'a vista separa emitido/recebido/transferido/disponível');
   assert.ok(/transferir-fcr/.test(vistaContas), 'a lista de contas tem entrada para a transferência do FCR');
+
+  // ── 15. REGRESSÃO do fluxo completo pela ROTA real (corrente → FCR) ──
+  // É o cenário que falhou no teste manual: pagamentos antigos (sem
+  // condominio_id), POST pelo formulário e verificação dos dois movimentos e dos
+  // saldos das duas contas.
+  reiniciar();
+  seedPagamentoLegado({ id: 1, data: '2026-01-10', quota: 100, valor: 55 });
+  seedPagamentoLegado({ id: 2, data: '2026-01-20', quota: 101, valor: 55 });
+  const rotaPost = require(path.join(RAIZ, 'routes', 'financeiro')).stack
+    .find((l) => l.route && l.route.path === '/contas/transferir-fcr' && l.route.methods.post)
+    .route.stack.slice(-1)[0].handle;
+  const saldoAntes = { corrente: saldoC(10), fundo: saldoC(11) };
+  const flashesRota = [];
+  let redirectRota = null;
+  let erroRota = null;
+  let erroAssincrono = null;
+  const reqRota = {
+    params: {},
+    body: { sentido: 'corrente_para_fcr', conta_origem_id: '10', conta_destino_id: '11', valor: '10', data: '2026-05-20' },
+    condominioId: 1,
+    user: { id: 7 },
+    flash: (tipo, msg) => flashesRota.push({ tipo, msg }),
+  };
+  const resRota = {
+    redirect: (url) => { redirectRota = url; },
+    render: () => { throw new Error('o POST não deve renderizar'); },
+    status: () => resRota,
+  };
+  const movimentosAntes = db.movimentos.length;
+  const capturarErro = (e) => { erroAssincrono = e; };
+  process.once('unhandledRejection', capturarErro);
+  try {
+    await rotaPost(reqRota, resRota);
+  } catch (e) {
+    erroRota = e;
+  }
+  process.removeListener('unhandledRejection', capturarErro);
+  assert.ok(!erroRota && !erroAssincrono, `a rota não pode lançar erro (${(erroRota || erroAssincrono || {}).message || ''})`);
+  const sucessoRota = flashesRota.find((f) => f.tipo === 'success_msg');
+  const erroFlashes = flashesRota.find((f) => f.tipo === 'error_msg');
+  assert.ok(sucessoRota, `a rota confirma a transferência corrente → FCR (mensagem: ${erroFlashes ? erroFlashes.msg : 'nenhuma'})`);
+  assert.strictEqual(redirectRota, '/admin/contas/transferir-fcr', 'a rota volta para a página do Fundo de Reserva');
+  const parRota = db.movimentos.slice(movimentosAntes);
+  assert.strictEqual(parRota.length, 2, 'a rota cria exatamente os dois movimentos');
+  const saidaRota = parRota.find((m) => m.tipo === 'saida');
+  const entradaRota = parRota.find((m) => m.tipo === 'entrada');
+  assert.strictEqual(Number(saidaRota.conta_bancaria_id), 10, 'saída na conta à ordem');
+  assert.strictEqual(Number(entradaRota.conta_bancaria_id), 11, 'entrada na conta do Fundo de Reserva');
+  assert.strictEqual(toCents(saidaRota.valor), 1000, 'valor pedido no formulário (10,00 €)');
+  assert.strictEqual(toCents(entradaRota.valor), toCents(saidaRota.valor), 'os dois movimentos têm o mesmo valor');
+  assert.ok(parRota.every((m) => m.referencia === 'TRANSF'), 'os dois movimentos ficam com referencia TRANSF');
+  assert.ok(parRota.every((m) => Number(m.condominio_id) === 1), 'os dois movimentos ficam com o condomínio ativo');
+  assert.ok(parRota.every((m) => !m.deliberacao_id), 'corrente → FCR não leva deliberação');
+  assert.strictEqual(saldoC(10), saldoAntes.corrente - 1000, 'o saldo da conta à ordem diminui 10,00 €');
+  assert.strictEqual(saldoC(11), saldoAntes.fundo + 1000, 'o saldo da conta do Fundo de Reserva aumenta 10,00 €');
+  assert.strictEqual(saldoC(10) + saldoC(11), saldoAntes.corrente + saldoAntes.fundo, 'a transferência não cria nem destrói dinheiro');
+  // Auditoria do fluxo corrente → FCR (a ação mantém-se `transferir_fcr`).
+  const auditRota = auditorias.find((a) => a.acao === 'transferir_fcr');
+  assert.ok(auditRota, 'a transferência corrente → FCR é auditada como transferir_fcr');
+  assert.strictEqual(JSON.parse(auditRota.detalhes).valor, 10, 'a auditoria regista o valor transferido');
 
   console.log('✓ Testes do ciclo do FCR (receção e transferência) passaram, sem base de dados.');
 }

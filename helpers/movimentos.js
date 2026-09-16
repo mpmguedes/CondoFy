@@ -3,8 +3,13 @@ const { MovimentoBancario } = require('../models');
 const { toCents, fromCents } = require('./money');
 
 // Cria um movimento bancário. `valor` é sempre positivo; o tipo indica o sentido.
+// `condominioId` e `deliberacaoId` são opcionais: o primeiro identifica o
+// condomínio do movimento (os registos antigos ficam com NULL e continuam a ser
+// lidos pela conta) e o segundo liga a utilização do FCR à deliberação que a
+// autorizou.
 async function criarMovimento({
   contaBancariaId,
+  condominioId,
   data,
   tipo,
   valor,
@@ -16,6 +21,7 @@ async function criarMovimento({
   despesaId,
   extraQuotaParcelaId,
   documentoId,
+  deliberacaoId,
   observacoes,
   userId,
   transaction,
@@ -23,6 +29,7 @@ async function criarMovimento({
   return MovimentoBancario.create(
     {
       conta_bancaria_id: contaBancariaId,
+      condominio_id: condominioId || null,
       data: data || new Date(),
       tipo,
       valor: fromCents(toCents(valor)),
@@ -34,6 +41,7 @@ async function criarMovimento({
       despesa_id: despesaId || null,
       extra_quota_parcela_id: extraQuotaParcelaId || null,
       documento_id: documentoId || null,
+      deliberacao_id: deliberacaoId || null,
       observacoes: observacoes || null,
       created_by: userId || null,
       estado: 'confirmado',
@@ -60,28 +68,46 @@ async function criarMovimento({
 // transferência do Fundo de Reserva, que valida o FCR disponível antes de
 // escrever), os dois movimentos entram nessa transação e o commit/rollback é
 // responsabilidade de quem a abriu — garantindo atomicidade no conjunto todo.
-async function registarTransferencia({ contaOrigemId, contaDestinoId, valor, data, descricao, userId, transaction }) {
+//
+// `condominioId` e `deliberacaoId` são gravados nos dois movimentos do par: o
+// primeiro identifica o condomínio, o segundo liga a utilização do FCR à
+// deliberação que a autorizou (nulo nas transferências operacionais).
+async function registarTransferencia({
+  contaOrigemId,
+  contaDestinoId,
+  valor,
+  data,
+  descricao,
+  userId,
+  condominioId,
+  deliberacaoId,
+  transaction,
+}) {
   const t = transaction || (await sequelize.transaction());
   const propria = !transaction;
   try {
     const rotulo = descricao || 'Transferência entre contas';
     const saida = await criarMovimento({
       contaBancariaId: contaOrigemId,
+      condominioId,
       data,
       tipo: 'saida',
       valor,
       descricao: rotulo,
       referencia: 'TRANSF',
+      deliberacaoId,
       userId,
       transaction: t,
     });
     const entrada = await criarMovimento({
       contaBancariaId: contaDestinoId,
+      condominioId,
       data,
       tipo: 'entrada',
       valor,
       descricao: rotulo,
       referencia: 'TRANSF',
+      deliberacaoId,
       userId,
       transaction: t,
     });

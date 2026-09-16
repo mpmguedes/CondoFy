@@ -36,6 +36,7 @@ const {
 } = require('../models');
 const { toCents, fromCents } = require('./money');
 const { registarTransferencia, saldoContaMovimentos } = require('./movimentos');
+const { carregarDeliberacao, valorUtilizadoDeliberacaoC, ESTADOS_ASSEMBLEIA_SEM_DELIBERACAO } = require('./fcr-deliberacoes');
 
 // Referência que identifica uma transferência entre contas (os dois movimentos
 // — saída na origem e entrada no destino — partilham este valor).
@@ -93,13 +94,22 @@ async function fcrEmitidoC(condominioId, { transaction } = {}) {
   return toCents(total);
 }
 
-// ── FCR transferido: transferências já registadas para contas FCR ──
-// Uma transferência interna gera SEMPRE uma entrada na conta de destino e uma
-// saída com o mesmo valor e data (mesma referência 'TRANSF'). A contagem é
-// feita pelas ENTRADAS nas contas do tipo `fundo_reserva` — a conta de destino
-// é a única que identifica inequivocamente a operação —, com a saída
-// correspondente marcada como consumida para nunca contar o mesmo dinheiro duas
-// vezes (nem em dados antigos, nem se existir mais do que uma conta FCR).
+// ── FCR transferido: transferências já registadas da corrente para o fundo ──
+// Só conta o que foi EFETIVAMENTE transferido PARA o fundo: entradas na conta do
+// tipo `fundo_reserva` cujo par seja uma saída de OUTRA conta do condomínio e
+// que NÃO seja uma utilização (uma utilização tem `deliberacao_id` e tem a
+// entrada na conta corrente, não no fundo).
+//
+// Erro que isto corrige: contar qualquer entrada no fundo somava também a
+// ponta de entrada das UTILIZAÇÕES feitas para a conta corrente, o que inflava o
+// "transferido" e esgotava o "disponível" — a seguir, uma nova transferência
+// corrente → FCR era recusada com «o valor excede o FCR recebido e ainda não
+// transferido».
+//
+// A contagem é feita pelas entradas no fundo (a conta de destino identifica
+// inequivocamente a operação), com a saída correspondente marcada como
+// consumida para nunca contar o mesmo dinheiro duas vezes — inclusive em dados
+// antigos gravados apenas com `referencia: 'TRANSF'`.
 async function fcrTransferidoC(condominioId, { transaction, incluirDetalhe = false } = {}) {
   const contas = await ContaBancaria.findAll({
     where: { condominio_id: condominioId },
@@ -110,53 +120,91 @@ async function fcrTransferidoC(condominioId, { transaction, incluirDetalhe = fal
   const fundoIds = contas.filter((c) => c.tipo === 'fundo_reserva').map((c) => Number(c.id));
 
   const movimentos = await MovimentoBancario.findAll({
-    where: { referencia: REF_TRANSFERENCIA, estado: 'confirmado' },
-    attributes: ['id', 'conta_bancaria_id', 'data', 'tipo', 'valor', 'descricao'],
+    where: {
+      referencia: REF_TRANSFERENCIA,
+      estado: 'confirmado',
+      // O condomínio do movimento é lido da coluna nova quando existe (escritas
+      // a partir da migração 20260101000074) e, no histórico anterior, continua
+      // a ser lido pela conta — a mesma regra do resto do projeto.
+      [Op.or]: [{ condominio_id: null }, { condominio_id: condominioId }],
+    },
+    attributes: ['id', 'conta_bancaria_id', 'data', 'tipo', 'valor', 'descricao', 'deliberacao_id'],
     include: [{ model: ContaBancaria, as: 'conta_bancaria', attributes: ['id', 'condominio_id', 'nome', 'tipo'], where: { condominio_id: condominioId }, required: true }],
     order: [['data', 'ASC'], ['id', 'ASC']],
     transaction,
   });
 
   const dataISO = (m) => String(m.data || '').slice(0, 10);
-  const entradasFcr = movimentos.filter((m) => fundoIds.includes(Number(m.conta_bancaria_id)) && m.tipo !== 'saida');
-  const saidas = movimentos.filter((m) => m.tipo !== 'entrada');
-  const consumidas = new Set();
+  const entradas = movimentos.filter((m) => m.tipo === 'entrada');
+  const saidas = movimentos.filter((m) => m.tipo === 'saida');
+  const saidasUsadas = new Set();
 
-  const transferencias = entradasFcr.map((entrada) => {
-    // Saída correspondente: mesmo valor e data, preferindo outra conta do
-    // condomínio (a origem real da transferência); se não existir, é uma
-    // entrada antiga/solta e não é contada como transferência interna.
+  const transferencias = [];
+  for (const entrada of entradas) {
     const candidatas = saidas.filter(
-      (s) => !consumidas.has(s.id) && toCents(s.valor) === toCents(entrada.valor) && dataISO(s) === dataISO(entrada)
+      (s) => !saidasUsadas.has(s.id)
+        && toCents(s.valor) === toCents(entrada.valor)
+        && dataISO(s) === dataISO(entrada)
     );
-    const par =
-      candidatas.find((s) => Number(s.conta_bancaria_id) !== Number(entrada.conta_bancaria_id)) ||
-      candidatas[0] ||
-      null;
-    if (par) consumidas.add(par.id);
-    return {
+    // Prefere a saída de OUTRA conta (a origem real da transferência).
+    const par = candidatas.find((s) => Number(s.conta_bancaria_id) !== Number(entrada.conta_bancaria_id)) || candidatas[0] || null;
+    if (par) saidasUsadas.add(par.id);
+
+    const noFundo = fundoIds.includes(Number(entrada.conta_bancaria_id));
+    const origemFora = par && !fundoIds.includes(Number(par.conta_bancaria_id));
+    // Utilização do FCR (fundo → corrente) não é reforço do fundo e não entra
+    // aqui: o `deliberacao_id` identifica-a em qualquer das pontas do par.
+    const ehUtilizacao = Boolean(entrada.deliberacao_id)
+      || Boolean(par && par.deliberacao_id);
+
+    if (!par) {
+      // Entrada antiga/solta no fundo (sem par identificável): é dinheiro que
+      // entrou no fundo e não foi movimentado por nós — conta como transferido.
+      if (noFundo && !ehUtilizacao) {
+        transferencias.push({
+          id: entrada.id, data: entrada.data, valorC: toCents(entrada.valor),
+          descricao: entrada.descricao, origem: null, contaOrigemId: null,
+          destino: entrada.conta_bancaria ? entrada.conta_bancaria.nome : null,
+          contaDestinoId: Number(entrada.conta_bancaria_id), registada: true,
+        });
+      }
+      continue;
+    }
+
+    if (!noFundo) continue; // a ponta de entrada não é no fundo → não é reforço do fundo
+    if (ehUtilizacao) continue; // fundo → corrente: utilização, não reforço
+    if (fundoIds.includes(Number(par.conta_bancaria_id))) continue; // fundo → fundo
+    if (!origemFora) continue;
+
+    const origem = contasPorId.get(Number(par.conta_bancaria_id));
+    transferencias.push({
       id: entrada.id,
       data: entrada.data,
       valorC: toCents(entrada.valor),
       descricao: entrada.descricao,
-      origem: par && contasPorId.get(Number(par.conta_bancaria_id)) ? contasPorId.get(Number(par.conta_bancaria_id)).nome : null,
-      contaOrigemId: par ? Number(par.conta_bancaria_id) : null,
+      origem: origem ? origem.nome : null,
+      contaOrigemId: Number(par.conta_bancaria_id),
       destino: entrada.conta_bancaria ? entrada.conta_bancaria.nome : null,
       contaDestinoId: Number(entrada.conta_bancaria_id),
-      registada: Boolean(par),
-    };
-  });
+      registada: true,
+    });
+  }
 
-  const registadas = transferencias.filter((t) => t.registada);
-  const totalC = registadas.reduce((s, t) => s + t.valorC, 0);
+  const totalC = transferencias.reduce((s, t) => s + t.valorC, 0);
   // `valor` em euros para as vistas (as vistas formatam com o helper `eur`).
   const comVista = (t) => ({ ...t, valor: fromCents(t.valorC) });
   const ordenadas = transferencias.map(comVista).sort((a, b) => String(b.data).localeCompare(String(a.data)) || b.id - a.id);
-  if (!incluirDetalhe) return { totalC, contasFcr: fundoIds, nTransferencias: registadas.length };
-  return { totalC, contasFcr: fundoIds, nTransferencias: registadas.length, transferencias: ordenadas };
+  if (!incluirDetalhe) return { totalC, contasFcr: fundoIds, nTransferencias: transferencias.length };
+  return { totalC, contasFcr: fundoIds, nTransferencias: transferencias.length, transferencias: ordenadas };
 }
 
 // ── FCR recebido: aplicações de pagamentos CONFIRMADOS do condomínio ──
+// O isolamento vem da QUOTA (todas as quotas carregadas acima são do
+// condomínio). O `include` do pagamento exige apenas que esteja confirmado e,
+// quando o pagamento tem condomínio preenchido, que seja o mesmo: pagamentos
+// anteriores à existência de `pagamentos.condominio_id` ficam a NULL e continuam
+// a valer (o dinheiro entrou). Exigir igualdade exata aqui excluía-os e fazia o
+// FCR recebido sair a zero — era o que impedia a transferência corrente → FCR.
 async function fcrRecebidoC(condominioId, { transaction } = {}) {
   const quotas = await Quota.findAll({
     where: { condominio_id: condominioId },
@@ -168,7 +216,18 @@ async function fcrRecebidoC(condominioId, { transaction } = {}) {
   const aplicacoes = await PagamentoQuota.findAll({
     where: { quota_id: { [Op.in]: [...quotasPorId.keys()] } },
     attributes: ['quota_id', 'valor_aplicado'],
-    include: [{ model: Pagamento, as: 'pagamento', attributes: ['id', 'estado', 'condominio_id'], where: { estado: 'confirmado', condominio_id: condominioId }, required: true }],
+    include: [{
+      model: Pagamento,
+      as: 'pagamento',
+      attributes: ['id', 'estado', 'condominio_id'],
+      where: {
+        estado: 'confirmado',
+        // NULL = registo anterior à coluna; o vínculo ao condomínio é garantido
+        // pela quota (que já foi filtrada por condominio_id acima).
+        [Op.or]: [{ condominio_id: null }, { condominio_id: condominioId }],
+      },
+      required: true,
+    }],
     transaction,
   });
   const calculado = calcularFcrRecebidoC({ aplicacoes, quotasPorId });
@@ -203,36 +262,64 @@ async function resumoFcr(condominioId, { transaction, incluirDetalhe = false } =
 }
 
 // ── Validação da transferência (pura, sem BD) ──────────────────────
-// Ordem das regras: contas existentes (no condomínio) → distintas → destino FCR
-// → valor positivo → valor ≤ disponível. Devolve sempre { ok } ou
-// { ok:false, motivo, mensagem }.
+// `sentido`:
+//   · 'corrente_para_fcr' (por omissão, retrocompatível) — entrada de dinheiro
+//     no fundo: destino tem de ser conta do tipo fundo_reserva e o valor não
+//     pode exceder o FCR recebido e ainda não transferido;
+//   · 'fcr_para_corrente' — utilização do fundo: origem tem de ser conta do
+//     tipo fundo_reserva, destino não pode ser do fundo e o valor não pode
+//     exceder o saldo atual da conta FCR nem o limite autorizado (deliberação)
+//     quando existir.
+// Ordem: contas → direção → valor positivo → limite autorizado → saldo
+// disponível na origem. Devolve sempre { ok } ou { ok:false, motivo, mensagem }.
 function validarTransferenciaFcr({
   contaOrigem,
   contaDestino,
   valorC,
+  sentido = 'corrente_para_fcr',
   disponivelC = 0,
   saldoOrigemC = null,
+  limiteAutorizadoC = null,
+  limiteRotulo = 'valor aprovado ainda disponível',
 }) {
   if (!contaOrigem || !contaDestino) {
-    return { ok: false, motivo: 'conta_invalida', mensagem: 'Selecione a conta de origem e a conta do Fundo de Reserva.' };
+    return { ok: false, motivo: 'conta_invalida', mensagem: 'Selecione a conta de origem e a conta de destino.' };
   }
   if (Number(contaOrigem.id) === Number(contaDestino.id)) {
     return { ok: false, motivo: 'contas_iguais', mensagem: 'A conta de origem e a conta de destino não podem ser a mesma.' };
   }
-  if (contaDestino.tipo !== 'fundo_reserva') {
+  if (sentido === 'fcr_para_corrente') {
+    if (contaOrigem.tipo !== 'fundo_reserva') {
+      return { ok: false, motivo: 'origem_nao_fcr', mensagem: 'Para utilizar o Fundo de Reserva, a conta de origem tem de ser uma conta do tipo Fundo de Reserva.' };
+    }
+    if (contaDestino.tipo === 'fundo_reserva') {
+      return { ok: false, motivo: 'destino_fcr', mensagem: 'A conta de destino não pode ser uma conta do tipo Fundo de Reserva.' };
+    }
+  } else if (contaDestino.tipo !== 'fundo_reserva') {
     return { ok: false, motivo: 'destino_nao_fcr', mensagem: 'A conta de destino tem de ser uma conta do tipo Fundo de Reserva.' };
   }
   const valor = Math.round(Number(valorC) || 0);
   if (valor <= 0) {
     return { ok: false, motivo: 'valor_invalido', mensagem: 'Indique um valor positivo para transferir.' };
   }
+  if (limiteAutorizadoC !== null && valor > limiteAutorizadoC) {
+    return {
+      ok: false,
+      motivo: 'acima_do_aprovado',
+      valorC: valor,
+      limiteAutorizadoC,
+      mensagem: `O valor excede o ${limiteRotulo} (${fromCents(limiteAutorizadoC).toFixed(2).replace('.', ',')} €).`,
+    };
+  }
   if (valor > disponivelC) {
     return {
       ok: false,
-      motivo: 'acima_do_disponivel',
+      motivo: sentido === 'fcr_para_corrente' ? 'saldo_fcr_insuficiente' : 'acima_do_disponivel',
       valorC: valor,
       disponivelC,
-      mensagem: `O valor excede o FCR recebido e ainda não transferido (${fromCents(disponivelC).toFixed(2).replace('.', ',')} €).`,
+      mensagem: sentido === 'fcr_para_corrente'
+        ? `O valor excede o saldo atual da conta do Fundo de Reserva (${fromCents(disponivelC).toFixed(2).replace('.', ',')} €).`
+        : `O valor excede o FCR recebido e ainda não transferido (${fromCents(disponivelC).toFixed(2).replace('.', ',')} €).`,
     };
   }
   if (saldoOrigemC !== null && valor > saldoOrigemC) {
@@ -279,6 +366,7 @@ async function transferirFcr({ condominioId, contaOrigemId, contaDestinoId, valo
       data: data || new Date(),
       descricao: descricao || `Transferência de Fundo de Reserva: ${contaOrigem.nome} → ${contaDestino.nome}`,
       userId,
+      condominioId,
       transaction: t,
     });
     await t.commit();
@@ -290,6 +378,126 @@ async function transferirFcr({ condominioId, contaOrigemId, contaDestinoId, valo
       entradaId: ida.entradaId,
       contaOrigem: contaOrigem.nome,
       contaDestino: contaDestino.nome,
+    };
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
+}
+
+// ── Utilização do FCR: fundo_reserva → conta corrente (atómica) ────
+// Só com deliberação de assembleia APROVADA e dentro do valor ainda disponível
+// dessa deliberação. A cadeia completa é validada antes de escrever:
+//   deliberação → agenda_item → assembleia → condomínio  (carregarDeliberacao)
+//   movimento   → conta → condomínio                     (ContaBancaria.findOne)
+// Nenhum id do formulário é aceite sem esta verificação.
+//
+// Os dois movimentos (saída da conta FCR e entrada na conta corrente) ficam com
+// `deliberacao_id` e `referencia = 'TRANSF'`: é uma transferência entre contas,
+// nunca receita nem despesa. Tudo na MESMA transação — qualquer falha deixa a
+// base exatamente como estava.
+//
+// Devolve { saidaId, entradaId, valorC, disponivelAprovadoC, … } ou
+// { ok:false, motivo, mensagem }.
+async function transferirFcrAprovado({
+  condominioId,
+  deliberacaoId,
+  contaOrigemId,
+  contaDestinoId,
+  valorC,
+  data,
+  descricao,
+  userId,
+}) {
+  const t = await sequelizeTransaction();
+  try {
+    // 1) Deliberação (a cadeia até ao condomínio é validada na consulta).
+    const item = await carregarDeliberacao({ deliberacaoId, condominioId, transaction: t });
+    if (!item) {
+      await t.rollback();
+      return {
+        ok: false,
+        motivo: deliberacaoId ? 'deliberacao_invalida' : 'deliberacao_obrigatoria',
+        mensagem: deliberacaoId
+          ? 'A deliberação indicada não existe neste condomínio.'
+          : 'Escolha a deliberação que autoriza a utilização do Fundo de Reserva.',
+      };
+    }
+    if (item.deliberacao_estado !== 'aprovada') {
+      await t.rollback();
+      return {
+        ok: false,
+        motivo: 'deliberacao_nao_aprovada',
+        mensagem: 'Só uma deliberação aprovada autoriza a utilização do Fundo de Reserva.',
+      };
+    }
+    const assembleia = item.assembleia;
+    if (!assembleia || ESTADOS_ASSEMBLEIA_SEM_DELIBERACAO.includes(assembleia.estado)) {
+      await t.rollback();
+      return {
+        ok: false,
+        motivo: 'assembleia_nao_delibera',
+        mensagem: 'A assembleia desta deliberação não autoriza utilização do Fundo de Reserva.',
+      };
+    }
+    const valorAprovadoC = toCents(item.valor_aprovado);
+    if (valorAprovadoC <= 0) {
+      await t.rollback();
+      return { ok: false, motivo: 'sem_valor_aprovado', mensagem: 'A deliberação não tem valor aprovado.' };
+    }
+
+    // 2) Contas do condomínio ativo (nunca ids do formulário sem verificação).
+    const [contaOrigem, contaDestino] = await Promise.all([
+      ContaBancaria.findOne({ where: { id: contaOrigemId, condominio_id: condominioId }, transaction: t }),
+      ContaBancaria.findOne({ where: { id: contaDestinoId, condominio_id: condominioId }, transaction: t }),
+    ]);
+
+    // 3) Limites: valor aprovado ainda disponível e saldo real da conta FCR.
+    const utilizadoC = await valorUtilizadoDeliberacaoC(item.id, { condominioId, transaction: t });
+    const disponivelAprovadoC = Math.max(0, valorAprovadoC - utilizadoC);
+    const saldoOrigemC = contaOrigem ? toCents(await saldoContaMovimentos(contaOrigem, { transaction: t })) : 0;
+
+    const decisao = validarTransferenciaFcr({
+      contaOrigem,
+      contaDestino,
+      valorC,
+      sentido: 'fcr_para_corrente',
+      disponivelC: saldoOrigemC,
+      limiteAutorizadoC: disponivelAprovadoC,
+      limiteRotulo: 'valor aprovado ainda disponível nesta deliberação',
+    });
+    if (!decisao.ok) {
+      await t.rollback();
+      return { ...decisao, disponivelAprovadoC };
+    }
+
+    // 4) Os dois movimentos, com o mesmo valor, na mesma transação.
+    const ida = await registarTransferencia({
+      contaOrigemId: contaOrigem.id,
+      contaDestinoId: contaDestino.id,
+      valor: fromCents(decisao.valorC),
+      data: data || new Date(),
+      descricao: descricao || `Utilização do Fundo de Reserva (${assembleia.numero || 'assembleia'}): ${contaOrigem.nome} → ${contaDestino.nome}`,
+      userId,
+      condominioId,
+      deliberacaoId: item.id,
+      transaction: t,
+    });
+    await t.commit();
+    return {
+      ok: true,
+      valorC: decisao.valorC,
+      saidaId: ida.saidaId,
+      entradaId: ida.entradaId,
+      deliberacaoId: item.id,
+      assembleiaId: assembleia.id,
+      assembleiaNumero: assembleia.numero || null,
+      descricaoPonto: item.descricao,
+      contaOrigem: contaOrigem.nome,
+      contaDestino: contaDestino.nome,
+      valorAprovadoC,
+      utilizadoC: utilizadoC + decisao.valorC,
+      disponivelAprovadoC: Math.max(0, disponivelAprovadoC - decisao.valorC),
     };
   } catch (err) {
     await t.rollback();
@@ -313,4 +521,5 @@ module.exports = {
   fcrTransferidoC,
   resumoFcr,
   transferirFcr,
+  transferirFcrAprovado,
 };

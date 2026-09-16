@@ -15,6 +15,13 @@ const { getCondominio } = require('../helpers/condominio');
 const storage = require('../helpers/storage');
 const { gerarConvocatoriaPDF, gerarAtaPDF } = require('../helpers/pdf');
 const cabecalhos = require('../helpers/cabecalhos-ficheiro');
+const { toCents, fromCents } = require('../helpers/money');
+const {
+  validarDeliberacao,
+  utilizacaoPorItemC,
+  temMovimentosAssociados,
+  ESTADOS_ASSEMBLEIA_SEM_DELIBERACAO,
+} = require('../helpers/fcr-deliberacoes');
 
 const router = express.Router();
 // Isolamento: condomínio ativo (sessão validada) em todas as operações.
@@ -55,6 +62,13 @@ function parseHoraSegundos(hora) {
   if (min >= 60) { min -= 60; h += 1; }
   if (h >= 24) h -= 24;
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
+// Aceita "1234,56" (PT) ou "1234.56" (formulário HTML) — nunca lança.
+function parseDecimal(valor, fallback = 0) {
+  if (valor === null || valor === undefined || valor === '') return fallback;
+  const n = parseFloat(String(valor).replace(',', '.'));
+  return Number.isFinite(n) ? n : fallback;
 }
 
 // Assembleia do condomínio ATIVO (null quando não pertence — bloqueia IDOR).
@@ -161,6 +175,23 @@ router.get('/assembleias/:id', async (req, res) => {
     }),
   ]);
 
+  // Utilização do FCR por ponto: valor aprovado, já utilizado e ainda
+  // disponível (calculado só pelas saídas confirmadas da conta do fundo). Fica
+  // no próprio item para a vista poder mostrá-lo sem helpers extra.
+  const utilizacaoC = await utilizacaoPorItemC({ condominioId: req.condominioId, itemIds: (assembleia.agenda_itens || []).map((i) => i.id) });
+  for (const item of assembleia.agenda_itens || []) {
+    const valorAprovadoC = toCents(item.valor_aprovado);
+    const usadoC = utilizacaoC.get(Number(item.id)) || 0;
+    item.setDataValue('fcr', {
+      valorAprovadoC,
+      utilizadoC: usadoC,
+      disponivelC: Math.max(0, valorAprovadoC - usadoC),
+      valorAprovado: fromCents(valorAprovadoC),
+      utilizado: fromCents(usadoC),
+      disponivel: fromCents(Math.max(0, valorAprovadoC - usadoC)),
+    });
+  }
+
   res.render('admin/assembleias/detalhe', {
     titulo: assembleia.numero ? `Assembleia ${assembleia.numero}` : 'Assembleia',
     assembleia,
@@ -168,6 +199,7 @@ router.get('/assembleias/:id', async (req, res) => {
     fracoes,
     pessoas,
     anexos,
+    deliberacaoPendente: ESTADOS_ASSEMBLEIA_SEM_DELIBERACAO.includes(assembleia.estado),
     driveLigado: storage.isConfigured(req.condominioId),
     tipos: TIPOS,
     estadosLabel: ESTADOS_LABEL,
@@ -238,8 +270,82 @@ router.post('/assembleias/:id/agenda/:aid', async (req, res) => {
 router.post('/assembleias/:id/agenda/:aid/eliminar', async (req, res) => {
   const assembleia = await carregarAssembleia(req);
   if (!assembleia) return res.redirect('/admin/assembleias');
-  await AgendaItem.destroy({ where: { id: req.params.aid, assembleia_id: assembleia.id } });
+  const item = await AgendaItem.findOne({ where: { id: req.params.aid, assembleia_id: assembleia.id } });
+  if (!item) return res.redirect(`/admin/assembleias/${assembleia.id}`);
+
+  // Um ponto já usado financeiramente (utilização do FCR registada em
+  // movimentos bancários) nunca é eliminado: apagaria a ligação entre a
+  // deliberação e o dinheiro que ela autorizou.
+  const movimentos = await temMovimentosAssociados(item.id);
+  if (movimentos > 0) {
+    req.flash(
+      'error_msg',
+      `Este ponto não pode ser eliminado: já existe utilização financeira associada à deliberação (${movimentos} movimento(s) do Fundo de Reserva). Anule os movimentos primeiro, se for mesmo necessário.`
+    );
+    return res.redirect(`/admin/assembleias/${assembleia.id}`);
+  }
+
+  await AgendaItem.destroy({ where: { id: item.id, assembleia_id: assembleia.id } });
   req.flash('success_msg', 'Ponto removido.');
+  res.redirect(`/admin/assembleias/${assembleia.id}`);
+});
+
+// ── Deliberação do ponto (resultado registado manualmente) ─────────
+// Não há votação eletrónica nem cálculo de quórum: o gestor regista o
+// resultado. O que se valida é o que autoriza dinheiro: estado validado,
+// sujeito a votação, valor aprovado > 0 e assembleia que já pode deliberar.
+router.post('/assembleias/:id/agenda/:aid/deliberacao', async (req, res) => {
+  const assembleia = await carregarAssembleia(req);
+  if (!assembleia) return res.redirect('/admin/assembleias');
+  const item = await AgendaItem.findOne({ where: { id: req.params.aid, assembleia_id: assembleia.id } });
+  if (!item) {
+    req.flash('error_msg', 'Ponto da ordem de trabalhos não encontrado nesta assembleia.');
+    return res.redirect(`/admin/assembleias/${assembleia.id}`);
+  }
+
+  const valorAprovadoC = toCents(parseDecimal(req.body.valor_aprovado, 0));
+  const decisao = validarDeliberacao({
+    assembleia,
+    item,
+    estado: req.body.deliberacao_estado,
+    valorAprovadoC,
+  });
+  if (!decisao.ok) {
+    req.flash('error_msg', decisao.mensagem);
+    return res.redirect(`/admin/assembleias/${assembleia.id}`);
+  }
+
+  const nota = String(req.body.deliberacao_nota || '').trim() || null;
+  const anterior = {
+    estado: item.deliberacao_estado,
+    valorAprovado: item.valor_aprovado,
+    nota: item.deliberacao_nota,
+  };
+  await item.update({
+    deliberacao_estado: req.body.deliberacao_estado || 'pendente',
+    valor_aprovado: decisao.valorAprovadoC === null ? null : fromCents(decisao.valorAprovadoC),
+    deliberacao_nota: nota,
+  });
+
+  await audit({
+    userId: req.user.id,
+    acao: 'registar_deliberacao',
+    entidade: 'AgendaItem',
+    entidadeId: item.id,
+    detalhes: {
+      condominioId: req.condominioId,
+      assembleiaId: assembleia.id,
+      estado: item.deliberacao_estado,
+      valorAprovado: item.valor_aprovado,
+      anterior,
+    },
+  });
+  req.flash(
+    'success_msg',
+    item.deliberacao_estado === 'aprovada'
+      ? `Deliberação registada: aprovada até ${fromCents(decisao.valorAprovadoC).toFixed(2).replace('.', ',')} € de Fundo de Reserva.`
+      : 'Deliberação registada (não autoriza utilização do Fundo de Reserva).'
+  );
   res.redirect(`/admin/assembleias/${assembleia.id}`);
 });
 
