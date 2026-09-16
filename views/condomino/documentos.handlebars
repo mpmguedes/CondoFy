@@ -1,63 +1,109 @@
-<div class="page-heading">
-  <h1>Documentos do condomínio</h1>
-  <p class="subtitle">Documentos disponibilizados pela administração aos condóminos</p>
+﻿{{!-- Documentos do condomínio (mobile-first).
+
+     Cartões por documento no telemóvel; a partir de 768px a mesma lista em duas
+     colunas, para aproveitar o espaço sem uma tabela pesada. O ficheiro é sempre
+     servido pelo GesCondu através de `urlDocumento` (rota interna autorizada em
+     cada pedido) — nunca por um link direto ao armazenamento. --}}
+<div class="page-heading portal-cabecalho">
+  <h1>Documentos</h1>
+  <p class="subtitle">Documentos que a administração disponibilizou aos condóminos{{#if nDocumentos}} · {{nDocumentos}} documento(s){{/if}}</p>
 </div>
 
-{{#if pasta}}
-<div class="card mb-3"><div class="card-body d-flex flex-wrap gap-2">
-  <a href="/condomino/documentos" class="btn btn-sm btn-outline-secondary">Todos</a>
-  <span class="badge text-bg-primary align-self-center">{{lookup pastas pasta}}</span>
-</div></div>
+{{#unless pessoa}}
+<div class="alert alert-warning">A sua conta ainda não está associada a um condómino neste condomínio. Contacte a administração.</div>
 {{else}}
-<div class="card mb-3"><div class="card-body d-flex flex-wrap gap-2">
-  {{#each pastas}}<a href="/condomino/documentos?pasta={{@key}}" class="btn btn-sm btn-outline-secondary">{{this}}</a>{{/each}}
-</div></div>
-{{/if}}
 
-{{#if pasta}}
-  {{#if documentos}}
-  <div class="card"><div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
-      <thead class="table-light"><tr><th>Nome</th><th>Data</th><th class="text-end">Ações</th></tr></thead>
-      <tbody>
-        {{#each documentos}}
-        <tr>
-          <td class="fw-semibold">{{nome}}</td>
-          <td class="text-nowrap">{{formatDate data}}</td>
-          <td class="text-end">
-            {{#if (urlDocumento this 'condomino')}}<a href="{{urlDocumento this 'condomino'}}" class="btn btn-sm btn-outline-primary">Ver/Descarregar</a>{{/if}}
-            {{#if (urlDocumentoExterno this)}}<a href="{{urlDocumentoExterno this}}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary" title="Link externo indicado pela administração">Link externo</a>{{/if}}
-          </td>
-        </tr>
-        {{/each}}
-      </tbody>
-    </table>
-  </div></div>
-  {{else}}
-  <div class="alert alert-light border small">Sem documentos nesta categoria.</div>
+{{!-- ── Filtros: categoria (pasta) e ano ─────────────────────────────── --}}
+<div class="portal-filtros card mb-3"><div class="card-body">
+  <div class="portal-filtro-linha">
+    <span class="stat-label">Categoria</span>
+    <div class="portal-chips">
+      <a class="portal-chip{{#unless pasta}} portal-chip-ativo{{/unless}}" href="/condomino/documentos{{#if anoFiltro}}?ano={{anoFiltro}}{{/if}}">Todos</a>
+      {{#each pastas}}<a class="portal-chip{{#if (eq ../pasta @key)}} portal-chip-ativo{{/if}}" href="/condomino/documentos?pasta={{@key}}{{#if ../anoFiltro}}&ano={{../anoFiltro}}{{/if}}">{{this}}</a>{{/each}}
+    </div>
+  </div>
+  {{#if anos.length}}
+  <div class="portal-filtro-linha">
+    <span class="stat-label">Ano</span>
+    <div class="portal-chips">
+      <a class="portal-chip{{#unless anoFiltro}} portal-chip-ativo{{/unless}}" href="/condomino/documentos{{#if pasta}}?pasta={{pasta}}{{/if}}">Todos</a>
+      {{#each anos}}<a class="portal-chip{{#if (eq ../anoFiltro this)}} portal-chip-ativo{{/if}}" href="/condomino/documentos?ano={{this}}{{#if ../pasta}}&pasta={{../pasta}}{{/if}}">{{this}}</a>{{/each}}
+    </div>
+  </div>
   {{/if}}
-{{else}}
-  {{#if agrupados}}
-    {{#each agrupados}}
-    <h2 class="h6 mt-3 mb-2">{{rotulo}}</h2>
-    <div class="card"><div class="table-responsive">
-      <table class="table table-sm table-hover align-middle mb-0">
-        <tbody>
-          {{#each itens}}
-          <tr>
-            <td class="fw-semibold">{{nome}}</td>
-            <td class="text-nowrap">{{formatDate data}}</td>
-            <td class="text-end">
-              {{#if (urlDocumento this 'condomino')}}<a href="{{urlDocumento this 'condomino'}}" class="btn btn-sm btn-outline-primary">Ver</a>{{/if}}
-              {{#if (urlDocumentoExterno this)}}<a href="{{urlDocumentoExterno this}}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary" title="Link externo indicado pela administração">Link externo</a>{{/if}}
-            </td>
-          </tr>
-          {{/each}}
-        </tbody>
-      </table>
-    </div></div>
+</div></div>
+
+{{!-- ── Documentos agrupados por categoria ───────────────────────────── --}}
+{{#if agrupados.length}}
+  {{#each agrupados}}
+  <h2 class="h6 text-uppercase portal-titulo-seccao">{{rotulo}}</h2>
+  <ul class="portal-doc-lista">
+    {{#each itens}}
+    <li class="portal-doc">
+      <div class="portal-doc-topo">
+        <span class="material-symbols-outlined portal-doc-icone" aria-hidden="true">description</span>
+        <span class="portal-doc-texto">
+          <span class="portal-doc-titulo">{{nome}}</span>
+          <span class="portal-doc-meta">
+            {{#if data}}<span>{{formatDate data}}</span>{{/if}}
+            {{#if tipoRotulo}}<span>{{tipoRotulo}}</span>{{/if}}
+          </span>
+        </span>
+      </div>
+      <div class="portal-doc-acoes">
+        {{#if (urlDocumento this 'condomino')}}
+        <a class="btn btn-primary portal-btn" href="{{urlDocumento this 'condomino'}}">
+          <span class="material-symbols-outlined" aria-hidden="true">visibility</span>Ver documento
+        </a>
+        {{/if}}
+        {{#if (urlDocumentoExterno this)}}
+        <a class="btn btn-outline-secondary portal-btn" href="{{urlDocumentoExterno this}}" target="_blank" rel="noopener noreferrer" title="Ligação externa indicada pela administração">
+          <span class="material-symbols-outlined" aria-hidden="true">open_in_new</span>Ligação externa
+        </a>
+        {{/if}}
+      </div>
+    </li>
     {{/each}}
+  </ul>
+  {{/each}}
+{{else}}
+  {{#if documentos.length}}
+  {{!-- Lista filtrada (por categoria, por ano ou pelos dois). --}}
+  <ul class="portal-doc-lista">
+    {{#each documentos}}
+    <li class="portal-doc">
+      <div class="portal-doc-topo">
+        <span class="material-symbols-outlined portal-doc-icone" aria-hidden="true">description</span>
+        <span class="portal-doc-texto">
+          <span class="portal-doc-titulo">{{nome}}</span>
+          <span class="portal-doc-meta">
+            {{#if data}}<span>{{formatDate data}}</span>{{/if}}
+            {{#if pastaRotulo}}<span>{{pastaRotulo}}</span>{{/if}}
+            {{#if tipoRotulo}}<span>{{tipoRotulo}}</span>{{/if}}
+          </span>
+        </span>
+      </div>
+      <div class="portal-doc-acoes">
+        {{#if (urlDocumento this 'condomino')}}
+        <a class="btn btn-primary portal-btn" href="{{urlDocumento this 'condomino'}}">
+          <span class="material-symbols-outlined" aria-hidden="true">visibility</span>Ver documento
+        </a>
+        {{/if}}
+        {{#if (urlDocumentoExterno this)}}
+        <a class="btn btn-outline-secondary portal-btn" href="{{urlDocumentoExterno this}}" target="_blank" rel="noopener noreferrer" title="Ligação externa indicada pela administração">
+          <span class="material-symbols-outlined" aria-hidden="true">open_in_new</span>Ligação externa
+        </a>
+        {{/if}}
+      </div>
+    </li>
+    {{/each}}
+  </ul>
   {{else}}
-  <div class="alert alert-light border small">Ainda não existem documentos disponibilizados aos condóminos.</div>
+  <div class="card"><div class="card-body text-center text-muted py-4">
+    <span class="material-symbols-outlined" aria-hidden="true" style="font-size:2rem">search_off</span>
+    <div class="fw-semibold mt-1">{{#if pasta}}{{#if anoFiltro}}Sem documentos com estes filtros{{else}}Sem documentos nesta categoria{{/if}}{{else}}{{#if anoFiltro}}Sem documentos neste ano{{else}}Ainda não existem documentos disponibilizados{{/if}}{{/if}}</div>
+    <div class="small">{{#if pasta}}Experimente outra categoria ou outro ano.{{else}}{{#if anoFiltro}}Experimente outro ano.{{else}}Quando a administração partilhar documentos, aparecem aqui.{{/if}}{{/if}}</div>
+  </div></div>
   {{/if}}
 {{/if}}
+{{/unless}}

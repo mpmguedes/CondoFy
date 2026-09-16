@@ -618,7 +618,7 @@ assert.ok(html.includes('Os meus pagamentos'), 'condómino pagamentos');
 html = comp('condomino/recibos.handlebars')(baseCond);
 assert.ok(html.includes('Os meus recibos'), 'condómino recibos');
 html = comp('condomino/documentos.handlebars')(baseCond);
-assert.ok(html.includes('Documentos do condomínio'), 'condómino documentos públicos');
+assert.ok(html.includes('<h1>Documentos</h1>'), 'condómino documentos públicos');
 // Sidebar do condómino (sem admin)
 html = layout({ body: 'ok', user: { nome: 'Ana', role: 'condomino' }, isAdmin: false, condominio: contexto.condominio, currentPath: '/condomino/quotas' });
 assert.ok(html.includes('href="/condomino/quotas"'), 'sidebar condómino: Quotas');

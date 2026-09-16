@@ -512,6 +512,132 @@ function testePaginaQuotas() {
   assert.ok(/badge text-bg-info">Em cobrança/.test(comExtras), 'extras: estado apresentado em linguagem clara');
 }
 
+// ── 3c. Recibos: cartões, multi-fração e PDF ──────────────────────
+const baseRecibos = { pessoa: { id: 10 }, titulo: 'Os meus recibos' };
+const paginaRecibos = (linhas, opts = {}) => render('views/condomino/recibos.handlebars', {
+  ...baseRecibos, linhas, nRecibos: linhas.length,
+  temVariasFracoes: Boolean(opts.temVariasFracoes),
+}).replace(/\s+/g, ' ');
+
+function testePaginaRecibos() {
+  const um = paginaRecibos([
+    { id: 21, codigo: '2026/000121', data_emissao: '2026-08-21', valor: 48.5, estado: 'emitido', periodos: 'Novembro 2026', fracaoDesignacao: '1.º Esq', temExtras: false },
+    { id: 22, codigo: '2026/000122', data_emissao: '2026-09-21', valor: 165, estado: 'emitido', periodos: 'Impermeabilização', fracaoDesignacao: '1.º Esq', temExtras: true },
+  ]);
+
+  // Identificável sem abrir o PDF.
+  assert.ok(/Recibo 2026\/000121/.test(um) && /Recibo 2026\/000122/.test(um), 'recibos: número visível em cada recibo');
+  assert.ok(/Emitido 21\/08\/2026/.test(um), 'recibos: data de emissão visível');
+  assert.ok(/48,50 €/.test(um) && /165,00 €/.test(um), 'recibos: valor visível');
+  assert.ok(/Novembro 2026/.test(um), 'recibos: período a que respeita');
+  assert.ok(/badge text-bg-success">Emitido/.test(um), 'recibos: estado apresentado');
+  assert.ok(/Inclui quota extraordinária/.test(um), 'recibos: assinala o recibo de quota extraordinária');
+  // Acesso ao PDF como CTA, para o recurso protegido.
+  assert.strictEqual((um.match(/href="\/condomino\/recibos\/\d+\/pdf"/g) || []).length, 4,
+    'recibos: acesso ao PDF em cartão e tabela (2 recibos × 2 apresentações)');
+  assert.ok(/class="btn btn-primary portal-btn" href="\/condomino\/recibos\/21\/pdf"/.test(um),
+    'recibos: CTA principal para o PDF no mobile');
+  // Cartões no mobile, tabela no desktop: as duas apresentações existem.
+  assert.ok(/portal-quota-lista/.test(um) && /portal-quota-tabela/.test(um),
+    'recibos: lista (mobile) e tabela (desktop) na mesma página');
+  assert.ok(/<h1>Os meus recibos<\/h1>/.test(um), 'recibos: título próprio');
+
+  // Uma só fração: a designação não se repete em cada recibo.
+  assert.ok(!/Recibo 2026\/000121 · /.test(um), 'uma fração: não repete a designação em cada recibo');
+  assert.ok(!/<th>Fração<\/th>/.test(um), 'uma fração: a tabela não tem coluna de fração');
+
+  // Várias frações: a fração aparece em cada recibo e na tabela.
+  const multi = paginaRecibos([
+    { id: 31, codigo: '2026/000201', data_emissao: '2026-08-01', valor: 75, estado: 'emitido', periodos: 'Agosto 2026', fracaoDesignacao: '1.º Esq', temExtras: false },
+    { id: 32, codigo: '2026/000202', data_emissao: '2026-08-05', valor: 42.5, estado: 'emitido', periodos: 'Agosto 2026', fracaoDesignacao: '2.º Dto', temExtras: false },
+  ], { temVariasFracoes: true });
+  assert.ok(/Recibo 2026\/000201 · 1\.º Esq/.test(multi) && /Recibo 2026\/000202 · 2\.º Dto/.test(multi),
+    'multi-fração: cada recibo identifica a sua fração');
+  assert.ok(/<th>Fração<\/th>/.test(multi), 'multi-fração: a tabela mostra a coluna de fração');
+  assert.ok(/1\.º Esq/.test(multi) && /2\.º Dto/.test(multi), 'multi-fração: as duas frações identificadas');
+
+  // Recibo anulado: estado próprio, não «Emitido» nem mensagem de erro.
+  const anulado = paginaRecibos([
+    { id: 41, codigo: '2026/000301', data_emissao: '2026-07-01', valor: 75, estado: 'anulado', periodos: 'Julho 2026', fracaoDesignacao: '1.º Esq', temExtras: false },
+  ]);
+  assert.ok(/badge text-bg-secondary">Anulado/.test(anulado), 'recibos: recibo anulado assinalado como tal');
+  assert.ok(!/badge text-bg-success">Emitido/.test(anulado), 'recibos: anulado não é apresentado como emitido');
+
+  // Sem recibos: mensagem neutra, sem sugerir problema.
+  const vazio = paginaRecibos([]);
+  assert.ok(/Ainda não tem recibos emitidos/.test(vazio), 'sem recibos: mensagem neutra');
+  assert.ok(!/portal-quota-lista|<table/.test(vazio), 'sem recibos: nenhum cartão nem tabela vazios');
+  assert.ok(!/erro|problema|falha/i.test(vazio), 'sem recibos: não sugere erro');
+}
+
+// ── 3d. Documentos: cartões, filtros por ano e estado vazio ──────
+const baseDocs = { pessoa: { id: 10 }, titulo: 'Documentos do condomínio', pastas: { atas: 'Atas', convocatorias: 'Convocatórias' } };
+const doc = (over) => ({
+  id: 9, nome: 'Ata da assembleia.pdf', pasta: 'atas', pastaRotulo: 'Atas', tipo: 'ata', tipoRotulo: 'Ata',
+  data: '2026-08-20', ano: '2026', drive_file_id: 'F9', url: null, disponivel_condominos: true, ...over,
+});
+const paginaDocs = (ctx) => render('views/condomino/documentos.handlebars', { ...baseDocs, anos: [], anoFiltro: null, nDocumentos: 0, documentos: null, agrupados: null, ...ctx }).replace(/\s+/g, ' ');
+
+function testePaginaDocumentos() {
+  // Com dados, agrupados por categoria.
+  const comDados = paginaDocs({
+    agrupados: [
+      { rotulo: 'Atas', itens: [doc()] },
+      { rotulo: 'Convocatórias', itens: [doc({ id: 8, nome: 'Convocatória 2026.pdf', pasta: 'convocatorias', pastaRotulo: 'Convocatórias', tipo: 'convocatoria', tipoRotulo: 'Convocatória', data: '2026-07-30' })] },
+    ],
+    anos: ['2026'], nDocumentos: 2,
+  });
+  assert.ok(/<h1>Documentos<\/h1>/.test(comDados), 'documentos: cabeçalho claro');
+  assert.ok(/Ata da assembleia\.pdf/.test(comDados) && /Convocatória 2026\.pdf/.test(comDados),
+    'documentos: nome de cada documento');
+  assert.ok(/Atas/.test(comDados) && /Convocatórias/.test(comDados), 'documentos: categoria visível');
+  assert.ok(/20\/08\/2026/.test(comDados), 'documentos: data visível');
+  assert.ok(/documento\(s\)/.test(comDados), 'documentos: contagem apresentada');
+  // Acesso pelo recurso protegido do GesCondu (rota interna), nunca link do fornecedor.
+  assert.ok(/href="\/condomino\/documentos\/9\/ficheiro"/.test(comDados),
+    'documentos: acesso pela rota interna autenticada');
+  assert.ok(!/drive\.google|dropbox|1drv/.test(comDados), 'documentos: sem links diretos ao armazenamento');
+  assert.ok(/portal-doc-lista/.test(comDados), 'documentos: cartões (lista) no mobile');
+  assert.ok(/portal-chip/.test(comDados), 'documentos: filtros em chips');
+
+  // Filtro por ano: o ano ativo fica assinalado.
+  const comAno = paginaDocs({
+    documentos: [doc()], anoFiltro: '2026', anos: ['2026', '2025'], nDocumentos: 1,
+  });
+  assert.ok(/portal-chip portal-chip-ativo"[^>]*href="\/condomino\/documentos\?ano=2026"/.test(comAno),
+    'documentos: o ano escolhido fica assinalado');
+  assert.ok(/href="\/condomino\/documentos\?ano=2026"/.test(comAno), 'documentos: URL de filtro preservado');
+  assert.ok(/href="\/condomino\/documentos\?pasta=atas/.test(comAno), 'documentos: filtro de categoria preservado');
+
+  // Sem documentos: mensagem neutra.
+  const vazio = paginaDocs({ agrupados: [] });
+  assert.ok(/Ainda não existem documentos disponibilizados/.test(vazio), 'sem documentos: mensagem neutra');
+  assert.ok(!/portal-doc-lista/.test(vazio), 'sem documentos: nenhum cartão vazio');
+  assert.ok(!/erro|problema|falha/i.test(vazio), 'sem documentos: não sugere erro');
+
+  // Categoria/ano sem resultados: explica que são os filtros, sem sugerir erro.
+  const semResultado = paginaDocs({ documentos: [], anoFiltro: '2025', anos: ['2025'], nDocumentos: 0 });
+  assert.ok(/Sem documentos neste ano/.test(semResultado), 'documentos: ano sem documentos explicado');
+  const semResultadoCat = paginaDocs({ documentos: [], pasta: 'atas', anos: ['2026'], nDocumentos: 0 });
+  assert.ok(/Sem documentos nesta categoria/.test(semResultadoCat), 'documentos: categoria sem documentos explicada');
+  const semResultadoAmbos = paginaDocs({ documentos: [], pasta: 'atas', anoFiltro: '2025', anos: ['2025'], nDocumentos: 0 });
+  assert.ok(/Sem documentos com estes filtros/.test(semResultadoAmbos), 'documentos: os dois filtros juntos explicados');
+  assert.ok(!/erro|problema|falha/i.test(semResultadoAmbos), 'documentos: filtros sem resultado não sugerem erro');
+
+  // Documento só com ligação externa (sem ficheiro guardado).
+  const externo = paginaDocs({
+    documentos: [doc({ id: 7, drive_file_id: null, url: 'https://exemplo.pt/ata.pdf' })], nDocumentos: 1,
+  });
+  assert.ok(/target="_blank" rel="noopener noreferrer"/.test(externo) && /exemplo\.pt/.test(externo),
+    'documentos: ligação externa apresentada quando não há ficheiro guardado');
+  assert.ok(!/href="\/condomino\/documentos\/7\/ficheiro"/.test(externo),
+    'documentos: sem ficheiro guardado não há rota interna de ficheiro');
+
+  // Sem documentos mas sem erros: um documento sem data não parte a linha de meta.
+  const semData = paginaDocs({ documentos: [doc({ data: null, ano: null })], nDocumentos: 1 });
+  assert.ok(/Ata da assembleia\.pdf/.test(semData), 'documentos: documento sem data continua apresentado');
+}
+
 // ── 4. Cabeçalho do portal ────────────────────────────────────────
 function testeCabecalho() {
   const layout = ler('views/layouts/main.handlebars');
@@ -593,6 +719,8 @@ testeInicio();
 testeInicioMultiFraccao();
 testeAreaQuotas();
 testePaginaQuotas();
+testePaginaRecibos();
+testePaginaDocumentos();
 testeCabecalho();
 testeIntegridade();
 console.log('✓ Testes da área do condómino passaram (mobile-first, sem base de dados).');

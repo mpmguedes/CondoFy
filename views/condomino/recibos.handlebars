@@ -1,36 +1,78 @@
 {{> _condomino-quotas-tabs ativo='recibos'}}
-<div class="page-heading">
+{{!-- Recibos emitidos para a fração do condómino.
+
+     Cartões por recibo no telemóvel (sem tabela horizontal); a partir de 768px a
+     tabela compacta. O PDF é sempre servido por `/condomino/recibos/:id/pdf`,
+     que revalida a sessão, o condomínio ativo e a fração em cada pedido. --}}
+<div class="page-heading portal-cabecalho">
   <h1>Os meus recibos</h1>
-  <p class="subtitle">Recibos emitidos para a sua fração</p>
+  <p class="subtitle">Recibos emitidos para a sua fração{{#if nRecibos}} · {{nRecibos}} recibo(s){{/if}}</p>
 </div>
 
 {{#unless pessoa}}
-<div class="alert alert-warning">A sua conta ainda não está associada a um condómino neste condomínio.</div>
+<div class="alert alert-warning">A sua conta ainda não está associada a um condómino neste condomínio. Contacte a administração.</div>
 {{else}}
 {{#if linhas}}
-<div class="card"><div class="table-responsive">
+
+{{!-- Telemóvel: um recibo por bloco, identificável sem abrir o PDF. --}}
+<ul class="portal-quota-lista">
+  {{#each linhas}}
+  <li class="portal-quota">
+    <div class="portal-quota-topo">
+      <span class="portal-quota-periodo">Recibo {{codigo}}{{#if (and ../temVariasFracoes fracaoDesignacao)}} · {{fracaoDesignacao}}{{/if}}</span>
+      {{#if (eq estado 'anulado')}}<span class="badge text-bg-secondary">Anulado</span>
+      {{else}}<span class="badge text-bg-success">Emitido</span>{{/if}}
+    </div>
+    <div class="portal-quota-valor">{{eur valor}}</div>
+    <div class="portal-quota-meta">
+      {{#if data_emissao}}<span>Emitido {{formatDate data_emissao}}</span>{{/if}}
+      {{#if periodos}}<span>{{periodos}}</span>{{/if}}
+      {{#if temExtras}}<span>Inclui quota extraordinária</span>{{/if}}
+    </div>
+    <div class="portal-doc-acoes">
+      <a class="btn btn-primary portal-btn" href="/condomino/recibos/{{id}}/pdf" target="_blank" rel="noopener">
+        <span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>Ver recibo (PDF)
+      </a>
+    </div>
+  </li>
+  {{/each}}
+</ul>
+
+{{!-- Desktop: tabela compacta com a mesma informação. --}}
+<div class="card portal-quota-tabela"><div class="table-responsive">
   <table class="table table-hover align-middle mb-0">
     <thead class="table-light">
-      <tr><th>Número</th><th>Data</th><th>Fração</th><th>Período(s)</th><th>Valor</th><th>Estado</th><th class="text-end">Ações</th></tr>
+      <tr>
+        <th>Recibo</th><th>Data</th>
+        {{#if temVariasFracoes}}<th>Fração</th>{{/if}}
+        <th>Período(s)</th><th>Valor</th><th>Estado</th><th class="text-end">Ações</th>
+      </tr>
     </thead>
     <tbody>
       {{#each linhas}}
       <tr>
         <td class="fw-semibold">{{codigo}}</td>
         <td class="text-nowrap">{{formatDate data_emissao}}</td>
-        <td>{{fracaoDesignacao}}</td>
-        <td class="small">{{periodos}}</td>
+        {{#if ../temVariasFracoes}}<td>{{fracaoDesignacao}}</td>{{/if}}
+        <td class="small">{{periodos}}{{#if temExtras}} <span class="badge text-bg-light border">Extra</span>{{/if}}</td>
         <td>{{eur valor}}</td>
         <td>{{#if (eq estado 'anulado')}}<span class="badge text-bg-secondary">Anulado</span>{{else}}<span class="badge text-bg-success">Emitido</span>{{/if}}</td>
         <td class="text-end text-nowrap">
-          <a href="/condomino/recibos/{{id}}/pdf" target="_blank" class="btn btn-sm btn-outline-primary" title="Ver recibo (PDF)"><span class="material-symbols-outlined">picture_as_pdf</span></a>
+          <a href="/condomino/recibos/{{id}}/pdf" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" title="Ver recibo (PDF)" aria-label="Ver recibo {{codigo}} (PDF)">
+            <span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>
+          </a>
         </td>
       </tr>
       {{/each}}
     </tbody>
   </table>
 </div></div>
+
 {{else}}
-<div class="alert alert-light border small">Sem recibos para a sua fração.</div>
+<div class="card"><div class="card-body text-center text-muted py-4">
+  <span class="material-symbols-outlined" aria-hidden="true" style="font-size:2rem">receipt_long</span>
+  <div class="fw-semibold mt-1">Ainda não tem recibos emitidos</div>
+  <div class="small">Quando o condomínio emitir um recibo para a sua fração, ele aparece aqui.</div>
+</div></div>
 {{/if}}
 {{/unless}}

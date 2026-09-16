@@ -488,9 +488,19 @@ router.get('/recibos', async (req, res) => {
         .join(' + ');
     }
     json.temExtras = extras.length > 0;
+    // Nº de períodos cobertos, para a vista poder resumir uma lista longa.
+    json.nPeriodos = (r.quotas || []).length + extras.length;
     return json;
   });
-  res.render('condomino/recibos', { titulo: 'Os meus recibos', pessoa, linhas });
+  res.render('condomino/recibos', {
+    titulo: 'Os meus recibos',
+    pessoa,
+    linhas,
+    nRecibos: linhas.length,
+    // A fração só é mostrada em cada recibo quando o utilizador tem mais do que
+    // uma (com uma só seria repetir a mesma designação em todas as linhas).
+    temVariasFracoes: fracoes.length > 1,
+  });
 });
 
 // PDF do recibo — apenas da própria fração do condomínio ativo (IDOR).
@@ -627,34 +637,79 @@ router.get('/calendario', async (req, res) => {
 });
 
 // ── Documentos públicos do condomínio ───────────────────────────────
+// Etiquetas em PT-PT para o tipo de documento. O tipo é um dado que já existe
+// no modelo; aqui só é traduzido para linguagem de condómino (nada é inventado).
+const TIPOS_DOCUMENTO = {
+  aviso_quota: 'Aviso de quota',
+  recibo: 'Recibo',
+  ata: 'Ata',
+  convocatoria: 'Convocatória',
+  relatorio: 'Relatório',
+  fatura: 'Fatura',
+  contrato: 'Contrato',
+  orcamento: 'Orçamento',
+  comprovativo: 'Comprovativo',
+  outro: null,
+};
+
 router.get('/documentos', async (req, res) => {
   const { pessoa } = await contextoFracoes(req);
   const pasta = typeof req.query.pasta === 'string' ? req.query.pasta : null;
+  const anoFiltro = /^\d{4}$/.test(String(req.query.ano || '')) ? String(req.query.ano) : null;
   const cond = await getCondominio({ id: req.condominioId });
   const mapa = mapaPastas(cond);
   const where = { condominio_id: req.condominioId, disponivel_condominos: true };
   if (pasta && mapa[pasta]) where.pasta = pasta;
+  // A data é DATEONLY (texto «AAAA-MM-DD»): o ano pode ser filtrado no próprio
+  // SQL, mantendo a consulta única e o isolamento por condomínio.
+  if (anoFiltro) where.data = { [Op.between]: [`${anoFiltro}-01-01`, `${anoFiltro}-12-31`] };
+
   const documentos = await Documento.findAll({
     where,
     order: [['data', 'DESC'], ['id', 'DESC']],
   });
+
+  // Anos disponíveis: obtidos dos mesmos documentos, sem consulta adicional.
+  // A lista não depende do ano escolhido (que já filtrou a consulta), por isso é
+  // lida sobre o resultado — quando há filtro ativo fica só o ano escolhido.
+  const anos = [...new Set(documentos.map((d) => (d.data ? String(d.data).slice(0, 4) : null)).filter(Boolean))].sort().reverse();
+  if (anoFiltro && !anos.includes(anoFiltro)) anos.unshift(anoFiltro);
+
+  // Apresentação: data, etiqueta de pasta e etiqueta de tipo por documento.
+  const comEtiquetas = documentos.map((d) => {
+    const json = d.toJSON();
+    return {
+      ...json,
+      pastaRotulo: mapa[d.pasta] || d.pasta || null,
+      tipoRotulo: TIPOS_DOCUMENTO[json.tipo] || null,
+      ano: json.data ? String(json.data).slice(0, 4) : null,
+    };
+  });
+
   const agrupados = [];
   if (!pasta) {
     const porPasta = new Map();
-    for (const d of documentos) {
-      const label = mapa[d.pasta] || d.pasta;
+    for (const d of comEtiquetas) {
+      const label = mapa[d.pasta] || d.pasta || 'Outros';
       if (!porPasta.has(label)) porPasta.set(label, { rotulo: label, itens: [] });
       porPasta.get(label).itens.push(d);
     }
     for (const [rotulo, grupo] of porPasta) agrupados.push({ rotulo, itens: grupo.itens });
   }
+
+  const comPasta = Boolean(pasta) || Boolean(anoFiltro);
   res.render('condomino/documentos', {
     titulo: 'Documentos do condomínio',
     pessoa,
     pasta,
     pastas: mapa,
-    documentos: pasta ? documentos : null,
-    agrupados: pasta ? null : agrupados,
+    anos,
+    anoFiltro,
+    nDocumentos: comEtiquetas.length,
+    // Uma das duas listas vai sempre vazia (nunca nula), para a vista poder
+    // distinguir «sem documentos» de «sem resultados com estes filtros».
+    documentos: comPasta ? comEtiquetas : [],
+    agrupados: comPasta ? [] : agrupados,
   });
 });
 
