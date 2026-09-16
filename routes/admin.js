@@ -18,6 +18,8 @@ const {
   Documento,
   Aviso,
   AvisoDestinatario,
+  Assembleia,
+  AuditLog,
   Fornecedor,
   PagamentoFornecedor,
   BackupLog,
@@ -30,6 +32,8 @@ const { audit } = require('../helpers/audit');
 const { getCondominio } = require('../helpers/condominio');
 const { resumoCondominio, resumoFracao, estadoEfetivo } = require('../helpers/saldos');
 const { resumoFinanceiroMes, resumoEmAtraso, orcamentoDoAno } = require('../helpers/dashboard');
+// Ajudante completo do painel (sinais de atenção, atividade recente, orçamento).
+const dashboardHelpers = require('../helpers/dashboard');
 // Histórico de titularidade da fração (relação temporal pessoa/conta ↔ fração).
 const titularidades = require('../helpers/titularidades');
 const { validarNif } = require('../public/js/validacao-fiscal');
@@ -69,6 +73,7 @@ function toArray(value) {
 
 // ── Dashboard ──────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
+  const hoje = new Date().toISOString().slice(0, 10);
   const [nFracoes, nPessoas, nUsers, condominio, resumo, quotas, ultimoBackup, filaPendentes, filaErros] =
     await Promise.all([
       Fracao.count({ where: onde(req) }),
@@ -89,6 +94,57 @@ router.get('/', async (req, res) => {
     EmailFila.count({ where: onde(req, { estado: 'enviado' }) }),
     Fornecedor.count({ where: onde(req, { ativo: true }) }),
     PagamentoFornecedor.count({ where: onde(req, { estado: 'pendente' }) }),
+  ]);
+
+  // ── Sinais de atenção + atividade recente (Fase 2H.2) ─────────────
+  // Tudo o que é carregado aqui serve os dois blocos novos. Isolamento: cada
+  // consulta filtra pelo condomínio ativo; `audit_logs` não tem condominio_id,
+  // por isso o âmbito é feito pelos utilizadores associados a este condomínio
+  // (ver o comentário antes da consulta).
+  const anoCorrente = new Date().getFullYear();
+  const mesCorrente = new Date().getMonth() + 1;
+  const inicioAno = `${anoCorrente}-01-01`;
+  const fimAno = `${anoCorrente}-12-31`;
+  const idsUtilizadoresDoCondominio = await UserCondominio.findAll({
+    where: { condominio_id: req.condominioId },
+    attributes: ['utilizador_id'],
+    raw: true,
+  });
+  const utilizadoresDoCondominio = idsUtilizadoresDoCondominio.map((u) => u.utilizador_id).filter(Boolean);
+
+  const [
+    quotasDoMes,
+    proximasAssembleias,
+    documentosPorDisponibilizar,
+    comprovativosPendentes,
+    registosAuditoria,
+  ] = await Promise.all([
+    // As quotas do mês corrente, com a MESMA lógica da geração de quotas
+    // (`/admin/quotas/gerar`): ano + mês, sem as anuladas.
+    Quota.count({ where: onde(req, { ano: anoCorrente, mes: mesCorrente, estado: { [Op.ne]: 'anulada' } }) }),
+    // Próximas assembleias relevantes, com a mesma seleção da área Assembleias.
+    Assembleia.findAll({
+      where: onde(req, { estado: { [Op.in]: ['agendada', 'convocada'] }, data: { [Op.gte]: hoje } }),
+      order: [['data', 'ASC'], ['hora', 'ASC']],
+      limit: 3,
+    }),
+    // Documentos DESTE ano ainda não disponibilizados aos condóminos (o
+    // histórico antigo não é apresentado como pendente).
+    Documento.count({ where: onde(req, { disponivel_condominos: false, data: { [Op.between]: [inicioAno, fimAno] } }) }),
+    // Comprovativos à espera de validação — o mesmo critério do módulo de
+    // Comprovativos (pagamento confirmado com ficheiro e estado pendente).
+    Pagamento.count({ where: onde(req, { estado: 'confirmado', comprovativo_estado: 'pendente' }) }),
+    // Atividade recente. `audit_logs` não tem condominio_id: filtra-se pelos
+    // utilizadores associados a este condomínio, para nunca trazer atividade de
+    // outro condomínio em instalações com vários.
+    utilizadoresDoCondominio.length
+      ? AuditLog.findAll({
+          where: { user_id: { [Op.in]: utilizadoresDoCondominio } },
+          include: [{ model: User, as: 'user', attributes: ['id', 'nome'], required: false }],
+          order: [['id', 'DESC']],
+          limit: 60,
+        })
+      : [],
   ]);
 
   const nPagas = quotas.filter((q) => q.estado === 'paga').length;
@@ -146,6 +202,30 @@ router.get('/', async (req, res) => {
     .sort((a, b) => b.totalC - a.totalC)
     .slice(0, 5);
 
+  // Sinais de atenção: a decisão é do ajudante (lógica pura); aqui só se reúne o
+  // que ele precisa. Sem sinais a apresentar, a vista mostra o estado tranquilo.
+  const orcamentoPorConcluir = dashboardHelpers.orcamentoPorConcluir(orcamentoAno);
+  const sinais = dashboardHelpers.sinaisDeAtencao({
+    nVencidas,
+    comprovativosPendentes,
+    quotasMesEmitidas: quotasDoMes,
+    pagamentosFornecedorPendentes: nPagFornecedorPendentes,
+    documentosPorDisponibilizar,
+    ano: anoAtual,
+    orcamentoEstadoAberto: orcamentoPorConcluir ? orcamentoPorConcluir.estado : null,
+    orcamentoEstadoRotulo: orcamentoPorConcluir ? orcamentoPorConcluir.rotulo : null,
+    orcamentoId: orcamentoPorConcluir ? orcamentoPorConcluir.id : null,
+    proximasAssembleias: proximasAssembleias.map((a) => ({
+      id: a.id,
+      numero: a.numero || null,
+      data: a.data ? String(a.data).slice(0, 10).split('-').reverse().join('/') : '',
+      designacao: a.designacao || null,
+    })),
+    filaErros,
+    driveLigado: drive.isConfigured(),
+    smtp: smtpConfigured(),
+  });
+
   res.render('admin/dashboard', {
     titulo: 'Painel de administração',
     nFracoes,
@@ -165,6 +245,13 @@ router.get('/', async (req, res) => {
     financeiroMes,
     emAtraso,
     orcamentoAno: orcamentoAno,
+    // Fase 2H.2 — o que exige decisão hoje + o que aconteceu recentemente.
+    sinais,
+    proximasAssembleias: proximasAssembleias.map((a) => ({ ...a.toJSON() })),
+    atividade: dashboardHelpers.atividadeRecente(
+      registosAuditoria.map((r) => ({ ...r.toJSON(), utilizador: r.user ? { nome: r.user.nome } : null })),
+      5
+    ),
     sistema: {
       driveLigado: drive.isConfigured(),
       smtp: smtpConfigured(),

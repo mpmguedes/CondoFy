@@ -1410,6 +1410,74 @@ a.portal-item:hover .portal-item-titulo { text-decoration: underline; }
   .strip-item { flex: 1 1 45%; border-left: none; padding: 6px 12px; }
 }
 
+/* ── Painel: o que precisa de atenção hoje (Fase 2H.2) ─────────────
+   Uma linha por sinal, toda clicável e com o destino escrito; a cor da marca
+   indica a gravidade (crítico, atenção, informativo), sem transformar isto num
+   alerta persistente. No telemóvel a ação desce para a linha seguinte, para não
+   apertar o texto. */
+.atencao-lista { list-style: none; margin: 0; padding: 0; }
+.atencao-item { border-bottom: 1px solid var(--c-border); }
+.atencao-item:last-child { border-bottom: 0; }
+.atencao-sinal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 6px 2px;
+  color: var(--c-text);
+  text-decoration: none;
+}
+.atencao-sinal:hover .atencao-texto, .atencao-sinal:focus-visible .atencao-texto { text-decoration: underline; }
+.atencao-marca {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--c-text-subtle);
+}
+.atencao-critico .atencao-marca { background: var(--c-error); }
+.atencao-atencao .atencao-marca { background: var(--c-warning); }
+.atencao-info .atencao-marca { background: var(--c-info); }
+.atencao-texto { flex: 1 1 auto; min-width: 0; font-size: 0.9rem; }
+.atencao-acao {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--c-link);
+  white-space: nowrap;
+}
+.atencao-acao .material-symbols-outlined { font-size: calc(16px * var(--font-scale)); }
+.atencao-estado { border-top: 1px solid var(--c-border); margin-top: 6px; padding-top: 6px; color: var(--c-text-muted); }
+.atencao-estado + .atencao-estado { border-top: 0; margin-top: 0; padding-top: 2px; }
+@media (max-width: 575.98px) {
+  .atencao-sinal { flex-wrap: wrap; row-gap: 2px; }
+  .atencao-texto { flex: 1 1 100%; }
+  .atencao-acao { margin-left: 20px; }
+}
+
+/* Linha de lista do painel (próximas assembleias e atividade recente). */
+.painel-linha { display: flex; align-items: center; gap: 10px; min-height: 48px; color: inherit; text-decoration: none; }
+.painel-linha:hover .painel-linha-titulo, .painel-linha:focus-visible .painel-linha-titulo { text-decoration: underline; }
+.painel-linha-icone {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-surface-2);
+  color: var(--c-primary-dark);
+}
+.painel-linha-icone .material-symbols-outlined { font-size: calc(19px * var(--font-scale)); }
+.painel-linha-texto { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.painel-linha-titulo { font-weight: 600; color: var(--c-text); overflow-wrap: anywhere; }
+.painel-linha-meta { color: var(--c-text-muted); font-size: calc(12px * var(--font-scale)); overflow-wrap: anywhere; }
+.painel-linha-estado { flex: none; }
+
 
 
 

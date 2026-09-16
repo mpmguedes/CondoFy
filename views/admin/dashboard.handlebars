@@ -84,21 +84,42 @@
   </div>
 </div>
 
-{{!-- ATENÇÃO (só quando necessário) --}}
-{{#if (or (gt nVencidas 0) (gt sistema.filaErros 0) (gt nPagFornecedorPendentes 0) (not sistema.driveLigado) (not sistema.smtp))}}
-<div class="section-title">Atenção</div>
-<div class="card mb-3"><div class="card-body py-2 small">
-  <div class="d-flex flex-wrap gap-3">
-    {{#if (gt nVencidas 0)}}<div><span class="text-danger">🔴 {{nVencidas}} quotas em atraso</span> · <a href="/admin/quotas">Ver quotas</a></div>{{/if}}
-    {{#if (gt sistema.filaErros 0)}}<div><span class="text-warning">🟠 {{sistema.filaErros}} emails com erro</span> · <a href="/admin/emails?estado=erros">Ver emails</a></div>{{/if}}
-    {{#if (gt nPagFornecedorPendentes 0)}}<div><span class="text-warning">🟠 {{nPagFornecedorPendentes}} pagamentos a fornecedores pendentes</span> · <a href="/admin/fornecedores">Ver</a></div>{{/if}}
-    {{#unless sistema.driveLigado}}<div><span class="text-muted"><i class="{{@root.armazenamentoIcone}} me-1"></i>{{@root.armazenamentoRotulo}} desligado</span> · <a href="/admin/config/armazenamento#google-drive">Ligar</a></div>{{/unless}}
-    {{#unless sistema.smtp}}<div><span class="text-muted">⚪ Email/SMTP não configurado</span> · <a href="/admin/emails#smtp">Configurar</a></div>{{/unless}}
+{{!-- O QUE PRECISA DE ATENÇÃO HOJE (Fase 2H.2)
+
+     Uma lista única de sinais acionáveis: só aparece o que existe realmente a
+     tratar (nenhum zero é apresentado como problema) e cada linha leva à ação
+     correspondente. A decisão do que entra é do ajudante `helpers/dashboard.js`
+     (lógica pura, testada offline); aqui só se apresenta.
+
+     O estado dos serviços (armazenamento, email, backups) continua onde já
+     estava — no cartão «Estado do condomínio» —, para não repetir a mesma
+     informação em dois sítios. --}}
+<div class="section-title">Precisa de atenção</div>
+<div class="card mb-3">
+  <div class="card-body py-2">
+    {{#if sinais.length}}
+    <ul class="atencao-lista">
+      {{#each sinais}}
+      <li class="atencao-item">
+        <a class="atencao-sinal atencao-{{gravidade}}" href="{{destino.url}}">
+          <span class="atencao-marca" aria-hidden="true"></span>
+          <span class="atencao-texto">{{texto}}</span>
+          <span class="atencao-acao">{{destino.texto}}<span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span></span>
+        </a>
+      </li>
+      {{/each}}
+    </ul>
+    {{else}}
+    <div class="text-success small py-1"><i class="bi bi-check-circle me-1"></i>Nada a tratar neste momento.</div>
+    {{/if}}
+
+    {{#if (or (gt sistema.filaPendentes 0) (gt sistema.filaErros 0))}}
+    <div class="atencao-estado small">
+      <div>Fila de emails: <a href="/admin/emails">{{sistema.filaPendentes}} por enviar · <span class="{{#if (gt sistema.filaErros 0)}}text-danger{{/if}}">{{sistema.filaErros}} com erro</span></a></div>
+    </div>
+    {{/if}}
   </div>
-</div></div>
-{{else}}
-<div class="text-success small mb-2"><i class="bi bi-check-circle me-1"></i>Não existem situações que requeiram atenção.</div>
-{{/if}}
+</div>
 
 {{!-- TOP DEVEDORES + EVOLUÇÃO --}}
 <div class="row g-3 mb-3">
@@ -144,6 +165,61 @@
           <div class="card-body"><canvas id="chartCategorias" role="img" aria-label="Gráfico circular com a distribuição das despesas por categoria"></canvas></div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+{{!-- PRÓXIMAS ASSEMBLEIAS + ATIVIDADE RECENTE (Fase 2H.2) --}}
+<div class="row g-3 mb-3">
+  <div class="col-12 col-lg-6">
+    <div class="card h-100">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">Próximas assembleias</span>
+        <a href="/admin/assembleias" class="small">Ver todas →</a>
+      </div>
+      {{#if proximasAssembleias.length}}
+      <ul class="list-group list-group-flush">
+        {{#each proximasAssembleias}}
+        <li class="list-group-item">
+          <a class="painel-linha" href="/admin/assembleias/{{id}}">
+            <span class="painel-linha-icone" aria-hidden="true"><span class="material-symbols-outlined">forum</span></span>
+            <span class="painel-linha-texto">
+              <span class="painel-linha-titulo">{{#if numero}}Assembleia {{numero}}{{else}}Assembleia de condóminos{{/if}}</span>
+              <span class="painel-linha-meta">{{formatDate data}}{{#if hora}} · {{hora}}{{/if}}{{#if local}} · {{local}}{{/if}}</span>
+            </span>
+            <span class="painel-linha-estado badge {{#if (eq estado 'convocada')}}text-bg-success{{else}}text-bg-secondary{{/if}}">{{#if (eq estado 'convocada')}}Convocada{{else}}Agendada{{/if}}</span>
+          </a>
+        </li>
+        {{/each}}
+      </ul>
+      {{else}}
+      <div class="card-body text-muted small">Sem assembleias futuras agendadas. <a href="/admin/assembleias/nova">Agendar uma →</a></div>
+      {{/if}}
+    </div>
+  </div>
+  <div class="col-12 col-lg-6">
+    <div class="card h-100">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">Atividade recente</span>
+        <a href="/admin/config/auditoria" class="small">Ver registo →</a>
+      </div>
+      {{#if atividade.length}}
+      <ul class="list-group list-group-flush">
+        {{#each atividade}}
+        <li class="list-group-item">
+          <a class="painel-linha" href="{{url}}">
+            <span class="painel-linha-icone" aria-hidden="true"><span class="material-symbols-outlined">{{icone}}</span></span>
+            <span class="painel-linha-texto">
+              <span class="painel-linha-titulo">{{rotulo}}</span>
+              <span class="painel-linha-meta">{{formatDateTime data}}{{#if autor}} · {{autor}}{{/if}}</span>
+            </span>
+          </a>
+        </li>
+        {{/each}}
+      </ul>
+      {{else}}
+      <div class="card-body text-muted small">Sem atividade registada neste condomínio.</div>
+      {{/if}}
     </div>
   </div>
 </div>

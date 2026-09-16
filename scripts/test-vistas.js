@@ -579,12 +579,20 @@ html = handlebars.compile(parciais['_convocatoria-editor'])({ v: valores, driveL
 assert.ok(html.includes('Sem serviço de armazenamento ligado'), 'convocatória: aviso sem nome de fornecedor');
 assert.ok(!html.includes('Google Drive não ligado'), 'convocatória: sem "Google Drive não ligado"');
 
-// O painel só mostra a linha de estado em certas condições; verifica-se na
-// própria vista (e no rótulo global) para não depender do contexto completo.
+// O painel mostra o estado do serviço de armazenamento ativo (com o nome e o
+// ícone reais) no cartão «Estado do condomínio»; os sinais acionáveis vivem na
+// secção «Precisa de atenção» (Fase 2H.2) e levam à ação correspondente.
 const fontePainel = ler('admin/dashboard.handlebars');
-assert.ok(fontePainel.includes('{{@root.armazenamentoRotulo}}: {{#if sistema.driveLigado}}'), 'painel: estado nomeia o serviço ativo');
-assert.ok(fontePainel.includes('{{@root.armazenamentoRotulo}} desligado'), 'painel: aviso nomeia o serviço ativo');
+assert.ok(fontePainel.includes('{{@root.armazenamentoRotulo}}'), 'painel: estado nomeia o serviço ativo');
 assert.ok(fontePainel.includes('{{@root.armazenamentoIcone}}'), 'painel: ícone do serviço ativo');
+assert.ok(fontePainel.includes('{{#if sinais.length}}') && fontePainel.includes('Precisa de atenção'),
+  'painel: secção «Precisa de atenção» com a lista de sinais');
+assert.ok(fontePainel.includes('href="{{destino.url}}"'),
+  'painel: cada sinal é uma ligação para a ação (destino vindo do ajudante)');
+assert.ok(fontePainel.includes('{{#if proximasAssembleias.length}}') && fontePainel.includes('{{#if atividade.length}}'),
+  'painel: próximas assembleias e atividade recente com estado vazio');
+assert.ok(fontePainel.includes('Nada a tratar neste momento.'),
+  'painel: sem sinais, mostra o estado tranquilo (e não zeros)');
 
 // 17.2 Confirmações: nenhuma vista usa o confirm() nativo do browser (todas
 // passam pela modal da aplicação, definida no layout e controlada pelo app.js).
