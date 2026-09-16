@@ -21,9 +21,9 @@
 const RECURSO_CSS = '/css/home.css?v=20260910b';
 const RECURSO_JS = '/js/home.js?v=20260910b';
 
-const TITULO_HOME = 'GesCondu — Gestão de condomínios simples, organizada e transparente';
+const TITULO_HOME = 'GesCondu — software de gestão de condomínios em Portugal';
 const DESCRICAO_HOME =
-  'O GesCondu centraliza a gestão do condomínio: quotas, recibos, despesas, documentos, assembleias e comunicações numa plataforma portuguesa, criada para a realidade dos condomínios em Portugal.';
+  'Plataforma portuguesa de gestão de condomínios: quotas, recibos, documentos, despesas e finanças num só lugar, para a administração e para os condóminos — cada um com o seu próprio acesso.';
 const DESCRICAO_ACESSO =
   'O acesso ao GesCondu está disponível por convite. Veja como pedir acesso à plataforma de gestão de condomínios.';
 
@@ -82,13 +82,22 @@ const FAQ = [
   {
     pergunta: 'Os condóminos têm acesso à plataforma?',
     resposta: [
-      'Sim, por convite do administrador do condomínio. Cada condómino entra com a sua conta e consulta a situação da sua fração, os recibos, os documentos do condomínio, as assembleias e os avisos.',
+      'Sim, por convite do administrador do condomínio. O GesCondu tem um portal próprio para os condóminos: cada um entra com a sua conta e consulta a situação da sua fração, os pagamentos registados, os recibos em PDF, os documentos disponibilizados, os avisos, as assembleias e o calendário do condomínio.',
+      'O portal funciona no navegador do telemóvel e é desenhado para ecrãs pequenos.',
+    ],
+  },
+  {
+    pergunta: 'O que é que o condómino consegue consultar no portal?',
+    resposta: [
+      'A situação da sua fração (quotas emitidas, o que está pago e o que está por pagar, com as datas de vencimento), o histórico de pagamentos, os recibos em PDF, os documentos que o condomínio disponibiliza aos condóminos, os avisos, as assembleias com a ordem de trabalhos e a ata, o calendário e a situação financeira do condomínio (contas, fundo de reserva, dívida e evolução do ano).',
+      'Na sua área pessoal consulta também os seus dados de conta, o estado da segurança (com a verificação em duas etapas) e os condomínios a que tem acesso, podendo mudar de condomínio ativo quando tem mais do que um.',
     ],
   },
   {
     pergunta: 'Posso consultar quotas e recibos?',
     resposta: [
-      'Sim. Quem administra acompanha as quotas lançadas, recebidas e em atraso, por fração e por período. O condómino consulta a situação da sua fração, os pagamentos registados e os recibos em PDF.',
+      'Sim. Quem administra acompanha as quotas lançadas, recebidas e em atraso — por fração e por período — e emite os recibos, que ficam disponíveis em PDF. O condómino consulta a situação da sua fração, os pagamentos registados e os seus recibos em PDF no portal.',
+      'O relatório financeiro do condomínio junta a mesma informação numa apresentação de prestação de contas, e pode ser gerado em PDF para um ano completo ou para um período específico.',
     ],
   },
   {
@@ -107,6 +116,20 @@ const FAQ = [
     pergunta: 'Existe aplicação para telemóvel?',
     resposta: [
       'Não existe aplicação para instalar. A plataforma funciona no navegador do telemóvel e o portal do condómino foi desenhado para ecrãs pequenos — para consultar quotas, recibos, documentos e avisos onde for mais prático.',
+    ],
+  },
+  {
+    pergunta: 'Qualquer pessoa pode consultar as contas do condomínio?',
+    resposta: [
+      'Não. Cada pessoa vê apenas o condomínio a que está associada e a informação que a sua relação atual justifica: a administração tem a gestão completa e o condómino tem acesso à informação da sua fração e à informação agregada do condomínio — nunca a dados privados de outra fração ou de outra pessoa.',
+      'Dentro desse âmbito, o portal do condómino apresenta a situação financeira do condomínio: saldo das contas, fundo de reserva, valores recebidos e em dívida, execução do orçamento e evolução do ano.',
+    ],
+  },
+  {
+    pergunta: 'Como é que o acesso às contas é protegido?',
+    resposta: [
+      'Não há registo público: as contas são criadas por convite de quem administra o condomínio. Cada pessoa tem a sua conta, com palavra-passe, e pode ativar a verificação em duas etapas (código por email ou aplicação autenticadora), com códigos de recuperação para o caso de perder o acesso.',
+      'O acesso é sempre verificado no momento do pedido: cada pessoa vê apenas os condomínios a que está associada e as frações que a sua relação atual justifica. Quando essa relação termina, o acesso correspondente deixa de ser válido.',
     ],
   },
   {
@@ -184,7 +207,7 @@ function dadosEstruturados({ base, descricao, comFaq }) {
       inLanguage: 'pt-PT',
       url: `${base || ''}/`,
       description:
-        'Plataforma portuguesa de gestão de condomínios: quotas, orçamento, despesas, contas bancárias, documentos, assembleias, comunicações e relatórios financeiros.',
+        'Plataforma portuguesa de gestão de condomínios: quotas, orçamento, despesas, contas bancárias, documentos, assembleias e comunicações para a administração, com portal próprio do condómino para consultar a sua fração e a situação financeira do condomínio.',
     },
   ];
   if (comFaq) {

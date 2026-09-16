@@ -148,6 +148,38 @@ const SECOES = [
   'acessibilidade', 'seguranca', 'portugal', 'titularidade', 'faq', 'conteudo',
 ];
 
+// ── 3.1 Portal do condómino na proposta de valor ──────────────────
+// O portal é uma parte central do produto atual e tem de aparecer cedo — no
+// hero e na primeira secção de funcionalidades —, sem transformar a página numa
+// página só para condóminos (a administração continua a ser o público principal).
+const PORTAL_TERMOS = ['portal do condómino', 'condómino'];
+
+// ── 3.2 Exemplos visuais identificados como tal ───────────────────
+// Os "screenshots" da página são composições HTML/CSS (`_home-mock-*`), não
+// capturas de ecrã. A página tem de o dizer, sem desvalorizar o produto.
+const NOTA_EXEMPLOS = [
+  'Exemplos visuais representativos da experiencia no GesCondu',
+  'nao sao capturas de ecra da aplicacao',
+];
+// Expressões que desvalorizariam o produto (proibidas na nota).
+const NOTA_EXEMPLOS_PROIBIDO = [
+  /apenas um desenho/i, /n[ãa]o (é|e) real/i, /imagem fict[íi]cia/i,
+  /mockup sem correspond[êe]ncia/i, /meramente ilustrativo/i, /sem valor/i,
+];
+
+// ── 3.3 Nada de produtos futuros apresentados como existentes ─────
+// Funcionalidades que ainda NÃO existem no portal: submeter comprovativos pelo
+// condómino, pedidos/tickets, mensagens à administração, votações eletrónicas.
+const PROMESSAS_PROIBIDAS = [
+  [/cond[óo]mino[^.]{0,60}(envia|submete|carrega|anexa)[^.]{0,40}comprovativo/i, 'o condómino ainda não envia comprovativos pelo portal'],
+  [/comprovativo[^.]{0,40}(pelo|no) portal[^.]{0,20}(do cond[óo]mino)?[^.]{0,20}enviad/i, 'o envio de comprovativo pelo condómino não existe'],
+  [/(abrir|abre|criar|cria|enviar|envie|acompanh)[^.]{0,30}(pedidos|tickets|ocorr[êe]ncias)/i, 'não existem pedidos/tickets'],
+  [/(falar|fale|comunicar|comunique|mensagem|mensagens)[^.]{0,30}(diretamente )?(com a|à) administra[çc][ãa]o/i, 'não existe comunicação bidirecional'],
+  [/respostas? da administra[çc][ãa]o (no|pelo) portal/i, 'não existe troca de mensagens no portal'],
+  [/(assinar|assinatura) (digital|eletr[óo]nica)/i, 'não existe assinatura digital'],
+  [/(pagar|pagamento)[^.]{0,30}(multibanco|cart[ãa]o|d[ée]bito direto)[^.]{0,30}plataforma/i, 'não há pagamentos pela plataforma'],
+];
+
 async function main() {
   const home = await pedir('/');
   const html = home.corpo;
@@ -157,12 +189,20 @@ async function main() {
   assert.strictEqual(home.cabecalhos.location, undefined, 'não redireciona para o login');
 
   // ── SEO ───────────────────────────────────────────────────────────
-  assert.ok(
-    html.includes('<title>GesCondu — Gestão de condomínios simples, organizada e transparente</title>'),
-    'título de SEO presente e começado pelo nome do produto'
-  );
   const helperSeo = require('../helpers/home-publica');
+  // O título começa pelo nome do produto e diz o que ele é e para onde é
+  // (software de gestão de condomínios, em Portugal), sem encher de palavras.
+  assert.ok(html.includes(`<title>${helperSeo.TITULO_HOME}</title>`), 'título de SEO presente');
+  assert.ok(/^GesCondu — /.test(helperSeo.TITULO_HOME), 'título começado pelo nome do produto');
+  assert.ok(/gest[ãa]o de condom[íi]nios/i.test(helperSeo.TITULO_HOME), 'título diz o que o produto faz');
+  assert.ok(/Portugal/i.test(helperSeo.TITULO_HOME), 'título diz a que mercado se destina');
   assert.ok(html.includes(`<meta name="description" content="${helperSeo.DESCRICAO_HOME}" />`), 'meta description presente');
+  // A descrição cobre o essencial do produto real: gestão, quotas, documentos,
+  // finanças e o portal do condómino.
+  for (const termo of ['gestão de condomínios', 'quotas', 'documentos', 'finan', 'condóminos']) {
+    assert.ok(semAcentos(helperSeo.DESCRICAO_HOME).toLowerCase().includes(semAcentos(termo).toLowerCase()),
+      `meta description menciona «${termo}»`);
+  }
   assert.ok(/<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/" \/>/.test(html), 'canónica com o domínio do pedido');
   assert.ok(html.includes('<meta property="og:title"'), 'Open Graph: título');
   assert.ok(html.includes('<meta property="og:description"'), 'Open Graph: descrição');
@@ -179,8 +219,56 @@ async function main() {
     assert.ok(tipos.includes(tipo), `dados estruturados incluem ${tipo}`);
   }
   assert.ok(!/offers|aggregateRating|review|price/i.test(jsonLd[1]), 'dados estruturados sem preços nem avaliações');
+  // Os dados estruturados usam o MESMO texto que é apresentado na página (nunca
+  // um texto paralelo, que poderia dizer mais do que a página sustenta).
+  for (const item of helperSeo.FAQ) {
+    assert.ok(jsonLd[1].includes(item.pergunta.replace(/"/g, '\\"')) || jsonLd[1].includes(item.pergunta),
+      `dados estruturados: pergunta da FAQ presente («${item.pergunta}»)`);
+  }
+  const appLd = dados['@graph'].find((n) => n['@type'] === 'SoftwareApplication');
+  assert.ok(appLd.inLanguage === 'pt-PT' && appLd.operatingSystem === 'Web', 'aplicação declarada como produto web em pt-PT');
+  for (const termo of ['condómino', 'quotas', 'documentos']) {
+    assert.ok(semAcentos(appLd.description).toLowerCase().includes(semAcentos(termo).toLowerCase()),
+      `dados estruturados: a descrição da aplicação menciona «${termo}»`);
+  }
+  assert.ok(/^Plataforma portuguesa de gest[ãa]o de condom[íi]nios/.test(appLd.description),
+    'dados estruturados: descrição da aplicação começa pelo que o produto é');
+  assert.ok(!/aggregateRating|"ratingValue"|"review"|"votac|"preco"|"price"/i.test(jsonLd[1]),
+    'dados estruturados sem afirmações que a página não sustenta');
   const faqLd = dados['@graph'].find((n) => n['@type'] === 'FAQPage');
   assert.strictEqual(faqLd.mainEntity.length, helperSeo.FAQ.length, 'a FAQ declarada é a mesma que a apresentada');
+
+  // A FAQ visível tem de esclarecer o produto REAL — incluindo o portal do
+  // condómino — e não pode prometer funcionalidades futuras.
+  const perguntas = helperSeo.FAQ.map((f) => semAcentos(f.pergunta).toLowerCase());
+  assert.ok(perguntas.some((p) => p.includes('portal')),
+    'a FAQ tem uma pergunta sobre o portal do condómino');
+  assert.ok(perguntas.some((p) => p.includes('condomino') && p.includes('consultar')),
+    'a FAQ explica o que o condómino consegue consultar');
+  for (const tema of ['quotas e recibos', 'documentos', 'quem pode utilizar']) {
+    assert.ok(perguntas.some((p) => semAcentos(p).includes(semAcentos(tema).toLowerCase())),
+      `a FAQ cobre «${tema}»`);
+  }
+  assert.ok(perguntas.some((p) => /proteg|seguranca|palavra-passe/.test(p)),
+    'a FAQ tem uma pergunta sobre a segurança da conta');
+  const textoFaqBruto = semAcentos(JSON.stringify(helperSeo.FAQ)).toLowerCase();
+  assert.ok(/mais do que um condominio|varios condominios/.test(textoFaqBruto),
+    'a FAQ cobre vários condomínios na mesma conta');
+  const textoFaq = textoFaqBruto;
+  for (const [regex, motivo] of PROMESSAS_PROIBIDAS) {
+    assert.ok(!regex.test(JSON.stringify(helperSeo.FAQ)), `FAQ: ${motivo}`);
+  }
+  assert.ok(textoFaq.includes('situacao financeira'), 'a FAQ explica a situação financeira do condomínio');
+  assert.ok(textoFaq.includes('duas etapas'), 'a FAQ refere a verificação em duas etapas');
+  // A FAQ não pode falar de módulos que são apenas placeholders.
+  for (const proibido of ['votac', 'ticket', 'ocorrenc', 'modulo de seguros', 'mensagens']) {
+    assert.ok(!textoFaq.includes(proibido), `FAQ: sem referência a «${proibido}»`);
+  }
+  // Cada entrada tem resposta útil (não vazia e com conteúdo).
+  for (const item of helperSeo.FAQ) {
+    assert.ok(Array.isArray(item.resposta) && item.resposta.length, `FAQ «${item.pergunta}»: tem resposta`);
+    assert.ok(item.resposta.join(' ').length > 60, `FAQ «${item.pergunta}»: resposta com conteúdo`);
+  }
 
   // ── Nome da aplicação visível (verificação de marca Google) ───────
   const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/g) || [];
@@ -245,6 +333,60 @@ async function main() {
   }
   assert.ok(html.includes('class="mk-telemovel"'), 'mockup do telemóvel (portal do condómino) presente');
   assert.ok(html.includes('class="mk-lateral"'), 'mockup com a barra lateral da aplicação');
+
+  // ── Portal do condómino: presente e cedo ──────────────────────────
+  // O hero e a primeira secção de funcionalidades têm de deixar claro que o
+  // produto serve os dois lados: quem administra e quem é condómino.
+  const posHero = html.indexOf('hp-hero');
+  const posFuncionalidades = html.indexOf('id="funcionalidades"');
+  const posPortalEmFuncionalidades = html.indexOf('Portal do condómino');
+  assert.ok(posHero > -1 && posFuncionalidades > posHero && posPortalEmFuncionalidades > -1,
+    'o portal do condómino aparece na secção de funcionalidades');
+  for (const termo of PORTAL_TERMOS) {
+    assert.ok(semAcentos(html.slice(posHero, posHero + 3000)).toLowerCase().includes(semAcentos(termo).toLowerCase()),
+      `o hero menciona «${termo}»`);
+  }
+  // No primeiro cartão da grelha de funcionalidades (antes de finanças).
+  const primeiroCartao = html.slice(posFuncionalidades, posFuncionalidades + 1200);
+  assert.ok(semAcentos(primeiroCartao).includes('Portal do condomino'),
+    'o portal do condómino é o primeiro cartão da secção de funcionalidades');
+  assert.ok(posPortalEmFuncionalidades < html.indexOf('Finanças e orçamento'),
+    'o portal do condómino aparece antes das finanças (é apresentado logo no início)');
+  // E continua a ser uma página para a administração, não só para condóminos.
+  const posAdministrador = html.indexOf('id="administrador"');
+  assert.ok(posAdministrador > posFuncionalidades && posAdministrador < html.indexOf('id="condomino"'),
+    'a administração continua a ter a sua secção própria');
+  assert.ok(/Para quem administra/.test(html), 'a secção da administração mantém-se identificada');
+
+  // ── Exemplos visuais identificados honestamente ───────────────────
+  // A nota tem de existir e dizer, de forma clara, o que são estes elementos.
+  const ocorrenciasNota = (html.match(/hp-nota-exemplos/g) || []).length;
+  assert.ok(ocorrenciasNota >= 3, `a nota dos exemplos visuais aparece nas secções com exemplos (${ocorrenciasNota})`);
+  for (const frase of NOTA_EXEMPLOS) {
+    assert.ok(semAcentos(html).toLowerCase().includes(semAcentos(frase).toLowerCase()),
+      `nota dos exemplos: «${frase}» presente`);
+  }
+  for (const regex of NOTA_EXEMPLOS_PROIBIDO) {
+    assert.ok(!regex.test(html), `nota dos exemplos: sem expressões que desvalorizem o produto (${regex})`);
+  }
+  // A nota está integrada (classe própria da homepage) e não é um alerta legal.
+  assert.ok(/class="hp-nota-exemplos"/.test(html), 'a nota usa o componente próprio da homepage');
+  assert.ok(!/alert alert-warning|alert alert-danger/.test(html), 'a nota não é apresentada como aviso legal');
+  const cssNota = ler('public/css/home.css');
+  assert.ok(/\.hp-nota-exemplos \{/.test(cssNota), 'a nota tem estilo próprio na folha da homepage');
+
+  // ── Nenhum produto futuro apresentado como existente ──────────────
+  for (const [regex, motivo] of PROMESSAS_PROIBIDAS) {
+    assert.ok(!regex.test(html), `homepage: ${motivo} (encontrado: ${(html.match(regex) || [])[0]})`);
+  }
+  // O que o condómino consegue fazer é dito por verbos de consulta.
+  const blocoCondomino = semAcentos(html.slice(html.indexOf('id="condomino"'), html.indexOf('id="transparencia"'))).toLowerCase();
+  const verbosConsulta = ['consulta', 'consultar', 'acompanhar', 'ver '].filter((v) => blocoCondomino.includes(v));
+  assert.ok(verbosConsulta.length >= 2,
+    `portal do condómino: descrito como consulta (${verbosConsulta.join(', ') || 'nenhum verbo de consulta'})`);
+  for (const escrita of ['envia', 'submete', 'carregar ficheiro', 'abrir pedido', 'enviar mensagem']) {
+    assert.ok(!blocoCondomino.includes(escrita), `portal do condómino: sem prometer «${escrita}»`);
+  }
 
   // Tabelas dos mockups: cada uma define as larguras das colunas no <colgroup>,
   // para que os valores fiquem alinhados com os títulos (e as tabelas do mesmo

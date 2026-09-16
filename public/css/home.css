@@ -120,6 +120,26 @@ body.blank-page.home-publica .blank-flash:empty { display: none; }
 }
 .hp-nota-convite .material-symbols-outlined { font-size: 1.05rem; }
 
+/* Nota sobre os exemplos visuais (mockups): discreta, integrada na secção.
+   Não é um aviso legal — só esclarece que as molduras de janela/telemóvel são
+   recriações e não capturas de ecrã. Funciona dentro do cabeçalho de secção e
+   como nota de pé de secção. */
+.hp-nota-exemplos {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin: 1.1rem 0 0;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--c-border-strong);
+  max-width: 62ch;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--c-text-muted);
+}
+.hp-nota-exemplos .material-symbols-outlined { font-size: 1.05rem; flex: none; }
+.hp-cabeca .hp-nota-exemplos { margin-top: 1.1rem; }
+.hp-rodape .hp-nota-exemplos { border-left-color: var(--nav-border); color: var(--nav-text); opacity: 0.85; max-width: 46ch; margin: 0; }
+
 /* ── Cabeçalho público (nav) ────────────────────────────────── */
 .hp-nav {
   position: sticky;
