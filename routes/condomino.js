@@ -255,6 +255,9 @@ router.get('/', async (req, res) => {
 router.get('/quotas', async (req, res) => {
   const { pessoa, fracoes } = await contextoFracoes(req);
   const ids = fracoes.map((f) => f.id);
+  // Data de hoje (AAAA-MM-DD), como nas restantes rotas do portal: é usada para
+  // saber se uma quota já venceu ao derivar o estado apresentado.
+  const hoje = new Date().toISOString().slice(0, 10);
   const ano = parseInt(req.query.ano, 10) || null;
   const estado = req.query.estado && ['pendente', 'vencida', 'paga'].includes(req.query.estado) ? req.query.estado : null;
 
