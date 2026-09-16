@@ -609,7 +609,7 @@ const comp = (f) => handlebars.compile(ler(f));
 html = comp('condomino/dashboard.handlebars')({ ...baseCond, user: { nome: 'Ana' }, condominio: { designacao: 'X' } });
 // O Início foi reorganizado (mobile-first): as secções próprias substituíram os
 // blocos antigos («A minha situação» / «Situação do condomínio»).
-assert.ok(html.includes('Ações rápidas') && html.includes('Atividade recente') && html.includes('O condomínio em resumo'),
+assert.ok(html.includes('Acesso rápido') && html.includes('Atividade recente') && html.includes('O condomínio em resumo'),
   'condómino dashboard renderiza');
 html = comp('condomino/quotas.handlebars')(baseCond);
 assert.ok(html.includes('As minhas quotas'), 'condómino quotas');

@@ -1053,6 +1053,63 @@ a.portal-item:hover .portal-item-titulo { text-decoration: underline; }
    `.quick-action` fica em 36–44px por ser uso com rato). */
 .portal-atalho { min-height: 48px; }
 
+/* ── Início: composição da página (mobile-first) ───────────────────
+   O mesmo conteúdo no telemóvel e no desktop, reorganizado: cartão principal
+   em destaque, atalhos em grelha e dois blocos lado a lado a partir de 992px.
+   O contentor limita a largura em ecrãs grandes (nenhum bloco fica de ponta a
+   ponta) sem afetar o telemóvel, onde ocupa a largura toda. */
+.portal-conteudo { max-width: 1180px; margin: 0 auto; }
+.portal-inicio { align-items: flex-start; }
+.portal-inicio > [class*='col-'] { min-width: 0; }
+
+/* Cartão principal «A minha situação»: o elemento de maior destaque. */
+.portal-hero { border-left: 4px solid var(--c-border-strong); }
+.portal-hero-ok { border-left-color: var(--c-success); }
+.portal-hero-divida { border-left-color: var(--c-error); }
+.portal-hero-vinculo { color: var(--c-text-muted); font-size: calc(11.5px * var(--font-scale)); text-transform: capitalize; }
+.portal-hero-valor {
+  font-size: calc(32px * var(--font-scale));
+  line-height: 1.1;
+  font-weight: 700;
+  margin-top: 8px;
+}
+.portal-hero-linhas { margin-top: 12px; }
+.portal-hero-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.portal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+.portal-btn .material-symbols-outlined { font-size: calc(20px * var(--font-scale)); }
+
+/* Atalhos: grelha de 3 colunas no telemóvel e 6 a partir de 576px. */
+.portal-atalhos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.portal-atalhos .portal-atalho {
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 6px;
+  line-height: 1.2;
+}
+.portal-atalhos .portal-atalho .material-symbols-outlined { font-size: calc(24px * var(--font-scale)); }
+.portal-atalho-meta {
+  font-size: calc(10.5px * var(--font-scale));
+  color: var(--c-text-muted);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.portal-atalhos .portal-atalho:hover .portal-atalho-meta { color: var(--c-primary-dark); }
+/* Seis colunas só a partir do ponto em que cada atalho ainda tem largura para
+   o rótulo (para baixo disso o rótulo seria cortado). */
+@media (min-width: 1200px) {
+  .portal-atalhos { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+
 /* Painel — faixas horizontais agrupadas (sem um card por número) */
 .painel-strip {
   display: flex;

@@ -1,13 +1,17 @@
 {{!-- Início da área do condómino (mobile-first).
 
-     Ordem pensada para telemóvel, respondendo por esta ordem a:
-       «O que tenho para tratar?» → resumo e alertas
-       «O que preciso de saber?»  → ações rápidas, atividade recente
-       «O que aconteceu / o que vem aí?» → atividade e próximos eventos
+     Sequência pensada para telemóvel, respondendo por esta ordem a
+     «qual é a situação da minha fração e há alguma coisa que eu precise de
+     consultar ou tratar?»:
+        identidade → a minha situação → acesso rápido → atividade recente
+        → próximos eventos → situação do condomínio
 
-     Todas as informações vêm de dados reais: quotas, pagamentos, recibos,
-     avisos, documentos e assembleias do condomínio ativo. --}}
-<div class="page-heading">
+     Todas as informações vêm de dados que já existem (quotas, pagamentos,
+     recibos, avisos, documentos e assembleias do condomínio ativo). Nada é
+     apresentado quando não existe: cada bloco tem a sua mensagem neutra.
+     Com várias frações, cada cartão mostra exclusivamente a sua própria
+     informação (a próxima quota é consultada por fração em routes/condomino.js). --}}
+<div class="page-heading portal-cabecalho">
   <h1>Olá, {{user.nome}}</h1>
   <p class="subtitle">
     {{condominio.designacao}}{{#if fracoesComResumo.length}} · {{#each fracoesComResumo}}{{designacao}}{{#unless @last}}, {{/unless}}{{/each}}{{#if fracoesComResumo.0.permilagem}} · {{fracoesComResumo.0.permilagem}}‰{{/if}}{{/if}}
@@ -21,93 +25,105 @@
 </div>
 {{else}}
 
-{{#if fracoesComResumo}}
-{{!-- ── Resumo: o que tenho para tratar ────────────────────────────── --}}
-{{#each fracoesComResumo}}
-<div class="card mb-3 portal-resumo">
-  <div class="card-body">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-      <div>
-        <div class="stat-label">Fração {{designacao}}</div>
-        {{#if permilagem}}<span class="badge text-bg-light border">{{permilagem}}‰</span>{{/if}}
-      </div>
-      {{#if (gt resumo.emDivida 0)}}
-      <span class="badge text-bg-danger">Quota em atraso</span>
-      {{else}}
-      <span class="badge text-bg-success">Tudo em dia</span>
-      {{/if}}
-    </div>
+<div class="portal-conteudo">
+<div class="row g-3 portal-inicio">
+  <div class="col-12 col-lg-7">
 
-    <div class="portal-valor {{#if (gt resumo.emDivida 0)}}text-danger{{else}}text-success{{/if}}">
-      {{eur resumo.emDivida}}
-    </div>
-    <div class="stat-label mb-3">{{#if (gt resumo.emDivida 0)}}Em dívida{{else}}Saldo a favor{{/if}}</div>
+    {{!-- ── A minha situação (bloco de maior destaque do Início) ───── --}}
+    {{#if fracoesComResumo}}
+    {{#each fracoesComResumo}}
+    <div class="card portal-hero mb-3 {{#if (gt resumo.emDivida 0)}}portal-hero-divida{{else}}portal-hero-ok{{/if}}">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <div class="stat-label">Fração {{designacao}}</div>
+            {{#if vinculo}}<div class="portal-hero-vinculo">{{vinculo}}</div>{{/if}}
+          </div>
+          {{#if (gt resumo.emDivida 0)}}
+          <span class="badge text-bg-danger">Quota em atraso</span>
+          {{else}}
+          <span class="badge text-bg-success">Tudo pago</span>
+          {{/if}}
+        </div>
 
-    <div class="portal-linhas">
-      <div class="portal-linha">
-        <span class="material-symbols-outlined" aria-hidden="true">event_upcoming</span>
-        <span class="portal-linha-texto">
-          {{!-- Próxima quota DESTA fração (calculada por fração na rota): o
-               cartão nunca mostra a quota de outra fração. --}}
+        <div class="portal-hero-valor {{#if (gt resumo.emDivida 0)}}text-danger{{else}}text-success{{/if}}">
+          {{eur resumo.emDivida}}
+        </div>
+        <div class="stat-label">{{#if (gt resumo.emDivida 0)}}Valores por regularizar{{else}}Nada a pagar{{/if}}</div>
+
+        <div class="portal-linhas portal-hero-linhas">
+          {{!-- Com dívida, o que importa é regularizar: o detalhe está na área das
+               quotas (histórico, recibos e pagamentos registados). Sem dívida,
+               mostra-se o próximo vencimento desta fração, quando existe. Se não
+               houver quota por vencer, diz-se — sem inventar uma próxima quota. --}}
           {{#if proximaQuota}}
-          Próxima quota: <strong>{{eur proximaQuota.valor}}</strong> até {{formatDate proximaQuota.data_vencimento}}
+          <div class="portal-linha">
+            <span class="material-symbols-outlined" aria-hidden="true">event_upcoming</span>
+            <span class="portal-linha-texto">
+              Próxima quota: <strong>{{eur proximaQuota.valor}}</strong> até {{formatDate proximaQuota.data_vencimento}}
+            </span>
+          </div>
           {{else}}
-          Sem quotas por vencer registadas
+          {{#unless (gt resumo.emDivida 0)}}
+          <div class="portal-linha">
+            <span class="material-symbols-outlined" aria-hidden="true">event_available</span>
+            <span class="portal-linha-texto">Sem quotas por vencer registadas</span>
+          </div>
+          {{/unless}}
           {{/if}}
-        </span>
-      </div>
-      <div class="portal-linha">
-        <span class="material-symbols-outlined" aria-hidden="true">payments</span>
-        <span class="portal-linha-texto">
-          {{#if resumo.ultimoPagamento}}
-          Último pagamento: <strong>{{eur resumo.ultimoPagamento.valor}}</strong> em {{formatDate resumo.ultimoPagamento.data}}
-          {{else}}
-          Ainda sem pagamentos registados
+          <div class="portal-linha">
+            <span class="material-symbols-outlined" aria-hidden="true">payments</span>
+            <span class="portal-linha-texto">
+              {{#if resumo.ultimoPagamento}}
+              Último pagamento: <strong>{{eur resumo.ultimoPagamento.valor}}</strong> em {{formatDate resumo.ultimoPagamento.data}}
+              {{else}}
+              Ainda sem pagamentos registados
+              {{/if}}
+            </span>
+          </div>
+          <div class="portal-linha">
+            <span class="material-symbols-outlined" aria-hidden="true">checklist</span>
+            <span class="portal-linha-texto">{{resumo.quotasPagas}} quota(s) paga(s) · {{resumo.quotasPendentes}} pendente(s)</span>
+          </div>
+          {{#if extrasPendentes}}
+          <div class="portal-linha">
+            <span class="material-symbols-outlined" aria-hidden="true">savings</span>
+            <span class="portal-linha-texto">
+              Extraordinárias por pagar:
+              {{#each extrasPendentes}}<strong>{{eur valor}}</strong> ({{designacao}}, parcela {{parcela}}){{#unless @last}} · {{/unless}}{{/each}}
+            </span>
+          </div>
           {{/if}}
-        </span>
-      </div>
-      <div class="portal-linha">
-        <span class="material-symbols-outlined" aria-hidden="true">checklist</span>
-        <span class="portal-linha-texto">{{resumo.quotasPagas}} quota(s) paga(s) · {{resumo.quotasPendentes}} pendente(s)</span>
-      </div>
-      {{#if extrasPendentes}}
-      <div class="portal-linha">
-        <span class="material-symbols-outlined" aria-hidden="true">savings</span>
-        <span class="portal-linha-texto">
-          Extraordinárias por pagar:
-          {{#each extrasPendentes}}<strong>{{eur valor}}</strong> ({{designacao}}, parcela {{parcela}}){{#unless @last}} · {{/unless}}{{/each}}
-        </span>
-      </div>
-      {{/if}}
-    </div>
+        </div>
 
-    <div class="d-flex flex-wrap gap-2 mt-3">
-      <a class="btn btn-primary btn-sm" href="/condomino/quotas">Ver quotas</a>
-      <a class="btn btn-outline-secondary btn-sm" href="/condomino/recibos">Recibos</a>
-      <a class="btn btn-outline-secondary btn-sm" href="/condomino/pagamentos">Pagamentos</a>
+        <div class="portal-hero-acoes">
+          <a class="btn btn-primary portal-btn" href="/condomino/quotas">
+            <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>
+            {{#if (gt resumo.emDivida 0)}}Consultar quotas{{else}}Ver quotas{{/if}}
+          </a>
+        </div>
+      </div>
+    </div>
+    {{/each}}
+    {{else}}
+    <div class="alert alert-info">Não tem frações associadas neste condomínio.</div>
+    {{/if}}
+
+    {{!-- ── Acesso rápido (as seis áreas reais, a um toque) ─────────── --}}
+    <h2 class="h6 text-uppercase portal-titulo-seccao">Acesso rápido</h2>
+    <div class="portal-atalhos mb-4">
+      <a class="quick-action portal-atalho" href="/condomino/quotas"><span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>Quotas<span class="portal-atalho-meta">{{#if (gt fracoesComResumo.0.resumo.emDivida 0)}}Em dívida{{else}}Em dia{{/if}}</span></a>
+      <a class="quick-action portal-atalho" href="/condomino/recibos"><span class="material-symbols-outlined" aria-hidden="true">confirmation_number</span>Recibos<span class="portal-atalho-meta">{{#if fracoesComResumo.0.resumo.ultimoPagamento}}Último pagamento{{else}}Sem recibos{{/if}}</span></a>
+      <a class="quick-action portal-atalho" href="/condomino/documentos"><span class="material-symbols-outlined" aria-hidden="true">folder</span>Documentos<span class="portal-atalho-meta">Do condomínio</span></a>
+      <a class="quick-action portal-atalho" href="/condomino/avisos"><span class="material-symbols-outlined" aria-hidden="true">campaign</span>Avisos<span class="portal-atalho-meta">{{#if avisosRecentes}}{{avisosRecentes}} recente(s){{else}}Sem novidades{{/if}}</span></a>
+      <a class="quick-action portal-atalho" href="/condomino/assembleias"><span class="material-symbols-outlined" aria-hidden="true">forum</span>Assembleias<span class="portal-atalho-meta">Convocatórias e atas</span></a>
+      <a class="quick-action portal-atalho" href="/condomino/situacao"><span class="material-symbols-outlined" aria-hidden="true">monitoring</span>Situação<span class="portal-atalho-meta">Financeira</span></a>
     </div>
   </div>
-</div>
-{{/each}}
-{{else}}
-<div class="alert alert-info">Não tem frações associadas neste condomínio.</div>
-{{/if}}
 
-{{!-- ── Ações rápidas ─────────────────────────────────────────────── --}}
-<h2 class="h6 text-uppercase portal-titulo-seccao">Ações rápidas</h2>
-<div class="row g-2 mb-4">
-  <div class="col-4 col-md-2"><a class="quick-action portal-atalho w-100 justify-content-center" href="/condomino/quotas"><span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>Quotas</a></div>
-  <div class="col-4 col-md-2"><a class="quick-action portal-atalho w-100 justify-content-center" href="/condomino/recibos"><span class="material-symbols-outlined" aria-hidden="true">confirmation_number</span>Recibos</a></div>
-  <div class="col-4 col-md-2"><a class="quick-action portal-atalho w-100 justify-content-center" href="/condomino/documentos"><span class="material-symbols-outlined" aria-hidden="true">folder</span>Documentos</a></div>
-  <div class="col-4 col-md-2"><a class="quick-action portal-atalho w-100 justify-content-center" href="/condomino/avisos"><span class="material-symbols-outlined" aria-hidden="true">campaign</span>Avisos</a></div>
-  <div class="col-4 col-md-2"><a class="quick-action portal-atalho w-100 justify-content-center" href="/condomino/assembleias"><span class="material-symbols-outlined" aria-hidden="true">forum</span>Assembleias</a></div>
-  <div class="col-4 col-md-2"><a class="quick-action portal-atalho w-100 justify-content-center" href="/condomino/situacao"><span class="material-symbols-outlined" aria-hidden="true">monitoring</span>Situação</a></div>
-</div>
-
-{{!-- ── Atividade recente + próximos eventos ──────────────────────── --}}
-<div class="row g-3">
-  <div class="col-12 col-lg-7">
-    <div class="card h-100">
+  <div class="col-12 col-lg-5">
+    {{!-- ── Atividade recente ──────────────────────────────────────── --}}
+    <div class="card mb-3">
       <div class="card-header bg-white d-flex justify-content-between align-items-center">
         <span class="stat-label">Atividade recente</span>
         <a class="small" href="/condomino/avisos">Ver avisos</a>
@@ -136,12 +152,11 @@
       <div class="card-body text-muted small">Ainda sem atividade recente neste condomínio.</div>
       {{/if}}
     </div>
-  </div>
 
-  <div class="col-12 col-lg-5">
-    <div class="card h-100">
+    {{!-- ── Próximos eventos ───────────────────────────────────────── --}}
+    <div class="card mb-3">
       <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <span class="stat-label">Próximos acontecimentos</span>
+        <span class="stat-label">Próximos eventos</span>
         <a class="small" href="/condomino/calendario">Calendário</a>
       </div>
       {{#if proximosEventos.length}}
@@ -153,16 +168,16 @@
         {{/each}}
       </ul>
       {{else}}
-      <div class="card-body text-muted small">Sem acontecimentos agendados.</div>
+      <div class="card-body text-muted small">Sem eventos agendados neste condomínio.</div>
       {{/if}}
     </div>
   </div>
 </div>
 
-{{!-- ── Transparência do condomínio (versão compacta; detalhe na área
-     Condomínio, em Situação financeira e Orçamento) ──────────────── --}}
-<h2 class="h6 text-uppercase portal-titulo-seccao mt-4">O condomínio em resumo</h2>
-<div class="card">
+{{!-- ── Situação do condomínio (resumo; detalhe na área Condomínio) ─── --}}
+<div class="mt-4">
+<h2 class="h6 text-uppercase portal-titulo-seccao">O condomínio em resumo</h2>
+<div class="card portal-transparencia">
   <div class="card-body">
     <div class="row g-3 align-items-center">
       <div class="col-6 col-md-3">
@@ -189,6 +204,7 @@
       <a class="btn btn-outline-secondary btn-sm" href="/condomino/orcamento">Orçamento</a>
     </div>
   </div>
+</div>
 </div>
 
 {{#unless fracoesComResumo.length}}
@@ -236,4 +252,5 @@
 </div>
 {{/if}}
 {{/unless}}
+</div>
 {{/unless}}

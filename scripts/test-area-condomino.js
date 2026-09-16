@@ -112,8 +112,8 @@ function testeInicio() {
   assert.ok(/Último pagamento:/.test(seguido), 'Início: último pagamento');
   assert.ok(/Extraordinárias por pagar:/.test(seguido) && seguido.includes('Elevador'), 'Início: quotas extraordinárias pendentes');
 
-  // Ações rápidas: as seis áreas reais, a um toque.
-  assert.ok(/Ações rápidas/.test(html), 'Início: secção de ações rápidas');
+  // Acesso rápido: as seis áreas reais, a um toque.
+  assert.ok(/Acesso rápido/.test(html), 'Início: secção de acesso rápido');
   for (const [rotulo, href] of [
     ['Quotas', '/condomino/quotas'], ['Recibos', '/condomino/recibos'], ['Documentos', '/condomino/documentos'],
     ['Avisos', '/condomino/avisos'], ['Assembleias', '/condomino/assembleias'], ['Situação', '/condomino/situacao'],
@@ -126,13 +126,49 @@ function testeInicio() {
   assert.ok(/Atividade recente/.test(html), 'Início: atividade recente');
   assert.ok(seguido.includes('Manutenção do elevador') && seguido.includes('Recibo RCP-2026-0042') && seguido.includes('Ata da assembleia'),
     'Início: avisos, recibos e documentos na atividade');
-  assert.ok(/Próximos acontecimentos/.test(html) && seguido.includes('Assembleia 2/2026'), 'Início: próximos acontecimentos com assembleias');
+  assert.ok(/Próximos eventos/.test(html) && seguido.includes('Assembleia 2/2026'), 'Início: próximos eventos com assembleias');
+  // Limite da lista: no máximo 5 itens (a rota corta antes de renderizar).
+  const rotaAtividade = ler('routes/condomino.js');
+  assert.ok(/const atividadeRecente = \[[\s\S]*?\.slice\(0, 5\)/.test(rotaAtividade),
+    'Início: atividade recente limitada a 5 itens');
+  assert.ok(!/\.slice\(0, 6\)/.test(rotaAtividade), 'Início: o limite antigo de 6 itens já não existe');
 
   // Transparência compacta (detalhe fica na área Condomínio).
   assert.ok(/O condomínio em resumo/.test(html), 'Início: transparência compacta');
   assert.ok(seguido.includes('Saldo das contas') && /Execução do orçamento 2026/.test(seguido), 'Início: saldo e execução do orçamento');
   assert.ok(/href="\/condomino\/situacao"/.test(html) && /href="\/condomino\/orcamento"/.test(html),
     'Início: ligação ao detalhe (Situação financeira e Orçamento)');
+
+  // Cartão principal «A minha situação»: destaque, estado e ligação às quotas.
+  assert.ok(/class="card portal-hero[^"]*"/.test(html), 'Início: cartão principal em destaque (A minha situação)');
+  assert.ok(/portal-hero-valor/.test(html), 'Início: valor em destaque no cartão principal');
+  assert.ok(/Quota em atraso/.test(seguido) && /portal-hero-divida/.test(html),
+    'Início: com dívida, o cartão principal assume o estado de atraso');
+  assert.ok(/Valores por regularizar/.test(seguido), 'Início: com dívida, texto de valores por regularizar');
+  assert.ok(/href="\/condomino\/quotas"[^>]*>[\s\S]{0,200}?Consultar quotas/.test(html),
+    'Início: com dívida, ligação para consultar as quotas');
+  // Cada sub-linha do cartão usa dados reais da fração.
+  assert.ok(/Último pagamento: <strong>75,00 €<\/strong> em 05\/08\/2026/.test(seguido), 'Início: último pagamento no cartão principal');
+  assert.ok(/8 quota\(s\) paga\(s\) · 2 pendente\(s\)/.test(seguido), 'Início: quotas pagas e pendentes');
+
+  // Acesso rápido: as seis sub-linhas vêm de dados que já existem.
+  assert.strictEqual((html.match(/portal-atalho-meta/g) || []).length, 6, 'Início: seis atalhos com sub-linha informativa');
+  assert.ok(/Em dívida/.test(seguido), 'Início: atalho Quotas indica o estado da dívida');
+
+  // Ordem da página no telemóvel: identidade → situação → acesso → atividade → eventos → condomínio.
+  const posicoes = ['Olá, Ana Silva', 'portal-hero', 'Acesso rápido', 'Atividade recente', 'Próximos eventos', 'O condomínio em resumo']
+    .map((marca) => html.indexOf(marca));
+  assert.ok(posicoes.every((p) => p > -1), 'Início: todas as secções presentes');
+  assert.deepStrictEqual(posicoes, [...posicoes].sort((a, b) => a - b),
+    'Início: sequência identidade → situação → acesso rápido → atividade → próximos eventos → condomínio');
+
+  // Duas colunas a partir de 992px (mesma informação, reorganizada).
+  assert.ok(/class="row g-3 portal-inicio"/.test(html) && /col-12 col-lg-7/.test(html) && /col-12 col-lg-5/.test(html),
+    'Início: blocos em duas colunas no desktop');
+  assert.ok(/class="portal-conteudo"/.test(html), 'Início: contentor limita a largura em ecrãs grandes');
+
+  // Nada de duplicação: a situação por fração aparece uma só vez.
+  assert.strictEqual((html.match(/portal-hero-valor/g) || []).length, 1, 'Início: um só cartão de situação por fração');
 
   // Fluxos já validados preservados.
   const semFracoes = render('views/condomino/dashboard.handlebars', {
@@ -213,6 +249,58 @@ function testeInicioMultiFraccao() {
   }).replace(/\s+/g, ' ');
   assert.ok(soUma.includes('Sem quotas por vencer registadas') && soUma.includes('Próxima quota: <strong>42,50 €</strong> até 15/11/2026'),
     'multi-fração: fração sem vencimento futuro não herda a quota da outra fração');
+
+  // ── Estado normal (sem dívida) ────────────────────────────────────
+  // Uma fração sem dívida e com próxima quota: «Tudo pago» + próximo vencimento.
+  const semDivida = render('views/condomino/dashboard.handlebars', {
+    ...CONTEXTO,
+    fracoesComResumo: [{
+      id: 5, designacao: '1.º Esq', permilagem: '125.00', vinculo: 'proprietario',
+      resumo: { emDivida: 0, quotasPagas: 10, quotasPendentes: 1, quotasVencidas: 0, ultimoPagamento: { valor: 75, data: '2026-08-05' } },
+      proximaQuota: { valor: 75, data_vencimento: '2026-10-08', fracao_id: 5 },
+      extrasPendentes: [],
+    }],
+  }).replace(/\s+/g, ' ');
+  assert.ok(/Tudo pago/.test(semDivida) && /portal-hero-ok/.test(semDivida),
+    'situação normal: cartão principal mostra «Tudo pago»');
+  assert.ok(/Nada a pagar/.test(semDivida), 'situação normal: rótulo do valor em dia');
+  assert.ok(/Próxima quota: <strong>75,00 €<\/strong> até 08\/10\/2026/.test(semDivida),
+    'situação normal: mostra a próxima quota e o vencimento');
+  assert.ok(/href="\/condomino\/quotas"[^>]*>[\s\S]{0,200}?Ver quotas/.test(semDivida),
+    'situação normal: ligação para as quotas');
+  assert.ok(!/Quota em atraso/.test(semDivida) && !/Valores por regularizar/.test(semDivida),
+    'situação normal: sem linguagem de dívida');
+
+  // Sem quotas por vencer: diz-se, em vez de inventar uma próxima quota.
+  const semProxima = render('views/condomino/dashboard.handlebars', {
+    ...CONTEXTO,
+    fracoesComResumo: [{
+      id: 5, designacao: '1.º Esq', permilagem: '125.00',
+      resumo: { emDivida: 0, quotasPagas: 12, quotasPendentes: 0, quotasVencidas: 0, ultimoPagamento: null },
+      proximaQuota: null, extrasPendentes: [],
+    }],
+  }).replace(/\s+/g, ' ');
+  assert.ok(/Sem quotas por vencer registadas/.test(semProxima), 'sem quotas por vencer: mensagem neutra');
+  assert.ok(!/Próxima quota:/.test(semProxima), 'sem quotas por vencer: não inventa uma próxima quota');
+
+  // ── Próximos eventos usam dados que já existem ────────────────────
+  const comEventos = render('views/condomino/dashboard.handlebars', {
+    ...CONTEXTO,
+    proximosEventos: [
+      { tipo: 'assembleia', icone: 'forum', titulo: 'Assembleia 2/2026', detalhe: '18:30 · Sala comum', data: '2026-11-12', link: '/condomino/assembleias/7' },
+      { tipo: 'comunicacao', icone: 'schedule_send', titulo: 'Vistoria do gás', detalhe: 'Comunicação programada', data: '2026-11-20', link: '/condomino/avisos' },
+    ],
+  }).replace(/\s+/g, ' ');
+  assert.ok(comEventos.includes('18:30 · Sala comum · 12/11/2026'),
+    'próximos eventos: assembleia com hora e local');
+  assert.ok(comEventos.includes('Comunicação programada · 20/11/2026'),
+    'próximos eventos: aviso programado identificado como comunicação');
+  assert.ok(/href="\/condomino\/assembleias\/7"/.test(comEventos) && /href="\/condomino\/avisos"/.test(comEventos),
+    'próximos eventos: cada evento liga ao recurso existente');
+
+  // Sem eventos: mensagem neutra, sem cartão vazio artificial.
+  const semEventos = render('views/condomino/dashboard.handlebars', { ...CONTEXTO, proximosEventos: [] }).replace(/\s+/g, ' ');
+  assert.ok(/Sem eventos agendados neste condomínio\./.test(semEventos), 'sem eventos: mensagem neutra');
 
   // A vista lê a quota DA FRAÇÃO: não pode voltar a existir uma quota global.
   const vista = ler('views/condomino/dashboard.handlebars');

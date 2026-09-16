@@ -212,7 +212,7 @@ router.get('/', async (req, res) => {
     })),
   ]
     .sort((a, b) => String(b.data).localeCompare(String(a.data)))
-    .slice(0, 6);
+    .slice(0, 5);
 
   // Próximos eventos: assembleias futuras + comunicações programadas.
   const proximosEventos = [
