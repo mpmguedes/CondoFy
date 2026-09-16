@@ -47,8 +47,8 @@ const { enfileirarEmail } = require('../helpers/email-fila');
 const { estaAtivo } = require('../helpers/notificacoes');
 const { estaAtivo: automacaoAtiva } = require('../helpers/automacoes');
 const background = require('../helpers/background-jobs');
-const { getQuotaConfig, setQuotaConfig } = require('../helpers/quotas-config');
-const { calcularQuota, calcularQuotasOrcamento } = require('../helpers/quotas-calc');
+const { getQuotaConfig, setQuotaConfig, validarFcrPercentagem } = require('../helpers/quotas-config');
+const { calcularQuota, calcularQuotasOrcamento, dividirComponentesQuota } = require('../helpers/quotas-calc');
 const { validarPermilagem } = require('../helpers/permilagem');
 const storage = require('../helpers/storage');
 
@@ -394,14 +394,18 @@ router.get('/quotas', async (req, res) => {
 // Configuração das quotas (valor por 1000‰ + FCR)
 router.post('/quotas/config', async (req, res) => {
   const valorPor1000 = parseDecimal(req.body.valor_1000 ?? req.body.valor_permilagem);
-  const fcrPercentagem = parseInt(req.body.fcr_percentagem, 10);
+  // O FCR tem um mínimo legal (10% da quota-parte nas restantes despesas do
+  // condomínio) e admite qualquer valor acima desse, aprovado pelo condomínio.
+  // Aceita decimais (ex.: 12,5%).
+  const fcrValidado = validarFcrPercentagem(req.body.fcr_percentagem);
+  const fcrPercentagem = fcrValidado.valor;
 
   if (valorPor1000 <= 0) {
     req.flash('error_msg', 'O valor por 1000‰ tem de ser maior que zero.');
     return res.redirect('/admin/quotas');
   }
-  if (isNaN(fcrPercentagem) || fcrPercentagem < 0 || fcrPercentagem > 100) {
-    req.flash('error_msg', 'O FCR tem de estar entre 0 e 100%.');
+  if (!fcrValidado.ok) {
+    req.flash('error_msg', fcrValidado.mensagem);
     return res.redirect('/admin/quotas');
   }
 
@@ -514,6 +518,10 @@ router.get('/quotas/gerar', async (req, res) => {
     orcamentosJson: JSON.stringify(orcamentosJson),
     fracoesJson: JSON.stringify(fracoes.map((f) => ({ id: f.id, designacao: f.designacao, permilagem: f.permilagem }))),
     existentesJson: JSON.stringify(existentesSet),
+    // Pré-visualização: a divisão entre despesas correntes e FCR é feita pela
+    // MESMA função do cálculo final (passada já avaliada), para não existir uma
+    // segunda implementação da regra no browser.
+    fcrSplitterJs: `window.__GESCONDU_DIVIDIR_FCR = ${dividirComponentesQuota.toString()};`,
     driveLigado: storage.isConfigured(req.condominioId),
     autoQuotas: { drive: autoQuotasDrive, email: autoQuotasEmail, automatico: autoQuotasAutomatico },
   });
@@ -552,11 +560,15 @@ router.post('/quotas/gerar', async (req, res) => {
       return res.redirect('/admin/quotas/gerar');
     }
     const totalAnualC = orcamento.rubricas.filter((r) => r.ativo).reduce((s, r) => s + toCents(r.valor_anual), 0);
+    // A percentagem do FCR vem SEMPRE da configuração do condomínio: sem ela o
+    // FCR saía a zero e a quota deixava de discriminar o fundo.
+    const { fcrPercentagem: fcrOrcamento } = await getQuotaConfig();
     valoresPorFracao = calcularQuotasOrcamento({
       fracoes,
       totalAnual: fromCents(totalAnualC),
       metodo: 'permilagem',
       meses: 12,
+      fcrPercentagem: fcrOrcamento,
     });
     metodoLabel = `orçamento ${orcamento.designacao}`;
   } else {

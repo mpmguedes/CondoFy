@@ -53,7 +53,8 @@
           </div>
           <div class="mb-3">
             <label class="form-label">Fundo Comum de Reserva (%)</label>
-            <input type="number" class="form-control" name="fcr_percentagem" value="{{quotaConfig.fcrPercentagem}}" min="0" max="100" />
+            <input type="number" class="form-control" name="fcr_percentagem" value="{{quotaConfig.fcrPercentagem}}" min="10" max="100" step="0.01" />
+            <div class="form-text">Mínimo legal: <strong>10%</strong> da quota-parte nas restantes despesas do condomínio. Pode ser superior, se aprovado em assembleia.</div>
           </div>
           <div class="form-check">
             <input class="form-check-input" type="checkbox" name="recalcular" id="recalcular" value="futuras" />

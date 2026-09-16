@@ -34,7 +34,7 @@
                 <option value="">— Selecionar —</option>
                 {{#each orcamentos}}<option value="{{id}}">{{designacao}} ({{eur total}}/ano)</option>{{/each}}
               </select>
-              <p class="form-text">O total anual de rubricas do orçamento é distribuído pelas frações por permilagem e dividido em 12 meses. O FCR deve constar como rubrica do orçamento.</p>
+              <p class="form-text">O total anual de rubricas do orçamento é distribuído pelas frações por permilagem e dividido em 12 meses. O FCR é uma componente desse valor ({{quotaConfig.fcrPercentagem}}%), não uma rubrica adicional — o total da quota mantém-se.</p>
             </div>
           </div>
           <div class="col-md-6">
@@ -147,6 +147,19 @@
   const EXISTENTES = {{{existentesJson}}};
   const fmt = (n) => n.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
+  // Divisão da quota nas suas componentes (despesas correntes + FCR): é a MESMA
+  // função do cálculo final no servidor, injetada aqui já avaliada — a
+  // pré-visualização nunca inventa números que o servidor não vá gravar.
+  {{{fcrSplitterJs}}}
+  const pctFcr = () => {
+    const p = parseFloat(String(CFG.fcrPercentagem).replace(',', '.'));
+    return Number.isFinite(p) && p > 0 ? p : 0;
+  };
+  function dividir(totalMensal, percentagem) {
+    const partes = window.__GESCONDU_DIVIDIR_FCR(Math.round(totalMensal * 100), percentagem);
+    return { base: partes.baseC / 100, fcr: partes.fcrC / 100, total: partes.totalC / 100 };
+  }
+
   function ehOrcamento() { return document.getElementById('metodoOrcamento').checked; }
 
   function calc(perm) {
@@ -155,13 +168,13 @@
       const totalAnual = orc ? parseFloat(orc.total) : 0;
       const totalPerm = FRACOES.reduce((s, f) => s + (parseFloat(f.permilagem) || 0), 0);
       const anual = totalPerm > 0 ? totalAnual * (parseFloat(perm) || 0) / totalPerm : totalAnual / FRACOES.length;
-      const mensal = anual / 12;
-      return { base: mensal, fcr: 0, total: mensal, orcamento: orc };
+      // O total mensal manda: o FCR é uma componente dele (tal como no servidor).
+      return { ...dividir(anual / 12, pctFcr()), orcamento: orc };
     }
     // (permilagem / 1000) × valor por 1000‰ + FCR
     const valorPor1000C = Math.round(parseFloat(CFG.valorPor1000) * 100);
     const baseC = Math.round((parseFloat(perm) || 0) / 1000 * valorPor1000C);
-    const fcrC = Math.round(baseC * parseFloat(CFG.fcrPercentagem) / 100);
+    const fcrC = Math.round(baseC * pctFcr() / 100);
     return { base: baseC / 100, fcr: fcrC / 100, total: (baseC + fcrC) / 100 };
   }
 
@@ -227,7 +240,7 @@
     const orc = ehOrcamento();
     document.getElementById('campoOrcamento').classList.toggle('d-none', !orc);
     document.getElementById('infoMetodo').innerHTML = orc
-      ? 'A receita mensal é definida pelo total de rubricas do orçamento selecionado (o FCR deve constar como rubrica).'
+      ? 'A receita mensal é o total de rubricas do orçamento distribuído por permilagem, dividido em 12 meses. O FCR (<strong>' + CFG.fcrPercentagem + '%</strong>) é uma componente dessa quota, não um valor a somar.'
       : 'Valor por 1000‰: <strong>' + CFG.valorPor1000 + ' €</strong> · FCR: <strong>' + CFG.fcrPercentagem + '%</strong>';
   }
   document.getElementById('escopoMes').addEventListener('change', alternarEscopo);

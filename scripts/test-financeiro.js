@@ -152,7 +152,8 @@ async function main() {
   assert.strictEqual(periodos[3].ano, 2026);
   assert.strictEqual(periodos[3].mes, 5);
 
-  // 9. Método 2 — orçamento define a receita (distribuição por permilagem ÷ 12)
+  // 9. Método 2 — orçamento define a receita (distribuição por permilagem ÷ 12),
+  // com o FCR separado pela percentagem configurada.
   const qOrc = calcularQuotasOrcamento({
     fracoes: [
       { id: 1, permilagem: '500' },
@@ -162,11 +163,27 @@ async function main() {
     totalAnual: '12000.00',
     metodo: 'permilagem',
     meses: 12,
+    fcrPercentagem: 10,
   });
   let somaMensalC = 0;
   for (const [, v] of qOrc) somaMensalC += v.totalC;
   assert.strictEqual(somaMensalC * 12, toCents('12000.00'), 'orçamento: 12 × soma mensal = total anual');
-  assert.strictEqual(qOrc.get(1).fcr, 0, 'método 2 sem FCR separado (FCR é rubrica)');
+  assert.ok(qOrc.get(1).fcr > 0, 'método 2 separa o FCR pela percentagem configurada');
+  for (const [, v] of qOrc) {
+    assert.strictEqual(v.baseC + v.fcrC, v.totalC, `método 2: base + FCR = total (fração ${v.permilagem}‰)`);
+  }
+  // Sem a percentagem, o FCR fica a zero E o total continua a ser a receita
+  // definida pelo orçamento (o valor a pagar nunca muda por causa do FCR).
+  const qOrcSemFcr = calcularQuotasOrcamento({
+    fracoes: [{ id: 1, permilagem: '1000' }],
+    totalAnual: '12000.00',
+    metodo: 'permilagem',
+    meses: 12,
+  });
+  assert.strictEqual(qOrcSemFcr.get(1).fcr, 0, 'método 2 sem percentagem: FCR a zero');
+  assert.strictEqual(qOrcSemFcr.get(1).total, 1000, 'método 2 sem percentagem: total mantém-se (1000 €/mês)');
+  assert.strictEqual(qOrcSemFcr.get(1).baseC + qOrcSemFcr.get(1).fcrC, qOrcSemFcr.get(1).totalC,
+    'método 2 sem percentagem: base + FCR = total');
 
   // 10. Quota extraordinária — 5000 € entre 500‰+500‰, 5 parcelas mensais
   const extraDemo = distribuicaoExtra('5000.00', [
