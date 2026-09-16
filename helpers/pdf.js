@@ -1,9 +1,62 @@
 const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
-const { formatEUR, fromCents } = require('./money');
+const { formatEUR, fromCents, toCents } = require('./money');
 const { formatDate, formatDateExtenso } = require('./dates');
 const { gerarConvocatoriaCartaPDF } = require('./pdf-convocatoria');
+
+// ── Componentes da quota (Quota corrente + FCR) ────────────────────
+// Os documentos NUNCA recalculam a percentagem: mostram apenas os valores
+// guardados nos modelos (Quota.valor_base/valor_fcr/fcr_percentagem,
+// ReciboQuota.valor_base/valor_fcr). Esta função limita-se a somar esses
+// valores em cêntimos e a garantir o invariante `base + FCR = total`.
+//
+// Devolve `null` quando NÃO existem componentes: sem base/FCR guardados não há
+// nada a discriminar e o documento mantém a apresentação simples (apenas o
+// total) — nunca se inventam valores nem se mostra um FCR a zero que não foi
+// cobrado.
+//
+// `componentesDaQuota` cobre as duas formas de entrada usadas no sistema:
+//   · aviso de quota → valores diretos da quota ({ baseC, fcrC, totalC });
+//   · recibo         → linhas de ReciboQuota ({ base, fcr, aplicado }), somadas
+//                      e reconciliadas com o valor realmente aplicado.
+function componentesDaQuota({ baseC, fcrC, totalC, basesC = [], fcrsC = [], aplicadosC = [], percentagem = null } = {}) {
+  const soma = (lista) => lista.reduce((s, v) => s + (Number(v) || 0), 0);
+  let base = baseC === undefined || baseC === null ? soma(basesC) : Number(baseC) || 0;
+  let fcr = fcrC === undefined || fcrC === null ? soma(fcrsC) : Number(fcrC) || 0;
+  if (!base && !fcr) return null;
+  // O valor aplicado à quota é o valor de referência (é o que o recibo cobra por
+  // essa quota); na sua falta usa-se o total explícito e, em último caso, a soma
+  // das componentes guardadas.
+  const totalAplicado = soma(aplicadosC);
+  const total = totalAplicado > 0
+    ? totalAplicado
+    : (totalC === undefined || totalC === null ? base + fcr : Number(totalC) || 0);
+  // Reconcilição (arredondamento por linha do recibo): a quota corrente absorve
+  // a diferença de cêntimos, tal como no cálculo do servidor. O FCR nunca é
+  // ajustado para baixo (é o valor que tem de ser afetado ao fundo).
+  if (base + fcr !== total) {
+    base += total - fcr - base;
+    if (base < 0) {
+      base = 0;
+      fcr = total;
+    }
+  }
+  const p = Number(String(percentagem === null || percentagem === undefined ? '' : percentagem).replace(',', '.'));
+  return {
+    baseC: base,
+    fcrC: fcr,
+    totalC: base + fcr,
+    aplicadoC: totalAplicado,
+    base: fromCents(base),
+    fcr: fromCents(fcr),
+    total: fromCents(base + fcr),
+    temFcr: fcr > 0,
+    percentagem: Number.isFinite(p) && p > 0 ? p : null,
+    // Texto discreto da percentagem: « (15%)» ou « (12,5%)».
+    percentagemTexto: Number.isFinite(p) && p > 0 ? ` (${String(percentagem).replace('.', ',')}%)` : '',
+  };
+}
 
 // ── Paleta GesCondu para documentos impressos ──────────────────────
 // Os documentos são SEMPRE claros e profissionais (independentes do tema
@@ -523,6 +576,15 @@ async function gerarAvisoQuotaPDF(condominio, d) {
   const doc = criarDocumento();
   const L = new Layout(doc, condominio, 'AVISO DE QUOTA');
 
+  // Componentes guardadas na quota (nunca recalculadas aqui): «Quota corrente»
+  // = despesas comuns da fração; FCR = Fundo Comum de Reserva.
+  const quotaComp = componentesDaQuota({
+    baseC: toCents(d.valorBase),
+    fcrC: toCents(d.valorFcr),
+    totalC: toCents(d.valor),
+    percentagem: d.fcrPercentagem,
+  });
+
   L.texto('Destinatário', { bold: true, fontSize: 11 });
   L.texto(d.destinatarioNome || '—');
   L.texto(`Fração: ${d.fracaoDesignacao || ''}`, { fontSize: T.TEXTO_SIZE_SMALL, cor: T.COR_MUTED });
@@ -538,6 +600,23 @@ async function gerarAvisoQuotaPDF(condominio, d) {
     C.linha('Data de vencimento', formatDate(d.dataVencimento));
     C.linha('Valor da quota', formatEUR(d.valor));
   });
+
+  // Discriminação da quota: quota corrente (despesas comuns) + Fundo Comum de
+  // Reserva. Só aparece quando a quota tem componentes guardados; com FCR = 0
+  // apresenta apenas a quota corrente e o total (sem linha de fundo a zero).
+  if (quotaComp) {
+    L.caixa(
+      'Composição da quota',
+      (C) => {
+        C.linha('Quota corrente', formatEUR(quotaComp.base), { cor: T.TINTA });
+        if (quotaComp.temFcr) {
+          C.linha(`Fundo de reserva${quotaComp.percentagemTexto}`, formatEUR(quotaComp.fcr), { cor: T.COR_SUCESSO });
+        }
+        C.linha('Total da quota', formatEUR(quotaComp.total), { cor: T.MARINHO });
+      },
+      T.MARINHO
+    );
+  }
 
   // Quotas extraordinárias incluídas neste aviso (linhas discriminadas).
   if (d.extras && d.extras.length) {
@@ -567,7 +646,15 @@ async function gerarAvisoQuotaPDF(condominio, d) {
         : '—';
       C.linha('Último pagamento', ult, { cor: T.COR_SUCESSO });
       C.linha('Em dívida (antes desta quota)', formatEUR(d.emDivida), { cor: Number(d.emDivida) > 0 ? T.TINTA_ERRO : T.TINTA_2 });
-      C.linha('Quota atual', formatEUR(d.valor), { cor: T.TINTA });
+      if (quotaComp) {
+        C.linha('Quota corrente', formatEUR(quotaComp.base), { cor: T.TINTA });
+        if (quotaComp.temFcr) {
+          C.linha(`Fundo de reserva${quotaComp.percentagemTexto}`, formatEUR(quotaComp.fcr), { cor: T.COR_SUCESSO });
+        }
+        C.linha('Quota atual', formatEUR(quotaComp.total), { cor: T.TINTA });
+      } else {
+        C.linha('Quota atual', formatEUR(d.valor), { cor: T.TINTA });
+      }
       C.linha('Total a pagar', formatEUR(d.totalAPagar), { cor: T.MARINHO });
     },
     T.MARINHO
@@ -622,6 +709,17 @@ async function gerarReciboPDF(condominio, d) {
     { texto: `Código de verificação: ${d.codigoVerificacao || '—'}`, tamanho: T.TEXTO_SIZE_SMALL, negrito: false, cor: T.TINTA_2 },
     { texto: `Emitido em ${d.data ? formatDateExtenso(d.data) : '—'}`, tamanho: T.TEXTO_SIZE_SMALL, negrito: false, cor: T.TINTA_2 },
   ]);
+
+  // Componentes da quota corrente (base + FCR) guardadas por linha de
+  // ReciboQuota: somadas em cêntimos, nunca recalculadas. `null` quando o recibo
+  // não tem componentes (recibos antigos, ou só quotas extraordinárias),
+  // mantendo o documento simples — sem linhas de FCR a zero.
+  const quotasComp = componentesDaQuota({
+    basesC: (d.quotas || []).map((q) => toCents(q.valorBase)),
+    fcrsC: (d.quotas || []).map((q) => toCents(q.valorFcr)),
+    aplicadosC: (d.quotas || []).map((q) => toCents(q.valorAplicado)),
+    percentagem: d.fcrPercentagem,
+  });
 
   // ── 1. Destinatário (cartão claro com borda subtil) ────────────────
   const dest = (d.destinatario && Object.keys(d.destinatario).length)
@@ -717,10 +815,23 @@ async function gerarReciboPDF(condominio, d) {
     );
   }
 
-  // ── 6. VALOR DO RECIBO (destaque principal) ────────────────────────
+  // ── 6. COMPOSIÇÃO DO VALOR (quota corrente + FCR) ──────────────────
+  // O FCR é uma componente da quota mensal, NÃO uma despesa nem uma quota
+  // extraordinária: por isso aparece aqui, colado ao valor do recibo e fora da
+  // tabela de quotas extraordinárias (secção 5, que se mantém intacta).
+  // Bloco compacto (sem título de secção) para o recibo continuar a caber numa
+  // página só; é o próprio «VALOR DO RECIBO» que fecha a soma das componentes.
+  if (quotasComp) {
+    L.grelha([
+      ['Quota corrente', formatEUR(quotasComp.base)],
+      ...(quotasComp.temFcr ? [[`Fundo de reserva${quotasComp.percentagemTexto}`, formatEUR(quotasComp.fcr)]] : []),
+    ], { larguraRotulo: 170 });
+  }
+
+  // ── 7. VALOR DO RECIBO (destaque principal) ────────────────────────
   L.blocoTotal('VALOR DO RECIBO', d.valor);
 
-  // ── 7. Saldo (rótulo semântico: devedor / credor / regularizado) ───
+  // ── 8. Saldo (rótulo semântico: devedor / credor / regularizado) ───
   L.blocoSaldo(d.saldoAposPagamento, d.data);
 
   // Recibos anulados mantêm todo o conteúdo histórico, marcados de forma
@@ -1091,4 +1202,4 @@ function tipoContaLabel(tipo) {
   }[tipo] || 'Conta';
 }
 
-module.exports = { gerarAvisoQuotaPDF, gerarReciboPDF, gerarConvocatoriaPDF, gerarAtaPDF, gerarRelatorioFinanceiroPDF };
+module.exports = { gerarAvisoQuotaPDF, gerarReciboPDF, gerarConvocatoriaPDF, gerarAtaPDF, gerarRelatorioFinanceiroPDF, componentesDaQuota };

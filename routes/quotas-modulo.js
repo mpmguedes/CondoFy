@@ -912,6 +912,10 @@ async function pdfDeRecibo(recibo, condRow) {
       numero: q.numero_documento || '',
       periodo: recibosHelper.periodoLabel([{ ano: q.ano, mes: q.mes }]),
       valorAplicado: q.ReciboQuota ? q.ReciboQuota.valor : q.valor,
+      // Componentes guardadas por linha (ReciboQuota): permitem discriminar
+      // quota corrente + FCR no PDF do recibo, sem recalcular nada.
+      valorBase: q.ReciboQuota ? q.ReciboQuota.valor_base : null,
+      valorFcr: q.ReciboQuota ? q.ReciboQuota.valor_fcr : null,
     })),
     extras,
   });

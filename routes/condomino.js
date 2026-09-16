@@ -574,6 +574,10 @@ router.get('/recibos/:id/pdf', async (req, res) => {
       numero: q.numero_documento || '',
       periodo: recibosHelper.periodoLabel([{ ano: q.ano, mes: q.mes }]),
       valorAplicado: q.ReciboQuota ? q.ReciboQuota.valor : q.valor,
+      // Componentes guardadas por linha (ReciboQuota): o PDF discrimina a quota
+      // corrente e o FCR sem recalcular a percentagem.
+      valorBase: q.ReciboQuota ? q.ReciboQuota.valor_base : null,
+      valorFcr: q.ReciboQuota ? q.ReciboQuota.valor_fcr : null,
     })),
     extras,
   });

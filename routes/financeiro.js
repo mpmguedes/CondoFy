@@ -1351,6 +1351,10 @@ async function construirAvisoQuota(quotaId, condominioId, extrasIds = []) {
     dataEmissao: quota.data_emissao,
     dataVencimento: quota.data_vencimento,
     valor: quota.valor,
+    // Componentes guardadas na quota (discriminação quota corrente + FCR no PDF).
+    valorBase: quota.valor_base,
+    valorFcr: quota.valor_fcr,
+    fcrPercentagem: quota.fcr_percentagem,
     destinatarioNome,
     fracaoDesignacao: quota.fracao.designacao,
     fracaoMorada: [condominio.morada, [condominio.codigo_postal, condominio.localidade].filter(Boolean).join(' ')].filter(Boolean).join(', '),
@@ -1376,7 +1380,7 @@ async function construirRecibo(pagamentoId, condominioId) {
     include: [
       { model: Fracao, as: 'fracao' },
       { model: MetodoPagamento, as: 'metodo_pagamento' },
-      { model: Quota, as: 'quotas', through: { attributes: ['valor_aplicado'] } },
+      { model: Quota, as: 'quotas', through: { attributes: ['valor_aplicado', 'valor_base', 'valor_fcr'] } },
     ],
   });
   if (!pagamento) throw new Error('Pagamento não encontrado neste condomínio.');
@@ -1397,6 +1401,10 @@ async function construirRecibo(pagamentoId, condominioId) {
       numero: q.numero_documento,
       periodo: `${monthName(q.mes)} ${q.ano}`,
       valorAplicado: q.PagamentoQuota ? q.PagamentoQuota.valor_aplicado : 0,
+      // Componentes guardadas na ligação pagamento↔quota (valor_base/valor_fcr):
+      // permitem discriminar quota corrente + FCR no PDF, sem recalcular nada.
+      valorBase: q.PagamentoQuota ? q.PagamentoQuota.valor_base : null,
+      valorFcr: q.PagamentoQuota ? q.PagamentoQuota.valor_fcr : null,
     })),
     saldoAposPagamento: resumo.emDivida,
   });

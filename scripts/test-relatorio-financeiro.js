@@ -613,7 +613,7 @@ function testesIsolamentoEIntegracao() {
 
   // O gerador do PDF vive em helpers/pdf.js (reutiliza o Layout do recibo).
   assert.ok(/async function gerarRelatorioFinanceiroPDF/.test(codigoPdf), 'gerador do relatório em helpers/pdf.js');
-  assert.ok(/gerarRelatorioFinanceiroPDF\s*\}/.test(codigoPdf), 'gerador exportado');
+  assert.ok(/module\.exports\s*=\s*\{[^}]*gerarRelatorioFinanceiroPDF/.test(codigoPdf), 'gerador exportado');
   assert.ok(/finalizarPaginacao\(doc, condominio\)/.test(codigoPdf), 'rodapé/paginação partilhados');
 
   // A vista: período, opções de detalhe, observações e botão de PDF.
