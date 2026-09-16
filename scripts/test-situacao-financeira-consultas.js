@@ -81,6 +81,13 @@ const modelos = {
         .filter((m) => m.tipo === o.where.tipo && m.estado === o.where.estado)
         .reduce((s, m) => s + m.valor, 0);
     },
+    // `saldoContaMovimentos` lê os movimentos da conta e soma entradas/saídas
+    // (mesma regra, agora numa única consulta).
+    findAll: async (o = {}) => {
+      registar('MovimentoBancario.findAll', o.where);
+      const linhas = MOVIMENTOS[o.where.conta_bancaria_id] || [];
+      return linhas.filter((m) => m.estado === o.where.estado);
+    },
   },
   Pagamento: {
     findAll: async (o = {}) => { registar('Pagamento.findAll', o.where); return filtro(PAGAMENTOS, o.where); },
@@ -136,7 +143,7 @@ const { resumoFinanceiro } = require(path.join(RAIZ, 'helpers', 'saldos'));
   // `MovimentoBancario` segue a mesma regra: é lido por conta, e as contas já
   // foram carregadas dentro do condomínio ativo.
   const porQuotaIds = ['PagamentoQuota.findAll'];
-  const porContaId = ['MovimentoBancario.sum'];
+  const porContaId = ['MovimentoBancario.sum', 'MovimentoBancario.findAll'];
   for (const c of consultas) {
     if (porQuotaIds.includes(c.nome)) {
       assert.ok(c.onde && c.onde.quota_id && c.onde.quota_id[Op.in],

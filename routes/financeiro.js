@@ -49,6 +49,7 @@ const { estaAtivo: automacaoAtiva } = require('../helpers/automacoes');
 const background = require('../helpers/background-jobs');
 const { getQuotaConfig, setQuotaConfig, validarFcrPercentagem } = require('../helpers/quotas-config');
 const { calcularQuota, calcularQuotasOrcamento, dividirComponentesQuota } = require('../helpers/quotas-calc');
+const { resumoFcr, transferirFcr } = require('../helpers/fcr');
 const { validarPermilagem } = require('../helpers/permilagem');
 const storage = require('../helpers/storage');
 
@@ -152,6 +153,70 @@ router.post('/contas/:id/eliminar', async (req, res) => {
   }
   req.flash('success_msg', 'Conta bancária eliminada.');
   res.redirect('/admin/contas');
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// FUNDO DE RESERVA — transferência conta corrente → conta fundo_reserva
+//
+// O FCR recebido (parte das quotas efetivamente pagas que corresponde ao fundo)
+// fica na conta corrente. Esta operação move-o para a conta do tipo
+// `fundo_reserva`, criando dois movimentos (saída na origem, entrada no
+// destino). NÃO é uma despesa: é uma transferência entre contas do condomínio,
+// pelo que não entra em receitas nem em despesas nos relatórios.
+// ═══════════════════════════════════════════════════════════════════
+router.get('/contas/transferir-fcr', async (req, res) => {
+  const [contas, resumo, fcr] = await Promise.all([
+    ContaBancaria.findAll({ where: { condominio_id: req.condominioId, ativa: true }, order: [['nome', 'ASC']] }),
+    resumoCondominio(req.condominioId),
+    resumoFcr(req.condominioId, { incluirDetalhe: true }),
+  ]);
+  const saldoPorId = {};
+  (resumo.contas || []).forEach((c) => (saldoPorId[c.id] = c.saldo));
+  const contasComSaldo = contas.map((c) => ({ ...c.toJSON(), saldo: saldoPorId[c.id] }));
+  res.render('admin/contas/transferir-fcr', {
+    titulo: 'Transferir para o Fundo de Reserva',
+    contas: contasComSaldo,
+    contasFcr: contasComSaldo.filter((c) => c.tipo === 'fundo_reserva'),
+    fcr,
+    hoje: new Date().toISOString().slice(0, 10),
+  });
+});
+
+router.post('/contas/transferir-fcr', async (req, res) => {
+  const valorC = toCents(parseDecimal(req.body.valor, 0));
+  const contaOrigemId = parseInt(req.body.conta_origem_id, 10) || null;
+  const contaDestinoId = parseInt(req.body.conta_destino_id, 10) || null;
+  try {
+    const r = await transferirFcr({
+      condominioId: req.condominioId,
+      contaOrigemId,
+      contaDestinoId,
+      valorC,
+      data: req.body.data || new Date(),
+      descricao: String(req.body.descricao || '').trim() || null,
+      userId: req.user.id,
+    });
+    if (!r.ok) {
+      req.flash('error_msg', r.mensagem || 'Não foi possível registar a transferência.');
+      return res.redirect('/admin/contas/transferir-fcr');
+    }
+    await audit({
+      userId: req.user.id,
+      acao: 'transferir_fcr',
+      entidade: 'ContaBancaria',
+      entidadeId: contaDestinoId,
+      detalhes: { valor: fromCents(r.valorC), origem: r.contaOrigem, destino: r.contaDestino, saidaId: r.saidaId, entradaId: r.entradaId },
+    });
+    req.flash(
+      'success_msg',
+      `Transferência de ${fromCents(r.valorC).toFixed(2).replace('.', ',')} € registada (não é despesa: transferência entre contas). FCR disponível: ${fromCents(r.disponivelC).toFixed(2).replace('.', ',')} €.`
+    );
+    res.redirect('/admin/contas/transferir-fcr');
+  } catch (err) {
+    console.error('[fcr-transferencia]', err);
+    req.flash('error_msg', 'Erro ao registar a transferência. Nenhum movimento foi criado.');
+    res.redirect('/admin/contas/transferir-fcr');
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════

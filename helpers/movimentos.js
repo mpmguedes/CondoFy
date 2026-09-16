@@ -42,34 +42,53 @@ async function criarMovimento({
   );
 }
 
-// Transferência entre contas: cria dois movimentos (saída na origem, entrada no destino).
-async function registarTransferencia({ contaOrigemId, contaDestinoId, valor, data, descricao, userId }) {
-  const t = await sequelize.transaction();
+// Transferência entre contas: cria dois movimentos (saída na origem, entrada no
+// destino) na MESMA transação.
+//
+// Os dois movimentos são gravados como `saida`/`entrada` com
+// `referencia: 'TRANSF'` — é o que faz o saldo de cada conta ficar correto
+// (débito na origem, crédito no destino) e, ao mesmo tempo, mantém a operação
+// fora de receitas/despesas: o relatório financeiro identifica as
+// transferências pela referencia 'TRANSF' (ou pelo tipo próprio) e nunca as
+// conta como receita nem como despesa.
+//
+// (O valor 'transferencia' do ENUM `tipo` continua a ser reconhecido nas
+// leituras, para qualquer movimento antigo gravado assim, mas não é usado aqui:
+// sem uma direção explícita não seria possível debitar/creditar corretamente.)
+//
+// `transaction` opcional: quando quem chama já abriu uma transação (ex.: a
+// transferência do Fundo de Reserva, que valida o FCR disponível antes de
+// escrever), os dois movimentos entram nessa transação e o commit/rollback é
+// responsabilidade de quem a abriu — garantindo atomicidade no conjunto todo.
+async function registarTransferencia({ contaOrigemId, contaDestinoId, valor, data, descricao, userId, transaction }) {
+  const t = transaction || (await sequelize.transaction());
+  const propria = !transaction;
   try {
-    await criarMovimento({
+    const rotulo = descricao || 'Transferência entre contas';
+    const saida = await criarMovimento({
       contaBancariaId: contaOrigemId,
       data,
       tipo: 'saida',
       valor,
-      descricao: descricao || 'Transferência entre contas',
+      descricao: rotulo,
       referencia: 'TRANSF',
       userId,
       transaction: t,
     });
-    await criarMovimento({
+    const entrada = await criarMovimento({
       contaBancariaId: contaDestinoId,
       data,
       tipo: 'entrada',
       valor,
-      descricao: descricao || 'Transferência entre contas',
+      descricao: rotulo,
       referencia: 'TRANSF',
       userId,
       transaction: t,
     });
-    await t.commit();
-    return true;
+    if (propria) await t.commit();
+    return { saidaId: saida.id, entradaId: entrada.id };
   } catch (err) {
-    await t.rollback();
+    if (propria) await t.rollback();
     throw err;
   }
 }
@@ -112,12 +131,22 @@ async function sincronizarMovimentoDespesa(despesa, userId, transaction) {
 }
 
 // Saldo de uma conta calculado pelos movimentos: saldo inicial + entradas − saídas.
-async function saldoContaMovimentos(conta) {
-  const [entradas, saidas] = await Promise.all([
-    MovimentoBancario.sum('valor', { where: { conta_bancaria_id: conta.id, tipo: 'entrada', estado: 'confirmado' } }),
-    MovimentoBancario.sum('valor', { where: { conta_bancaria_id: conta.id, tipo: 'saida', estado: 'confirmado' } }),
-  ]);
-  return fromCents(toCents(conta.saldo_inicial) + toCents(entradas) - toCents(saidas));
+// `transaction` opcional: dentro de uma transação lê à mesma ligação (enxerga as
+// escritas ainda não confirmadas).
+async function saldoContaMovimentos(conta, { transaction } = {}) {
+  const movimentos = await MovimentoBancario.findAll({
+    where: { conta_bancaria_id: conta.id, estado: 'confirmado' },
+    attributes: ['tipo', 'valor'],
+    transaction,
+  });
+  let entradasC = 0;
+  let saidasC = 0;
+  for (const m of movimentos) {
+    if (m.tipo === 'entrada') entradasC += toCents(m.valor);
+    else if (m.tipo === 'saida') saidasC += toCents(m.valor);
+    // 'transferencia' (registo antigo) não altera o saldo.
+  }
+  return fromCents(toCents(conta.saldo_inicial) + entradasC - saidasC);
 }
 
 module.exports = { criarMovimento, registarTransferencia, sincronizarMovimentoDespesa, saldoContaMovimentos };

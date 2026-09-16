@@ -1,0 +1,137 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Fundo de Reserva</h1>
+    <p class="subtitle">Transferir o FCR recebido para a conta do Fundo de Reserva</p>
+  </div>
+  <a href="/admin/contas" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar às contas</a>
+</div>
+
+<div class="alert alert-info d-flex align-items-start gap-2">
+  <span class="material-symbols-outlined">swap_horiz</span>
+  <div>
+    <strong>Isto é uma transferência entre contas do condomínio, não é uma despesa.</strong>
+    <div class="small">O valor sai da conta de origem e entra na conta do Fundo de Reserva; não é contabilizado como receita nem como despesa nos relatórios.</div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">FCR emitido</div>
+      <div class="stat-value">{{eur fcr.emitido}}</div>
+      <div class="form-text mb-0">FCR incluído nas quotas lançadas</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">FCR recebido</div>
+      <div class="stat-value">{{eur fcr.recebido}}</div>
+      <div class="form-text mb-0">Parte do FCR das quotas já pagas</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">FCR transferido</div>
+      <div class="stat-value">{{eur fcr.transferido}}</div>
+      <div class="form-text mb-0">{{fcr.nTransferencias}} transferência(s) registada(s)</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Disponível para transferir</div>
+      <div class="stat-value">{{eur fcr.disponivel}}</div>
+      <div class="form-text mb-0">FCR recebido ainda não transferido</div>
+    </div></div>
+  </div>
+</div>
+
+{{#unless contasFcr}}
+<div class="alert alert-warning d-flex align-items-start gap-2">
+  <span class="material-symbols-outlined">warning</span>
+  <div>
+    <strong>Ainda não existe uma conta do tipo Fundo de Reserva.</strong>
+    <div class="small">Crie uma conta com o tipo <em>Fundo de reserva</em> em <a href="/admin/contas/nova">Contas bancárias → Nova conta</a> para poder transferir o FCR recebido.</div>
+  </div>
+</div>
+{{/unless}}
+
+<div class="card mb-4">
+  <div class="card-header bg-white"><i class="bi bi-arrow-left-right me-1"></i>Nova transferência</div>
+  <div class="card-body">
+    <form action="/admin/contas/transferir-fcr" method="POST" class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label" for="contaOrigem">Conta de origem (conta corrente) *</label>
+        <select class="form-select" name="conta_origem_id" id="contaOrigem" required>
+          <option value="">— Selecionar —</option>
+          {{#each contas}}
+          {{#unless (eq tipo 'fundo_reserva')}}
+          <option value="{{id}}">{{nome}} — saldo {{eur saldo}}</option>
+          {{/unless}}
+          {{/each}}
+        </select>
+        <p class="form-text mb-0">De onde sai o dinheiro. Por defeito é a conta corrente onde os pagamentos entram.</p>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="contaDestino">Conta de destino (Fundo de Reserva) *</label>
+        <select class="form-select" name="conta_destino_id" id="contaDestino" required {{#unless contasFcr}}disabled{{/unless}}>
+          <option value="">— Selecionar —</option>
+          {{#each contasFcr}}
+          <option value="{{id}}">{{nome}} — saldo {{eur saldo}}</option>
+          {{/each}}
+        </select>
+        <p class="form-text mb-0">Só são aceites contas do tipo <em>Fundo de reserva</em>.</p>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="valorFcr">Valor a transferir (€) *</label>
+        <input type="number" class="form-control" name="valor" id="valorFcr" step="0.01" min="0.01" max="{{fcr.disponivel}}" required />
+        <p class="form-text mb-0">Máximo: <strong>{{eur fcr.disponivel}}</strong> (FCR recebido e ainda não transferido).</p>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="dataFcr">Data do movimento</label>
+        <input type="date" class="form-control" name="data" id="dataFcr" value="{{hoje}}" />
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="descricaoFcr">Descrição (opcional)</label>
+        <input type="text" class="form-control" name="descricao" id="descricaoFcr" maxlength="255" placeholder="Transferência de Fundo de Reserva" />
+      </div>
+      <div class="col-12 d-flex gap-2">
+        <button class="btn btn-primary" {{#unless contasFcr}}disabled{{/unless}}>
+          <span class="material-symbols-outlined me-1">swap_horiz</span>Confirmar transferência
+        </button>
+        <a href="/admin/contas" class="btn btn-outline-secondary">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header bg-white"><i class="bi bi-clock-history me-1"></i>Transferências de FCR registadas</div>
+  {{#if fcr.transferencias}}
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Data</th>
+          <th>De</th>
+          <th>Para</th>
+          <th>Descrição</th>
+          <th class="text-end">Valor</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each fcr.transferencias}}
+        <tr>
+          <td>{{formatDate data}}</td>
+          <td>{{#if origem}}{{origem}}{{else}}—{{/if}}</td>
+          <td>{{#if destino}}{{destino}}{{else}}—{{/if}}</td>
+          <td class="text-muted small">{{#if descricao}}{{descricao}}{{else}}Transferência entre contas{{/if}}</td>
+          <td class="text-end fw-semibold">{{eur valor}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <div class="card-body text-muted">Ainda não há transferências de FCR registadas.</div>
+  {{/if}}
+</div>
