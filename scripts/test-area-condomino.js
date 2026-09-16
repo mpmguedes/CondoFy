@@ -116,7 +116,7 @@ function testeInicio() {
   assert.ok(/Acesso rápido/.test(html), 'Início: secção de acesso rápido');
   for (const [rotulo, href] of [
     ['Quotas', '/condomino/quotas'], ['Recibos', '/condomino/recibos'], ['Documentos', '/condomino/documentos'],
-    ['Avisos', '/condomino/avisos'], ['Assembleias', '/condomino/assembleias'], ['Situação', '/condomino/situacao'],
+    ['Avisos', '/condomino/avisos'], ['Assembleias', '/condomino/assembleias'], ['Situação', '/condomino/situacao-financeira'],
   ]) {
     assert.ok(new RegExp(`href="${href}"[^>]*>\\s*<span class="material-symbols-outlined"[^>]*>[a-z_]+</span>${rotulo}<`).test(html),
       `Início: atalho rápido para ${rotulo}`);
@@ -136,7 +136,7 @@ function testeInicio() {
   // Transparência compacta (detalhe fica na área Condomínio).
   assert.ok(/O condomínio em resumo/.test(html), 'Início: transparência compacta');
   assert.ok(seguido.includes('Saldo das contas') && /Execução do orçamento 2026/.test(seguido), 'Início: saldo e execução do orçamento');
-  assert.ok(/href="\/condomino\/situacao"/.test(html) && /href="\/condomino\/orcamento"/.test(html),
+  assert.ok(/href="\/condomino\/situacao-financeira"/.test(html) && /href="\/condomino\/orcamento"/.test(html),
     'Início: ligação ao detalhe (Situação financeira e Orçamento)');
 
   // Cartão principal «A minha situação»: destaque, estado e ligação às quotas.
@@ -876,10 +876,21 @@ function testeIntegridade() {
     'sidebar: Quotas antes de Recibos (área financeira agrupada)');
   assert.ok(!/href="\/condomino\/pagamentos"/.test(ramoSidebar),
     'sidebar: Pagamentos deixa de ser item próprio (passa a separador da área Quotas)');
-  assert.ok(/href="\/condomino\/situacao"/.test(ramoSidebar) && !/href="\/condomino\/orcamento"/.test(ramoSidebar),
+  assert.ok(/href="\/condomino\/situacao-financeira"/.test(ramoSidebar) && !/href="\/condomino\/orcamento"/.test(ramoSidebar),
     'sidebar: Orçamento acede-se pelo Início e pela Situação financeira');
-  assert.ok(/href="\/condomino\/orcamento"/.test(ler('views/condomino/situacao.handlebars')),
+  // A situação financeira é a página de transparência do condomínio: continua a
+  // levar ao orçamento e mantém o endereço anterior a responder.
+  const vistaSituacao = ler('views/condomino/situacao-financeira.handlebars');
+  assert.ok(/href="\/condomino\/orcamento"/.test(vistaSituacao),
     'situação financeira: ligação ao orçamento (sem becos sem saída na navegação)');
+  assert.ok(/router\.get\('\/situacao'/.test(rota) && /router\.get\('\/situacao-financeira'/.test(rota),
+    'situação financeira: endereço atual e anterior a responder');
+  assert.ok(!/router\.post|\.create\(|\.update\(|\.destroy\(/.test(
+    rota.slice(rota.indexOf("router.get('/situacao-financeira'"))),
+    'situação financeira: a rota continua só de leitura');
+  // A página não pode passar percentagens quando não há denominador (orçamento).
+  assert.ok(/if \(gt orcamento\.orcamentado 0\)/.test(vistaSituacao),
+    'situação financeira: sem percentagem de execução sem orçamento definido');
   // Nenhuma migration/modelo foi tocado por esta alteração (só apresentação).
   assert.ok(!/migrations\//.test(rota) && !/sequelize\.define/.test(rota), 'portal: sem novos modelos ou migrations');
 }

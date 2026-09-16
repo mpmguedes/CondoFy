@@ -69,6 +69,22 @@ const EXTRAS = [
   { id: 301, extra_quota_id: 1, fracao_id: 5, parcela_numero: 2, valor: 165, valor_pago: 0, data_vencimento: '2026-12-01', estado: 'cobrada', extra_quota: { id: 1, designacao: 'Impermeabilização', estado: 'processada' }, fracao: fracaoInst(FRACAO_A), toJSON() { return { id: this.id, fracao_id: this.fracao_id, parcela_numero: this.parcela_numero, valor: this.valor, valor_pago: this.valor_pago, data_vencimento: this.data_vencimento, estado: this.estado }; } },
 ];
 
+// Contas bancárias e orçamento do condomínio (duplos dos modelos usados pelas
+// consultas dos ajudantes substituídos neste teste).
+const CONTAS = [
+  { id: 1, condominio_id: 1, nome: 'Conta principal', banco: 'Banco Exemplo', iban: 'PT50 0002 0123 1234 5678 9015 4', tipo: 'corrente', saldo_inicial: 1000, ativa: true, toJSON() { return { ...this }; } },
+  { id: 2, condominio_id: 1, nome: 'Fundo de reserva', banco: 'Banco Exemplo', iban: null, tipo: 'fundo_reserva', saldo_inicial: 500, ativa: true, toJSON() { return { ...this }; } },
+];
+const ORCAMENTO = {
+  id: 1, condominio_id: 1, ano: 2026, designacao: 'Orçamento 2026', estado: 'em_execucao',
+  data_inicio: '2026-01-01', data_fim: '2026-12-31',
+  rubricas: [
+    { id: 1, orcamento_id: 1, descricao: 'Eletricidade', valor_anual: 4200, ativo: true },
+    { id: 2, orcamento_id: 1, descricao: 'Limpeza', valor_anual: 6600, ativo: true },
+  ],
+  toJSON() { return { ...this }; },
+};
+
 function filtroSimples(linhas, where) {
   if (!where) return linhas;
   return linhas.filter((l) => Object.entries(where).every(([k, v]) => {
@@ -79,6 +95,12 @@ function filtroSimples(linhas, where) {
     return l[k] === v;
   }));
 }
+
+// Saldos por quota (em cêntimos) — coerentes com APLICACOES: 102 tem um
+// pagamento ANULADO (não conta) e 103 está paga em parte.
+const PAGO_POR_QUOTA = new Map([[101, 7500], [103, 5000]]);
+// Valor transitado por fração (conta-corrente).
+const TRANSITADO = new Map([[5, 0], [6, 0]]);
 
 // ── Duplos dos modelos (antes de carregar a rota) ──────────────────
 const modelsPath = require.resolve('../models');
@@ -94,21 +116,40 @@ require.cache[modelsPath] = {
       findAll: async (o = {}) => filtroSimples(QUOTAS, o.where).map((q) => ({ ...q, fracao: fracaoInst(q.fracao_id === 5 ? FRACAO_A : FRACAO_C), toJSON() { const { fracao, ...resto } = this; return resto; } })),
       findOne: async () => null, sum: async () => 0, count: async () => QUOTAS.length,
     },
-    Pagamento: { findAll: async () => [], findOne: async () => null, sum: async () => 0 },
+    Pagamento: {
+      // A listagem de pagamentos (com `include`) continua vazia, como antes. A
+      // situação financeira pede só valor + data (raw) — é aqui que os
+      // pagamentos confirmados do exemplo entram no resumo e no mês.
+      findAll: async (o = {}) => {
+        const attrs = Array.isArray(o.attributes) ? o.attributes : [];
+        if (!attrs.includes('data_pagamento')) return [];
+        const linhas = APLICACOES.filter((a) => a.pagamento.estado === 'confirmado')
+          .map((a) => ({ valor: a.valor_aplicado / 100, data_pagamento: a.pagamento.data_pagamento, estado: 'confirmado', condominio_id: 1 }));
+        return filtroSimples(linhas, o.where);
+      },
+      findOne: async () => null,
+      sum: async () => 0,
+    },
     PagamentoQuota: { findAll: async () => APLICACOES },
+    PagamentoExtraParcela: { findAll: async () => [] },
     Recibo: {
       findAll: async () => RECIBOS,
       findOne: async () => RECIBOS[0],
       count: async () => RECIBOS.length,
     },
+    ReciboQuota: { findAll: async () => [] },
+    ReciboExtraParcela: { findAll: async () => [] },
     ExtraQuotaParcela: { findAll: async () => EXTRAS },
     ExtraQuota: { findOne: async () => null, findAll: async () => [] },
     Aviso: { findAll: async () => [], count: async () => 3 },
     Documento: { findAll: async (o = {}) => filtroSimples(DOCUMENTOS, o.where), findOne: async () => DOCUMENTOS[0] },
     Assembleia: { findAll: async () => [] },
     Despesa: { findAll: async () => [], sum: async () => 0 },
-    ContaBancaria: { findAll: async () => [] },
-    Orcamento: { findOne: async () => null },
+    ContaBancaria: { findAll: async (o = {}) => filtroSimples(CONTAS, o.where), count: async () => CONTAS.length },
+    MovimentoBancario: { findAll: async () => [], sum: async () => 0, count: async () => 0 },
+    Orcamento: { findOne: async () => ORCAMENTO, findAll: async () => [ORCAMENTO], count: async () => 1 },
+    OrcamentoRubrica: { findAll: async () => ORCAMENTO.rubricas, findOne: async () => ORCAMENTO.rubricas[0], count: async () => ORCAMENTO.rubricas.length },
+    Categoria: { findAll: async () => [], findByPk: async () => null },
     AgendaItem: { findAll: async () => [] },
   },
 };
@@ -118,12 +159,61 @@ const stubs = {
   '../helpers/audit': { audit: async () => ({}), auditSafe: async () => ({}) },
   '../helpers/mailer': { sendMail: async () => ({ ok: true }) },
   '../helpers/saldos': {
+    // A aritmética da situação financeira é código puro e é testada à parte
+    // (scripts/test-situacao-financeira.js); aqui duplica-se para o teste
+    // executar o HANDLER, que é o que esta bateria cobre.
+    resumoFinanceiro: async (ano) => ({
+      ano,
+      saldoContas: 2500,
+      receitasAno: 125,
+      despesasAno: 0,
+      saldoAno: 125,
+      totalQuotas: 335,
+      pagoQuotas: 125,
+      emDivida: 210,
+      cobrancaPct: 37,
+      nFracoesEmAtraso: 1,
+      nFracoes: 2,
+      contas: [
+        { id: 1, nome: 'Conta principal', banco: 'Banco Exemplo', iban: 'PT50 0002 0123 1234 5678 9015 4', tipo: 'corrente', saldo: 1000 },
+        { id: 2, nome: 'Fundo de reserva', banco: 'Banco Exemplo', iban: null, tipo: 'fundo_reserva', saldo: 500 },
+      ],
+      fundoReserva: 500,
+      orcamentado: 10800,
+      executadoC: 0,
+      contasPorMes: [0, 0, 0, 0, 0, 0, 7500, 0, 5000, 0, 0, 0],
+      despesasPorMes: Array(12).fill(0),
+    }),
+    evolucaoMensal: ({ contasPorMes = [], despesasPorMes = [] } = {}) => {
+      const meses = [];
+      for (let i = 0; i < 12; i += 1) {
+        const contas = contasPorMes[i] || 0;
+        const despesas = despesasPorMes[i] || 0;
+        meses.push({ mes: i + 1, contas: contas / 100, despesas: despesas / 100, saldo: (contas - despesas) / 100, temMovimentos: contas !== 0 || despesas !== 0 });
+      }
+      return {
+        meses,
+        temMovimentos: meses.some((m) => m.temMovimentos),
+        mesesComMovimentos: meses.filter((m) => m.temMovimentos).length,
+        totalContas: 125,
+        totalDespesas: 0,
+      };
+    },
     estadoEfetivo: (q) => (q && q.estado) || null,
-    resumoFracao: async () => ({ totalQuotas: 292.5, totalPago: 125, emDivida: 167.5, quotasPagas: 1, quotasPendentes: 2, quotasVencidas: 1, ultimoPagamento: { valor: 50, data: '2026-09-01' } }),
     saldoConta: async () => 0,
+    // Duplos apenas para os resumos usados por outras páginas.
+    resumoFracao: async () => ({ totalQuotas: 292.5, totalPago: 125, emDivida: 167.5, quotasPagas: 1, quotasPendentes: 2, quotasVencidas: 1, ultimoPagamento: { valor: 50, data: '2026-09-01' } }),
     resumoCondominio: async () => ({ saldoContas: 1000, fundoReserva: 500, receitas: 2000, despesas: 1500, emDividaGlobal: 100, contas: [] }),
-    resumoOrcamento: async (ano) => ({ ano: ano || 2026, orcamentado: 12000, executado: 8000, percentagem: 67 }),
+    resumoOrcamento: async (ano) => ({ ano: ano || 2026, orcamentado: 10800, executado: 0, percentagem: 0 }),
     ESTADOS_PENDENTES: ['pendente', 'parcialmente_paga', 'vencida'],
+  },
+  '../helpers/conta-corrente': {
+    // Duplo da conta-corrente: a fração C não deve dívida, a A deve.
+    contaCorrenteFracao: async ({ fracaoId }) => (Number(fracaoId) === 5
+      ? { saldo: 167.5, saldoC: 16750, emDivida: true, temCredito: false, quotasEmDivida: 167.5, extrasEmDivida: 0, extrato: [], anos: [2026] }
+      : { saldo: 0, saldoC: 0, emDivida: false, temCredito: false, quotasEmDivida: 0, extrasEmDivida: 0, extrato: [], anos: [2026] }),
+    anosContaCorrente: async () => [2026],
+    listaFracoes: async () => [],
   },
   '../helpers/titularidades': {
     fracoesDoUtilizador: async () => ({ fracoes: [{ fracao: FRACAO_A, vinculo: 'proprietario' }, { fracao: FRACAO_C, vinculo: 'proprietario' }], terminadas: [] }),
@@ -131,7 +221,7 @@ const stubs = {
     estaAtiva: () => true,
   },
   '../helpers/recibos': {
-    pagoPorQuota: async () => new Map(),
+    pagoPorQuota: async () => PAGO_POR_QUOTA,
     cobertoPorQuota: async () => new Map(),
     pagamentosDasQuotas: async () => [],
     periodoLabel: () => 'Setembro 2026',
@@ -230,7 +320,8 @@ const PAGINAS = [
   ['/condomino/documentos', 'Documentos'],
   ['/condomino/documentos?pasta=atas', 'Documentos (por categoria)'],
   ['/condomino/documentos?ano=2026', 'Documentos (por ano)'],
-  ['/condomino/situacao', 'Situação financeira'],
+  ['/condomino/situacao-financeira', 'Situação financeira'],
+  ['/condomino/situacao', 'Situação financeira (endereço anterior)'],
   ['/condomino/orcamento', 'Orçamento'],
   ['/condomino', 'Início'],
 ];
@@ -262,7 +353,33 @@ const PAGINAS = [
   const porEstado = await pedir('/condomino/quotas?estado=paga');
   assert.strictEqual(porEstado.status, 200, 'quotas: filtro por estado responde 200');
 
-  // 5. A correção não pode voltar a depender de uma variável inexistente.
+  // 5. Situação financeira: valores agregados, secções e estados vazios.
+  const situacao = await pedir('/condomino/situacao-financeira');
+  const antiga = await pedir('/condomino/situacao');
+  assert.ok(/<h1>Situação financeira<\/h1>/.test(situacao.html), 'situação: título da página presente');
+  for (const seccao of ['Resumo financeiro', 'Execução do orçamento', 'Contas', 'Fundo de reserva',
+    'Valores em dívida', 'Evolução do ano', 'Relatório e ações']) {
+    assert.ok(situacao.html.includes(seccao), `situação: secção «${seccao}» presente`);
+  }
+  // Só valores agregados: as duas frações do utilizador aparecem (são suas) e a
+  // secção de dívida nunca identifica terceiros — apenas a contagem agregada.
+  assert.ok(/1\.º Esq/.test(situacao.html) && /2\.º Dto/.test(situacao.html),
+    'situação: mostra a posição das frações do próprio');
+  // Dívida de terceiros: nunca identificada, sempre agregada. O bloco da secção
+  // é isolado pelo comentário/estado que a vista escreve (sem HTML inventado).
+  assert.ok(/Dívida agregada das frações em atraso/.test(situacao.html),
+    'situação: a dívida é apresentada como valor agregado');
+  assert.ok(/Valor agregado de 1 fração com quota vencida/.test(situacao.html),
+    'situação: a dívida de terceiros aparece apenas como contagem');
+  assert.ok(/não são identificadas frações nem titulares/.test(situacao.html),
+    'situação: a secção de dívida declara que não identifica terceiros');
+  assert.ok(!/Fração 3|Fração 4/.test(situacao.html), 'situação: nenhuma fração de terceiros é identificada');
+  assert.ok(/12 480,50|12480,50|12.480,50/.test(situacao.html) || /€/.test(situacao.html), 'situação: valores monetários formatados');
+  // O endereço anterior continua a responder com a MESMA página.
+  assert.strictEqual(antiga.status, 200, 'situação: o endereço anterior responde 200');
+  assert.ok(/<h1>Situação financeira<\/h1>/.test(antiga.html), 'situação: o endereço anterior serve a mesma página');
+
+  // 6. A correção não pode voltar a depender de uma variável inexistente.
   const fonte = fs.readFileSync(path.join(RAIZ, 'routes', 'condomino.js'), 'utf8');
   const rotaQuotas = fonte.slice(fonte.indexOf("router.get('/quotas'"), fonte.indexOf("router.get('/pagamentos'"));
   assert.ok(/const hoje = new Date\(\)\.toISOString\(\)\.slice\(0, 10\);/.test(rotaQuotas),
@@ -274,5 +391,12 @@ const PAGINAS = [
 })().catch((err) => {
   console.error('✗ ' + err.message);
   if (err.stack) console.error(err.stack.split('\n').slice(1, 4).join('\n'));
+  process.exit(1);
+});
+
+// Uma promessa rejeitada fora da cadeia (ex.: erro dentro de um handler Express
+// que o erro do router não apanhou) tem de falhar o teste, não passar em claro.
+process.on('unhandledRejection', (err) => {
+  console.error('✗ promessa rejeitada sem tratamento: ' + (err && err.message));
   process.exit(1);
 });

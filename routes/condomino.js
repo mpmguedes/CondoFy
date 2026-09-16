@@ -22,7 +22,8 @@ const {
 const { eAutenticado } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const titularidades = require('../helpers/titularidades');
-const { resumoFracao, resumoCondominio, resumoOrcamento, estadoEfetivo } = require('../helpers/saldos');
+const { resumoFracao, resumoCondominio, resumoOrcamento, resumoFinanceiro, evolucaoMensal, estadoEfetivo } = require('../helpers/saldos');
+const contaCorrente = require('../helpers/conta-corrente');
 const { getCondominio } = require('../helpers/condominio');
 const { gerarReciboPDF } = require('../helpers/pdf');
 const cabecalhos = require('../helpers/cabecalhos-ficheiro');
@@ -913,51 +914,72 @@ router.get('/orcamento', async (req, res) => {
 });
 
 // ── Situação financeira (agregada — sem dados pessoais de terceiros) ──
-router.get('/situacao', async (req, res) => {
-  const { pessoa } = await contextoFracoes(req);
-  const ano = new Date().getFullYear();
-  const inicio = `${ano}-01-01`;
-  const fim = `${ano}-12-31`;
+//
+// Página de transparência do condomínio: só valores AGREGADOS (e, quando muito,
+// a posição financeira das frações do próprio utilizador, que são suas). Nunca
+// são apresentados nomes, contactos, frações de terceiros, nem valores de
+// dívida imputáveis a outra fração.
+//
+// Tudo o que é apresentado vem de dados existentes: quotas, pagamentos,
+// despesas, contas bancárias e orçamento do condomínio ATIVO. Nenhuma métrica é
+// estimada — quando não há dados, a secção mostra um estado vazio.
+async function paginaSituacaoFinanceira(req, res) {
+  const { pessoa, fracoes } = await contextoFracoes(req);
+  const anoAtual = new Date().getFullYear();
+  const mesCorrenteAtual = new Date().getMonth() + 1;
 
-  const [resumo, quotasAno, receitasAno, despesasAno, nFracoes] = await Promise.all([
-    resumoCondominio(req.condominioId),
-    Quota.findAll({ where: { condominio_id: req.condominioId, ano, estado: { [Op.ne]: 'anulada' } }, raw: true }),
-    Pagamento.sum('valor', { where: { condominio_id: req.condominioId, estado: 'confirmado', data_pagamento: { [Op.between]: [inicio, fim] } } }),
-    Despesa.sum('valor', { where: { condominio_id: req.condominioId, estado: { [Op.ne]: 'anulada' }, data: { [Op.between]: [inicio, fim] } } }),
-    Fracao.count({ where: { condominio_id: req.condominioId } }),
+  const [resumo, orcamento] = await Promise.all([
+    resumoFinanceiro(anoAtual, req.condominioId),
+    resumoOrcamento(anoAtual, req.condominioId),
   ]);
 
-  const totalQuotasC = quotasAno.reduce((s, q) => s + Math.round((Number(q.valor) || 0) * 100), 0);
-  const pagoMap = await recibosHelper.pagoPorQuota(quotasAno.map((q) => q.id));
-  let pagoC = 0;
-  for (const q of quotasAno) pagoC += pagoMap.get(q.id) || 0;
-  const dividaC = Math.max(0, totalQuotasC - pagoC);
-  const cobrancaPct = totalQuotasC > 0 ? Math.round((pagoC / totalQuotasC) * 100) : 0;
+  // Evolução do ano: mesmos valores do resumo, organizados por mês.
+  const evolucao = evolucaoMensal(resumo);
+  const movimentos = evolucao.meses.map((m) => ({
+    ...m,
+    nome: MESES[m.mes - 1],
+    atual: m.mes === mesCorrenteAtual,
+  }));
 
-  // Frações com quota em atraso (agregado — apenas contagem, sem nomes).
-  const emAtraso = new Set();
-  for (const q of quotasAno) {
-    if (estadoEfetivo(q) === 'vencida') {
-      const aberto = Math.round((Number(q.valor) || 0) * 100) - (pagoMap.get(q.id) || 0);
-      if (aberto > 0) emAtraso.add(q.fracao_id);
-    }
+  // Posição de cada fração do próprio utilizador (conta-corrente: quotas
+  // ordinárias + extraordinárias processadas − pagamentos confirmados).
+  const minhasFracoes = [];
+  for (const f of fracoes) {
+    const cc = await contaCorrente.contaCorrenteFracao({ condominioId: req.condominioId, fracaoId: f.id })
+      .catch(() => null);
+    if (!cc) continue;
+    minhasFracoes.push({
+      id: f.id,
+      designacao: f.designacao,
+      emDivida: cc.emDivida,
+      saldo: cc.saldo,
+      quotasEmDivida: cc.quotasEmDivida,
+      extrasEmDivida: cc.extrasEmDivida,
+      temCredito: cc.temCredito,
+    });
   }
 
-  res.render('condomino/situacao', {
+  return res.render('condomino/situacao-financeira', {
     titulo: 'Situação financeira',
     pessoa,
-    ano,
+    ano: anoAtual,
     resumo,
-    nFracoes,
-    receitasAno: Number(receitasAno) || 0,
-    despesasAno: Number(despesasAno) || 0,
-    saldoAno: (Number(receitasAno) || 0) - (Number(despesasAno) || 0),
-    totalQuotas: totalQuotasC / 100,
-    pagoQuotas: pagoC / 100,
-    divida: dividaC / 100,
-    cobrancaPct,
-    nFracoesEmAtraso: emAtraso.size,
+    orcamento,
+    // Quanto do orçamento ainda não foi executado (negativo = acima do previsto).
+    saldoOrcamento: orcamento.orcamentado - orcamento.executado,
+    movimentos,
+    temMovimentos: evolucao.temMovimentos,
+    mesesComMovimentos: evolucao.mesesComMovimentos,
+    minhasFracoes,
+    temDivida: minhasFracoes.some((f) => f.emDivida),
   });
-});
+}
+
+// Endereço atual da página (diz o que a página é).
+router.get('/situacao-financeira', paginaSituacaoFinanceira);
+// Endereço anterior: mantém-se a responder com a MESMA página (nunca um
+// redirecionamento que possa perder a ligação), para não quebrar atalhos,
+// separadores abertos nem ligações já partilhadas.
+router.get('/situacao', paginaSituacaoFinanceira);
 
 module.exports = router;

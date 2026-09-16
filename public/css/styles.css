@@ -1224,6 +1224,51 @@ a.portal-item:hover .portal-item-titulo { text-decoration: underline; }
 .portal-item-linha:last-child { border-bottom: 0; }
 .portal-item-linha .portal-item { padding: 8px 2px; min-height: 48px; }
 
+/* ── Situação financeira do condómino ─────────────────────────────
+   Página só de leitura, com valores agregados. No telemóvel os números
+   principais ficam empilhados (cada valor com a sua legenda, sem cortar);
+   a partir de 768px passam a três colunas. */
+.portal-financas { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.portal-financas .portal-financa-card { min-width: 0; }
+.portal-financa-valor {
+  font-size: calc(26px * var(--font-scale));
+  line-height: 1.15;
+  font-weight: 700;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+.portal-financa-nota {
+  color: var(--c-text-muted);
+  font-size: calc(11.5px * var(--font-scale));
+  line-height: 1.4;
+  margin-top: 4px;
+  /* Linhas de texto com largura de leitura: em ecrãs grandes o aviso de cada
+     número não deve esticar pela largura toda do cartão. */
+  max-width: 78ch;
+}
+/* Valor de uma linha de lista (contas, frações): alinhado ao topo e sem
+   partir o número para a linha seguinte. */
+.portal-valor-linha {
+  margin-left: auto;
+  padding-left: 8px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+/* Estado vazio com ícone: mesma linguagem em todas as secções da página. */
+.portal-vazio { display: flex; align-items: flex-start; gap: 10px; }
+.portal-vazio .material-symbols-outlined { color: var(--c-text-muted); font-size: calc(22px * var(--font-scale)); }
+/* Evolução do ano: um mês por linha, com o mês corrente realçado. */
+.portal-mes-lista { list-style: none; margin: 0; padding: 0; }
+.portal-mes { border-top: 1px solid var(--c-border); padding: 8px 14px; }
+.portal-mes:first-child { border-top: 0; }
+.portal-mes-topo { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.portal-mes-nome { font-weight: 600; }
+.portal-mes-saldo { font-weight: 700; white-space: nowrap; }
+.portal-mes-atual { background: var(--c-primary-light); }
+@media (min-width: 768px) {
+  .portal-financas { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 /* Painel — faixas horizontais agrupadas (sem um card por número) */
 .painel-strip {
   display: flex;

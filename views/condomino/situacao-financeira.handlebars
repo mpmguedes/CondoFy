@@ -1,0 +1,307 @@
+{{!-- Situação financeira do condomínio (área do condómino, só de leitura).
+
+     Princípios desta página:
+       · Só valores AGREGADOS do condomínio ativo. Nunca nomes, contactos,
+         frações de terceiros nem valores de dívida imputáveis a outra fração —
+         as frações em atraso aparecem apenas como CONTAGEM.
+       · Nada é estimado: cada número vem de dados existentes (quotas,
+         pagamentos, despesas, contas bancárias e orçamento do condomínio).
+       · Sem dados → estado vazio explícito, nunca um valor inventado nem uma
+         percentagem sobre um denominador zero.
+
+     Ordem no telemóvel (o que interessa primeiro, primeiro):
+       cabeçalho → resumo financeiro → execução do orçamento → contas
+       → fundo de reserva → valores em dívida → evolução do ano → ações --}}
+<div class="page-heading portal-cabecalho">
+  <h1>Situação financeira</h1>
+  <p class="subtitle">
+    {{condominio.designacao}} · informação agregada de {{ano}}
+  </p>
+</div>
+
+<div class="portal-conteudo">
+
+{{!-- ── Resumo financeiro ─────────────────────────────────────────── --}}
+<h2 class="h6 text-uppercase portal-titulo-seccao">Resumo financeiro</h2>
+<div class="portal-financas mb-2">
+  <div class="card portal-financa-card">
+    <div class="card-body">
+      <div class="stat-label">Saldo das contas</div>
+      <div class="portal-financa-valor {{#if (lt resumo.saldoContas 0)}}text-danger{{/if}}">{{eur resumo.saldoContas}}</div>
+      <div class="portal-financa-nota">Posição atual das contas ativas (não é o saldo do ano)</div>
+    </div>
+  </div>
+  <div class="card portal-financa-card">
+    <div class="card-body">
+      <div class="stat-label">Receitas de {{ano}}</div>
+      <div class="portal-financa-valor text-success">{{eur resumo.receitasAno}}</div>
+      <div class="portal-financa-nota">Pagamentos confirmados com data em {{ano}}</div>
+    </div>
+  </div>
+  <div class="card portal-financa-card">
+    <div class="card-body">
+      <div class="stat-label">Despesas de {{ano}}</div>
+      <div class="portal-financa-valor text-danger">{{eur resumo.despesasAno}}</div>
+      <div class="portal-financa-nota">Despesas do ano, sem as anuladas</div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body py-3">
+    <div class="portal-linhas">
+      <div class="portal-linha">
+        <span class="material-symbols-outlined" aria-hidden="true">balance</span>
+        <span class="portal-linha-texto">
+          {{#if (gt resumo.totalQuotas 0)}}
+          Quotas de {{ano}}: <strong>{{eur resumo.pagoQuotas}}</strong> recebidos de {{eur resumo.totalQuotas}}
+          <span class="portal-chip">{{resumo.cobrancaPct}}% de cobrança</span>
+          {{else}}
+          Não existem quotas emitidas para {{ano}}.
+          {{/if}}
+        </span>
+      </div>
+      <div class="portal-linha">
+        <span class="material-symbols-outlined" aria-hidden="true">hourglass_bottom</span>
+        <span class="portal-linha-texto">
+          Em dívida (todas as quotas de {{ano}}): <strong class="text-danger">{{eur resumo.emDivida}}</strong>
+        </span>
+      </div>
+      <div class="portal-linha">
+        <span class="material-symbols-outlined" aria-hidden="true">groups</span>
+        <span class="portal-linha-texto">
+          {{#if resumo.nFracoes}}
+          {{resumo.nFracoesEmAtraso}} de {{resumo.nFracoes}} frações com quota vencida por pagar
+          {{else}}
+          Ainda não existem frações registadas neste condomínio.
+          {{/if}}
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{!-- ── Execução do orçamento ─────────────────────────────────────── --}}
+<h2 class="h6 text-uppercase portal-titulo-seccao">Execução do orçamento</h2>
+<div class="card mb-4">
+  <div class="card-body">
+    {{#if (gt orcamento.orcamentado 0)}}
+    <div class="d-flex justify-content-between align-items-center">
+      <span class="stat-label">Execução de {{orcamento.ano}}</span>
+      <span class="fw-semibold">{{orcamento.percentagem}}%</span>
+    </div>
+    <div class="progress mt-1" style="height:10px">
+      <div class="progress-bar {{#if (gt orcamento.percentagem 100)}}bg-danger{{else}}bg-primary{{/if}}" style="width: {{orcamento.percentagem}}%"></div>
+    </div>
+    <div class="portal-linhas mt-3">
+      <div class="portal-linha">
+        <span class="material-symbols-outlined" aria-hidden="true">savings</span>
+        <span class="portal-linha-texto">Orçamentado: <strong>{{eur orcamento.orcamentado}}</strong></span>
+      </div>
+      <div class="portal-linha">
+        <span class="material-symbols-outlined" aria-hidden="true">payments</span>
+        <span class="portal-linha-texto">Executado: <strong>{{eur orcamento.executado}}</strong></span>
+      </div>
+      <div class="portal-linha">
+        <span class="material-symbols-outlined" aria-hidden="true">trending_up</span>
+        <span class="portal-linha-texto">
+          Diferença: <strong class="{{#if (lt saldoOrcamento 0)}}text-danger{{else}}text-success{{/if}}">{{eur saldoOrcamento}}</strong>
+          <span class="text-muted">{{#if (lt saldoOrcamento 0)}}(acima do orçamentado){{else}}(por executar){{/if}}</span>
+        </span>
+      </div>
+    </div>
+    <div class="portal-hero-acoes">
+      <a class="btn btn-outline-primary portal-btn" href="/condomino/orcamento">
+        <span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span>
+        Ver orçamento rubrica a rubrica
+      </a>
+    </div>
+    {{else}}
+    <div class="portal-vazio">
+      <span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span>
+      <div>
+        <div class="fw-semibold">Não existe orçamento para este ano.</div>
+        <div class="portal-financa-nota">Quando a administração publicar o orçamento de {{ano}}, a execução aparece aqui.</div>
+      </div>
+    </div>
+    {{/if}}
+  </div>
+</div>
+
+{{!-- ── Contas ────────────────────────────────────────────────────── --}}
+<h2 class="h6 text-uppercase portal-titulo-seccao">Contas</h2>
+<div class="card mb-4">
+  {{#if resumo.contas.length}}
+  <ul class="portal-lista-simples mb-0">
+    {{#each resumo.contas}}
+    <li class="portal-item-linha">
+      <div class="portal-item">
+        <span class="portal-item-icone"><span class="material-symbols-outlined" aria-hidden="true">account_balance</span></span>
+        <span class="portal-item-texto">
+          <span class="portal-item-titulo">{{nome}}</span>
+          <span class="portal-item-meta">
+            {{banco}}{{#if banco}} · {{/if}}{{#if (eq tipo 'fundo_reserva')}}Fundo de reserva{{else}}{{#if (eq tipo 'poupanca')}}Poupança{{else}}{{#if (eq tipo 'corrente')}}Conta corrente{{else}}Outra conta{{/if}}{{/if}}{{/if}}
+            {{#if iban}} · {{iban}}{{/if}}
+          </span>
+        </span>
+        <span class="portal-valor-linha {{#if (lt saldo 0)}}text-danger{{/if}}">{{eur saldo}}</span>
+      </div>
+    </li>
+    {{/each}}
+  </ul>
+  {{else}}
+  <div class="card-body">
+    <div class="portal-vazio">
+      <span class="material-symbols-outlined" aria-hidden="true">account_balance</span>
+      <div>
+        <div class="fw-semibold">Não existem contas bancárias com saldo disponível.</div>
+        <div class="portal-financa-nota">Só são apresentadas contas ativas do condomínio.</div>
+      </div>
+    </div>
+  </div>
+  {{/if}}
+</div>
+
+{{!-- ── Fundo de reserva ──────────────────────────────────────────── --}}
+<h2 class="h6 text-uppercase portal-titulo-seccao">Fundo de reserva</h2>
+<div class="card mb-4">
+  <div class="card-body">
+    {{#if (gt resumo.fundoReserva 0)}}
+    <div class="stat-label">Valor atual do fundo de reserva</div>
+    <div class="portal-financa-valor">{{eur resumo.fundoReserva}}</div>
+    <div class="portal-financa-nota">Somatório do saldo das contas do condomínio do tipo «fundo de reserva», calculado pelos movimentos bancários registados.</div>
+    {{else}}
+    <div class="portal-vazio">
+      <span class="material-symbols-outlined" aria-hidden="true">savings</span>
+      <div>
+        <div class="fw-semibold">Sem fundo de reserva registado.</div>
+        <div class="portal-financa-nota">Não existe nenhuma conta de fundo de reserva com saldo neste condomínio.</div>
+      </div>
+    </div>
+    {{/if}}
+  </div>
+</div>
+
+{{!-- ── Valores em dívida ─────────────────────────────────────────── --}}
+<h2 class="h6 text-uppercase portal-titulo-seccao">Valores em dívida</h2>
+<div class="card mb-4">
+  <div class="card-body">
+    {{#if temDivida}}
+    <div class="stat-label">Dívida agregada das frações em atraso ({{ano}})</div>
+    <div class="portal-financa-valor text-danger">{{eur resumo.emDivida}}</div>
+    <div class="portal-financa-nota">
+      Valor agregado de {{resumo.nFracoesEmAtraso}} {{#if (eq resumo.nFracoesEmAtraso 1)}}fração{{else}}frações{{/if}} com quota vencida — não são identificadas frações nem titulares.
+    </div>
+
+    {{#if minhasFracoes.length}}
+    <hr class="my-3" />
+    <div class="stat-label mb-2">As minhas frações</div>
+    <ul class="portal-lista-simples mb-0">
+      {{#each minhasFracoes}}
+      <li class="portal-item-linha">
+        <div class="portal-item">
+          <span class="portal-item-icone"><span class="material-symbols-outlined" aria-hidden="true">home</span></span>
+          <span class="portal-item-texto">
+            <span class="portal-item-titulo">Fração {{designacao}}</span>
+            <span class="portal-item-meta">
+              {{#if emDivida}}
+              Quotas {{eur quotasEmDivida}}{{#if (gt extrasEmDivida 0)}} · extraordinárias {{eur extrasEmDivida}}{{/if}}
+              {{else}}
+              {{#if temCredito}}Sem valores a pagar (crédito a favor){{else}}Sem valores a pagar{{/if}}
+              {{/if}}
+            </span>
+          </span>
+          <span class="portal-valor-linha {{#if emDivida}}text-danger{{else}}text-success{{/if}}">{{eur saldo}}</span>
+        </div>
+      </li>
+      {{/each}}
+    </ul>
+    <div class="portal-hero-acoes">
+      <a class="btn btn-outline-primary portal-btn" href="/condomino/quotas">
+        <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>
+        Ver as minhas quotas
+      </a>
+    </div>
+    {{/if}}
+    {{else}}
+    <div class="portal-vazio">
+      <span class="material-symbols-outlined" aria-hidden="true">check_circle</span>
+      <div>
+        <div class="fw-semibold">Não existem valores em dívida registados.</div>
+        <div class="portal-financa-nota">Não há quotas de {{ano}} vencidas por pagar no condomínio.</div>
+      </div>
+    </div>
+    {{/if}}
+  </div>
+</div>
+
+{{!-- ── Evolução do ano ───────────────────────────────────────────── --}}
+<h2 class="h6 text-uppercase portal-titulo-seccao">Evolução do ano</h2>
+<div class="card mb-4">
+  {{#if temMovimentos}}
+  <div class="card-body pb-0">
+    <div class="portal-financa-nota">
+      Movimentos reais por mês, agregados a partir dos pagamentos confirmados e das despesas do condomínio.
+      Meses com registos: {{mesesComMovimentos}} de 12.
+    </div>
+  </div>
+  <ul class="portal-mes-lista">
+    {{#each movimentos}}
+    {{#if temMovimentos}}
+    <li class="portal-mes{{#if atual}} portal-mes-atual{{/if}}">
+      <div class="portal-mes-topo">
+        <span class="portal-mes-nome">{{nome}}</span>
+        <span class="portal-mes-saldo {{#if (lt saldo 0)}}text-danger{{else}}text-success{{/if}}">{{eur saldo}}</span>
+      </div>
+      <div class="portal-quota-meta">
+        <span>Receitas {{eur contas}}</span>
+        <span>Despesas {{eur despesas}}</span>
+      </div>
+    </li>
+    {{/if}}
+    {{/each}}
+  </ul>
+  {{else}}
+  <div class="card-body">
+    <div class="portal-vazio">
+      <span class="material-symbols-outlined" aria-hidden="true">timeline</span>
+      <div>
+        <div class="fw-semibold">Ainda não existem movimentos financeiros registados para este período.</div>
+        <div class="portal-financa-nota">Aparecem aqui à medida que forem registados pagamentos e despesas em {{ano}}.</div>
+      </div>
+    </div>
+  </div>
+  {{/if}}
+</div>
+
+{{!-- ── Relatório e ações ─────────────────────────────────────────── --}}
+<h2 class="h6 text-uppercase portal-titulo-seccao">Relatório e ações</h2>
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="portal-hero-acoes mt-0">
+      <a class="btn btn-outline-primary portal-btn" href="/condomino/orcamento">
+        <span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span>
+        Orçamento do ano
+      </a>
+      <a class="btn btn-outline-secondary portal-btn" href="/condomino/recibos">
+        <span class="material-symbols-outlined" aria-hidden="true">confirmation_number</span>
+        Os meus recibos
+      </a>
+      <a class="btn btn-outline-secondary portal-btn" href="/condomino/quotas">
+        <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>
+        As minhas quotas
+      </a>
+    </div>
+    <div class="portal-financa-nota mt-3">
+      O relatório financeiro detalhado é um documento de administração. Quando a administração o disponibilizar ao
+      condomínio, aparece na área Documentos, juntamente com as atas e as convocatórias.
+    </div>
+  </div>
+</div>
+
+<p class="portal-financa-nota">
+  Informação agregada do condomínio {{condominio.designacao}}. Não são exibidos nomes, contactos, frações nem valores
+  de outros condóminos.
+</p>
+
+</div>
