@@ -569,13 +569,59 @@ function pessoaNomeDoUser(req) {
 }
 
 // ── Assembleias (consulta) ──────────────────────────────────────────
+// Etiquetas em PT-PT para o estado e o tipo de assembleia. São dados que já
+// existem no modelo; aqui só são traduzidos para linguagem de condómino.
+const ESTADOS_ASSEMBLEIA = {
+  rascunho: { rotulo: 'Rascunho', classe: 'text-bg-secondary' },
+  agendada: { rotulo: 'Agendada', classe: 'text-bg-warning' },
+  convocada: { rotulo: 'Convocada', classe: 'text-bg-info' },
+  realizada: { rotulo: 'Realizada', classe: 'text-bg-success' },
+  cancelada: { rotulo: 'Cancelada', classe: 'text-bg-dark' },
+};
+const TIPOS_ASSEMBLEIA = {
+  ordinaria: 'Ordinária',
+  extraordinaria: 'Extraordinária',
+  urgencia: 'Urgência',
+};
+// Uma assembleia deixa de ser «próxima» quando a data já passou ou quando o
+// estado a encerrou. Não se inventa nenhum estado: só se usa o que existe.
+function estadoAssembleia(a) {
+  return ESTADOS_ASSEMBLEIA[a.estado] || { rotulo: a.estado || '—', classe: 'text-bg-light border' };
+}
+function assembleiaEncerrada(a) {
+  return ['realizada', 'cancelada'].includes(String(a.estado || ''));
+}
+
 router.get('/assembleias', async (req, res) => {
   const { pessoa } = await contextoFracoes(req);
+  const hoje = new Date().toISOString().slice(0, 10);
   const assembleias = await Assembleia.findAll({
     where: { condominio_id: req.condominioId },
     order: [['data', 'DESC'], ['id', 'DESC']],
   });
-  res.render('condomino/assembleias', { titulo: 'Assembleias', pessoa, assembleias });
+  const comEtiquetas = assembleias.map((a) => {
+    const json = a.toJSON();
+    const dataISO = json.data ? String(json.data).slice(0, 10) : null;
+    return {
+      ...json,
+      estadoRotulo: estadoAssembleia(json).rotulo,
+      estadoClasse: estadoAssembleia(json).classe,
+      tipoRotulo: TIPOS_ASSEMBLEIA[json.tipo] || null,
+      // «Futura» = data ainda por chegar e não encerrada pela administração.
+      eFutura: Boolean(dataISO) && dataISO >= hoje && !assembleiaEncerrada(json),
+    };
+  });
+  // A próxima é a mais próxima no tempo; as passadas ficam por ordem descendente.
+  const futuras = comEtiquetas.filter((a) => a.eFutura).sort((a, b) => String(a.data).localeCompare(String(b.data)) || a.id - b.id);
+  const passadas = comEtiquetas.filter((a) => !a.eFutura);
+  res.render('condomino/assembleias', {
+    titulo: 'Assembleias',
+    pessoa,
+    assembleias: comEtiquetas,
+    proxima: futuras.length ? futuras[0] : null,
+    outrasFuturas: futuras.slice(1),
+    passadas,
+  });
 });
 
 router.get('/assembleias/:id', async (req, res) => {
@@ -605,13 +651,58 @@ router.get('/assembleias/:id', async (req, res) => {
 });
 
 // ── Avisos (leitura) ────────────────────────────────────────────────
+// O aviso distingue-se pelo que a aplicação já sabe: os publicados de imediato
+// (`createdAt`) e os programados para uma data futura (`data_programada`).
+// NÃO existe estado de lido/não lido, urgência nem prioridade — nada disso é
+// apresentado, porque não existe no sistema.
 router.get('/avisos', async (req, res) => {
   const { pessoa } = await contextoFracoes(req);
+  const hoje = new Date().toISOString().slice(0, 10);
   const avisos = await Aviso.findAll({ where: { condominio_id: req.condominioId }, order: [['id', 'DESC']], limit: 100 });
-  res.render('condomino/avisos', { titulo: 'Avisos e comunicações', pessoa, avisos });
+  const dataISO = (v) => {
+    if (!v) return null;
+    if (typeof v === 'string') return v.slice(0, 10);
+    const d = v instanceof Date ? v : new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  };
+  const comEtiquetas = avisos.map((a) => {
+    const json = a.toJSON();
+    const programada = dataISO(json.data_programada);
+    let tipoRotulo = null;
+    if (json.tipo === 'programado') tipoRotulo = 'Comunicação programada';
+    else if (json.tipo === 'automatico') tipoRotulo = 'Comunicação automática';
+    return {
+      ...json,
+      programada,
+      // Data mostrada: a de publicação (a programada, quando existe).
+      dataMostrada: programada || dataISO(json.createdAt),
+      // Por publicar: programada para uma data que ainda não chegou.
+      porPublicar: Boolean(programada) && programada > hoje,
+      temDocumento: Boolean(json.documento_id),
+      tipoRotulo,
+    };
+  });
+  const tipo = String(req.query.tipo || '');
+  const filtroTipo = ['publicados', 'programados'].includes(tipo) ? tipo : null;
+  const lista = filtroTipo === 'programados'
+    ? comEtiquetas.filter((a) => a.porPublicar)
+    : filtroTipo === 'publicados'
+      ? comEtiquetas.filter((a) => !a.porPublicar)
+      : comEtiquetas;
+  res.render('condomino/avisos', {
+    titulo: 'Avisos e comunicações',
+    pessoa,
+    avisos: lista,
+    nAvisos: comEtiquetas.length,
+    nPorPublicar: comEtiquetas.filter((a) => a.porPublicar).length,
+    filtroTipo,
+  });
 });
 
 // ── Calendário (assembleias + avisos programados; leitura) ─────────
+// Os eventos são os mesmos de sempre (assembleias não canceladas + avisos
+// programados), agora separados em próximos e passados para o telemóvel poder
+// mostrar primeiro o que ainda vai acontecer.
 router.get('/calendario', async (req, res) => {
   const { pessoa } = await contextoFracoes(req);
   const hoje = new Date().toISOString().slice(0, 10);
@@ -620,20 +711,44 @@ router.get('/calendario', async (req, res) => {
     order: [['data', 'ASC'], ['id', 'ASC']],
   });
   const avisos = await Aviso.findAll({
-    where: { condominio_id: req.condominioId, data_programada: { [Op.gte]: hoje } },
+    where: { condominio_id: req.condominioId, data_programada: { [Op.ne]: null } },
     order: [['data_programada', 'ASC']],
   });
   const eventos = [
     ...assembleias.map((a) => ({
       data: a.data,
       tipo: 'assembleia',
-      titulo: a.numero ? `Assembleia ${a.numero}` : 'Assembleia',
+      tipoRotulo: 'Assembleia',
+      titulo: a.numero ? `Assembleia ${a.numero}` : 'Assembleia de condóminos',
+      hora: a.hora || null,
+      local: a.local || null,
       detalhe: [a.hora, a.local].filter(Boolean).join(' · ') || null,
+      estadoRotulo: estadoAssembleia(a).rotulo,
       link: `/condomino/assembleias/${a.id}`,
     })),
-    ...avisos.map((a) => ({ data: a.data_programada, tipo: 'aviso', titulo: a.assunto, detalhe: null, link: '/condomino/avisos' })),
+    ...avisos.map((a) => ({
+      data: a.data_programada,
+      tipo: 'aviso',
+      tipoRotulo: 'Comunicação programada',
+      titulo: a.assunto,
+      hora: null,
+      local: null,
+      detalhe: null,
+      estadoRotulo: null,
+      link: '/condomino/avisos',
+    })),
   ].sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')));
-  res.render('condomino/calendario', { titulo: 'Calendário', pessoa, eventos });
+  // Passados que se mantêm consultáveis, do mais recente para o mais antigo.
+  const proximos = eventos.filter((e) => String(e.data || '') >= hoje);
+  const passados = eventos.filter((e) => String(e.data || '') < hoje).reverse();
+  res.render('condomino/calendario', {
+    titulo: 'Calendário',
+    pessoa,
+    eventos,
+    proximos,
+    passados,
+    proximo: proximos.length ? proximos[0] : null,
+  });
 });
 
 // ── Documentos públicos do condomínio ───────────────────────────────

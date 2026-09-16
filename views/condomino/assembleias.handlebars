@@ -1,20 +1,131 @@
-<div class="page-heading">
+{{!-- Assembleias do condomínio (mobile-first).
+
+     A próxima assembleia tem destaque; as restantes futuras e as passadas vêm
+     depois, mais compactas, mantendo o acesso à informação e à documentação
+     existentes em /condomino/assembleias/:id. --}}
+<div class="page-heading portal-cabecalho">
   <h1>Assembleias</h1>
-  <p class="subtitle">Consulta de assembleias do condomínio</p>
+  <p class="subtitle">Consulta das assembleias do condomínio</p>
 </div>
 
-{{#if assembleias}}
-<div class="card"><div class="table-responsive">
+{{#unless pessoa}}
+<div class="alert alert-warning">A sua conta ainda não está associada a um condómino neste condomínio. Contacte a administração.</div>
+{{else}}
+
+{{#if proxima}}
+{{!-- ── Próxima assembleia (destaque) ──────────────────────────────── --}}
+<h2 class="h6 text-uppercase portal-titulo-seccao">Próxima assembleia</h2>
+<div class="card portal-hero portal-hero-ok mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+      <div>
+        <div class="stat-label">{{#if proxima.tipoRotulo}}{{proxima.tipoRotulo}}{{else}}Assembleia{{/if}}{{#if proxima.numero}} {{proxima.numero}}{{/if}}</div>
+        {{#if proxima.data}}<div class="portal-hero-vinculo">{{diaSemana proxima.data}}</div>{{/if}}
+      </div>
+      <span class="badge {{proxima.estadoClasse}}">{{proxima.estadoRotulo}}</span>
+    </div>
+
+    <div class="portal-hero-valor">{{formatDate proxima.data}}</div>
+    <div class="portal-linhas portal-hero-linhas">
+      {{#if proxima.hora}}
+      <div class="portal-linha">
+        <span class="material-symbols-outlined" aria-hidden="true">schedule</span>
+        <span class="portal-linha-texto">{{proxima.hora}}</span>
+      </div>
+      {{/if}}
+      {{#if proxima.local}}
+      <div class="portal-linha">
+        <span class="material-symbols-outlined" aria-hidden="true">location_on</span>
+        <span class="portal-linha-texto">{{proxima.local}}</span>
+      </div>
+      {{/if}}
+      {{#if proxima.ordem_trabalhos}}
+      <div class="portal-linha">
+        <span class="material-symbols-outlined" aria-hidden="true">list_alt</span>
+        <span class="portal-linha-texto">Ordem de trabalhos disponível</span>
+      </div>
+      {{/if}}
+    </div>
+
+    <div class="portal-hero-acoes">
+      <a class="btn btn-primary portal-btn" href="/condomino/assembleias/{{proxima.id}}">
+        <span class="material-symbols-outlined" aria-hidden="true">description</span>Ver convocatória e documentos
+      </a>
+    </div>
+  </div>
+</div>
+{{else}}
+<div class="card mb-4"><div class="card-body text-center text-muted py-4">
+  <span class="material-symbols-outlined" aria-hidden="true" style="font-size:2rem">event_busy</span>
+  {{#if passadas.length}}
+  <div class="fw-semibold mt-1">Não existem assembleias futuras agendadas</div>
+  <div class="small">As assembleias anteriores estão listadas abaixo.</div>
+  {{else}}
+  <div class="fw-semibold mt-1">Ainda não existem assembleias registadas</div>
+  <div class="small">Quando a administração convocar uma assembleia, aparece aqui.</div>
+  {{/if}}
+</div></div>
+{{/if}}
+
+{{!-- ── Outras futuras ─────────────────────────────────────────────── --}}
+{{#if outrasFuturas.length}}
+<h2 class="h6 text-uppercase portal-titulo-seccao">Também agendadas</h2>
+<ul class="portal-doc-lista mb-4">
+  {{#each outrasFuturas}}
+  <li class="portal-doc">
+    <div class="portal-doc-topo">
+      <span class="material-symbols-outlined portal-doc-icone" aria-hidden="true">forum</span>
+      <span class="portal-doc-texto">
+        <span class="portal-doc-titulo">{{#if numero}}Assembleia {{numero}}{{else}}Assembleia de condóminos{{/if}}</span>
+        <span class="portal-doc-meta">
+          {{#if data}}<span>{{formatDate data}}</span>{{/if}}
+          {{#if hora}}<span>{{hora}}</span>{{/if}}
+          {{#if local}}<span>{{local}}</span>{{/if}}
+        </span>
+      </span>
+    </div>
+    <div class="portal-doc-acoes">
+      <a class="btn btn-primary portal-btn" href="/condomino/assembleias/{{id}}">
+        <span class="material-symbols-outlined" aria-hidden="true">visibility</span>Ver detalhe
+      </a>
+      <span class="badge {{estadoClasse}} align-self-center">{{estadoRotulo}}</span>
+    </div>
+  </li>
+  {{/each}}
+</ul>
+{{/if}}
+
+{{!-- ── Assembleias passadas ───────────────────────────────────────── --}}
+{{#if passadas.length}}
+<h2 class="h6 text-uppercase portal-titulo-seccao">Assembleias anteriores</h2>
+
+{{!-- Telemóvel: lista compacta. --}}
+<ul class="portal-lista-simples">
+  {{#each passadas}}
+  <li class="portal-item-linha">
+    <a class="portal-item" href="/condomino/assembleias/{{id}}">
+      <span class="portal-item-icone" aria-hidden="true"><span class="material-symbols-outlined">forum</span></span>
+      <span class="portal-item-texto">
+        <span class="portal-item-titulo">{{#if numero}}Assembleia {{numero}}{{else}}Assembleia de condóminos{{/if}}</span>
+        <span class="portal-item-meta">{{#if data}}{{formatDate data}} · {{/if}}{{estadoRotulo}}</span>
+      </span>
+      {{#if local}}<span class="portal-item-meta ms-auto d-none d-md-inline">{{local}}</span>{{/if}}
+    </a>
+  </li>
+  {{/each}}
+</ul>
+
+<div class="card portal-quota-tabela"><div class="table-responsive">
   <table class="table table-hover align-middle mb-0">
     <thead class="table-light"><tr><th>Número</th><th>Data</th><th>Hora</th><th>Local</th><th>Estado</th><th class="text-end">Ações</th></tr></thead>
     <tbody>
-      {{#each assembleias}}
+      {{#each passadas}}
       <tr>
         <td class="fw-semibold">{{#if numero}}{{numero}}{{else}}—{{/if}}</td>
         <td class="text-nowrap">{{formatDate data}}</td>
         <td>{{#if hora}}{{hora}}{{else}}—{{/if}}</td>
         <td class="small">{{#if local}}{{local}}{{else}}—{{/if}}</td>
-        <td><span class="badge text-bg-light border">{{estado}}</span></td>
+        <td><span class="badge {{estadoClasse}}">{{estadoRotulo}}</span></td>
         <td class="text-end"><a href="/condomino/assembleias/{{id}}" class="btn btn-sm btn-outline-primary">Ver</a></td>
       </tr>
       {{/each}}
@@ -22,5 +133,12 @@
   </table>
 </div></div>
 {{else}}
-<div class="alert alert-light border small">Sem assembleias registadas.</div>
+{{#unless proxima}}{{#unless outrasFuturas.length}}
+<div class="card"><div class="card-body text-center text-muted py-4">
+  <span class="material-symbols-outlined" aria-hidden="true" style="font-size:2rem">forum</span>
+  <div class="fw-semibold mt-1">Ainda não existem assembleias registadas</div>
+  <div class="small">Quando houver uma assembleia, aparece aqui.</div>
+</div></div>
+{{/unless}}{{/unless}}
 {{/if}}
+{{/unless}}

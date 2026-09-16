@@ -1,22 +1,62 @@
-<div class="page-heading">
-  <h1>Avisos e comunicações</h1>
-  <p class="subtitle">Informação publicada pela administração</p>
+{{!-- Avisos do condomínio (mobile-first).
+
+     Cartões verticais no telemóvel e duas colunas no desktop, reutilizando as
+     mesmas peças dos documentos e das quotas. Só se apresenta o que a aplicação
+     consegue determinar: NÃO existe estado de lido/não lido, urgência nem
+     prioridade neste sistema — por isso nada disso aparece aqui. --}}
+<div class="page-heading portal-cabecalho">
+  <h1>Avisos</h1>
+  <p class="subtitle">Informação publicada pela administração{{#if nAvisos}} · {{nAvisos}} aviso(s){{/if}}</p>
 </div>
 
-{{#if avisos}}
-<div class="row g-3">
-  {{#each avisos}}
-  <div class="col-12 col-lg-6">
-    <div class="card h-100"><div class="card-body">
-      <div class="d-flex justify-content-between align-items-start gap-2">
-        <h2 class="h6 mb-1">{{assunto}}</h2>
-        {{#if data_programada}}<span class="badge text-bg-light border text-nowrap">{{formatDate data_programada}}</span>{{/if}}
-      </div>
-      {{#if mensagem}}<p class="text-muted small mb-0">{{mensagem}}</p>{{/if}}
-    </div></div>
-  </div>
-  {{/each}}
-</div>
+{{#unless pessoa}}
+<div class="alert alert-warning">A sua conta ainda não está associada a um condómino neste condomínio. Contacte a administração.</div>
 {{else}}
-<div class="alert alert-light border small">Sem avisos publicados.</div>
+
+{{#if nAvisos}}
+{{!-- Filtro pelo que a aplicação sabe distinguir: já publicado ou programado. --}}
+<div class="portal-filtros card mb-3"><div class="card-body">
+  <div class="portal-filtro-linha">
+    <span class="stat-label">Mostrar</span>
+    <div class="portal-chips">
+      <a class="portal-chip{{#unless filtroTipo}} portal-chip-ativo{{/unless}}" href="/condomino/avisos">Todos</a>
+      <a class="portal-chip{{#if (eq filtroTipo 'publicados')}} portal-chip-ativo{{/if}}" href="/condomino/avisos?tipo=publicados">Publicados</a>
+      {{#if nPorPublicar}}<a class="portal-chip{{#if (eq filtroTipo 'programados')}} portal-chip-ativo{{/if}}" href="/condomino/avisos?tipo=programados">Programados ({{nPorPublicar}})</a>{{/if}}
+    </div>
+  </div>
+</div></div>
 {{/if}}
+
+{{#if avisos.length}}
+<ul class="portal-doc-lista">
+  {{#each avisos}}
+  <li class="portal-doc">
+    <div class="portal-doc-topo">
+      <span class="material-symbols-outlined portal-doc-icone" aria-hidden="true">{{#if porPublicar}}schedule_send{{else}}campaign{{/if}}</span>
+      <span class="portal-doc-texto">
+        <span class="portal-doc-titulo">{{assunto}}</span>
+        <span class="portal-doc-meta">
+          {{#if dataMostrada}}<span>{{diaSemana dataMostrada}}, {{formatDate dataMostrada}}</span>{{/if}}
+          {{#if porPublicar}}<span>Programado</span>{{else}}{{#if tipoRotulo}}<span>{{tipoRotulo}}</span>{{/if}}{{/if}}
+        </span>
+      </span>
+    </div>
+    {{#if mensagem}}<p class="portal-aviso-texto">{{mensagem}}</p>{{/if}}
+    {{#if temDocumento}}
+    <div class="portal-doc-acoes">
+      <a class="btn btn-outline-secondary portal-btn" href="/condomino/documentos">
+        <span class="material-symbols-outlined" aria-hidden="true">attach_file</span>Documento associado
+      </a>
+    </div>
+    {{/if}}
+  </li>
+  {{/each}}
+</ul>
+{{else}}
+<div class="card"><div class="card-body text-center text-muted py-4">
+  <span class="material-symbols-outlined" aria-hidden="true" style="font-size:2rem">campaign</span>
+  <div class="fw-semibold mt-1">{{#if filtroTipo}}Sem avisos com este filtro{{else}}Ainda não existem avisos{{/if}}</div>
+  <div class="small">{{#if filtroTipo}}Veja todos os avisos.{{else}}Quando a administração publicar um aviso, aparece aqui.{{/if}}</div>
+</div></div>
+{{/if}}
+{{/unless}}

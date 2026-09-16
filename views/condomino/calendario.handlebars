@@ -1,21 +1,118 @@
-<div class="page-heading">
+{{!-- Calendário do condomínio (mobile-first).
+
+     Os eventos são os mesmos de sempre: assembleias não canceladas e avisos
+     programados. No telemóvel mostra-se primeiro o que ainda vai acontecer (com
+     destaque para o próximo) e depois o que já passou, em lista compacta — a
+     grelha mensal não existe nesta aplicação, por isso não se inventa nenhuma.
+     Toda a informação continua acessível pela lista completa. --}}
+<div class="page-heading portal-cabecalho">
   <h1>Calendário</h1>
-  <p class="subtitle">Datas e acontecimentos do condomínio</p>
+  <p class="subtitle">Datas e acontecimentos do condomínio{{#if eventos.length}} · {{eventos.length}} evento(s){{/if}}</p>
 </div>
 
-{{#if eventos}}
-<div class="card"><ul class="list-group list-group-flush">
-  {{#each eventos}}
-  <li class="list-group-item d-flex flex-wrap gap-2 align-items-center">
-    <span class="badge text-bg-light border text-nowrap">{{formatDate data}}</span>
-    <span>
-      {{#if (eq tipo 'assembleia')}}<span class="material-symbols-outlined me-1" style="font-size:1rem">forum</span>{{else}}<span class="material-symbols-outlined me-1" style="font-size:1rem">campaign</span>{{/if}}
-      {{#if link}}<a href="{{link}}">{{titulo}}</a>{{else}}{{titulo}}{{/if}}
-    </span>
-    {{#if detalhe}}<span class="text-muted small ms-auto">{{detalhe}}</span>{{/if}}
+{{#unless pessoa}}
+<div class="alert alert-warning">A sua conta ainda não está associada a um condómino neste condomínio. Contacte a administração.</div>
+{{else}}
+
+{{#if eventos.length}}
+
+{{#if proximo}}
+{{!-- ── Próximo acontecimento (destaque) ───────────────────────────── --}}
+<h2 class="h6 text-uppercase portal-titulo-seccao">Próximo</h2>
+<div class="card portal-hero portal-hero-ok mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+      <div>
+        <div class="stat-label">{{proximo.tipoRotulo}}</div>
+        {{#if proximo.data}}<div class="portal-hero-vinculo">{{diaSemana proximo.data}}</div>{{/if}}
+      </div>
+      {{#if proximo.estadoRotulo}}<span class="badge text-bg-light border">{{proximo.estadoRotulo}}</span>{{/if}}
+    </div>
+
+    <div class="portal-hero-valor">{{formatDate proximo.data}}</div>
+    <div class="portal-linhas portal-hero-linhas">
+      <div class="portal-linha">
+        <span class="material-symbols-outlined" aria-hidden="true">{{#if (eq proximo.tipo 'assembleia')}}forum{{else}}campaign{{/if}}</span>
+        <span class="portal-linha-texto">{{proximo.titulo}}</span>
+      </div>
+      {{#if proximo.hora}}
+      <div class="portal-linha">
+        <span class="material-symbols-outlined" aria-hidden="true">schedule</span>
+        <span class="portal-linha-texto">{{proximo.hora}}</span>
+      </div>
+      {{/if}}
+      {{#if proximo.local}}
+      <div class="portal-linha">
+        <span class="material-symbols-outlined" aria-hidden="true">location_on</span>
+        <span class="portal-linha-texto">{{proximo.local}}</span>
+      </div>
+      {{/if}}
+    </div>
+
+    {{#if proximo.link}}
+    <div class="portal-hero-acoes">
+      <a class="btn btn-primary portal-btn" href="{{proximo.link}}">
+        <span class="material-symbols-outlined" aria-hidden="true">visibility</span>Ver detalhe
+      </a>
+    </div>
+    {{/if}}
+  </div>
+</div>
+{{/if}}
+
+{{!-- ── Próximos eventos (sem o que já está em destaque) ───────────── --}}
+{{#if proximos.length}}
+{{#if (gt proximos.length 1)}}
+<h2 class="h6 text-uppercase portal-titulo-seccao">A seguir</h2>
+<ul class="portal-lista-simples mb-4">
+  {{#each proximos}}
+  {{#unless @first}}
+  <li class="portal-item-linha">
+    {{#if link}}<a class="portal-item" href="{{link}}">{{else}}<span class="portal-item">{{/if}}
+      <span class="portal-item-icone" aria-hidden="true"><span class="material-symbols-outlined">{{#if (eq tipo 'assembleia')}}forum{{else}}schedule_send{{/if}}</span></span>
+      <span class="portal-item-texto">
+        <span class="portal-item-titulo">{{titulo}}</span>
+        <span class="portal-item-meta">{{tipoRotulo}}{{#if data}} · {{diaSemana data}}, {{formatDate data}}{{/if}}{{#if hora}} · {{hora}}{{/if}}{{#if local}} · {{local}}{{/if}}</span>
+      </span>
+    {{#if link}}</a>{{else}}</span>{{/if}}
+  </li>
+  {{/unless}}
+  {{/each}}
+</ul>
+{{/if}}
+{{else}}
+{{#if passados.length}}
+<div class="card mb-4"><div class="card-body text-center text-muted py-4">
+  <span class="material-symbols-outlined" aria-hidden="true" style="font-size:2rem">event_busy</span>
+  <div class="fw-semibold mt-1">Sem acontecimentos futuros agendados</div>
+  <div class="small">Os acontecimentos anteriores estão listados abaixo.</div>
+</div></div>
+{{/if}}
+{{/if}}
+
+{{!-- ── Já passaram (continua acessível) ───────────────────────────── --}}
+{{#if passados.length}}
+<h2 class="h6 text-uppercase portal-titulo-seccao">Já aconteceu</h2>
+<ul class="portal-lista-simples">
+  {{#each passados}}
+  <li class="portal-item-linha">
+    {{#if link}}<a class="portal-item" href="{{link}}">{{else}}<span class="portal-item">{{/if}}
+      <span class="portal-item-icone" aria-hidden="true"><span class="material-symbols-outlined">{{#if (eq tipo 'assembleia')}}forum{{else}}campaign{{/if}}</span></span>
+      <span class="portal-item-texto">
+        <span class="portal-item-titulo">{{titulo}}</span>
+        <span class="portal-item-meta">{{formatDate data}}{{#if detalhe}} · {{detalhe}}{{/if}}</span>
+      </span>
+    {{#if link}}</a>{{else}}</span>{{/if}}
   </li>
   {{/each}}
-</ul></div>
-{{else}}
-<div class="alert alert-light border small">Sem acontecimentos agendados.</div>
+</ul>
 {{/if}}
+
+{{else}}
+<div class="card"><div class="card-body text-center text-muted py-4">
+  <span class="material-symbols-outlined" aria-hidden="true" style="font-size:2rem">calendar_month</span>
+  <div class="fw-semibold mt-1">Sem acontecimentos agendados</div>
+  <div class="small">Assembleias e comunicações programadas aparecem aqui.</div>
+</div></div>
+{{/if}}
+{{/unless}}

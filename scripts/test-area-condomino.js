@@ -638,6 +638,176 @@ function testePaginaDocumentos() {
   assert.ok(/Ata da assembleia\.pdf/.test(semData), 'documentos: documento sem data continua apresentado');
 }
 
+// ── 3e. Avisos, Assembleias e Calendário ──────────────────────────
+const baseAvisos = { pessoa: { id: 10 }, titulo: 'Avisos e comunicações' };
+const aviso = (over) => ({
+  id: 1, assunto: 'Manutenção do elevador', mensagem: 'O elevador estará parado no dia 12.',
+  tipo: 'manual', data_programada: null, createdAt: '2026-09-10', programada: null,
+  dataMostrada: '2026-09-10', porPublicar: false, temDocumento: false, tipoRotulo: null, ...over,
+});
+const paginaAvisos = (avisos, extra = {}) => render('views/condomino/avisos.handlebars', {
+  ...baseAvisos, avisos, nAvisos: avisos.length, nPorPublicar: avisos.filter((a) => a.porPublicar).length, filtroTipo: null, ...extra,
+}).replace(/\s+/g, ' ');
+
+const baseAssembleias = { pessoa: { id: 10 }, titulo: 'Assembleias' };
+const assembleia = (over) => ({
+  id: 4, numero: '2026/2', tipo: 'ordinaria', tipoRotulo: 'Ordinária', data: '2026-11-12', hora: '18:30',
+  local: 'Sala comum', estado: 'convocada', estadoRotulo: 'Convocada', estadoClasse: 'text-bg-info',
+  ordem_trabalhos: '1. Contas\n2. Obras', eFutura: true, ...over,
+});
+const paginaAssembleias = (ctx) => render('views/condomino/assembleias.handlebars', {
+  ...baseAssembleias, assembleias: [], proxima: null, outrasFuturas: [], passadas: [], ...ctx,
+}).replace(/\s+/g, ' ');
+
+const baseCalendario = { pessoa: { id: 10 }, titulo: 'Calendário' };
+const evento = (over) => ({
+  data: '2026-11-12', tipo: 'assembleia', tipoRotulo: 'Assembleia', titulo: 'Assembleia 2026/2',
+  hora: '18:30', local: 'Sala comum', detalhe: '18:30 · Sala comum', estadoRotulo: 'Convocada',
+  link: '/condomino/assembleias/4', ...over,
+});
+const paginaCalendario = (ctx) => render('views/condomino/calendario.handlebars', {
+  ...baseCalendario, eventos: [], proximos: [], passados: [], proximo: null, ...ctx,
+}).replace(/\s+/g, ' ');
+
+// Estrutura mínima do HTML: as tags de bloco têm de estar emparelhadas. Sem isto,
+// um ramo condicional mal fechado produziria uma ligação que engole o resto.
+function tagsEmparelhadas(html, tag) {
+  const abre = (html.match(new RegExp(`<${tag}[\\s>]`, 'g')) || []).length;
+  const fecha = (html.match(new RegExp(`</${tag}>`, 'g')) || []).length;
+  return { abre, fecha, ok: abre === fecha };
+}
+
+function testePaginaAvisos() {
+  const comAvisos = paginaAvisos([
+    aviso({ id: 2, assunto: 'Limpeza das fachadas', createdAt: '2026-09-14', dataMostrada: '2026-09-14' }),
+    aviso({ id: 1, assunto: 'Manutenção do elevador', createdAt: '2026-09-10' }),
+  ]);
+  assert.ok(/<h1>Avisos<\/h1>/.test(comAvisos), 'avisos: cabeçalho claro');
+  assert.ok(/Limpeza das fachadas/.test(comAvisos) && /Manutenção do elevador/.test(comAvisos), 'avisos: título visível');
+  assert.ok(/Segunda-feira, 14\/09\/2026/.test(comAvisos), 'avisos: data e dia da semana visíveis');
+  assert.ok(/Quinta-feira, 10\/09\/2026/.test(comAvisos), 'avisos: data do segundo aviso distinta');
+  assert.ok(/O elevador estará parado no dia 12\./.test(comAvisos), 'avisos: conteúdo apresentado');
+  assert.ok(/portal-doc-lista/.test(comAvisos) && /portal-doc/.test(comAvisos), 'avisos: cartões no mobile');
+  assert.ok(!/lido|não lido|nao lido|urgente|prioridade/i.test(comAvisos),
+    'avisos: não inventa estados de lido/urgência/prioridade');
+  assert.ok(tagsEmparelhadas(comAvisos, 'li').ok && tagsEmparelhadas(comAvisos, 'ul').ok,
+    'avisos: listas e itens emparelhados');
+
+  // Programado: identificado como tal, sem outro estado inventado.
+  const programado = paginaAvisos([aviso({ porPublicar: true, programada: '2026-12-01', dataMostrada: '2026-12-01', tipo: 'programado', tipoRotulo: 'Comunicação programada' })], { nPorPublicar: 1 });
+  assert.ok(/Programado/.test(programado), 'avisos: comunicação programada assinalada');
+  assert.ok(/schedule_send/.test(programado), 'avisos: ícone próprio para programado');
+  assert.ok(/Programados \(1\)/.test(programado), 'avisos: filtro de programados com contagem');
+
+  // Documento associado: liga à área de documentos (recurso existente).
+  const comDocumento = paginaAvisos([aviso({ temDocumento: true })]);
+  assert.ok(/href="\/condomino\/documentos"/.test(comDocumento), 'avisos: documento associado liga aos documentos');
+
+  // Vários avisos e conteúdo longo: nada é truncado pelo servidor.
+  const longo = 'A'.repeat(600);
+  const comLongo = paginaAvisos([aviso({ mensagem: longo })]);
+  assert.ok(comLongo.includes(longo), 'avisos: conteúdo longo apresentado por inteiro');
+
+  // Sem avisos: mensagem neutra.
+  const vazio = paginaAvisos([]);
+  assert.ok(/Ainda não existem avisos/.test(vazio), 'avisos: estado vazio neutro');
+  assert.ok(!/portal-doc-lista/.test(vazio), 'avisos: sem cartões vazios');
+  assert.ok(!/erro|problema|falha/i.test(vazio), 'avisos: o vazio não é apresentado como erro');
+
+  // Filtro sem resultados: remete para todos.
+  const semFiltro = paginaAvisos([], { filtroTipo: 'programados' });
+  assert.ok(/Sem avisos com este filtro/.test(semFiltro), 'avisos: filtro sem resultados explicado');
+}
+
+function testePaginaAssembleias() {
+  const proxima = assembleia();
+  const passada = assembleia({ id: 3, numero: '2026/1', tipo: 'ordinaria', tipoRotulo: 'Ordinária', data: '2026-04-10', estado: 'realizada', estadoRotulo: 'Realizada', estadoClasse: 'text-bg-success', eFutura: false, ordem_trabalhos: null });
+  const comTudo = paginaAssembleias({ assembleias: [proxima, passada], proxima, outrasFuturas: [], passadas: [passada] });
+
+  assert.ok(/<h1>Assembleias<\/h1>/.test(comTudo), 'assembleias: cabeçalho');
+  assert.ok(/Próxima assembleia/.test(comTudo), 'assembleias: secção da próxima');
+  assert.ok(/portal-hero/.test(comTudo), 'assembleias: a próxima tem destaque');
+  assert.ok(/12\/11\/2026/.test(comTudo) && /18:30/.test(comTudo) && /Sala comum/.test(comTudo),
+    'assembleias: data, hora e local da próxima');
+  assert.ok(/badge text-bg-info">Convocada/.test(comTudo), 'assembleias: estado com o mesmo emblema do backoffice');
+  assert.ok(/Ordinária/.test(comTudo), 'assembleias: tipo em PT-PT');
+  assert.ok(/Quinta-feira/.test(comTudo) || /Quarta-feira|Terça-feira|Segunda-feira|Sexta-feira|Sábado|Domingo/.test(comTudo),
+    'assembleias: dia da semana apresentado');
+  assert.ok(/href="\/condomino\/assembleias\/4"/.test(comTudo), 'assembleias: ligação ao detalhe da próxima');
+  assert.ok(/Assembleias anteriores/.test(comTudo) && /10\/04\/2026/.test(comTudo), 'assembleias: passadas continuam acessíveis');
+  assert.ok(/href="\/condomino\/assembleias\/3"/.test(comTudo), 'assembleias: ligação ao detalhe das passadas');
+
+  // Sem futuras: mensagem específica (não diz que não há assembleias nenhumas).
+  const soPassadas = paginaAssembleias({ assembleias: [passada], proxima: null, outrasFuturas: [], passadas: [passada] });
+  assert.ok(/Não existem assembleias futuras agendadas/.test(soPassadas), 'assembleias: sem futuras explicado');
+  assert.ok(/As assembleias anteriores estão listadas abaixo/.test(soPassadas),
+    'assembleias: sem futuras remete para as anteriores');
+  assert.ok(/Assembleias anteriores/.test(soPassadas), 'assembleias: as passadas mantêm-se visíveis');
+  assert.ok(!/Ainda não existem assembleias registadas/.test(soPassadas),
+    'assembleias: com passadas não diz que não existem assembleias');
+
+  // Nenhuma assembleia: mensagem neutra, uma só (e sem falar de «futuras»).
+  const nenhuma = paginaAssembleias({});
+  assert.ok(/Ainda não existem assembleias registadas/.test(nenhuma), 'assembleias: nenhuma registada');
+  assert.ok(!/Não existem assembleias futuras/.test(nenhuma),
+    'assembleias: sem nenhuma não fala só de futuras');
+  assert.ok(!/Assembleias anteriores/.test(nenhuma), 'assembleias: sem secção de passadas vazia');
+
+  // Várias futuras: a próxima em destaque e as outras em lista.
+  const outra = assembleia({ id: 5, numero: '2026/3', data: '2026-12-20' });
+  const varias = paginaAssembleias({ assembleias: [proxima, outra], proxima, outrasFuturas: [outra], passadas: [] });
+  assert.strictEqual((varias.match(/class="card portal-hero /g) || []).length, 1, 'assembleias: só a próxima em destaque');
+  assert.ok(/Também agendadas/.test(varias) && /20\/12\/2026/.test(varias), 'assembleias: as outras futuras listadas');
+
+  assert.ok(tagsEmparelhadas(comTudo, 'li').ok && tagsEmparelhadas(comTudo, 'a').ok,
+    'assembleias: listas e ligações emparelhadas');
+}
+
+function testePaginaCalendario() {
+  const futuro = evento();
+  const avisoFuturo = evento({ data: '2026-11-20', tipo: 'aviso', tipoRotulo: 'Comunicação programada', titulo: 'Vistoria do gás', hora: null, local: null, detalhe: null, estadoRotulo: null, link: '/condomino/avisos' });
+  const passado = evento({ data: '2026-04-10', titulo: 'Assembleia 2026/1', estadoRotulo: 'Realizada', link: '/condomino/assembleias/3' });
+  const comTudo = paginaCalendario({ eventos: [passado, futuro, avisoFuturo], proximos: [futuro, avisoFuturo], passados: [passado], proximo: futuro });
+
+  assert.ok(/<h1>Calendário<\/h1>/.test(comTudo), 'calendário: cabeçalho');
+  assert.ok(/Próximo/.test(comTudo) && /portal-hero/.test(comTudo), 'calendário: o próximo tem destaque');
+  assert.ok(/12\/11\/2026/.test(comTudo) && /18:30/.test(comTudo) && /Sala comum/.test(comTudo),
+    'calendário: data, hora e local do próximo');
+  assert.ok(/A seguir/.test(comTudo) && /Vistoria do gás/.test(comTudo), 'calendário: próximos eventos listados');
+  assert.ok(/20\/11\/2026/.test(comTudo), 'calendário: data dos próximos eventos');
+  assert.ok(/Comunicação programada/.test(comTudo), 'calendário: tipo do evento identificado');
+  assert.ok(/Já aconteceu/.test(comTudo) && /10\/04\/2026/.test(comTudo), 'calendário: passados continuam acessíveis');
+  assert.ok(/href="\/condomino\/assembleias\/4"/.test(comTudo) && /href="\/condomino\/avisos"/.test(comTudo),
+    'calendário: cada evento liga ao recurso existente');
+
+  // A lista condicional de eventos não pode deixar tags por fechar.
+  assert.ok(tagsEmparelhadas(comTudo, 'a').ok,
+    'calendário: ligações emparelhadas (ramo com e sem link)');
+  assert.ok(tagsEmparelhadas(comTudo, 'li').ok, 'calendário: itens emparelhados');
+  assert.ok(tagsEmparelhadas(comTudo, 'span').ok, 'calendário: spans emparelhados');
+
+  // Evento sem ligação: o título aparece, sem ligação partida.
+  const evSemLink = evento({ titulo: 'Vistoria do gás', link: null });
+  const semLink = paginaCalendario({ eventos: [evSemLink], proximos: [evSemLink], proximo: evSemLink });
+  assert.ok(/Vistoria do gás/.test(semLink) && !/undefined/.test(semLink),
+    'calendário: evento sem ligação continua apresentado');
+  assert.ok(tagsEmparelhadas(semLink, 'a').ok, 'calendário: ramo sem ligação tem ligações emparelhadas');
+  assert.ok(tagsEmparelhadas(semLink, 'div').ok, 'calendário: ramo sem ligação tem divs emparelhados');
+
+  // Sem eventos: mensagem neutra.
+  const vazio = paginaCalendario({});
+  assert.ok(/Sem acontecimentos agendados/.test(vazio), 'calendário: estado vazio neutro');
+  assert.ok(!/portal-hero/.test(vazio), 'calendário: sem destaque inventado quando não há eventos');
+  assert.ok(!/erro|problema|falha/i.test(vazio), 'calendário: o vazio não é apresentado como erro');
+
+  // Só passados: diz que não há futuros e mantém o histórico.
+  const soPassados = paginaCalendario({ eventos: [passado], proximos: [], passados: [passado], proximo: null });
+  assert.ok(/Sem acontecimentos futuros agendados/.test(soPassados), 'calendário: sem futuros explicado');
+  assert.ok(/Já aconteceu/.test(soPassados), 'calendário: passados mantidos');
+  assert.ok(/Os acontecimentos anteriores estão listados abaixo/.test(soPassados),
+    'calendário: sem futuros remete para os anteriores');
+}
+
 // ── 4. Cabeçalho do portal ────────────────────────────────────────
 function testeCabecalho() {
   const layout = ler('views/layouts/main.handlebars');
@@ -721,6 +891,9 @@ testeAreaQuotas();
 testePaginaQuotas();
 testePaginaRecibos();
 testePaginaDocumentos();
+testePaginaAvisos();
+testePaginaAssembleias();
+testePaginaCalendario();
 testeCabecalho();
 testeIntegridade();
 console.log('✓ Testes da área do condómino passaram (mobile-first, sem base de dados).');

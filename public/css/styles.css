@@ -1208,6 +1208,22 @@ a.portal-item:hover .portal-item-titulo { text-decoration: underline; }
   .portal-chip { min-height: 48px; padding: 6px 14px; }
 }
 
+/* ── Avisos, assembleias e calendário ─────────────────────────────
+   Corpo de um aviso (texto completo, sem cortar) e listas simples de eventos
+   e assembleias passadas, que reutilizam os itens das listas do Início. */
+.portal-aviso-texto {
+  margin: 8px 0 0;
+  color: var(--c-text-muted);
+  font-size: calc(13.5px * var(--font-scale));
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+.portal-lista-simples { list-style: none; margin: 0 0 1rem; padding: 0; display: flex; flex-direction: column; }
+.portal-item-linha { border-bottom: 1px solid var(--c-border); }
+.portal-item-linha:last-child { border-bottom: 0; }
+.portal-item-linha .portal-item { padding: 8px 2px; min-height: 48px; }
+
 /* Painel — faixas horizontais agrupadas (sem um card por número) */
 .painel-strip {
   display: flex;

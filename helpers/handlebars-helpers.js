@@ -1,5 +1,5 @@
 const { formatEUR } = require('./money');
-const { formatDate, formatDateTime, toDateInput, currentYear, monthName } = require('./dates');
+const { formatDate, formatDateTime, toDateInput, currentYear, monthName, diaSemana } = require('./dates');
 const { urlExternaSegura } = require('./urls');
 
 // Helpers Handlebars usados nas views.
@@ -14,6 +14,9 @@ module.exports = {
   inc: (n) => Number(n) + 1,
   formatDate: (v) => formatDate(v),
   formatDateTime: (v) => formatDateTime(v),
+  // diaSemana: «Segunda-feira» — ajuda a situar rapidamente datas de assembleias,
+  // avisos e eventos (já existia em helpers/dates.js, só não estava na vista).
+  diaSemana: (v) => diaSemana(v),
   dateInput: (v) => toDateInput(v),
   eur: (v) => formatEUR(v),
   monthName: (m) => monthName(m),
