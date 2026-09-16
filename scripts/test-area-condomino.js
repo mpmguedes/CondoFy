@@ -815,9 +815,25 @@ function testeCabecalho() {
     'cabeçalho: área do condómino tem atalho real para os avisos (backoffice mantém o seu)');
   assert.ok(/icon-badge/.test(layout) && /\{\{#if avisosRecentes\}\}/.test(layout), 'cabeçalho: contagem de avisos recentes quando existe');
   assert.ok(/aria-label="Avisos do condomínio/.test(layout), 'cabeçalho: atalho descrito para leitores de ecrã');
-  assert.ok(/\{\{#unless isAdmin\}\}\s*<li><a class="dropdown-item" href="\/condomino\/saida">/.test(layout),
+  // O menu do utilizador: isola-se a lista do dropdown a partir do `<ul>` (não o
+  // bloco `isAdmin` do cabeçalho, que aparece antes na vista).
+  const inicioMenu = layout.indexOf('dropdown-menu dropdown-menu-end');
+  const menu = layout.slice(inicioMenu, layout.indexOf('</ul>', inicioMenu));
+  assert.ok(/dropdown-item" href="\/condomino\/saida"/.test(menu),
     'cabeçalho: «Preparar saída do condomínio» no perfil, apenas para condóminos');
-  assert.ok(/href="\/conta\/seguranca"/.test(layout) && /href="\/logout"/.test(layout), 'cabeçalho: perfil mantém segurança e sair');
+  assert.ok(/href="\/condomino\/perfil"/.test(layout) && /href="\/condomino\/condominios"/.test(layout)
+    && /href="\/conta\/seguranca"/.test(layout) && /href="\/logout"/.test(layout),
+    'cabeçalho: perfil mantém perfil, condomínios, segurança e sair');
+  // O condómino não é atirado para fora do portal para mudar de condomínio:
+  // a ligação de «Trocar de condomínio» do cabeçalho fica no portal.
+  assert.ok(/href="\/condomino\/condominios" title="Trocar de condomínio"/.test(layout),
+    'cabeçalho: pill do condomínio (área do condómino) troca dentro do portal');
+  assert.ok(/dropdown-item" href="\/condomino\/condominios"/.test(menu),
+    'cabeçalho: menu do utilizador leva a «Os meus condomínios» dentro do portal');
+  // O ramo do backoffice continua a usar o seletor fora do portal.
+  const ramoMenuAdmin = menu.slice(0, menu.indexOf('{{else}}'));
+  assert.ok(/dropdown-item" href="\/condominios"/.test(ramoMenuAdmin),
+    'cabeçalho: backoffice mantém «Os meus condomínios» (seletor fora do portal)');
 
   const app = ler('app.js');
   assert.ok(/res\.locals\.avisosRecentes = 0;/.test(app), 'app: contagem inicializada para todas as páginas');
@@ -895,6 +911,193 @@ function testeIntegridade() {
   assert.ok(!/migrations\//.test(rota) && !/sequelize\.define/.test(rota), 'portal: sem novos modelos ou migrations');
 }
 
+// ── 6. Conta, perfil e condomínios (Fase 2F) ──────────────────────
+// Renderiza as duas vistas novas com os estados que a fase tem de cobrir:
+// 2FA ativo/inativo, um/vários condomínios, uma/várias frações e sem frações.
+function testeContaPerfilCondominios() {
+  const CONTEXTO_BASE = {
+    user: { nome: 'Ana Silva', email: 'ana@exemplo.pt' },
+    condominio: { designacao: 'Condomínio Jardins do Tejo', morada: 'Rua das Flores 25', codigo_postal: '1000-100', localidade: 'Lisboa' },
+    condominioAtivo: { id: 1, designacao: 'Condomínio Jardins do Tejo', role: 'leitura' },
+    isAdmin: false,
+  };
+  const CONTA = {
+    id: 42, nome: 'Ana Silva', email: 'ana@exemplo.pt', telefone: '912345678',
+    email_confirmado: true, ativo: true, last_login_at: '2026-09-20T18:30:00.000Z',
+  };
+
+  const paginaPerfil = (extra) => render('views/condomino/perfil.handlebars', {
+    ...CONTEXTO_BASE,
+    conta: CONTA,
+    condominioLocal: 'Rua das Flores 25 · 1000-100 · Lisboa',
+    fracoes: [],
+    nCondominios: 1,
+    doisFatoresAtivo: false,
+    doisFatoresMetodo: 'email',
+    ...extra,
+  });
+
+  // ── Perfil: dados da conta e hierarquia ────────────────────────
+  const perfilInativo = paginaPerfil({});
+  assert.strictEqual((perfilInativo.match(/<h1>/g) || []).length, 1, 'perfil: um só H1');
+  assert.ok(/<h1>Meu perfil<\/h1>/.test(perfilInativo), 'perfil: título da página');
+  assert.ok(perfilInativo.includes('Ana Silva') && perfilInativo.includes('ana@exemplo.pt'),
+    'perfil: identifica a conta do próprio');
+  for (const seccao of ['Dados da conta', 'Condomínio ativo', 'Segurança', 'Os meus condomínios', 'Acesso a este condomínio']) {
+    assert.ok(perfilInativo.includes(seccao), `perfil: secção «${seccao}» presente`);
+  }
+  assert.ok(/Conta ativa/.test(perfilInativo), 'perfil: apresenta o estado da conta (o real, sem ação de reativação)');
+  assert.ok(!/Ativar conta|Reativar|Desativar conta/i.test(perfilInativo),
+    'perfil: não oferece ações sobre o estado da conta (não autorizadas ao próprio)');
+  assert.ok(/912345678/.test(perfilInativo), 'perfil: mostra os dados pessoais já apresentados ao próprio');
+
+  // ── Perfil: 2FA inativo → mensagem e ação de ativação ──────────
+  assert.ok(/Inativa/.test(perfilInativo), 'perfil: 2FA inativo é apresentado como inativo');
+  assert.ok(/Aumente a segurança da sua conta ativando a autenticação de dois fatores\./.test(perfilInativo),
+    'perfil: mensagem de incentivo quando o 2FA está inativo');
+  assert.ok(/href="\/conta\/seguranca"[\s\S]{0,200}Ativar 2FA/.test(perfilInativo),
+    'perfil: ação «Ativar 2FA» na página de segurança existente');
+  assert.ok(!/Gerir verificação em duas etapas/.test(perfilInativo),
+    'perfil: sem ação de gestão quando o 2FA está inativo');
+
+  // ── Perfil: 2FA ativo → estado real e gestão (sem «Ativar 2FA») ─
+  const perfilAtivo = paginaPerfil({ doisFatoresAtivo: true, doisFatoresMetodo: 'totp' });
+  assert.ok(/Ativa/.test(perfilAtivo), 'perfil: 2FA ativo é apresentado como ativo');
+  assert.ok(/aplicação autenticadora/.test(perfilAtivo), 'perfil: indica o método real do 2FA');
+  assert.ok(/href="\/conta\/seguranca"[\s\S]{0,200}Gerir verificação em duas etapas/.test(perfilAtivo),
+    'perfil: com 2FA ativo a ação é de gestão');
+  assert.ok(!/Ativar 2FA/.test(perfilAtivo), 'perfil: com 2FA ativo não se oferece «Ativar 2FA»');
+  assert.ok(!/Aumente a segurança/.test(perfilAtivo), 'perfil: com 2FA ativo não se pede para ativar');
+
+  // ── Perfil: método por email é descrito como email ─────────────
+  const perfilEmail = paginaPerfil({ doisFatoresAtivo: true, doisFatoresMetodo: 'email' });
+  assert.ok(/código enviado para o seu email/.test(perfilEmail), 'perfil: descreve o método por email');
+
+  // ── Perfil: uma fração, várias frações e sem frações ───────────
+  const umaFracao = paginaPerfil({ fracoes: [{ id: 5, designacao: '1.º Esq', vinculo: 'proprietario' }] });
+  assert.strictEqual((umaFracao.match(/Fração 1º Esq|Fração 1\.º Esq/g) || []).length, 1,
+    'perfil: uma fração aparece uma só vez');
+  assert.ok(/proprietario/.test(umaFracao), 'perfil: mostra o vínculo da fração');
+
+  const variasFracoes = paginaPerfil({
+    fracoes: [
+      { id: 5, designacao: '1.º Esq', vinculo: 'proprietario' },
+      { id: 6, designacao: '2.º Dto', vinculo: 'arrendatario' },
+    ],
+  });
+  assert.ok(/1\.º Esq/.test(variasFracoes) && /2\.º Dto/.test(variasFracoes),
+    'perfil: todas as frações próprias aparecem');
+  assert.strictEqual((variasFracoes.match(/Fração 1\.º Esq/g) || []).length, 1,
+    'perfil: nenhuma fração é duplicada');
+  assert.ok(/arrendatario/.test(variasFracoes), 'perfil: apresenta vínculos diferentes');
+
+  const semFracao = paginaPerfil({ fracoes: [] });
+  assert.ok(/Sem frações associadas neste condomínio\./.test(semFracao),
+    'perfil: sem fração mostra estado neutro');
+  assert.ok(!/Fração /.test(semFracao), 'perfil: sem fração não inventa uma relação');
+
+  // ── Perfil: sem condomínio ativo (estado neutro, sem invenções) ─
+  const semAtivo = render('views/condomino/perfil.handlebars', {
+    ...CONTEXTO_BASE, condominioAtivo: null, condominioLocal: null, conta: CONTA,
+    fracoes: [], nCondominios: 0, doisFatoresAtivo: false, doisFatoresMetodo: 'email',
+  });
+  assert.ok(/Sem condomínio ativo\./.test(semAtivo), 'perfil: sem condomínio ativo explica-se');
+  assert.ok(!/Fração /.test(semAtivo), 'perfil: sem condomínio ativo não inventa frações');
+
+  // ── Perfil: um condomínio não convida a "escolher" ─────────────
+  assert.ok(/Ver o meu condomínio/.test(paginaPerfil({ nCondominios: 1 })),
+    'perfil: com um condomínio a ação é informativa, não de escolha');
+  assert.ok(/Os meus condomínios/.test(paginaPerfil({ nCondominios: 3 })),
+    'perfil: com vários condomínios a ação leva à lista');
+
+  // ── Condomínios: um só, ativo e sem pedir escolha ──────────────
+  const UM = [{
+    id: 1, designacao: 'Condomínio Jardins do Tejo', local: 'Rua das Flores 25 · Lisboa',
+    papelLabel: 'Leitura', totalFracoes: 12, ativo: true, minhasFracoes: [{ id: 5, designacao: '1.º Esq', vinculo: 'proprietario' }],
+  }];
+  const paginaCondominios = (extra) => render('views/condomino/condominios.handlebars', {
+    ...CONTEXTO_BASE, lista: UM, ativoId: 1, temAtivo: true, varios: false, ...extra,
+  });
+
+  const umSo = paginaCondominios({});
+  assert.strictEqual((umSo.match(/<h1>/g) || []).length, 1, 'condomínios: um só H1');
+  assert.ok(/Condomínio ativo/.test(umSo), 'condomínios: o condomínio ativo está assinalado');
+  assert.ok(/O condomínio a que tem acesso\./.test(umSo), 'condomínios: com um só não pede escolha');
+  assert.ok(!/Entrar neste condomínio/.test(umSo),
+    'condomínios: com um só (já ativo) não se mostra a experiência de escolher entre uma opção');
+  assert.ok(/href="\/condomino"/.test(umSo), 'condomínios: leva ao Início do condomínio ativo');
+
+  // ── Condomínios: vários → ativo marcado + entrar nos restantes ─
+  const VARIOS = [
+    UM[0],
+    { id: 2, designacao: 'Condomínio das Amoreiras', local: null, papelLabel: 'Leitura', totalFracoes: 8, ativo: false, minhasFracoes: [] },
+    { id: 3, designacao: 'Condomínio do Parque', local: null, papelLabel: 'Leitura', totalFracoes: 4, ativo: false, minhasFracoes: [{ id: 9, designacao: 'R/C Dto', vinculo: 'arrendatario' }] },
+  ];
+  const muitos = paginaCondominios({ lista: VARIOS, varios: true });
+  assert.strictEqual((muitos.match(/Condomínio ativo/g) || []).length, 1, 'condomínios: um só ativo assinalado');
+  assert.strictEqual((muitos.match(/Entrar neste condomínio/g) || []).length, 2,
+    'condomínios: ação de entrada nos restantes (e não no ativo)');
+  assert.ok(/action="\/condomino\/condominios\/2\/entrar"/.test(muitos) && /action="\/condomino\/condominios\/3\/entrar"/.test(muitos),
+    'condomínios: a entrada usa a rota do portal com o id do condomínio');
+  assert.ok(/Escolha onde quer trabalhar\./.test(muitos), 'condomínios: com vários explica a escolha');
+  assert.ok(/R\/C Dto/.test(muitos) && /arrendatario/.test(muitos), 'condomínios: mostra as frações próprias de cada condomínio');
+  assert.ok(/Sem frações associadas neste condomínio\./.test(muitos),
+    'condomínios: sem frações próprias não inventa relação');
+  assert.ok(/Sem morada registada/.test(muitos), 'condomínios: sem morada diz que não há (não inventa)');
+
+  // ── Condomínios: sem nenhum (nunca "disponível para seleção") ──
+  const nenhum = paginaCondominios({ lista: [], ativoId: null, temAtivo: false });
+  assert.ok(/Ainda não está associado a nenhum condomínio\./.test(nenhum), 'condomínios: estado vazio explícito');
+  assert.ok(!/Entrar neste condomínio/.test(nenhum), 'condomínios: sem associações não há nada para selecionar');
+  assert.ok(!/Condomínio ativo/.test(nenhum), 'condomínios: sem condomínio ativo não se inventa um');
+
+  // ── A vista nunca mostra dados de terceiros ────────────────────
+  // As vistas da área pessoal recebem só os dados do próprio (o contexto dos
+  // testes não traz nenhum dado alheio): o que se garante é que não há contagens
+  // nem listagens de terceiros nem identificação de outras frações/titulares.
+  for (const [nome, html] of [['perfil', perfilInativo], ['condomínios', muitos]]) {
+    assert.ok(!/outro\(s\) condómino|outros condóminos|outro titular|titulares deste condomínio/i.test(html),
+      `${nome}: não apresenta dados de terceiros`);
+    assert.ok(!/Fração 7|Fração 8|Fração 9/.test(html),
+      `${nome}: não identifica frações que não sejam do próprio`);
+  }
+}
+
+// ── 7. Router da área pessoal: isolamento e não-escrita no portal ──
+function testeRouterConta() {
+  const fonte = ler('routes/condomino-conta.js');
+  // Isolamento: tudo vem das associações do PRÓPRIO utilizador.
+  assert.ok(/router\.use\(eAutenticado\)/.test(fonte), 'conta: exige sessão');
+  assert.ok((fonte.match(/tenant\.listarCondominios\(req\.user\.id\)/g) || []).length >= 2,
+    'conta: a lista de condomínios vem sempre do utilizador da sessão');
+  assert.ok(fonte.includes('tenant.entrarCondominio(req, id)'),
+    'conta: a troca de condomínio usa o mecanismo de autorização existente');
+  assert.ok(!/UserCondominio\.(create|update|destroy)|titularidades\.(criar|encerrar|associar)/.test(fonte),
+    'conta: não cria/atualiza associações nem titularidades');
+  assert.ok(!/User\.(create|update|destroy)|user\.update\(/.test(fonte),
+    'conta: não altera a conta do utilizador');
+  assert.ok(!/condominio_ativo_id\s*=/.test(fonte),
+    'conta: não escreve o condomínio ativo fora da função autorizada (tenant)');
+  // Do 2FA só se LÊ o estado; nenhum passo do fluxo é duplicado aqui.
+  assert.ok(/two_fa_ativo/.test(fonte) && !/two_fa_totp_secret|two_fa_recovery_hash/.test(fonte),
+    'conta: lê o estado do 2FA sem tocar em segredos/códigos de recuperação');
+  for (const passo of ['2fa/ativar', '2fa/desativar', '2fa/totp/iniciar', '2fa/codigos']) {
+    assert.ok(!fonte.includes(passo), `conta: não duplica o passo «${passo}» do 2FA existente`);
+  }
+  assert.ok(!/migrations\//.test(fonte) && !/sequelize\.define/.test(fonte),
+    'conta: sem novos modelos ou migrations');
+  // Só uma rota de escrita em toda a área pessoal: entrar num condomínio.
+  const escritas = (fonte.match(/router\.post\(/g) || []).length;
+  assert.strictEqual(escritas, 1, 'conta: uma só rota de escrita (entrar num condomínio)');
+  assert.ok(/router\.post\('\/condominios\/:id\/entrar'/.test(fonte), 'conta: a rota de escrita é a entrada no condomínio');
+  // e a área de consulta do portal continua estritamente só de leitura.
+  assert.ok(!/router\.post|\.create\(|\.update\(|\.destroy\(/.test(ler('routes/condomino.js')),
+    'conta: a área do condomínio (routes/condomino.js) continua só de leitura');
+
+  // Sem reativação de acesso: nenhuma rota do portal reativa associações.
+  assert.ok(!/estado: 'ativo'/.test(fonte), 'conta: não reativa associações (estado passado à mão)');
+}
+
 testeBarraInferior();
 testeInicio();
 testeInicioMultiFraccao();
@@ -907,4 +1110,6 @@ testePaginaAssembleias();
 testePaginaCalendario();
 testeCabecalho();
 testeIntegridade();
+testeContaPerfilCondominios();
+testeRouterConta();
 console.log('✓ Testes da área do condómino passaram (mobile-first, sem base de dados).');

@@ -216,6 +216,11 @@ app.use('/admin', require('./routes/fornecedores'));
 app.use('/admin', require('./routes/relatorios'));
 app.use('/admin', require('./routes/placeholders'));
 app.use('/condomino', require('./routes/condomino'));
+// Área pessoal do portal (perfil, condomínios e a única ação de sessão do
+// portal — trocar o condomínio ativo). Router próprio e montado ANTES do
+// router da área do condomínio: `routes/condomino.js` é a consulta do
+// condomínio ativo e mantém-se estritamente só de leitura.
+app.use('/condomino', require('./routes/condomino-conta'));
 // "Preparar saída do condomínio" (fluxo próprio do condómino, distinto de
 // terminar sessão) — ver routes/saida-condominio.js.
 // Montado na RAIZ: esse router declara já os caminhos completos

@@ -1,0 +1,250 @@
+{{!-- A minha conta (Fase 2F) — quem sou, o que está protegido e onde estou.
+
+     Uma só página para a área pessoal: dados da conta do próprio, estado real da
+     segurança (2FA, com a gestão que já existe em /conta/seguranca) e o
+     condomínio ativo com as frações próprias.
+
+     Deliberadamente NÃO repete:
+       · o resumo financeiro do Início (isso é a Situação financeira / o Início);
+       · dados administrativos do condomínio (papéis, outros condóminos);
+       · nenhuma ação sobre a conta (não se altera o estado da conta no portal).
+     E não cria um segundo sistema de 2FA: a configuração/gestão continua a ser a
+     página existente, aqui apenas ligada. --}}
+<div class="page-heading portal-cabecalho">
+  <h1>Meu perfil</h1>
+  <p class="subtitle">A sua conta GesCondu{{#if condominioAtivo}} · {{condominioAtivo.designacao}}{{/if}}</p>
+</div>
+
+<div class="portal-conteudo">
+
+<div class="card mb-4">
+  <div class="card-body d-flex align-items-center gap-3 flex-wrap">
+    <span class="portal-conta-avatar" aria-hidden="true">{{iniciais conta.nome}}</span>
+    <div class="portal-conta-identidade">
+      <div class="portal-conta-nome">{{conta.nome}}</div>
+      <div class="portal-conta-email">{{conta.email}}</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 portal-inicio">
+  <div class="col-12 col-lg-7">
+    {{!-- ── Dados da conta ─────────────────────────────────────────── --}}
+    <h2 class="h6 text-uppercase portal-titulo-seccao">Dados da conta</h2>
+    <div class="card mb-4">
+      <ul class="portal-lista-simples mb-0">
+        <li class="portal-item-linha">
+          <div class="portal-item">
+            <span class="portal-item-texto">
+              <span class="portal-item-meta">Nome</span>
+              <span class="portal-item-titulo">{{conta.nome}}</span>
+            </span>
+          </div>
+        </li>
+        <li class="portal-item-linha">
+          <div class="portal-item">
+            <span class="portal-item-texto">
+              <span class="portal-item-meta">Email</span>
+              <span class="portal-item-titulo">{{conta.email}}</span>
+            </span>
+            <span class="portal-valor-linha">
+              {{#if conta.email_confirmado}}
+              <span class="portal-selo portal-selo-ok">Confirmado</span>
+              {{else}}
+              <span class="portal-selo portal-selo-aviso">Por confirmar</span>
+              {{/if}}
+            </span>
+          </div>
+        </li>
+        {{#if conta.telefone}}
+        <li class="portal-item-linha">
+          <div class="portal-item">
+            <span class="portal-item-texto">
+              <span class="portal-item-meta">Telefone</span>
+              <span class="portal-item-titulo">{{conta.telefone}}</span>
+            </span>
+          </div>
+        </li>
+        {{/if}}
+        <li class="portal-item-linha">
+          <div class="portal-item">
+            <span class="portal-item-texto">
+              <span class="portal-item-meta">Estado da conta</span>
+              <span class="portal-item-titulo">Conta ativa</span>
+            </span>
+          </div>
+        </li>
+        {{#if conta.last_login_at}}
+        <li class="portal-item-linha">
+          <div class="portal-item">
+            <span class="portal-item-texto">
+              <span class="portal-item-meta">Última entrada</span>
+              <span class="portal-item-titulo">{{formatDateTime conta.last_login_at}}</span>
+            </span>
+          </div>
+        </li>
+        {{/if}}
+      </ul>
+    </div>
+
+    {{!-- ── Condomínio ativo (o contexto atual, sem repetir o Início) ─ --}}
+    <h2 class="h6 text-uppercase portal-titulo-seccao">Condomínio ativo</h2>
+    <div class="card mb-4">
+      {{#if condominioAtivo}}
+      <div class="card-body">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <span class="portal-item-icone"><span class="material-symbols-outlined" aria-hidden="true">apartment</span></span>
+          <span class="portal-item-texto">
+            <span class="portal-item-titulo">{{condominioAtivo.designacao}}</span>
+            {{#if condominioLocal}}<span class="portal-item-meta">{{condominioLocal}}</span>{{/if}}
+          </span>
+        </div>
+
+        <div class="portal-financa-nota mt-2">Em que condomínio está a trabalhar neste momento.</div>
+
+        <div class="mt-3">
+          <div class="stat-label">{{#if fracoes.length}}As minhas frações{{else}}Frações{{/if}}</div>
+          {{#if fracoes.length}}
+          <ul class="portal-lista-simples mb-0 mt-1">
+            {{#each fracoes}}
+            <li class="portal-item-linha">
+              <div class="portal-item">
+                <span class="portal-item-icone"><span class="material-symbols-outlined" aria-hidden="true">home</span></span>
+                <span class="portal-item-texto">
+                  <span class="portal-item-titulo">Fração {{designacao}}</span>
+                  {{#if vinculo}}<span class="portal-item-meta portal-vinculo">{{vinculo}}</span>{{/if}}
+                </span>
+              </div>
+            </li>
+            {{/each}}
+          </ul>
+          {{else}}
+          <div class="portal-vazio mt-2">
+            <span class="material-symbols-outlined" aria-hidden="true">info</span>
+            <div>
+              <div class="fw-semibold">Sem frações associadas neste condomínio.</div>
+              <div class="portal-financa-nota">
+                O acesso ao condomínio mantém-se; as frações aparecem aqui quando existir uma titularidade em vigor.
+                Se acha que é um engano, contacte a administração do condomínio.
+              </div>
+            </div>
+          </div>
+          {{/if}}
+        </div>
+
+        <div class="portal-hero-acoes">
+          <a class="btn btn-outline-primary portal-btn" href="/condomino">
+            <span class="material-symbols-outlined" aria-hidden="true">home</span>
+            Ir para o Início
+          </a>
+        </div>
+      </div>
+      {{else}}
+      <div class="card-body">
+        <div class="portal-vazio">
+          <span class="material-symbols-outlined" aria-hidden="true">apartment</span>
+          <div>
+            <div class="fw-semibold">Sem condomínio ativo.</div>
+            <div class="portal-financa-nota">Escolha o condomínio onde quer trabalhar para ver aqui as suas frações.</div>
+          </div>
+        </div>
+      </div>
+      {{/if}}
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-5">
+    {{!-- ── Segurança (estado real + gestão existente) ─────────────── --}}
+    <h2 class="h6 text-uppercase portal-titulo-seccao">Segurança</h2>
+    <div class="card mb-4">
+      <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+          <span class="stat-label">Verificação em duas etapas</span>
+          {{#if doisFatoresAtivo}}
+          <span class="portal-selo portal-selo-ok">Ativa</span>
+          {{else}}
+          <span class="portal-selo portal-selo-aviso">Inativa</span>
+          {{/if}}
+        </div>
+
+        {{#if doisFatoresAtivo}}
+        <div class="portal-financa-nota">
+          {{#if (eq doisFatoresMetodo 'totp')}}
+          Protegida com a aplicação autenticadora: é pedido um código de 6 dígitos em cada entrada, além da palavra-passe.
+          {{else}}
+          Protegida com código por email: é pedido um código enviado para o seu email em cada entrada, além da palavra-passe.
+          {{/if}}
+        </div>
+        <div class="portal-hero-acoes">
+          <a class="btn btn-outline-primary portal-btn" href="/conta/seguranca">
+            <span class="material-symbols-outlined" aria-hidden="true">shield</span>
+            Gerir verificação em duas etapas
+          </a>
+        </div>
+        {{else}}
+        <div class="fw-semibold mt-2">Aumente a segurança da sua conta ativando a autenticação de dois fatores.</div>
+        <div class="portal-financa-nota">
+          Passa a ser pedido um segundo código em cada entrada. A configuração e os códigos de recuperação são geridos na
+          página de segurança da conta.
+        </div>
+        <div class="portal-hero-acoes">
+          <a class="btn btn-primary portal-btn" href="/conta/seguranca">
+            <span class="material-symbols-outlined" aria-hidden="true">shield_lock</span>
+            Ativar 2FA
+          </a>
+        </div>
+        {{/if}}
+      </div>
+    </div>
+
+    {{!-- ── Os meus condomínios ────────────────────────────────────── --}}
+    <h2 class="h6 text-uppercase portal-titulo-seccao">Os meus condomínios</h2>
+    <div class="card mb-4">
+      <div class="card-body">
+        <div class="stat-label">Condomínios com acesso ativo</div>
+        <div class="portal-financa-valor">{{nCondominios}}</div>
+        <div class="portal-financa-nota">
+          {{#if (eq nCondominios 1)}}
+          Tem acesso a um condomínio.
+          {{else}}
+          Pode consultar e mudar de condomínio quando quiser.
+          {{/if}}
+        </div>
+        <div class="portal-hero-acoes">
+          <a class="btn btn-outline-primary portal-btn" href="/condomino/condominios">
+            <span class="material-symbols-outlined" aria-hidden="true">apps</span>
+            {{#if (eq nCondominios 1)}}Ver o meu condomínio{{else}}Os meus condomínios{{/if}}
+          </a>
+        </div>
+      </div>
+    </div>
+
+    {{!-- ── Saída do condomínio (fluxo existente, sem nova rota) ───── --}}
+    <h2 class="h6 text-uppercase portal-titulo-seccao">Acesso a este condomínio</h2>
+    <div class="card mb-4">
+      <div class="card-body">
+        <div class="portal-financa-nota mt-0">
+          A sua conta GesCondu é independente do acesso a cada condomínio: encerrar o acesso a um condomínio não fecha a
+          conta nem a sua sessão, e o histórico do condomínio não é apagado.
+        </div>
+        <div class="portal-hero-acoes">
+          <a class="btn btn-outline-secondary portal-btn" href="/condomino/saida">
+            <span class="material-symbols-outlined" aria-hidden="true">directions_walk</span>
+            Preparar saída do condomínio
+          </a>
+          <a class="btn btn-outline-secondary portal-btn" href="/logout">
+            <span class="material-symbols-outlined" aria-hidden="true">logout</span>
+            Terminar sessão
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="portal-financa-nota">
+  Os seus dados e as suas relações com este condomínio estão registados à parte do acesso: a conta é sua, o acesso é
+  deste condomínio e a titularidade é de cada fração.
+</p>
+
+</div>

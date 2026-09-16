@@ -223,7 +223,15 @@
             <span class="material-symbols-outlined">monitoring</span>
             <span class="sidebar-item-text">Situação financeira</span>
           </a>
-          <a class="sidebar-item {{isActive currentPath '/condominios'}}" href="/condominios" title="Os meus condomínios">
+        </div>
+
+        <div class="sidebar-group">
+          <div class="sidebar-group-title">A minha conta</div>
+          <a class="sidebar-item {{isActive currentPath '/condomino/perfil'}}" href="/condomino/perfil" title="Meu perfil">
+            <span class="material-symbols-outlined">account_circle</span>
+            <span class="sidebar-item-text">Meu perfil</span>
+          </a>
+          <a class="sidebar-item {{isActive currentPath '/condomino/condominios'}}" href="/condomino/condominios" title="Os meus condomínios">
             <span class="material-symbols-outlined">apps</span>
             <span class="sidebar-item-text">Condomínios</span>
           </a>
@@ -237,6 +245,7 @@
         <button class="icon-btn sidebar-toggle" id="sidebarToggle" type="button" data-sidebar-toggle aria-label="Alternar menu" aria-expanded="false" aria-controls="sidebar">
           <span class="material-symbols-outlined" aria-hidden="true">menu</span>
         </button>
+        {{#if isAdmin}}
         <a class="condominio-pill" id="condominioPill" href="/condominios" title="Trocar de condomínio">
           <span class="material-symbols-outlined">sync</span>
           {{#if condominioAtivo}}
@@ -245,6 +254,18 @@
           <span class="condominio-pill-text condominio-pill-vazio">Sem condomínio selecionado</span>
           {{/if}}
         </a>
+        {{else}}
+        {{!-- Área do condómino: a troca de condomínio acontece dentro do portal
+             (`/condomino/condominios`), para o condómino não perder a navegação. --}}
+        <a class="condominio-pill" id="condominioPill" href="/condomino/condominios" title="Trocar de condomínio">
+          <span class="material-symbols-outlined">sync</span>
+          {{#if condominioAtivo}}
+          <span class="condominio-pill-text">{{condominioAtivo.designacao}}</span>
+          {{else}}
+          <span class="condominio-pill-text condominio-pill-vazio">Sem condomínio selecionado</span>
+          {{/if}}
+        </a>
+        {{/if}}
         <div class="app-header-spacer"></div>
         {{> _tema-toggle}}
         {{#if isAdmin}}
@@ -268,10 +289,17 @@
           <ul class="dropdown-menu dropdown-menu-end">
             <li><span class="dropdown-item-text px-3 py-1 small text-muted">{{user.email}}</span></li>
             <li><hr class="dropdown-divider" /></li>
+            {{#if isAdmin}}
             <li><a class="dropdown-item" href="/conta/seguranca"><span class="material-symbols-outlined me-2">shield</span>Segurança da conta</a></li>
-            {{#unless isAdmin}}
+            <li><a class="dropdown-item" href="/condominios"><span class="material-symbols-outlined me-2">apps</span>Os meus condomínios</a></li>
+            {{else}}
+            {{!-- Área do condómino: o mesmo menu do painel, mas com os destinos do
+                 portal (o perfil reúne conta, segurança e condomínios). --}}
+            <li><a class="dropdown-item" href="/condomino/perfil"><span class="material-symbols-outlined me-2">account_circle</span>Meu perfil</a></li>
+            <li><a class="dropdown-item" href="/condomino/condominios"><span class="material-symbols-outlined me-2">apps</span>Os meus condomínios</a></li>
+            <li><a class="dropdown-item" href="/conta/seguranca"><span class="material-symbols-outlined me-2">shield</span>Segurança da conta</a></li>
             <li><a class="dropdown-item" href="/condomino/saida"><span class="material-symbols-outlined me-2">directions_walk</span>Preparar saída do condomínio</a></li>
-            {{/unless}}
+            {{/if}}
             <li><a class="dropdown-item" href="/logout"><span class="material-symbols-outlined me-2">logout</span>Sair</a></li>
           </ul>
         </div>

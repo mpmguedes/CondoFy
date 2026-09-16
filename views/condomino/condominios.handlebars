@@ -1,0 +1,99 @@
+{{!-- Os meus condomínios (Fase 2F) — dentro da casca do portal.
+
+     Lista APENAS os condomínios em que o utilizador tem associação ativa (a lista
+     vem de tenant.listarCondominios(req.user.id) e é a mesma que autoriza o
+     acesso a cada área). Um id inventado no browser não acrescenta condomínios.
+
+     Com um só condomínio não se pede para "escolher entre uma opção": mostra-se
+     o cartão do condomínio com acesso, marcado como ativo. Com dois ou mais, o
+     ativo fica assinalado e os restantes têm a ação de entrada. --}}
+<div class="page-heading portal-cabecalho">
+  <h1>Os meus condomínios</h1>
+  <p class="subtitle">
+    {{#if varios}}Escolha onde quer trabalhar.{{else}}O condomínio a que tem acesso.{{/if}}
+  </p>
+</div>
+
+<div class="portal-conteudo">
+
+{{#if lista.length}}
+<ul class="portal-cond-lista">
+  {{#each lista}}
+  <li class="card portal-cond{{#if ativo}} portal-cond-ativo{{/if}}">
+    <div class="card-body">
+      <div class="portal-cond-topo">
+        <span class="portal-item-icone"><span class="material-symbols-outlined" aria-hidden="true">apartment</span></span>
+        <span class="portal-item-texto">
+          <span class="portal-item-titulo">{{designacao}}</span>
+          <span class="portal-item-meta">{{#if local}}{{local}}{{else}}Sem morada registada{{/if}}</span>
+        </span>
+        {{#if ativo}}
+        <span class="portal-selo portal-selo-ativo">Condomínio ativo</span>
+        {{/if}}
+      </div>
+
+      <div class="portal-quota-meta">
+        <span><span class="material-symbols-outlined" aria-hidden="true">badge</span> Acesso: {{papelLabel}}</span>
+        <span><span class="material-symbols-outlined" aria-hidden="true">domain</span> {{totalFracoes}} {{#if (eq totalFracoes 1)}}fração{{else}}frações{{/if}} no condomínio</span>
+      </div>
+
+      {{#if minhasFracoes.length}}
+      <div class="portal-financa-nota">As minhas frações neste condomínio:</div>
+      <ul class="portal-quota-meta portal-cond-fracoes">
+        {{#each minhasFracoes}}
+        <li>Fração {{designacao}}{{#if vinculo}} · <span class="portal-vinculo">{{vinculo}}</span>{{/if}}</li>
+        {{/each}}
+      </ul>
+      {{else}}
+      <div class="portal-financa-nota">Sem frações associadas neste condomínio.</div>
+      {{/if}}
+
+      <div class="portal-hero-acoes">
+        {{#if ativo}}
+        <a class="btn btn-primary portal-btn" href="/condomino">
+          <span class="material-symbols-outlined" aria-hidden="true">home</span>
+          Ir para o Início
+        </a>
+        {{else}}
+        <form action="/condomino/condominios/{{id}}/entrar" method="POST" class="m-0">
+          <button type="submit" class="btn btn-outline-primary portal-btn">
+            <span class="material-symbols-outlined" aria-hidden="true">login</span>
+            Entrar neste condomínio
+          </button>
+        </form>
+        {{/if}}
+      </div>
+    </div>
+  </li>
+  {{/each}}
+</ul>
+
+<p class="portal-financa-nota">
+  A lista mostra apenas os condomínios em que tem acesso ativo. Entrar noutro condomínio muda o condomínio onde está a
+  trabalhar; não altera titularidades, nem a sua conta, nem o acesso que já tem.
+</p>
+{{else}}
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="portal-vazio">
+      <span class="material-symbols-outlined" aria-hidden="true">apartment</span>
+      <div>
+        <div class="fw-semibold">Ainda não está associado a nenhum condomínio.</div>
+        <div class="portal-financa-nota">
+          Quando a administração o associar a um condomínio, ele aparece aqui. Se tem um convite, use o código que
+          recebeu para entrar.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{{/if}}
+
+<div class="portal-hero-acoes mt-0">
+  <a class="btn btn-outline-secondary portal-btn" href="/condomino/perfil">
+    <span class="material-symbols-outlined" aria-hidden="true">account_circle</span>
+    Voltar ao meu perfil
+  </a>
+</div>
+
+</div>

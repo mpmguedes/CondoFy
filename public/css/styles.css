@@ -1269,6 +1269,63 @@ a.portal-item:hover .portal-item-titulo { text-decoration: underline; }
   .portal-financas { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
+/* ── Conta do condómino: perfil e condomínios (Fase 2F) ────────────
+   Área pessoal: identidade da conta, selos de estado e cartões dos
+   condomínios a que o utilizador tem acesso. Mesma linguagem do resto do
+   portal (um só H1, cartões empilhados no telemóvel, ações ≥48px). */
+.portal-conta-avatar {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-primary-light);
+  color: var(--c-primary-dark);
+  font-weight: 700;
+  font-size: calc(20px * var(--font-scale));
+  letter-spacing: 0.02em;
+}
+.portal-conta-identidade { min-width: 0; }
+.portal-conta-nome {
+  font-size: calc(20px * var(--font-scale));
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.portal-conta-email { color: var(--c-text-muted); font-size: calc(13px * var(--font-scale)); overflow-wrap: anywhere; }
+
+/* Selos de estado (conta, 2FA, condomínio ativo): só texto e cor — nenhum
+   alvo de toque, por isso não têm a altura mínima das ações. */
+.portal-selo {
+  display: inline-block;
+  flex: none;
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+.portal-selo-ok { color: var(--c-success-text); background: var(--c-success-bg); }
+.portal-selo-aviso { color: var(--c-warning-text); background: var(--c-warning-bg); }
+.portal-selo-ativo { color: var(--c-primary-dark); background: var(--c-primary-light); }
+
+/* Cartões dos condomínios do utilizador. */
+.portal-cond-lista { list-style: none; margin: 0 0 1rem; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.portal-cond { border-left: 4px solid var(--c-border-strong); }
+.portal-cond-ativo { border-left-color: var(--c-primary); }
+.portal-cond-topo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.portal-cond-topo .portal-item-texto { flex: 1 1 12ch; }
+.portal-cond .portal-quota-meta { margin-top: 8px; }
+.portal-cond .portal-quota-meta .material-symbols-outlined { font-size: calc(15px * var(--font-scale)); vertical-align: -3px; }
+.portal-cond-fracoes { list-style: none; padding: 0; }
+.portal-cond .portal-hero-acoes { margin-top: 12px; }
+.portal-cond .portal-hero-acoes form { display: contents; }
+.portal-vinculo { text-transform: capitalize; }
+
 /* Painel — faixas horizontais agrupadas (sem um card por número) */
 .painel-strip {
   display: flex;

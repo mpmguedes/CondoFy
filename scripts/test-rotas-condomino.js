@@ -220,6 +220,26 @@ const stubs = {
     historicoDaPessoa: async () => [],
     estaAtiva: () => true,
   },
+  // Área pessoal: a lista de condomínios vem das associações do próprio. Aqui o
+  // duplo serve as duas páginas do portal que a usam (perfil e condomínios); o
+  // isolamento a sério é exercitado em scripts/test-conta-condominios.js, com o
+  // ajudante real.
+  '../helpers/tenant': {
+    // O módulo da área do condomínio monta este middleware à entrada; aqui já
+    // há condomínio ativo na sessão, por isso só se expõe o que os handlers usam.
+    comCondominioAtivo: (req, res, next) => { req.condominioId = Number(req.session.condominio_ativo_id) || 1; next(); },
+    listarCondominios: async () => ([
+      { id: 1, designacao: COND.designacao, morada: COND.morada, codigo_postal: COND.codigo_postal, localidade: COND.localidade, role: 'leitura' },
+      { id: 2, designacao: 'Condomínio B', morada: null, codigo_postal: null, localidade: null, role: 'leitura' },
+    ]),
+    ativo: (req) => Number(req.session.condominio_ativo_id) || null,
+    entrarCondominio: async () => true,
+    eSuperAdmin: () => false,
+    associacaoAtiva: async () => ({ role: 'leitura' }),
+    papelNoAtivo: async () => 'leitura',
+    eAdminCondominio: async () => false,
+    pertenceAoAtivo: () => true,
+  },
   '../helpers/recibos': {
     pagoPorQuota: async () => PAGO_POR_QUOTA,
     cobertoPorQuota: async () => new Map(),
@@ -266,6 +286,7 @@ app.use(flash());
 // Sessão de condómino simulada.
 app.use((req, res, next) => {
   req.user = UTILIZADOR;
+  req.isAuthenticated = () => true;
   req.session.condominio_ativo_id = 1;
   next();
 });
@@ -292,6 +313,8 @@ app.use((req, res, next) => {
 
 app.get('/sessao/estado', (req, res) => res.json({ autenticado: true, expirada: false }));
 app.use('/condomino', require('../routes/condomino'));
+// Área pessoal do portal (Fase 2F): perfil e condomínios, no seu próprio router.
+app.use('/condomino', require('../routes/condomino-conta'));
 app.use((err, req, res, next) => {
   // Um erro inesperado num handler é exatamente o que este teste procura.
   res.status(500).send('ERRO_NO_HANDLER: ' + err.message);
@@ -322,6 +345,8 @@ const PAGINAS = [
   ['/condomino/documentos?ano=2026', 'Documentos (por ano)'],
   ['/condomino/situacao-financeira', 'Situação financeira'],
   ['/condomino/situacao', 'Situação financeira (endereço anterior)'],
+  ['/condomino/perfil', 'Meu perfil'],
+  ['/condomino/condominios', 'Os meus condomínios'],
   ['/condomino/orcamento', 'Orçamento'],
   ['/condomino', 'Início'],
 ];
@@ -379,7 +404,33 @@ const PAGINAS = [
   assert.strictEqual(antiga.status, 200, 'situação: o endereço anterior responde 200');
   assert.ok(/<h1>Situação financeira<\/h1>/.test(antiga.html), 'situação: o endereço anterior serve a mesma página');
 
-  // 6. A correção não pode voltar a depender de uma variável inexistente.
+  // 6. Área pessoal (Fase 2F): perfil e condomínios, no portal.
+  const perfil = await pedir('/condomino/perfil');
+  assert.ok(/<h1>Meu perfil<\/h1>/.test(perfil.html), 'perfil: título da página');
+  assert.ok(/ana@exemplo\.pt/.test(perfil.html) && /Ana Teste/.test(perfil.html), 'perfil: dados da conta do próprio');
+  assert.ok(/Inativa/.test(perfil.html) && /Ativar 2FA/.test(perfil.html), 'perfil: 2FA inativo com ação de ativação');
+  assert.ok(/href="\/conta\/seguranca"/.test(perfil.html), 'perfil: a gestão do 2FA continua na página existente');
+  assert.ok(/1\.º Esq/.test(perfil.html) && /2\.º Dto/.test(perfil.html), 'perfil: as frações próprias no condomínio ativo');
+  assert.ok(/Condomínio Exemplo/.test(perfil.html), 'perfil: identifica o condomínio ativo');
+
+  const conds = await pedir('/condomino/condominios');
+  assert.ok(/<h1>Os meus condomínios<\/h1>/.test(conds.html), 'condomínios: título da página');
+  assert.ok(/Condomínio Exemplo/.test(conds.html) && /Condomínio B/.test(conds.html), 'condomínios: lista os condomínios com acesso');
+  assert.ok(/Entrar neste condomínio/.test(conds.html), 'condomínios: ação para entrar no outro');
+  assert.ok(/action="\/condomino\/condominios\/2\/entrar"/.test(conds.html), 'condomínios: rota do portal para entrar');
+  // A área pessoal é do próprio: nada de dados de outras contas.
+  for (const html of [perfil.html, conds.html]) {
+    assert.ok(!/bruno@exemplo|outro condómino/i.test(html), 'área pessoal: não expõe dados de terceiros');
+  }
+  // O portal continua só de leitura: a única escrita vive no router da área pessoal.
+  const fontePortal = fs.readFileSync(path.join(RAIZ, 'routes', 'condomino.js'), 'utf8');
+  assert.ok(!/router\.(post|put|patch|delete)\(/.test(fontePortal),
+    'área pessoal: a área do condomínio continua sem rotas de escrita');
+  const fonteConta = fs.readFileSync(path.join(RAIZ, 'routes', 'condomino-conta.js'), 'utf8');
+  assert.strictEqual((fonteConta.match(/router\.post\(/g) || []).length, 1,
+    'área pessoal: uma só rota de escrita (entrar num condomínio)');
+
+  // 7. A correção não pode voltar a depender de uma variável inexistente.
   const fonte = fs.readFileSync(path.join(RAIZ, 'routes', 'condomino.js'), 'utf8');
   const rotaQuotas = fonte.slice(fonte.indexOf("router.get('/quotas'"), fonte.indexOf("router.get('/pagamentos'"));
   assert.ok(/const hoje = new Date\(\)\.toISOString\(\)\.slice\(0, 10\);/.test(rotaQuotas),

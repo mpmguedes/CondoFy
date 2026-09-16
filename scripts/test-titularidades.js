@@ -467,7 +467,14 @@ function testesFluxoSaida() {
   // já não tem frações); o aviso ao administrador está no próprio fluxo.
   const layout = ler('views/layouts/main.handlebars');
   assert.ok(/href="\/condomino\/saida"/.test(layout), 'saída: ligação a partir do perfil do condómino');
-  assert.ok(/\{\{#unless isAdmin\}\}[\s\S]{0,200}href="\/condomino\/saida"/.test(layout), 'saída: não é oferecida a quem administra');
+  // O menu do utilizador tem um ramo para o backoffice e outro para o portal: a
+  // saída do condomínio só pode existir no ramo do condómino.
+  const inicioMenuUsuario = layout.indexOf('dropdown-menu dropdown-menu-end');
+  const menuUsuario = layout.slice(inicioMenuUsuario, layout.indexOf('</ul>', inicioMenuUsuario));
+  const ramoAdminMenu = menuUsuario.slice(0, menuUsuario.indexOf('{{else}}'));
+  const ramoCondominoMenu = menuUsuario.slice(menuUsuario.indexOf('{{else}}'));
+  assert.ok(!/href="\/condomino\/saida"/.test(ramoAdminMenu), 'saída: não é oferecida a quem administra');
+  assert.ok(/href="\/condomino\/saida"/.test(ramoCondominoMenu), 'saída: oferecida no menu do condómino');
   assert.ok(/href="\/condomino\/saida"/.test(dashboard), 'saída: ligação a partir do bloco de antigo titular');
   assert.ok(/transfira primeiro a administração/.test(rota) && /motivoIndisponivel: eGestor/.test(rota),
     'saída: avisa o administrador de que a administração é caso separado');
