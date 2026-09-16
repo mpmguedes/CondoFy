@@ -223,13 +223,8 @@ app.use('/condomino', require('./routes/condomino'));
 app.use('/condomino', require('./routes/condomino-conta'));
 // "Preparar saída do condomínio" (fluxo próprio do condómino, distinto de
 // terminar sessão) — ver routes/saida-condominio.js.
-// Montado na RAIZ: esse router declara já os caminhos completos
-// (`/condomino/saida`, `/condomino/saida/exportar`, …). Montá-lo também sob
-// `/condomino` duplicava o prefixo e o URL efetivo passava a ser
-// `/condomino/condomino/saida` — todas as ligações para /condomino/saida
-// (menu do perfil e painel do Início) respondiam 404. O isolamento não depende
-// do prefixo: o próprio router aplica eAutenticado + tenant.comCondominioAtivo.
-app.use('/', require('./routes/saida-condominio'));
+// O router usa caminhos relativos ao prefixo /condomino.
+app.use('/condomino', require('./routes/saida-condominio'));
 // Link temporário de documento (destinatários sem conta) — rota pública
 // protegida por token assinado e com validade limitada; ver o cabeçalho de
 // routes/documentos-link.js. Nunca serve documentos sem token válido.

@@ -119,7 +119,7 @@ async function estadoDoFluxo(req) {
 }
 
 // ── 1. Página explicativa ──────────────────────────────────────────
-router.get('/condomino/saida', async (req, res) => {
+router.get('/saida', async (req, res) => {
   const estado = await estadoDoFluxo(req);
   if (!estado.podeSair) {
     req.flash('error_msg', motivoNaoAplicavel(estado));
@@ -146,7 +146,7 @@ router.get('/condomino/saida', async (req, res) => {
 });
 
 // ── 2. Exportação controlada ("Descarregar a minha informação") ────
-router.post('/condomino/saida/exportar', async (req, res) => {
+router.post('/saida/exportar', async (req, res) => {
   const estado = await estadoDoFluxo(req);
   if (!estado.podeSair) {
     req.flash('error_msg', motivoNaoAplicavel(estado));
@@ -192,7 +192,7 @@ router.post('/condomino/saida/exportar', async (req, res) => {
 });
 
 // ── 3. Segundo passo: confirmação final ────────────────────────────
-router.get('/condomino/saida/confirmar', async (req, res) => {
+router.get('/saida/confirmar', async (req, res) => {
   const estado = await estadoDoFluxo(req);
   if (!estado.podeSair) {
     req.flash('error_msg', motivoNaoAplicavel(estado));
@@ -208,7 +208,7 @@ router.get('/condomino/saida/confirmar', async (req, res) => {
 });
 
 // ── 4. Conclusão: encerra a relação, mantém o histórico ────────────
-router.post('/condomino/saida/concluir', async (req, res) => {
+router.post('/saida/concluir', async (req, res) => {
   const estado = await estadoDoFluxo(req);
   if (!estado.podeSair) {
     req.flash('error_msg', motivoNaoAplicavel(estado));

@@ -417,9 +417,9 @@ function testesFluxoSaida() {
   const rota = ler('routes/saida-condominio.js');
 
   assert.ok(/router\.use\(tenant\.comCondominioAtivo\)/.test(rota), 'saída: exige condomínio ativo');
-  assert.ok(/router\.get\('\/condomino\/saida'/.test(rota), 'saída: página explicativa própria');
-  assert.ok(/router\.post\('\/condomino\/saida\/exportar'/.test(rota), 'saída: exportação por POST (não por link)');
-  assert.ok(/router\.post\('\/condomino\/saida\/concluir'/.test(rota), 'saída: conclusão por POST');
+  assert.ok(/router\.get\('\/saida'/.test(rota), 'saída: página explicativa própria');
+  assert.ok(/router\.post\('\/saida\/exportar'/.test(rota), 'saída: exportação por POST (não por link)');
+  assert.ok(/router\.post\('\/saida\/concluir'/.test(rota), 'saída: conclusão por POST');
 
   // Reautenticação forte com os mecanismos existentes.
   assert.ok(/bcrypt\.compareSync\(password, req\.user\.password_hash\)/.test(rota), 'saída: confirma a palavra-passe');
@@ -453,15 +453,10 @@ function testesFluxoSaida() {
   // Dependências montadas e porta de entrada.
   const app = ler('app.js');
   assert.ok(app.includes("require('./routes/saida-condominio')"), 'saída: router montado no app.js');
-  // O router declara já os caminhos completos (`/condomino/saida`, …): montá-lo
-  // sob `/condomino` duplicava o prefixo e o URL efetivo passava a ser
-  // `/condomino/condomino/saida`, deixando todas as ligações (perfil do
-  // condómino e painel do Início) a responder 404. A montagem tem de ser na raiz.
-  assert.ok(/app\.use\('\/',\s*require\('\.\/routes\/saida-condominio'\)\)/.test(app),
-    'saída: router montado na raiz (senão /condomino/saida devolve 404)');
-  assert.ok(!/app\.use\('\/condomino',\s*require\('\.\/routes\/saida-condominio'\)\)/.test(app),
-    'saída: router não é montado outra vez sob /condomino');
-  assert.ok(/router\.get\('\/condomino\/saida'/.test(rota), 'saída: o caminho declarado continua /condomino/saida');
+  assert.ok(/app\.use\('\/condomino',\s*require\('\.\/routes\/saida-condominio'\)\)/.test(app),
+    'saída: router montado sob /condomino');
+  assert.ok(/router\.get\('\/saida'/.test(rota),
+    'saída: o caminho interno é relativo ao prefixo /condomino');
   const dashboard = ler('views/condomino/dashboard.handlebars');
   // A ação de saída vive no perfil do cabeçalho (e, no Início, apenas para quem
   // já não tem frações); o aviso ao administrador está no próprio fluxo.
