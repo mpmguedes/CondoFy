@@ -54,6 +54,7 @@ const {
   AvisoDestinatario,
   EmailFila,
   AuditLog,
+  RecomendacaoEstado,
   ExtraQuota,
   ExtraQuotaParcela,
   AgendaItem,
@@ -304,6 +305,12 @@ Categoria.belongsToMany(Documento, {
 
 // Auditoria
 AuditLog.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+// Estado de apresentação das recomendações contextuais do portal (Fase 2G).
+// Por conta (sem condomínio): uma recomendação sobre a conta não pertence a um
+// condomínio concreto.
+User.hasMany(RecomendacaoEstado, { foreignKey: 'user_id', as: 'recomendacoes_estado' });
+RecomendacaoEstado.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
 // Quotas Extraordinárias
 ExtraQuota.hasMany(ExtraQuotaParcela, { foreignKey: 'extra_quota_id', as: 'parcelas' });

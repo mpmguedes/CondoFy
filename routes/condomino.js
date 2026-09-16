@@ -29,6 +29,7 @@ const { gerarReciboPDF } = require('../helpers/pdf');
 const cabecalhos = require('../helpers/cabecalhos-ficheiro');
 const recibosHelper = require('../helpers/recibos');
 const { mapaPastas } = require('../helpers/documento-pastas');
+const recomendacoesHelper = require('../helpers/recomendacoes');
 // Acesso autorizado a documentos (neste módulo: só os disponibilizados).
 const { autorizarAcessoDocumento, servirDocumento, verificarDocumento, responderRecusa } = require('../helpers/documentos-acesso');
 
@@ -83,6 +84,19 @@ router.get('/', async (req, res) => {
   const { pessoa, fracoes } = await contextoFracoes(req);
   const ids = fracoes.map((f) => f.id);
   const hoje = new Date().toISOString().slice(0, 10);
+
+  // Orientação contextual (Fase 2G): o motor decide, a partir do estado real da
+  // conta, se há UMA recomendação a apresentar. As dispensas são lidas aqui e
+  // passadas ao motor — a condição continua a mandar: uma recomendação nunca
+  // aparece depois de a sua situação deixar de existir.
+  const sugestao = recomendacoesHelper.escolher(
+    {
+      userId: req.user.id,
+      autenticado: true,
+      twoFaAtivo: Boolean(req.user.two_fa_ativo),
+    },
+    await recomendacoesHelper.carregarDispensas(req.user.id)
+  );
 
   // Sem frações: distinguir "nunca teve relação" de "deixou de ser titular"
   // (mudança de proprietário). No segundo caso explica-se o que aconteceu e
@@ -249,6 +263,9 @@ router.get('/', async (req, res) => {
     hoje,
     nFracoesProprias: ids.length,
     titularidadesTerminadas,
+    // No máximo UMA recomendação (e só se a condição dela se verificar).
+    recomendacao: sugestao.recomendacao,
+    recomendacoesDisponiveis: sugestao.total,
   });
 });
 

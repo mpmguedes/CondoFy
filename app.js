@@ -221,6 +221,11 @@ app.use('/condomino', require('./routes/condomino'));
 // router da área do condomínio: `routes/condomino.js` é a consulta do
 // condomínio ativo e mantém-se estritamente só de leitura.
 app.use('/condomino', require('./routes/condomino-conta'));
+// Recomendações contextuais do portal (Fase 2G): dispensa/reposição de uma
+// recomendação. Router próprio — a condição de elegibilidade vive no motor
+// (helpers/recomendacoes.js) e a área de consulta do condomínio continua a não
+// ter escrita nenhuma.
+app.use('/condomino', require('./routes/condomino-recomendacoes'));
 // "Preparar saída do condomínio" (fluxo próprio do condómino, distinto de
 // terminar sessão) — ver routes/saida-condominio.js.
 // O router usa caminhos relativos ao prefixo /condomino.

@@ -1,0 +1,39 @@
+{{!-- Recomendação contextual do Início (Fase 2G).
+
+     Só é apresentada quando o motor (helpers/recomendacoes.js) confirma que a
+     condição dela se verifica AGORA — o estado real manda sempre. Aparece uma
+     só: `recomendacao` é a principal, escolhida por prioridade.
+
+     Este parcial não contém nenhuma condição: apenas apresenta o que recebeu.
+     A ação vem da definição da recomendação (nunca do browser).
+
+     Formas de sair do cartão (sem popup nem bloqueio do conteúdo):
+       · cumprir a recomendação → deixa de ser elegível e desaparece sozinho;
+       · dispensar (se `dismissivel`) → escondido durante o intervalo definido. --}}
+{{#if recomendacao}}
+<aside class="card portal-recomendacao mb-3" aria-labelledby="recomendacao-titulo">
+  <div class="card-body">
+    <div class="portal-recomendacao-topo">
+      <span class="portal-recomendacao-icone" aria-hidden="true">
+        <span class="material-symbols-outlined">{{#if recomendacao.icone}}{{recomendacao.icone}}{{else}}lightbulb{{/if}}</span>
+      </span>
+      <div class="portal-recomendacao-texto">
+        <div class="portal-recomendacao-rotulo">
+          <span class="material-symbols-outlined" aria-hidden="true">lightbulb</span>
+          Sugestão
+        </div>
+        <h2 class="portal-recomendacao-titulo" id="recomendacao-titulo">{{recomendacao.titulo}}</h2>
+        <p class="portal-recomendacao-mensagem">{{recomendacao.mensagem}}</p>
+      </div>
+    </div>
+    <div class="portal-recomendacao-acoes">
+      <a class="btn btn-primary portal-btn" href="{{recomendacao.acao.url}}">{{recomendacao.acao.texto}}</a>
+      {{#if recomendacao.dismissivel}}
+      <form action="/condomino/recomendacoes/{{recomendacao.id}}/dispensar" method="POST" class="m-0">
+        <button type="submit" class="btn btn-outline-secondary portal-btn">Dispensar</button>
+      </form>
+      {{/if}}
+    </div>
+  </div>
+</aside>
+{{/if}}

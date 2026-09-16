@@ -28,6 +28,9 @@ const parciais = {
   '_assembleias-tabs': ler('partials/_assembleias-tabs.handlebars'),
   '_config-tabs': ler('partials/_config-tabs.handlebars'),
   '_modal-confirmar': ler('partials/_modal-confirmar.handlebars'),
+  // Início do portal: itens de lista e recomendação contextual (Fase 2G).
+  '_portal-item': ler('partials/_portal-item.handlebars'),
+  '_portal-recomendacao': ler('partials/_portal-recomendacao.handlebars'),
 };
 Object.keys(parciais).forEach((k) => handlebars.registerPartial(k, parciais[k]));
 
@@ -611,6 +614,22 @@ html = comp('condomino/dashboard.handlebars')({ ...baseCond, user: { nome: 'Ana'
 // blocos antigos («A minha situação» / «Situação do condomínio»).
 assert.ok(html.includes('Acesso rápido') && html.includes('Atividade recente') && html.includes('O condomínio em resumo'),
   'condómino dashboard renderiza');
+// Recomendação contextual (Fase 2G): sem recomendação não há cartão; com
+// recomendação o Início apresenta-a no topo do conteúdo.
+assert.ok(!html.includes('portal-recomendacao'), 'condómino dashboard: sem recomendação não mostra cartão');
+html = comp('condomino/dashboard.handlebars')({
+  ...baseCond,
+  user: { nome: 'Ana' },
+  condominio: { designacao: 'X' },
+  recomendacao: {
+    id: '2fa_ativo', tipo: 'seguranca', titulo: 'Reforce a segurança da sua conta com 2FA',
+    mensagem: 'A verificação em duas etapas acrescenta um código extra em cada entrada.',
+    icone: 'shield_lock', acao: { texto: 'Ativar 2FA', url: '/conta/seguranca' }, dismissivel: true,
+  },
+});
+assert.ok(html.includes('Reforce a segurança da sua conta com 2FA') && html.includes('href="/conta/seguranca"')
+  && html.includes('/condomino/recomendacoes/2fa_ativo/dispensar'),
+  'condómino dashboard: recomendação apresentada com ação e dispensa');
 html = comp('condomino/quotas.handlebars')(baseCond);
 assert.ok(html.includes('As minhas quotas'), 'condómino quotas');
 html = comp('condomino/pagamentos.handlebars')(baseCond);

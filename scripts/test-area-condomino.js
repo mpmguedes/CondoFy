@@ -911,7 +911,60 @@ function testeIntegridade() {
   assert.ok(!/migrations\//.test(rota) && !/sequelize\.define/.test(rota), 'portal: sem novos modelos ou migrations');
 }
 
-// ── 6. Conta, perfil e condomínios (Fase 2F) ──────────────────────
+// ── 6. Recomendação contextual no Início (Fase 2G) ────────────────
+// O parcial não tem condições: apresenta o que o motor lhe entregar. Aqui
+// verificam-se as duas situações na vista — com e sem recomendação — e a
+// integração com o topo do Início.
+function testeRecomendacaoNoInicio() {
+  const RECOMENDACAO = {
+    id: '2fa_ativo',
+    tipo: 'seguranca',
+    titulo: 'Reforce a segurança da sua conta com 2FA',
+    mensagem: 'A verificação em duas etapas acrescenta um código extra em cada entrada.',
+    icone: 'shield_lock',
+    acao: { texto: 'Ativar 2FA', url: '/conta/seguranca' },
+    dismissivel: true,
+    prioridade: 100,
+  };
+
+  // Com recomendação: cartão com título, mensagem, ação e dispensa.
+  const com = render('views/partials/_portal-recomendacao.handlebars', { recomendacao: RECOMENDACAO });
+  assert.ok(/class="card portal-recomendacao/.test(com), 'recomendação: cartão apresentado (discreto, não é modal nem popup)');
+  assert.ok(/Reforce a segurança da sua conta com 2FA/.test(com), 'recomendação: título visível');
+  assert.ok(/A verificação em duas etapas/.test(com), 'recomendação: mensagem visível');
+  assert.ok(/href="\/conta\/seguranca"/.test(com) && /Ativar 2FA/.test(com), 'recomendação: ação com o destino da definição');
+  assert.ok(/action="\/condomino\/recomendacoes\/2fa_ativo\/dispensar"/.test(com), 'recomendação: dispensa ligada à recomendação certa');
+  assert.strictEqual((com.match(/portal-recomendacao-titulo/g) || []).length, 1, 'recomendação: um só cartão');
+  assert.ok(!/alert-danger|modal|popup/i.test(com), 'recomendação: sem alerta agressivo nem modal');
+
+  // Sem recomendação: nada é apresentado (nem um cartão vazio).
+  const sem = render('views/partials/_portal-recomendacao.handlebars', { recomendacao: null });
+  assert.strictEqual(sem.trim(), '', 'recomendação: sem recomendação não há cartão nenhum');
+
+  // Não dispensável: sem botão de dispensa (a decisão vem do motor).
+  const naoDismissivel = render('views/partials/_portal-recomendacao.handlebars', {
+    recomendacao: { ...RECOMENDACAO, dismissivel: false },
+  });
+  assert.ok(/Ativar 2FA/.test(naoDismissivel) && !/Dispensar/.test(naoDismissivel),
+    'recomendação: não dispensável não mostra o botão de dispensar');
+
+  // Integração: o Início inclui o parcial como primeiro bloco do conteúdo, e o
+  // parcial vem DEPOIS do bloco dos dados globais (que já existiam nas fases
+  // anteriores) — nada do Início foi reorganizado.
+  const dashboard = ler('views/condomino/dashboard.handlebars');
+  assert.ok(/\{\{> _portal-recomendacao\}\}/.test(dashboard), 'Início: inclui o parcial da recomendação');
+  assert.ok(dashboard.indexOf('portal-conteudo') < dashboard.indexOf('_portal-recomendacao'),
+    'Início: a recomendação entra dentro do conteúdo');
+  assert.ok(dashboard.indexOf('_portal-recomendacao') < dashboard.indexOf('portal-inicio'),
+    'Início: a recomendação fica no topo do conteúdo (antes das colunas)');
+
+  // Nenhuma condição de elegibilidade vive no template.
+  assert.ok(!/two_fa_ativo|two_fa_metodo/.test(ler('views/partials/_portal-recomendacao.handlebars')),
+    'recomendação: o template não tem condições de elegibilidade');
+  assert.ok(!/two_fa_ativo/.test(dashboard), 'Início: a vista não decide a elegibilidade');
+}
+
+// ── 7. Conta, perfil e condomínios (Fase 2F) ──────────────────────
 // Renderiza as duas vistas novas com os estados que a fase tem de cobrir:
 // 2FA ativo/inativo, um/vários condomínios, uma/várias frações e sem frações.
 function testeContaPerfilCondominios() {
@@ -1110,6 +1163,7 @@ testePaginaAssembleias();
 testePaginaCalendario();
 testeCabecalho();
 testeIntegridade();
+testeRecomendacaoNoInicio();
 testeContaPerfilCondominios();
 testeRouterConta();
 console.log('✓ Testes da área do condómino passaram (mobile-first, sem base de dados).');

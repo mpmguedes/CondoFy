@@ -151,6 +151,10 @@ require.cache[modelsPath] = {
     OrcamentoRubrica: { findAll: async () => ORCAMENTO.rubricas, findOne: async () => ORCAMENTO.rubricas[0], count: async () => ORCAMENTO.rubricas.length },
     Categoria: { findAll: async () => [], findByPk: async () => null },
     AgendaItem: { findAll: async () => [] },
+    // Recomendações contextuais (Fase 2G): o Início lê o estado de dispensa da
+    // conta. O comportamento a sério (dispensar → esconder → reaparecer) é
+    // testado em scripts/test-rotas-recomendacoes.js.
+    RecomendacaoEstado: { findAll: async () => [], findOne: async () => null, create: async () => ({}), destroy: async () => 0 },
   },
 };
 
@@ -430,7 +434,19 @@ const PAGINAS = [
   assert.strictEqual((fonteConta.match(/router\.post\(/g) || []).length, 1,
     'área pessoal: uma só rota de escrita (entrar num condomínio)');
 
-  // 7. A correção não pode voltar a depender de uma variável inexistente.
+  // 7. Recomendação contextual no Início (Fase 2G): aparece porque a condição
+  // existe (2FA inativo no utilizador de exemplo). O comportamento completo
+  // (dispensa, intervalo, ativação do 2FA) é testado em
+  // scripts/test-rotas-recomendacoes.js.
+  const inicio = await pedir('/condomino');
+  assert.ok(/Reforce a segurança da sua conta com 2FA/.test(inicio.html),
+    'Início: recomendação de 2FA apresentada quando a conta não tem 2FA');
+  assert.ok(/action="\/condomino\/recomendacoes\/2fa_ativo\/dispensar"/.test(inicio.html),
+    'Início: dispensa ligada à recomendação certa');
+  assert.strictEqual((inicio.html.match(/portal-recomendacao-titulo/g) || []).length, 1,
+    'Início: no máximo uma recomendação apresentada');
+
+  // 8. A correção não pode voltar a depender de uma variável inexistente.
   const fonte = fs.readFileSync(path.join(RAIZ, 'routes', 'condomino.js'), 'utf8');
   const rotaQuotas = fonte.slice(fonte.indexOf("router.get('/quotas'"), fonte.indexOf("router.get('/pagamentos'"));
   assert.ok(/const hoje = new Date\(\)\.toISOString\(\)\.slice\(0, 10\);/.test(rotaQuotas),
