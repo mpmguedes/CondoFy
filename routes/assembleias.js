@@ -20,6 +20,7 @@ const {
   validarDeliberacao,
   utilizacaoPorItemC,
   temMovimentosAssociados,
+  valorDespesasDeliberacaoC,
   ESTADOS_ASSEMBLEIA_SEM_DELIBERACAO,
 } = require('../helpers/fcr-deliberacoes');
 
@@ -69,6 +70,20 @@ function parseDecimal(valor, fallback = 0) {
   if (valor === null || valor === undefined || valor === '') return fallback;
   const n = parseFloat(String(valor).replace(',', '.'));
   return Number.isFinite(n) ? n : fallback;
+}
+
+// Nº de despesas associadas a um ponto (para a mensagem de bloqueio).
+async function contarDespesasAssociadas(itemId) {
+  const { Despesa } = require('../models');
+  if (!itemId) return 0;
+  return Despesa.count({ where: { deliberacao_id: itemId } });
+}
+
+// Nº de movimentos bancários associados a um ponto (utilização do FCR).
+async function contarMovimentosAssociados(itemId) {
+  const { MovimentoBancario } = require('../models');
+  if (!itemId) return 0;
+  return MovimentoBancario.count({ where: { deliberacao_id: itemId } });
 }
 
 // Assembleia do condomínio ATIVO (null quando não pertence — bloqueia IDOR).
@@ -273,14 +288,22 @@ router.post('/assembleias/:id/agenda/:aid/eliminar', async (req, res) => {
   const item = await AgendaItem.findOne({ where: { id: req.params.aid, assembleia_id: assembleia.id } });
   if (!item) return res.redirect(`/admin/assembleias/${assembleia.id}`);
 
-  // Um ponto já usado financeiramente (utilização do FCR registada em
-  // movimentos bancários) nunca é eliminado: apagaria a ligação entre a
-  // deliberação e o dinheiro que ela autorizou.
-  const movimentos = await temMovimentosAssociados(item.id);
-  if (movimentos > 0) {
+  // Um ponto já usado financeiramente nunca é eliminado: apagaria a ligação
+  // entre a deliberação e o dinheiro que ela autorizou. Contam tanto os
+  // movimentos bancários da utilização do FCR como as DESPESAS associadas à
+  // deliberação (`despesas.deliberacao_id`, migração 75).
+  const associados = await temMovimentosAssociados(item.id);
+  if (associados > 0) {
+    const [despesas, movimentos] = await Promise.all([
+      contarDespesasAssociadas(item.id),
+      contarMovimentosAssociados(item.id),
+    ]);
+    const partes = [];
+    if (movimentos > 0) partes.push(`${movimentos} movimento(s) do Fundo de Reserva`);
+    if (despesas > 0) partes.push(`${despesas} despesa(s) associada(s)`);
     req.flash(
       'error_msg',
-      `Este ponto não pode ser eliminado: já existe utilização financeira associada à deliberação (${movimentos} movimento(s) do Fundo de Reserva). Anule os movimentos primeiro, se for mesmo necessário.`
+      `Este ponto não pode ser eliminado: a deliberação já tem utilização financeira associada (${partes.join(' e ')}). Anule esses registos primeiro, se for mesmo necessário.`
     );
     return res.redirect(`/admin/assembleias/${assembleia.id}`);
   }

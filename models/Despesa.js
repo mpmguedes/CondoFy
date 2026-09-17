@@ -17,6 +17,9 @@ module.exports = (sequelize) => {
       fornecedor_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       conta_bancaria_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       metodo_pagamento_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+      // Deliberação de assembleia (agenda_items) que autoriza esta despesa com
+      // Fundo de Reserva. NULL = despesa corrente (o caso normal).
+      deliberacao_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       observacoes: { type: DataTypes.TEXT, allowNull: true },
       estado: {
         type: DataTypes.ENUM('registada', 'paga', 'anulada'),

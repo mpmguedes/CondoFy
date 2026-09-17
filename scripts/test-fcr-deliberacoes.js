@@ -191,7 +191,7 @@ const modelos = {
   Fracao: { findAll: async () => [], findOne: async () => null },
   Pessoa: { findAll: async () => [] },
   Numeracao: { findOne: async () => null, create: async () => ({ sequencia: 0, update: async () => {} }) },
-  Despesa: { findAll: async () => [], sum: async () => 0 },
+  Despesa: { findAll: async () => [], sum: async () => 0, count: async () => 0 },
   ExtraQuota: { findAll: async () => [] },
   ExtraQuotaParcela: { findAll: async () => [] },
   PagamentoExtraParcela: { findAll: async () => [] },

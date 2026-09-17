@@ -25,7 +25,18 @@
         {{#each despesas}}
         <tr>
           <td class="font-monospace small">{{#if numero_documento}}{{numero_documento}}{{else}}—{{/if}}</td>
-          <td class="fw-semibold">{{descricao}}</td>
+          <td class="fw-semibold">
+            {{descricao}}
+            {{#if deliberacao}}
+            <div class="small">
+              <span class="badge text-bg-light border" title="Despesa autorizada por deliberação de assembleia (Fundo de Reserva)">
+                FCR
+                {{#if deliberacao.assembleia.numero}}· Assembleia {{deliberacao.assembleia.numero}}{{/if}}
+                · ponto {{deliberacao.ordem}}
+              </span>
+            </div>
+            {{/if}}
+          </td>
           <td>{{#if categoria}}{{categoria.nome}}{{else}}—{{/if}}</td>
           <td>{{formatDate data}}</td>
           <td class="text-end fw-semibold">{{eur valor}}</td>

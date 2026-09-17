@@ -23,6 +23,8 @@ const {
   Recibo,
   ReciboQuota,
   ReciboExtraParcela,
+  AgendaItem,
+  Assembleia,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
@@ -50,7 +52,12 @@ const background = require('../helpers/background-jobs');
 const { getQuotaConfig, setQuotaConfig, validarFcrPercentagem } = require('../helpers/quotas-config');
 const { calcularQuota, calcularQuotasOrcamento, dividirComponentesQuota } = require('../helpers/quotas-calc');
 const { resumoFcr, transferirFcr, transferirFcrAprovado } = require('../helpers/fcr');
-const { deliberacoesAprovadas } = require('../helpers/fcr-deliberacoes');
+const {
+  deliberacoesAprovadas,
+  carregarDeliberacao,
+  deliberacaoComUtilizacao,
+  validarAssociacaoDespesa,
+} = require('../helpers/fcr-deliberacoes');
 const { validarPermilagem } = require('../helpers/permilagem');
 const storage = require('../helpers/storage');
 
@@ -65,7 +72,10 @@ function carregarConta(req) {
   return ContaBancaria.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
 }
 function carregarDespesa(req) {
-  return Despesa.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
+  return Despesa.findOne({
+    where: { id: req.params.id, condominio_id: req.condominioId },
+    include: [{ model: AgendaItem, as: 'deliberacao', include: [{ model: Assembleia, as: 'assembleia', attributes: ['id', 'numero', 'data'] }] }],
+  });
 }
 function ondeCondominio(req, extra = {}) {
   return { condominio_id: req.condominioId, ...extra };
@@ -80,6 +90,22 @@ function parseDecimal(value, fallback = 0) {
   if (value === null || value === undefined || value === '') return fallback;
   const n = parseFloat(String(value).replace(',', '.'));
   return Number.isFinite(n) ? n : fallback;
+}
+
+// Detalhes de auditoria da ligação Despesa ↔ Deliberação do FCR. Só é
+// preenchido quando a despesa tem deliberação: as despesas correntes mantêm os
+// eventos de auditoria exatamente como estavam.
+function detalhesFcrDespesa(deliberacaoId, validada) {
+  if (!deliberacaoId) return undefined;
+  return {
+    deliberacaoId: Number(deliberacaoId),
+    assembleiaId: validada && validada.deliberacao && validada.deliberacao.assembleia
+      ? Number(validada.deliberacao.assembleia.id)
+      : null,
+    valorAprovadoC: validada ? validada.valorAprovadoC : null,
+    jaAssociadoC: validada ? validada.jaAssociadoC : null,
+    disponivelC: validada ? validada.disponivelC : null,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -347,21 +373,31 @@ router.get('/despesas', async (req, res) => {
       { model: Categoria, as: 'categoria' },
       { model: ContaBancaria, as: 'conta_bancaria' },
       { model: MetodoPagamento, as: 'metodo_pagamento' },
+      // Deliberação que autoriza a despesa com Fundo de Reserva (badge na lista).
+      { model: AgendaItem, as: 'deliberacao', include: [{ model: Assembleia, as: 'assembleia', attributes: ['id', 'numero', 'data'] }] },
     ],
     order: [['data', 'DESC']],
   });
   res.render('admin/despesas/listar', { titulo: 'Despesas', despesas });
 });
 
+// Deliberações aprovadas com valor ainda disponível para despesas (só as que
+// podem ser escolhidas no formulário). Reutiliza o cálculo já existente.
+async function deliberacoesParaDespesa(req) {
+  const deliberacoes = await deliberacoesAprovadas({ condominioId: req.condominioId });
+  return deliberacoes.filter((d) => d.disponivelC > 0);
+}
+
 router.get('/despesas/nova', async (req, res) => {
-  const [categorias, contas, metodos, fornecedores] = await Promise.all([
+  const [categorias, contas, metodos, fornecedores, deliberacoes] = await Promise.all([
     Categoria.findAll({ where: { tipo: 'despesa', ativa: true }, order: [['nome', 'ASC']] }),
     ContaBancaria.findAll({ where: ondeCondominio(req, { ativa: true }), order: [['nome', 'ASC']] }),
     MetodoPagamento.findAll({ where: { ativo: true }, order: [['nome', 'ASC']] }),
     // Fornecedores apenas do condomínio ativo (cada condomínio tem a sua lista).
     Fornecedor.findAll({ where: { condominio_id: req.condominioId, ativo: true }, order: [['nome', 'ASC']] }),
+    deliberacoesParaDespesa(req),
   ]);
-  res.render('admin/despesas/form', { titulo: 'Nova despesa', despesa: null, categorias, contas, metodos, fornecedores });
+  res.render('admin/despesas/form', { titulo: 'Nova despesa', despesa: null, categorias, contas, metodos, fornecedores, deliberacoes });
 });
 
 router.post('/despesas', async (req, res) => {
@@ -386,6 +422,25 @@ router.post('/despesas', async (req, res) => {
     else fornecedorTexto = f.nome;
   }
 
+  // Fundo de Reserva: a despesa pode ser ligada à deliberação que a autoriza
+  // (opcional — sem deliberação é uma despesa corrente). A cadeia
+  // deliberação → item → assembleia → condomínio é validada na ajuda.
+  const deliberacaoId = parseInt(req.body.deliberacao_id, 10) || null;
+  let deliberacaoValidada = null;
+  if (deliberacaoId) {
+    const decisao = await validarAssociacaoDespesa({
+      deliberacaoId,
+      condominioId: req.condominioId,
+      valorC: toCents(valor),
+      contaBancariaId: contaId,
+    });
+    if (!decisao.ok) {
+      req.flash('error_msg', decisao.mensagem);
+      return res.redirect('/admin/despesas/nova');
+    }
+    deliberacaoValidada = decisao;
+  }
+
   const despesa = await Despesa.create({
     condominio_id: req.condominioId,
     numero_documento: numero,
@@ -399,11 +454,18 @@ router.post('/despesas', async (req, res) => {
     fornecedor_id,
     conta_bancaria_id: contaId,
     metodo_pagamento_id: metodo_pagamento_id || null,
+    deliberacao_id: deliberacaoId,
     observacoes,
     estado: estado || 'registada',
   });
   await sincronizarMovimentoDespesa(despesa, req.user.id);
-  await audit({ userId: req.user.id, acao: 'criar_despesa', entidade: 'Despesa', entidadeId: despesa.id });
+  await audit({
+    userId: req.user.id,
+    acao: 'criar_despesa',
+    entidade: 'Despesa',
+    entidadeId: despesa.id,
+    detalhes: detalhesFcrDespesa(deliberacaoId, deliberacaoValidada),
+  });
   req.flash('success_msg', 'Despesa criada.');
   res.redirect('/admin/despesas');
 });
@@ -411,13 +473,32 @@ router.post('/despesas', async (req, res) => {
 router.get('/despesas/:id/editar', async (req, res) => {
   const despesa = await carregarDespesa(req);
   if (!despesa) return res.redirect('/admin/despesas');
-  const [categorias, contas, metodos, fornecedores] = await Promise.all([
+  const [categorias, contas, metodos, fornecedores, deliberacoes] = await Promise.all([
     Categoria.findAll({ where: { tipo: 'despesa' }, order: [['nome', 'ASC']] }),
     ContaBancaria.findAll({ where: ondeCondominio(req), order: [['nome', 'ASC']] }),
     MetodoPagamento.findAll({ order: [['nome', 'ASC']] }),
     Fornecedor.findAll({ where: { condominio_id: req.condominioId }, order: [['nome', 'ASC']] }),
+    deliberacoesParaDespesa(req),
   ]);
-  res.render('admin/despesas/form', { titulo: 'Editar despesa', despesa, categorias, contas, metodos, fornecedores });
+  // A deliberação já associada continua a poder ser mantida mesmo que o
+  // disponível se tenha esgotado (senão a edição falharia sem motivo).
+  const deliberacaoAtualIncluida = Boolean(
+    despesa.deliberacao_id && deliberacoes.some((d) => Number(d.id) === Number(despesa.deliberacao_id))
+  );
+  if (despesa.deliberacao_id && !deliberacaoAtualIncluida) {
+    const atual = await carregarDeliberacao({ deliberacaoId: despesa.deliberacao_id, condominioId: req.condominioId });
+    if (atual) deliberacoes.unshift(await deliberacaoComUtilizacao(atual, { condominioId: req.condominioId }));
+  }
+  res.render('admin/despesas/form', {
+    titulo: 'Editar despesa',
+    despesa,
+    categorias,
+    contas,
+    metodos,
+    fornecedores,
+    deliberacoes,
+    deliberacaoAtualIncluida,
+  });
 });
 
 router.post('/despesas/:id', async (req, res) => {
@@ -440,6 +521,25 @@ router.post('/despesas/:id', async (req, res) => {
     else fornecedorTexto = f.nome;
   }
 
+  // Deliberação do FCR: validada como na criação (a própria despesa é ignorada
+  // no cálculo do que já está associado, para poder ser reeditada).
+  const deliberacaoId = parseInt(req.body.deliberacao_id, 10) || null;
+  let deliberacaoValidada = null;
+  if (deliberacaoId) {
+    const decisao = await validarAssociacaoDespesa({
+      deliberacaoId,
+      condominioId: req.condominioId,
+      valorC: toCents(valor),
+      contaBancariaId: contaId,
+      ignorarDespesaId: despesa.id,
+    });
+    if (!decisao.ok) {
+      req.flash('error_msg', decisao.mensagem);
+      return res.redirect(`/admin/despesas/${despesa.id}/editar`);
+    }
+    deliberacaoValidada = decisao;
+  }
+
   await despesa.update({
     descricao,
     categoria_id: categoria_id || null,
@@ -451,11 +551,18 @@ router.post('/despesas/:id', async (req, res) => {
     fornecedor_id,
     conta_bancaria_id: contaId,
     metodo_pagamento_id: metodo_pagamento_id || null,
+    deliberacao_id: deliberacaoId,
     observacoes,
     estado: estado || 'registada',
   });
   await sincronizarMovimentoDespesa(despesa, req.user.id);
-  await audit({ userId: req.user.id, acao: 'editar_despesa', entidade: 'Despesa', entidadeId: despesa.id });
+  await audit({
+    userId: req.user.id,
+    acao: 'editar_despesa',
+    entidade: 'Despesa',
+    entidadeId: despesa.id,
+    detalhes: detalhesFcrDespesa(deliberacaoId, deliberacaoValidada),
+  });
   req.flash('success_msg', 'Despesa atualizada.');
   res.redirect('/admin/despesas');
 });

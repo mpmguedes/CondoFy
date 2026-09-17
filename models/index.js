@@ -248,6 +248,9 @@ MovimentoBancario.belongsTo(Condominio, { foreignKey: 'condominio_id', as: 'cond
 // Deliberação que autoriza a utilização do FCR.
 MovimentoBancario.belongsTo(AgendaItem, { foreignKey: 'deliberacao_id', as: 'deliberacao' });
 AgendaItem.hasMany(MovimentoBancario, { foreignKey: 'deliberacao_id', as: 'movimentos_fcr' });
+// Deliberação que autoriza uma despesa paga com o Fundo de Reserva.
+Despesa.belongsTo(AgendaItem, { foreignKey: 'deliberacao_id', as: 'deliberacao' });
+AgendaItem.hasMany(Despesa, { foreignKey: 'deliberacao_id', as: 'despesas_fcr' });
 
 // Orçamento (modelo antigo, mantido por compatibilidade)
 OrcamentoItem.belongsTo(Categoria, { foreignKey: 'categoria_id', as: 'categoria' });

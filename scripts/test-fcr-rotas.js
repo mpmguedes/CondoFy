@@ -137,7 +137,7 @@ const modelos = {
     findOne: async (o = {}) => comMetodos(onde(db.assembleias, o.where)[0]) || null,
     findAll: async (o = {}) => onde(db.assembleias, o.where).map(comMetodos),
   },
-  Despesa: { findAll: async () => [], sum: async () => 0 },
+  Despesa: { findAll: async () => [], sum: async () => 0, count: async () => 0 },
   Documento: { findAll: async () => [], create: async () => ({}) },
   Fracao: { findAll: async () => [], findOne: async () => null },
   Orcamento: { findAll: async () => [] },

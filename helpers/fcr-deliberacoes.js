@@ -11,7 +11,7 @@
 // Este módulo trata da POLÍTICA (quem pode autorizar quanto); o dinheiro
 // (recebido/transferido/disponível) está em helpers/fcr.js.
 const { Op } = require('sequelize');
-const { AgendaItem, Assembleia, MovimentoBancario, ContaBancaria } = require('../models');
+const { AgendaItem, Assembleia, MovimentoBancario, ContaBancaria, Despesa } = require('../models');
 const { toCents, fromCents } = require('./money');
 
 // Assembleias em que uma deliberação aprovada NUNCA é aceite: a assembleia não
@@ -189,13 +189,121 @@ async function utilizacaoPorItemC({ condominioId, itemIds = [], transaction } = 
   return mapa;
 }
 
+// ── Despesas associadas a uma deliberação ──────────────────────────
+// Σ valor das despesas NÃO anuladas com esse `deliberacao_id` (as anuladas
+// ficam no histórico mas não contam). `ignorarDespesaId` permite excluir a
+// própria despesa ao editar.
+async function valorDespesasDeliberacaoC(deliberacaoId, { transaction, ignorarDespesaId = null } = {}) {
+  if (!deliberacaoId) return 0;
+  const where = { deliberacao_id: deliberacaoId, estado: { [Op.ne]: 'anulada' } };
+  if (ignorarDespesaId) where.id = { [Op.ne]: ignorarDespesaId };
+  const despesas = await Despesa.findAll({ where, attributes: ['valor'], transaction });
+  return despesas.reduce((s, d) => s + toCents(d.valor), 0);
+}
+
+// ── Regra: ligação validada entre uma despesa e a deliberação ───────
+// Aplica a MESMA política da utilização do FCR, reutilizando
+// `validarDeliberacao` (não há uma segunda regra a manter):
+//  · a deliberação tem de existir e pertencer ao condomínio ativo (cadeia
+//    deliberação → agenda_item → assembleia → condomínio, já validada em
+//    `carregarDeliberacao`);
+//  · tem de estar aprovada, com valor aprovado > 0, em assembleia que delibera;
+//  · a conta de pagamento não pode ser uma conta do tipo `fundo_reserva` (o
+//    fundo não paga diretamente: passa pela transferência fundo → corrente);
+//  · as despesas não anuladas já associadas + esta não podem exceder o valor
+//    aprovado.
+// Devolve { ok:true, valorAprovadoC, jaAssociadoC, disponivelC } ou
+// { ok:false, motivo, mensagem }.
+async function validarAssociacaoDespesa({
+  deliberacaoId,
+  condominioId,
+  valorC,
+  contaBancariaId = null,
+  ignorarDespesaId = null,
+  transaction,
+} = {}) {
+  if (!deliberacaoId) {
+    return { ok: false, motivo: 'deliberacao_obrigatoria', mensagem: 'Escolha a deliberação que autoriza esta despesa.' };
+  }
+  const item = await carregarDeliberacao({ deliberacaoId, condominioId, transaction });
+  if (!item) {
+    return { ok: false, motivo: 'deliberacao_invalida', mensagem: 'A deliberação indicada não existe neste condomínio.' };
+  }
+  if (!item.assembleia || ESTADOS_ASSEMBLEIA_SEM_DELIBERACAO.includes(item.assembleia.estado)) {
+    return {
+      ok: false,
+      motivo: 'assembleia_nao_delibera',
+      mensagem: 'A assembleia desta deliberação não autoriza despesas com o Fundo de Reserva.',
+    };
+  }
+  if (item.deliberacao_estado !== 'aprovada') {
+    return {
+      ok: false,
+      motivo: 'deliberacao_nao_aprovada',
+      mensagem: 'Só uma deliberação aprovada autoriza despesas com o Fundo de Reserva.',
+    };
+  }
+  // Estado/valor do ponto, com a MESMA regra do registo da deliberação
+  // («aprovada exige valor > 0» e sujeito a votação) — não há uma segunda regra.
+  const estado = validarDeliberacao({
+    assembleia: item.assembleia,
+    item,
+    estado: item.deliberacao_estado,
+    valorAprovadoC: toCents(item.valor_aprovado),
+  });
+  if (!estado.ok) {
+    return { ok: false, motivo: estado.motivo, mensagem: estado.mensagem };
+  }
+  const valorAprovadoC = estado.valorAprovadoC;
+
+  // A conta de pagamento tem de ser do condomínio e não pode ser o próprio fundo.
+  if (contaBancariaId) {
+    const conta = await ContaBancaria.findOne({
+      where: { id: contaBancariaId, condominio_id: condominioId },
+      attributes: ['id', 'tipo', 'nome'],
+      transaction,
+    });
+    if (!conta) {
+      return { ok: false, motivo: 'conta_invalida', mensagem: 'Conta bancária de pagamento não encontrada neste condomínio.' };
+    }
+    if (conta.tipo === 'fundo_reserva') {
+      return {
+        ok: false,
+        motivo: 'conta_fundo_reserva',
+        mensagem: 'A conta do Fundo de Reserva não paga despesas diretamente: transfira o valor aprovado para a conta corrente e registe a despesa por essa conta.',
+      };
+    }
+  }
+
+  const valorDespesaC = Math.max(0, Math.round(Number(valorC) || 0));
+  const jaAssociadoC = await valorDespesasDeliberacaoC(item.id, { transaction, ignorarDespesaId });
+  const disponivelC = Math.max(0, valorAprovadoC - jaAssociadoC);
+  if (valorDespesaC > disponivelC) {
+    return {
+      ok: false,
+      motivo: 'acima_do_aprovado',
+      valorAprovadoC,
+      jaAssociadoC,
+      disponivelC,
+      valorC: valorDespesaC,
+      mensagem: `O valor excede o que resta do valor aprovado nesta deliberação (${fromCents(disponivelC).toFixed(2).replace('.', ',')} € disponíveis de ${fromCents(valorAprovadoC).toFixed(2).replace('.', ',')} €).`,
+    };
+  }
+  return { ok: true, valorAprovadoC, jaAssociadoC, disponivelC, deliberacao: item };
+}
+
 // ── Existe utilização financeira deste ponto? ───────────────────────
-// Usado para impedir a eliminação de um ponto já usado (qualquer movimento com
-// esse deliberacao_id, em qualquer estado: anulado também conta, para não
-// deixar históricos órfãos).
+// Usado para impedir a eliminação de um ponto já usado: conta movimentos com
+// esse `deliberacao_id` (em qualquer estado — um movimento anulado continua a
+// ser histórico) E despesas associadas (mesmo as anuladas, para não deixar
+// registos órfãos).
 async function temMovimentosAssociados(deliberacaoId, { transaction } = {}) {
   if (!deliberacaoId) return 0;
-  return MovimentoBancario.count({ where: { deliberacao_id: deliberacaoId }, transaction });
+  const [movimentos, despesas] = await Promise.all([
+    MovimentoBancario.count({ where: { deliberacao_id: deliberacaoId }, transaction }),
+    Despesa.count({ where: { deliberacao_id: deliberacaoId }, transaction }),
+  ]);
+  return movimentos + despesas;
 }
 
 module.exports = {
@@ -203,6 +311,8 @@ module.exports = {
   validarDeliberacao,
   carregarDeliberacao,
   valorUtilizadoDeliberacaoC,
+  valorDespesasDeliberacaoC,
+  validarAssociacaoDespesa,
   deliberacaoComUtilizacao,
   deliberacoesAprovadas,
   utilizacaoPorItemC,

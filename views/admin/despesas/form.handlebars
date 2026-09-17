@@ -78,6 +78,25 @@
             <label class="form-label">Observações</label>
             <textarea class="form-control" name="observacoes" rows="2">{{despesa.observacoes}}</textarea>
           </div>
+          <div class="mb-3">
+            <label class="form-label">Deliberação do Fundo de Reserva</label>
+            <select class="form-select" name="deliberacao_id">
+              <option value="">— Não é paga pelo Fundo de Reserva —</option>
+              {{#if despesa.deliberacao_id}}
+              {{#unless deliberacaoAtualIncluida}}
+              <option value="{{despesa.deliberacao_id}}" selected>Deliberação associada (assembleia {{#if despesa.deliberacao.assembleia.numero}}{{despesa.deliberacao.assembleia.numero}}{{else}}—{{/if}} · ponto {{despesa.deliberacao.ordem}})</option>
+              {{/unless}}
+              {{/if}}
+              {{#each deliberacoes}}
+              <option value="{{id}}" {{selected id ../despesa.deliberacao_id}}>
+                {{#if assembleia.numero}}Assembleia {{assembleia.numero}}{{else}}Assembleia{{/if}} · ponto {{ordem}}: {{descricao}} — disponível {{eur disponivel}}
+              </option>
+              {{/each}}
+            </select>
+            <div class="form-text">
+              Só aparecem deliberações <strong>aprovadas</strong> com valor ainda disponível. Escolher uma liga a despesa à assembleia que a autorizou; a conta de pagamento não pode ser a própria conta do Fundo de Reserva (transfira primeiro o valor aprovado para a conta corrente).
+            </div>
+          </div>
           <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1">save</span>Guardar</button>
         </form>
       </div>
