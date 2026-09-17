@@ -344,7 +344,9 @@ async function main() {
   const [trfEnt] = await S(`
     SELECT COALESCE(SUM(valor),0) AS v, COUNT(*) AS n FROM movimentos_bancarios
     WHERE referencia='TRANSF' AND tipo='entrada' AND estado='confirmado'`);
-  const [trfTipo] = await S(`
+  // O ENUM 'transferencia' é legado: o código atual escreve referencia='TRANSF' com
+  // tipo 'saida'/'entrada'. Pode devolver 0 linhas → guardar o ARRAY, não a 1.ª linha.
+  const trfTipo = await S(`
     SELECT COALESCE(SUM(valor),0) AS v, COUNT(*) AS n, tipo FROM movimentos_bancarios
     WHERE tipo='transferencia' GROUP BY tipo`);
 
