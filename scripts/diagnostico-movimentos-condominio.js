@@ -92,7 +92,7 @@ async function main() {
   const porCond = await S(`
     SELECT
       mb.condominio_id AS cid,
-      COALESCE(c.nome, c.designacao, '(removido)') AS nome,
+      COALESCE(c.designacao, '(removido)') AS nome,
       COUNT(*) AS n,
       SUM(CASE WHEN mb.estado = 'confirmado' THEN 1 ELSE 0 END) AS n_conf,
       SUM(CASE WHEN mb.estado = 'anulado'   THEN 1 ELSE 0 END) AS n_anul,
@@ -136,7 +136,7 @@ async function main() {
       mb.conta_bancaria_id AS conta_id,
       cb.nome AS conta,
       cb.condominio_id AS conta_cid,
-      COALESCE(c.nome, c.designacao, '(sem condomínio)') AS conta_cond,
+      COALESCE(c.designacao, '(sem condomínio)') AS conta_cond,
       COUNT(*) AS n,
       SUM(CASE WHEN mb.tipo = 'entrada' AND mb.estado = 'confirmado' THEN mb.valor ELSE 0 END) AS v_ent,
       SUM(CASE WHEN mb.tipo = 'saida'   AND mb.estado = 'confirmado' THEN mb.valor ELSE 0 END) AS v_sai,
@@ -336,7 +336,7 @@ async function main() {
   const contas = await S(`
     SELECT
       cb.id, cb.condominio_id AS cid,
-      COALESCE(c.nome, c.designacao, '(sem condomínio)') AS cond,
+      COALESCE(c.designacao, '(sem condomínio)') AS cond,
       cb.nome, cb.banco, cb.iban, cb.tipo, cb.saldo_inicial,
       cb.data_saldo_inicial, cb.ativa,
       COUNT(mb.id) AS n_mov,
