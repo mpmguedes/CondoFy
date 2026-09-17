@@ -31,7 +31,7 @@ const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const { toCents, fromCents, toNumber } = require('../helpers/money');
-const { MESES, monthName } = require('../helpers/dates');
+const { MESES, monthName, currentYear } = require('../helpers/dates');
 const { resumoCondominio, resumoFracao, estadoEfetivo } = require('../helpers/saldos');
 const { getCondominio } = require('../helpers/condominio');
 const { PASTAS_BASE, resolverPastaDocumento } = require('../helpers/documento-pastas');
@@ -41,6 +41,10 @@ const recibos = require('../helpers/recibos');
 const quotaModulo = require('./quotas-modulo');
 const { uploadComprovativo, apagarComprovativo } = require('../helpers/comprovativos');
 const { sincronizarMovimentoDespesa } = require('../helpers/movimentos');
+const extrato = require('../helpers/extrato');
+// Lê e valida os filtros do extrato a partir da query string (nunca o
+// condomínio — esse vem sempre da sessão).
+const lerFiltrosExtrato = extrato.lerFiltros;
 const { gerarAvisoQuotaPDF, gerarReciboPDF } = require('../helpers/pdf');
 const cabecalhos = require('../helpers/cabecalhos-ficheiro');
 const { compor: comporEmail, nomeFicheiro: nomeFicheiroEmail } = require('../helpers/email-templates');
@@ -352,6 +356,104 @@ router.post('/contas/transferir-fcr', async (req, res) => {
   }
 });
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// EXTRATO BANCÁRIO
+//
+// Consulta cronológica dos movimentos do condomínio, com filtros por conta,
+// período e tipo, e saldo corrente por movimento.
+//
+// Toda a lógica de consulta e de cálculo vive em `helpers/extrato.js`; aqui
+// só se leem os parâmetros, se resolve o condomínio (sempre da SESSÃO, via
+// tenant.comCondominioAtivo) e se apresenta.
+//
+// Só de leitura, exceto a anulação lógica (POST .../anular), que preserva o
+// registo e não afeta o saldo. A edição de um movimento com origem
+// operacional (pagamento/despesa/quota extra) NÃO é feita aqui: faz-se na
+// entidade de origem, pelo fluxo que já existe.
+// ═══════════════════════════════════════════════════════════════════
+
+// Período por omissão: o ano corrente, igual ao Relatório Financeiro. Não se
+// inventa um intervalo arbitrário — segue-se o padrão já estabelecido.
+function periodoOmissaoExtrato() {
+  const ano = currentYear();
+  return { inicio: `${ano}-01-01`, fim: `${ano}-12-31` };
+}
+
+router.get('/movimentos', async (req, res) => {
+  const filtros = lerFiltrosExtrato(req.query);
+  const omissao = periodoOmissaoExtrato();
+  // Sem parâmetros no URL, aplica-se o período por omissão; assim que o
+  // utilizador filtra (mesmo que limpe as datas), respeita-se a escolha.
+  const semParametros = !req.query.inicio && !req.query.fim && !req.query.conta
+    && !req.query.tipo && !req.query.estado;
+  const efetivos = semParametros ? { ...filtros, inicio: omissao.inicio, fim: omissao.fim } : filtros;
+
+  const [contas, dados] = await Promise.all([
+    extrato.contasDoCondominio(req.condominioId),
+    extrato.extrato({ condominioId: req.condominioId, filtros: efetivos }),
+  ]);
+
+  // Conta inexistente OU de outro condomínio: mesmo tratamento. Não se revela
+  // a existência de contas de outros condomínios.
+  if (efetivos.conta && !dados.conta) {
+    req.flash('error_msg', 'Conta bancária não encontrada neste condomínio.');
+    return res.redirect('/admin/movimentos');
+  }
+
+  return res.render('admin/movimentos/listar', {
+    titulo: 'Extrato bancário',
+    contas: contas.map((c) => ({
+      id: c.id, nome: c.nome, banco: c.banco, tipo: c.tipo, ativa: c.ativa,
+    })),
+    contaSelecionada: dados.conta,
+    filtros: efetivos,
+    linhas: dados.linhas,
+    temMovimentos: dados.temMovimentos,
+    resumo: dados.resumo,
+    // Ligação de limpeza: sem filtros nenhuns (reaparece o período por omissão).
+    urlLimpar: '/admin/movimentos',
+  });
+});
+
+// Anulação lógica de um movimento MANUAL (ajuste). Preserva o registo: só
+// muda o estado. Um movimento com origem operacional é recusado aqui — a
+// correção faz-se na entidade de origem, para não criar divergência.
+router.post('/movimentos/:id(\\d+)/anular', async (req, res) => {
+  // O where inclui o condomínio: um movimento de outro condomínio é
+  // indistinguível de um inexistente (nunca 500, nunca 403 revelador).
+  const movimento = await MovimentoBancario.findOne({
+    where: { id: req.params.id, condominio_id: req.condominioId },
+  });
+  if (!movimento) {
+    req.flash('error_msg', 'Movimento não encontrado neste condomínio.');
+    return res.redirect('/admin/movimentos');
+  }
+  if (movimento.estado === 'anulado') {
+    req.flash('error_msg', 'Este movimento já está anulado.');
+    return res.redirect('/admin/movimentos');
+  }
+
+  const categoria = extrato.categoriaDe(movimento);
+  if (categoria !== extrato.CATEGORIAS.ajuste) {
+    req.flash(
+      'error_msg',
+      `Este movimento tem origem em «${extrato.ETIQUETAS[categoria]}» e não pode ser anulado no extrato. `
+      + 'Corrija o registo na origem, para o extrato e a origem não ficarem divergentes.'
+    );
+    return res.redirect('/admin/movimentos');
+  }
+
+  await movimento.update({ estado: 'anulado' });
+  await audit({
+    userId: req.user.id,
+    acao: 'anular_movimento_bancario',
+    entidade: 'MovimentoBancario',
+    entidadeId: movimento.id,
+  });
+  req.flash('success_msg', 'Movimento anulado. Continua visível no extrato e não afeta o saldo.');
+  return res.redirect('/admin/movimentos');
+});
 
 // ═══════════════════════════════════════════════════════════════════
 // CATEGORIAS

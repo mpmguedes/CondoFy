@@ -1,0 +1,171 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Extrato bancário</h1>
+    <p class="subtitle">
+      {{#if contaSelecionada}}{{contaSelecionada.nome}}{{#if contaSelecionada.banco}} · {{contaSelecionada.banco}}{{/if}}
+      {{#unless contaSelecionada.ativa}} <span class="badge text-bg-secondary">Inativa</span>{{/unless}}
+      {{else}}Movimentos de todas as contas{{/if}}
+    </p>
+  </div>
+  <a href="/admin/contas" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">account_balance</span>Contas</a>
+</div>
+
+<form method="GET" action="/admin/movimentos" class="card mb-3">
+  <div class="card-body row g-2 align-items-end">
+    <div class="col-12 col-md-6 col-lg-3">
+      <label class="form-label" for="filtro-conta">Conta</label>
+      <select name="conta" id="filtro-conta" class="form-select">
+        <option value="">Todas as contas</option>
+        {{#each contas}}
+        <option value="{{id}}" {{#if (eq ../filtros.conta id)}}selected{{/if}}>{{nome}}{{#unless ativa}} (inativa){{/unless}}</option>
+        {{/each}}
+      </select>
+    </div>
+    <div class="col-6 col-md-3 col-lg-2">
+      <label class="form-label" for="filtro-inicio">Data inicial</label>
+      <input type="date" name="inicio" id="filtro-inicio" class="form-control" value="{{filtros.inicio}}" />
+    </div>
+    <div class="col-6 col-md-3 col-lg-2">
+      <label class="form-label" for="filtro-fim">Data final</label>
+      <input type="date" name="fim" id="filtro-fim" class="form-control" value="{{filtros.fim}}" />
+    </div>
+    <div class="col-6 col-md-3 col-lg-2">
+      <label class="form-label" for="filtro-tipo">Tipo</label>
+      <select name="tipo" id="filtro-tipo" class="form-select">
+        <option value="">Todos</option>
+        <option value="entrada" {{#if (eq filtros.tipo 'entrada')}}selected{{/if}}>Entradas</option>
+        <option value="saida" {{#if (eq filtros.tipo 'saida')}}selected{{/if}}>Saídas</option>
+        <option value="transferencia" {{#if (eq filtros.tipo 'transferencia')}}selected{{/if}}>Transferências</option>
+      </select>
+    </div>
+    <div class="col-6 col-md-3 col-lg-3 d-flex gap-2">
+      <button class="btn btn-primary flex-grow-1"><span class="material-symbols-outlined me-1">filter_list</span>Aplicar</button>
+      <a href="{{urlLimpar}}" class="btn btn-outline-secondary">Limpar</a>
+    </div>
+  </div>
+</form>
+
+{{#if temMovimentos}}
+{{#unless contaSelecionada}}
+<div class="alert alert-secondary d-flex align-items-center gap-2 py-2" role="status">
+  <span class="material-symbols-outlined">summarize</span>
+  <span>Está a ver todas as contas: os totais abaixo somam todas elas. A coluna <strong>Saldo</strong> mostra o saldo da conta de cada movimento.</span>
+</div>
+{{/unless}}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">{{#if resumo.temPeriodo}}Saldo anterior{{else}}Saldo inicial{{/if}}</div>
+      <div class="stat-value">{{eur resumo.saldoAnterior}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Entradas</div>
+      <div class="stat-value text-success">{{eur resumo.entradas}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Saídas</div>
+      <div class="stat-value text-danger">{{eur resumo.saidas}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Saldo final</div>
+      <div class="stat-value">{{eur resumo.saldoFinal}}</div>
+    </div></div>
+  </div>
+</div>
+
+{{#if resumo.nAnulados}}
+<div class="alert alert-secondary d-flex align-items-center gap-2 py-2" role="status">
+  <span class="material-symbols-outlined">info</span>
+  <span>{{resumo.nAnulados}} movimento(s) anulado(s) incluído(s) no extrato para histórico. Não afetam o saldo.</span>
+</div>
+{{/if}}
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Data</th>
+          <th>Descrição</th>
+          <th>Origem</th>
+          <th class="text-end">Entrada</th>
+          <th class="text-end">Saída</th>
+          <th class="text-end">Saldo</th>
+          <th>Estado</th>
+          <th class="text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each linhas}}
+        <tr {{#if anulado}}class="text-muted"{{/if}}>
+          <td class="text-nowrap">{{formatDate data}}</td>
+          <td>
+            <span {{#if anulado}}class="text-decoration-line-through"{{/if}}>{{#if descricao}}{{descricao}}{{else}}—{{/if}}</span>
+            {{!-- Sem conta selecionada, a lista mistura contas e o saldo é o da
+                 conta da linha: identificar a conta evita lê-lo como um total. --}}
+            {{#unless ../contaSelecionada}}
+            {{#if contaNome}}<span class="d-block small text-muted">{{contaNome}}</span>{{/if}}
+            {{/unless}}
+          </td>
+          <td>
+            <span class="badge text-bg-light border d-inline-flex align-items-center gap-1">
+              <span class="material-symbols-outlined" style="font-size:1rem">{{categoriaIcone}}</span>{{categoriaEtiqueta}}
+            </span>
+            {{!-- Transferência com par determinável: mostra «De → Para». Sem par, fica só o badge. --}}
+            {{#if transferenciaTemPar}}
+            <span class="small text-muted ms-1 d-inline-flex align-items-center gap-1">
+              {{transferenciaDe}}<span class="material-symbols-outlined" style="font-size:1rem">arrow_forward</span>{{transferenciaPara}}
+            </span>
+            {{/if}}
+            {{#if pagamentoId}}
+            <a href="/admin/pagamentos/{{pagamentoId}}" class="small ms-1">ver pagamento</a>
+            {{/if}}
+            {{#if despesaId}}
+            <a href="/admin/despesas/{{despesaId}}/editar" class="small ms-1">ver despesa</a>
+            {{/if}}
+            {{#if extraQuotaParcelaId}}
+            <a href="/admin/quotas-extra/{{extraQuotaParcelaId}}" class="small ms-1">ver quota extra</a>
+            {{/if}}
+          </td>
+          <td class="text-end {{#unless anulado}}text-success fw-semibold{{/unless}}">
+            {{#if (eq tipo 'entrada')}}{{eur valor}}{{else}}—{{/if}}
+          </td>
+          <td class="text-end {{#unless anulado}}text-danger fw-semibold{{/unless}}">
+            {{#if (eq tipo 'saida')}}{{eur valor}}{{else}}—{{/if}}
+          </td>
+          <td class="text-end text-nowrap {{#if anulado}}text-muted{{/if}}">{{eur saldo}}</td>
+          <td>
+            {{#if anulado}}<span class="badge text-bg-secondary">Anulado</span>
+            {{else}}<span class="badge text-bg-success">Confirmado</span>{{/if}}
+          </td>
+          <td class="text-end">
+            {{#if anulado}}
+            <span class="text-muted small">—</span>
+            {{else if editavel}}
+            <form action="/admin/movimentos/{{id}}/anular" method="POST" class="d-inline" data-confirmar="Anular este movimento?" data-confirmar-perigo="1">
+              <button class="btn btn-sm btn-outline-danger" title="Anular movimento"><span class="material-symbols-outlined">block</span></button>
+            </form>
+            {{else}}
+            <span class="text-muted small" title="Este movimento tem origem noutro registo; corrija-o na origem.">origem</span>
+            {{/if}}
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<p class="text-muted small mt-3">
+  Movimentos com origem operacional (pagamento, despesa ou quota extra) não podem ser anulados aqui —
+  a correção faz-se no registo de origem, para o extrato e a origem nunca ficarem divergentes.
+</p>
+{{else}}
+{{> _empty-state icon="receipt_long" titulo="Sem movimentos" descricao="Não existem movimentos bancários no período e nos filtros selecionados."}}
+{{/if}}
