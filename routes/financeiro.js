@@ -25,6 +25,7 @@ const {
   ReciboExtraParcela,
   AgendaItem,
   Assembleia,
+  MovimentoBancario,
 } = require('../models');
 const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
@@ -194,6 +195,27 @@ router.post('/contas/:id(\\d+)/eliminar', async (req, res) => {
     req.flash('error_msg', 'Conta bancária não encontrada neste condomínio.');
     return res.redirect('/admin/contas');
   }
+
+  // Uma conta com histórico de movimentos NÃO pode ser eliminada: a FK
+  // movimentos_bancarios.conta_bancaria_id é ON DELETE RESTRICT, pelo que o
+  // destroy() rebentava com um erro de constraint e a rota devolvia 500
+  // («Erro interno») — sem dizer ao utilizador o que se passou.
+  //
+  // Apagar a conta levaria o histórico bancário com ela (não é possível manter
+  // um movimento sem conta: a coluna é NOT NULL com FK RESTRICT). Por isso a
+  // única política coerente com o modelo existente é RECUSAR a eliminação e
+  // sugerir a desativação — a conta fica fora dos saldos (só contas `ativa` são
+  // consideradas em resumoCondominio) sem perder o histórico.
+  const nMovimentos = await MovimentoBancario.count({ where: { conta_bancaria_id: conta.id } });
+  if (nMovimentos > 0) {
+    req.flash(
+      'error_msg',
+      `Não é possível eliminar «${conta.nome}»: tem ${nMovimentos} movimento(s) bancário(s) associado(s). `
+      + 'Desative a conta em vez de a eliminar, para preservar o histórico.'
+    );
+    return res.redirect('/admin/contas');
+  }
+
   await conta.destroy();
   await audit({ userId: req.user.id, acao: 'eliminar_conta_bancária', entidade: 'ContaBancaria', entidadeId: req.params.id });
   req.flash('success_msg', 'Conta bancária eliminada.');
@@ -458,7 +480,7 @@ router.post('/despesas', async (req, res) => {
     observacoes,
     estado: estado || 'registada',
   });
-  await sincronizarMovimentoDespesa(despesa, req.user.id);
+  await sincronizarMovimentoDespesa(despesa, req.user.id, undefined, req.condominioId);
   await audit({
     userId: req.user.id,
     acao: 'criar_despesa',
@@ -555,7 +577,7 @@ router.post('/despesas/:id', async (req, res) => {
     observacoes,
     estado: estado || 'registada',
   });
-  await sincronizarMovimentoDespesa(despesa, req.user.id);
+  await sincronizarMovimentoDespesa(despesa, req.user.id, undefined, req.condominioId);
   await audit({
     userId: req.user.id,
     acao: 'editar_despesa',
@@ -571,7 +593,7 @@ router.post('/despesas/:id/anular', async (req, res) => {
   const despesa = await carregarDespesa(req);
   if (despesa) {
     await despesa.update({ estado: 'anulada' });
-    await sincronizarMovimentoDespesa(despesa, req.user.id);
+    await sincronizarMovimentoDespesa(despesa, req.user.id, undefined, req.condominioId);
     await audit({ userId: req.user.id, acao: 'anular_despesa', entidade: 'Despesa', entidadeId: despesa.id });
   }
   req.flash('success_msg', 'Despesa anulada.');

@@ -123,10 +123,14 @@ async function fcrTransferidoC(condominioId, { transaction, incluirDetalhe = fal
     where: {
       referencia: REF_TRANSFERENCIA,
       estado: 'confirmado',
-      // O condomínio do movimento é lido da coluna nova quando existe (escritas
-      // a partir da migração 20260101000074) e, no histórico anterior, continua
-      // a ser lido pela conta — a mesma regra do resto do projeto.
-      [Op.or]: [{ condominio_id: null }, { condominio_id: condominioId }],
+      // Isolamento explícito por condomínio. O fallback `condominio_id IS NULL`
+      // que aqui existia era compatibilidade com o histórico anterior à migração
+      // 20260101000074 — e foi removido depois do backfill
+      // (20260101000076-backfill-movimentos-condominio), que associou todos os
+      // movimentos antigos ao condomínio da respetiva conta. Hoje NULL já não
+      // existe em movimentos_bancarios e não deve ser usado como mecanismo de
+      // fallback operacional: um movimento de outro condomínio nunca aparece.
+      condominio_id: condominioId,
     },
     attributes: ['id', 'conta_bancaria_id', 'data', 'tipo', 'valor', 'descricao', 'deliberacao_id'],
     include: [{ model: ContaBancaria, as: 'conta_bancaria', attributes: ['id', 'condominio_id', 'nome', 'tipo'], where: { condominio_id: condominioId }, required: true }],
@@ -200,11 +204,15 @@ async function fcrTransferidoC(condominioId, { transaction, incluirDetalhe = fal
 
 // ── FCR recebido: aplicações de pagamentos CONFIRMADOS do condomínio ──
 // O isolamento vem da QUOTA (todas as quotas carregadas acima são do
-// condomínio). O `include` do pagamento exige apenas que esteja confirmado e,
-// quando o pagamento tem condomínio preenchido, que seja o mesmo: pagamentos
-// anteriores à existência de `pagamentos.condominio_id` ficam a NULL e continuam
-// a valer (o dinheiro entrou). Exigir igualdade exata aqui excluía-os e fazia o
-// FCR recebido sair a zero — era o que impedia a transferência corrente → FCR.
+// condomínio). O `include` do pagamento exige que esteja confirmado e que o
+// condomínio seja o mesmo.
+//
+// O fallback `condominio_id IS NULL` que aqui existia era crença antiga de que
+// existiriam pagamentos anteriores à coluna: na verdade a migração
+// 20260101000056 (multitenant-foundation) já preencheu `pagamentos.condominio_id`
+// em todas as linhas e fixou a coluna como NOT NULL. O ramo `IS NULL` era,
+// portanto, código morto — nunca podia corresponder a nenhuma linha. Removido
+// para não deixar NULL a passar por mecanismo de fallback operacional.
 async function fcrRecebidoC(condominioId, { transaction } = {}) {
   const quotas = await Quota.findAll({
     where: { condominio_id: condominioId },
@@ -222,9 +230,7 @@ async function fcrRecebidoC(condominioId, { transaction } = {}) {
       attributes: ['id', 'estado', 'condominio_id'],
       where: {
         estado: 'confirmado',
-        // NULL = registo anterior à coluna; o vínculo ao condomínio é garantido
-        // pela quota (que já foi filtrada por condominio_id acima).
-        [Op.or]: [{ condominio_id: null }, { condominio_id: condominioId }],
+        condominio_id: condominioId,
       },
       required: true,
     }],

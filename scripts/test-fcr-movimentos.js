@@ -278,16 +278,12 @@ function seedPagamento({ id, condominioId = 1, fracaoId = 1, data = '2026-01-20'
   return { pagamento: db.pagamentos[db.pagamentos.length - 1] };
 }
 
-// Pagamento confirmado ANTIGO: `condominio_id` NULL, como os registos criados
-// antes de a coluna existir.
-function seedPagamentoLegado({ id, quota, valor, data = '2026-01-10' }) {
-  db.pagamentos.push({ id, condominio_id: null, fracao_id: 1, valor: valor, data_pagamento: data, estado: 'confirmado' });
-  db.pagamentoQuotas.push({ id: 1000 + id, pagamento_id: id, quota_id: Number(quota), valor_aplicado: valor });
-  db.movimentos.push({
-    id: ++db.proximoId.movimento, conta_bancaria_id: 10, condominio_id: 1, data,
-    tipo: 'entrada', valor, descricao: `Pagamento ${id}`, referencia: null, pagamento_id: id, estado: 'confirmado',
-  });
-}
+// NOTA: existia aqui um `seedPagamentoLegado` que criava pagamentos com
+// `condominio_id` NULL, simulando registos anteriores à coluna. A migração
+// 20260101000056 (multitenant-foundation) preencheu todas as linhas e fixou
+// `pagamentos.condominio_id` como NOT NULL, pelo que essa situação é hoje
+// impossível e o helper deixou de fazer sentido. Os cenários que dele dependiam
+// passaram a usar `seedPagamento`, representando o histórico real já migrado.
 
 // ── Cenário base ───────────────────────────────────────────────────
 // Condomínio 1: conta corrente (id 10) + conta FCR (id 11). Condomínio 2 tem as
@@ -538,11 +534,14 @@ async function main() {
   assert.strictEqual(db.movimentos.length, antesFalha, 'a base de dados ficou como estava antes da tentativa');
 
   // ── 12. Isolamento multi-condomínio ──────────────────────────────
+  // Os movimentos levam `condominio_id` explícito (estado pós-backfill
+  // 20260101000076). O filtro por condomínio é direto no `where` — já não
+  // existe o fallback `condominio_id IS NULL`.
   reiniciar();
   db.pagamentos.push({ id: 900, condominio_id: 2, fracao_id: 9, valor: '55.00', data_pagamento: '2026-01-20', estado: 'confirmado' });
   db.pagamentoQuotas.push({ id: 901, pagamento_id: 900, quota_id: 200, valor_aplicado: '55.00' });
-  db.movimentos.push({ id: 950, conta_bancaria_id: 21, data: '2026-01-21', tipo: 'entrada', valor: '5.00', referencia: 'TRANSF', estado: 'confirmado' });
-  db.movimentos.push({ id: 951, conta_bancaria_id: 20, data: '2026-01-21', tipo: 'saida', valor: '5.00', referencia: 'TRANSF', estado: 'confirmado' });
+  db.movimentos.push({ id: 950, conta_bancaria_id: 21, condominio_id: 2, data: '2026-01-21', tipo: 'entrada', valor: '5.00', referencia: 'TRANSF', estado: 'confirmado' });
+  db.movimentos.push({ id: 951, conta_bancaria_id: 20, condominio_id: 2, data: '2026-01-21', tipo: 'saida', valor: '5.00', referencia: 'TRANSF', estado: 'confirmado' });
   const recebidoC1 = await fcr.fcrRecebidoC(1);
   assert.strictEqual(recebidoC1.totalC, 0, 'o FCR recebido do condomínio 1 não inclui pagamentos do condomínio 2');
   const recebidoC2 = await fcr.fcrRecebidoC(2);
@@ -552,6 +551,16 @@ async function main() {
   const resumoC2 = await fcr.resumoFcr(2);
   assert.strictEqual(resumoC2.transferidoC, 500, 'o condomínio 2 vê a sua transferência (5,00 €, contada uma só vez)');
   assert.deepStrictEqual(resumoC2.contasFcrIds, [21], 'só a conta FCR do próprio condomínio é considerada');
+
+  // Um movimento TRANSF SEM `condominio_id` (histórico ainda não migrado) já não
+  // é admitido pelo fallback: fica fora da contagem. Depois do backfill esta
+  // situação não existe em produção — é a garantia de que NULL não volta a
+  // passar por mecanismo operacional.
+  db.movimentos.push({ id: 952, conta_bancaria_id: 21, data: '2026-01-22', tipo: 'entrada', valor: '7.00', referencia: 'TRANSF', estado: 'confirmado' });
+  db.movimentos.push({ id: 953, conta_bancaria_id: 20, data: '2026-01-22', tipo: 'saida', valor: '7.00', referencia: 'TRANSF', estado: 'confirmado' });
+  const comNuloC2 = await fcr.fcrTransferidoC(2);
+  assert.strictEqual(comNuloC2.totalC, 500, 'movimento TRANSF sem condominio_id não entra na contagem (sem fallback para NULL)');
+  assert.strictEqual(comNuloC2.nTransferencias, 1, 'só a transferência com condomínio explícito é contada');
 
   // Consultas: nenhuma leitura fica sem o condomínio — diretamente no `where`
   // (quotas, contas), por associação obrigatória cujo `where` filtra o
@@ -587,21 +596,26 @@ async function main() {
   assert.ok(todas.some((c) => c.nome === 'ContaBancaria.findAll' && String(c.where.condominio_id) === '1'), 'as contas são lidas por condomínio');
   assert.ok(todas.some((c) => c.nome === 'PagamentoQuota.findAll' && (c.incl || []).some((i) => i && filtraCondominio(i.where))), 'as aplicações são lidas com o pagamento confirmado do condomínio (aceitando o histórico sem condominio_id)');
 
-  // ── 13b. REGRESSÃO: pagamentos antigos (condominio_id NULL) ──────
-  // Causa concreta da falha «Corrente → FCR não fica registado»: os pagamentos
-  // criados antes de existir `pagamentos.condominio_id` ficam com NULL e o
-  // filtro de igualdade excluía-os, fazendo o FCR recebido sair a zero — a
-  // transferência era então recusada com «o valor excede o FCR recebido e ainda
-  // não transferido (0,00 €)» e não criava movimento nenhum.
+  // ── 13b. REGRESSÃO: histórico já migrado (condominio_id preenchido) ──
+  // Causa concreta da falha «Corrente → FCR não fica registado»: existia a
+  // crença de que os pagamentos criados antes de existir
+  // `pagamentos.condominio_id` ficavam com NULL, e um filtro de igualdade
+  // excluía-os — o FCR recebido saía a zero e a transferência era recusada com
+  // «o valor excede o FCR recebido e ainda não transferido (0,00 €)».
+  //
+  // A migração 20260101000056 (multitenant-foundation) preencheu TODAS as linhas
+  // de `pagamentos.condominio_id` e fixou a coluna como NOT NULL. O cenário de
+  // pagamentos com NULL é, por isso, hoje impossível — e o ramo `IS NULL` que
+  // existia em `fcrRecebidoC` era código morto. Este teste cobre agora o
+  // histórico REAL: pagamentos antigos com o condomínio preenchido.
   reiniciar();
-  // Três pagamentos confirmados de 55,00 € (50,00 € + 5,00 € de FCR) com
-  // `condominio_id` NULL — exatamente como ficam os pagamentos anteriores à
-  // existência da coluna.
-  seedPagamentoLegado({ id: 1, data: '2026-01-10', quota: 100, valor: 55 });
-  seedPagamentoLegado({ id: 2, data: '2026-01-20', quota: 101, valor: 55 });
-  seedPagamentoLegado({ id: 3, data: '2026-02-10', quota: 103, valor: 55 });
+  // Três pagamentos antigos confirmados de 55,00 € (50,00 € + 5,00 € de FCR),
+  // já associados ao condomínio 1 pela migração de backfill.
+  seedPagamento({ id: 1, data: '2026-01-10', aplicacoes: [{ quota: 100, valor: 55 }] });
+  seedPagamento({ id: 2, data: '2026-01-20', aplicacoes: [{ quota: 101, valor: 55 }] });
+  seedPagamento({ id: 3, data: '2026-02-10', aplicacoes: [{ quota: 103, valor: 55 }] });
   const recebidoLegado = await fcr.fcrRecebidoC(1);
-  assert.strictEqual(recebidoLegado.totalC, 1500, 'FCR recebido conta pagamentos antigos (3 quotas pagas × 5,00 €)');
+  assert.strictEqual(recebidoLegado.totalC, 1500, 'FCR recebido conta o histórico já migrado (3 quotas pagas × 5,00 €)');
   assert.strictEqual(recebidoLegado.nAplicacoes, 3, 'as três aplicações antigas são lidas');
   const resumoLegado = await fcr.resumoFcr(1);
   assert.strictEqual(resumoLegado.disponivelC, 1500, 'o FCR disponível conta os pagamentos antigos');
@@ -617,14 +631,24 @@ async function main() {
   assert.ok(parLegado.every((m) => m.referencia === 'TRANSF'), 'os dois movimentos ficam com referencia TRANSF');
   assert.ok(parLegado.every((m) => Number(m.condominio_id) === 1), `os dois movimentos ficam com o condomínio correto (recebido: ${JSON.stringify(parLegado.map((m) => [m.tipo, m.conta_bancaria_id, m.condominio_id]))})`);
   assert.ok(parLegado.every((m) => m.deliberacao_id === null || m.deliberacao_id === undefined), 'corrente → FCR não leva deliberação');
-  // Pagamento de OUTRO condomínio continua a não contar (o filtro aceita NULL,
-  // mas nunca o condomínio errado).
+  // Pagamento de OUTRO condomínio continua a não contar.
   db.pagamentos.push({ id: 900, condominio_id: 2, fracao_id: 9, valor: '55.00', data_pagamento: '2026-01-20', estado: 'confirmado' });
   db.pagamentoQuotas.push({ id: 901, pagamento_id: 900, quota_id: 100, valor_aplicado: '55.00' });
   const comOutroCondominio = await fcr.fcrRecebidoC(1);
   assert.strictEqual(comOutroCondominio.totalC, 1500, 'um pagamento de outro condomínio continua fora do FCR recebido');
   db.pagamentoQuotas = db.pagamentoQuotas.filter((a) => a.pagamento_id !== 900);
   db.pagamentos = db.pagamentos.filter((p) => p.id !== 900);
+
+  // Um pagamento confirmado com `condominio_id` NULL (situação que a migração
+  // 20260101000056 tornou impossível) já NÃO é admitido pelo filtro: o fallback
+  // foi removido por ser código morto e para não deixar NULL a passar por
+  // mecanismo operacional.
+  db.pagamentos.push({ id: 901, condominio_id: null, fracao_id: 1, valor: '55.00', data_pagamento: '2026-02-20', estado: 'confirmado' });
+  db.pagamentoQuotas.push({ id: 902, pagamento_id: 901, quota_id: 102, valor_aplicado: '55.00' });
+  const comNulo = await fcr.fcrRecebidoC(1);
+  assert.strictEqual(comNulo.totalC, 1500, 'um pagamento com condominio_id NULL não entra (sem fallback para NULL)');
+  db.pagamentoQuotas = db.pagamentoQuotas.filter((a) => a.pagamento_id !== 901);
+  db.pagamentos = db.pagamentos.filter((p) => p.id !== 901);
 
   // ── 13c. REGRESSÃO: uma utilização não consome o «disponível para transferir» ──
   // Segundo erro encontrado: a ponta de ENTRADA das utilizações (fundo →
@@ -659,17 +683,21 @@ async function main() {
   // Uma transferência antiga gravada como par saída/entrada com referencia
   // TRANSF conta UMA vez (o FCR não é transferido duas vezes por ter dois
   // movimentos), e continua a ser visível como transferência.
+  //
+  // O histórico anterior à migração 20260101000074 tem `condominio_id` NULL; a
+  // migração de backfill 20260101000076 associou-o ao condomínio da respetiva
+  // conta, que é o estado que aqui se representa.
   reiniciar();
   await pagamentosHelper.registarPagamento({ fracaoId: 1, valor: 55, dataPagamento: '2026-01-20', contaBancariaId: 10, userId: 7, condominioId: 1 });
-  db.movimentos.push({ id: 5001, conta_bancaria_id: 10, data: '2026-02-01', tipo: 'saida', valor: '5.00', descricao: 'Transferência entre contas', referencia: 'TRANSF', estado: 'confirmado' });
-  db.movimentos.push({ id: 5002, conta_bancaria_id: 11, data: '2026-02-01', tipo: 'entrada', valor: '5.00', descricao: 'Transferência entre contas', referencia: 'TRANSF', estado: 'confirmado' });
+  db.movimentos.push({ id: 5001, conta_bancaria_id: 10, condominio_id: 1, data: '2026-02-01', tipo: 'saida', valor: '5.00', descricao: 'Transferência entre contas', referencia: 'TRANSF', estado: 'confirmado' });
+  db.movimentos.push({ id: 5002, conta_bancaria_id: 11, condominio_id: 1, data: '2026-02-01', tipo: 'entrada', valor: '5.00', descricao: 'Transferência entre contas', referencia: 'TRANSF', estado: 'confirmado' });
   const antigas = await fcr.resumoFcr(1, { incluirDetalhe: true });
   assert.strictEqual(antigas.transferidoC, 500, 'transferência antiga (par saída/entrada) conta 5,00 € — não 10,00 €');
   assert.strictEqual(antigas.nTransferencias, 1, 'uma transferência antiga = uma transferência');
   assert.strictEqual(antigas.transferencias[0].origem, 'Conta corrente', 'a transferência antiga fica atribuída à conta de origem');
   assert.strictEqual(antigas.disponivelC, 0, 'depois de transferido o FCR antigo já não está disponível');
   // Movimento anulado (transferência revertida) nunca conta.
-  db.movimentos.push({ id: 5003, conta_bancaria_id: 11, data: '2026-02-02', tipo: 'entrada', valor: '5.00', referencia: 'TRANSF', estado: 'anulado' });
+  db.movimentos.push({ id: 5003, conta_bancaria_id: 11, condominio_id: 1, data: '2026-02-02', tipo: 'entrada', valor: '5.00', referencia: 'TRANSF', estado: 'anulado' });
   const comAnulado = await fcr.fcrTransferidoC(1);
   assert.strictEqual(comAnulado.totalC, 500, 'movimentos anulados não contam como transferido');
 
@@ -688,12 +716,12 @@ async function main() {
   assert.ok(/transferir-fcr/.test(vistaContas), 'a lista de contas tem entrada para a transferência do FCR');
 
   // ── 15. REGRESSÃO do fluxo completo pela ROTA real (corrente → FCR) ──
-  // É o cenário que falhou no teste manual: pagamentos antigos (sem
-  // condominio_id), POST pelo formulário e verificação dos dois movimentos e dos
-  // saldos das duas contas.
+  // É o cenário que falhou no teste manual: pagamentos antigos já migrados
+  // (o backfill 20260101000056 preencheu `pagamentos.condominio_id`), POST pelo
+  // formulário e verificação dos dois movimentos e dos saldos das duas contas.
   reiniciar();
-  seedPagamentoLegado({ id: 1, data: '2026-01-10', quota: 100, valor: 55 });
-  seedPagamentoLegado({ id: 2, data: '2026-01-20', quota: 101, valor: 55 });
+  seedPagamento({ id: 1, data: '2026-01-10', aplicacoes: [{ quota: 100, valor: 55 }] });
+  seedPagamento({ id: 2, data: '2026-01-20', aplicacoes: [{ quota: 101, valor: 55 }] });
   const rotaPost = require(path.join(RAIZ, 'routes', 'financeiro')).stack
     .find((l) => l.route && l.route.path === '/contas/transferir-fcr' && l.route.methods.post)
     .route.stack.slice(-1)[0].handle;

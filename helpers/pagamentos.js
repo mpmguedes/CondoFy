@@ -120,6 +120,7 @@ async function registarPagamento({
     if (contaBancariaId) {
       await criarMovimento({
         contaBancariaId,
+        condominioId: cid,
         data: dataPagamento || new Date(),
         tipo: 'entrada',
         valor: fromCents(valorC),
@@ -330,6 +331,7 @@ async function registarPagamentoExtraParcela({
     if (contaBancariaId) {
       await criarMovimento({
         contaBancariaId,
+        condominioId: cid,
         data: dataPagamento || new Date(),
         tipo: 'entrada',
         valor: parcela.valor,
@@ -443,6 +445,7 @@ async function registarPagamentoComItens({
     if (contaBancariaId) {
       await criarMovimento({
         contaBancariaId,
+        condominioId: cidFinal,
         data: dataPagamento || new Date(),
         tipo: 'entrada',
         valor: fromCents(valorC),

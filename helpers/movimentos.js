@@ -122,7 +122,13 @@ async function registarTransferencia({
 // Sincroniza o movimento bancário de saída de uma despesa com o seu estado:
 // - despesa 'paga' com conta → garante um movimento de saída;
 // - caso contrário → anula o movimento existente.
-async function sincronizarMovimentoDespesa(despesa, userId, transaction) {
+//
+// `condominioId` é opcional e existe só para deixar explícito o condomínio em
+// quem chama; quando omitido cai para `despesa.condominio_id` (NOT NULL no
+// modelo), que é a fonte natural. Em qualquer dos casos o movimento fica sempre
+// com condomínio — nunca NULL numa escrita nova.
+async function sincronizarMovimentoDespesa(despesa, userId, transaction, condominioId) {
+  const cid = condominioId || despesa.condominio_id || null;
   const movimento = await MovimentoBancario.findOne({ where: { despesa_id: despesa.id }, transaction });
   if (despesa.estado === 'paga' && despesa.conta_bancaria_id) {
     if (movimento) {
@@ -130,6 +136,7 @@ async function sincronizarMovimentoDespesa(despesa, userId, transaction) {
         await movimento.update(
           {
             conta_bancaria_id: despesa.conta_bancaria_id,
+            condominio_id: cid,
             data: despesa.data || new Date(),
             valor: despesa.valor,
             descricao: despesa.descricao,
@@ -141,6 +148,7 @@ async function sincronizarMovimentoDespesa(despesa, userId, transaction) {
     } else {
       await criarMovimento({
         contaBancariaId: despesa.conta_bancaria_id,
+        condominioId: cid,
         data: despesa.data || new Date(),
         tipo: 'saida',
         valor: despesa.valor,
@@ -157,6 +165,19 @@ async function sincronizarMovimentoDespesa(despesa, userId, transaction) {
 }
 
 // Saldo de uma conta calculado pelos movimentos: saldo inicial + entradas − saídas.
+//
+// Regras (as mesmas que o resto do projeto usa para "saldo bancário"):
+//  · o saldo inicial é contado UMA única vez (é o ponto de partida, não uma parcela);
+//  · só entram movimentos com estado 'confirmado' (anulados não afetam o saldo);
+//  · 'entrada' soma, 'saida' subtrai;
+//  · 'transferencia' (valor de ENUM antigo, já não escrito) não altera o saldo —
+//    o par saida+entrada de uma transferência real trata do débito/crédito;
+//  · o âmbito é a CONTA: `conta_bancaria_id` identifica-a inequivocamente, logo o
+//    filtro por conta é, por si, o isolamento por condomínio (uma conta pertence a
+//    um e um só condomínio — `contas_bancarias.condominio_id` é NOT NULL).
+//  · não há filtro por data aqui: quem precisa de um saldo À DATA usa
+//    `saldoContaNaData` (helpers/relatorio-financeiro), que aplica `dataCorte`.
+//
 // `transaction` opcional: dentro de uma transação lê à mesma ligação (enxerga as
 // escritas ainda não confirmadas).
 async function saldoContaMovimentos(conta, { transaction } = {}) {
@@ -175,4 +196,34 @@ async function saldoContaMovimentos(conta, { transaction } = {}) {
   return fromCents(toCents(conta.saldo_inicial) + entradasC - saidasC);
 }
 
-module.exports = { criarMovimento, registarTransferencia, sincronizarMovimentoDespesa, saldoContaMovimentos };
+// Igual a `saldoContaMovimentos`, mas devolvendo também a decomposição
+// (entradas/saídas), para quem precisa de mostrar de onde vem o saldo.
+// É a variante "com detalhe" da MESMA lógica — não uma segunda implementação.
+async function saldoContaMovimentosDetalhado(conta, { transaction } = {}) {
+  const movimentos = await MovimentoBancario.findAll({
+    where: { conta_bancaria_id: conta.id, estado: 'confirmado' },
+    attributes: ['tipo', 'valor'],
+    transaction,
+  });
+  let entradasC = 0;
+  let saidasC = 0;
+  for (const m of movimentos) {
+    if (m.tipo === 'entrada') entradasC += toCents(m.valor);
+    else if (m.tipo === 'saida') saidasC += toCents(m.valor);
+  }
+  const baseC = toCents(conta.saldo_inicial);
+  return {
+    saldoC: baseC + entradasC - saidasC,
+    saldoInicialC: baseC,
+    entradasC,
+    saidasC,
+    nMovimentos: movimentos.length,  };
+}
+
+module.exports = {
+  criarMovimento,
+  registarTransferencia,
+  sincronizarMovimentoDespesa,
+  saldoContaMovimentos,
+  saldoContaMovimentosDetalhado,
+};
