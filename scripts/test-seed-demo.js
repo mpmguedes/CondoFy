@@ -187,6 +187,71 @@ function testarGestorAssociado() {
   assert.ok(SEED.includes('indiceFracoSemConta'), 'o gestor recebe uma titularidade (fração sem conta)');
 }
 
+// ── 7b-bis. `--reparar` garante AS DUAS fontes de autorização do gestor ─
+// O ciclo `/` → `/admin` → `/` (ERR_TOO_MANY_REDIRECTS) acontece quando as
+// duas fontes discordam: `destinoAposLogin` (routes/index.js:16) decide por
+// `users.role` e manda para `/admin`; `comPapel('admin')`
+// (helpers/tenant.js:121) decide por `utilizador_condominios.role` e devolve a
+// `/`. Além disso, `associacaoAtiva` (helpers/tenant.js:21) só conta a
+// associação com `estado = 'ativo'` — uma linha inativa é o mesmo que não
+// existir. O reparador tem de garantir `role = 'admin'` E `estado = 'ativo'`.
+function testarReparacaoAssociacao() {
+  const inicio = SEED.indexOf('async function repararGestorDemo(');
+  assert.ok(inicio > 0, 'repararGestorDemo presente');
+  // Recorta só o corpo do reparador (até à função seguinte).
+  const fim = SEED.indexOf('async function apagarCondominioDemo(');
+  const corpo = SEED.slice(inicio, fim > inicio ? fim : undefined);
+
+  // 1. Criação da associação em falta: tem de nascer logo coerente.
+  assert.ok(
+    /UserCondominio\.create\(\{[\s\S]*?role: 'admin', estado: 'ativo',/.test(corpo),
+    "a associação criada pelo reparador nasce com role 'admin' e estado 'ativo'"
+  );
+  // 2. Correção de uma associação existente: as duas comparações presentes.
+  assert.ok(
+    /associacao\.role !== 'admin'/.test(corpo),
+    "o reparador corrige `role` quando não é 'admin'"
+  );
+  assert.ok(
+    /associacao\.estado !== 'ativo'/.test(corpo),
+    "o reparador corrige `estado` quando não é 'ativo'"
+  );
+  // 3. Um só UPDATE com o que falta (evita duas escritas desnecessárias e
+  //    garante que 0 campos ⇒ 0 escritas ⇒ idempotência).
+  assert.ok(
+    /if \(!dryRun && Object\.keys\(corrigir\)\.length\) await associacao\.update\(corrigir\)/.test(corpo),
+    'a correção da associação é um único UPDATE com os campos em falta'
+  );
+  // 4. As duas vias de acesso do portal têm de ser verificadas na titularidade
+  //    (`fracoesDoUtilizador` reconhece `utilizador_id` ou `pessoa_id`).
+  assert.ok(
+    /where: \{ condominio_id: cid, utilizador_id: gestor\.id, estado: 'ativa' \}/.test(corpo),
+    'a titularidade é procurada pela conta (utilizador_id)'
+  );
+  assert.ok(
+    /where: \{ condominio_id: cid, pessoa_id: pessoa\.id, estado: 'ativa' \}/.test(corpo),
+    'a titularidade é procurada também pela pessoa (pessoa_id)'
+  );
+  // 5. Nunca sobrepor uma fração ocupada. Em teste estático só se pode exigir
+  //    a ESTRUTURA: escolher a fração a partir do conjunto das LIVRES e criar
+  //    só se existir uma. A garantia comportamental (com todas as frações
+  //    ocupadas, não se cria nada) está no smoke test, que corre o reparador
+  //    a sério — é lá que a regra fica provada.
+  assert.ok(
+    /find\(\(f\) => !ocupadas\.has\(Number\(f\.id\)\)\)/.test(corpo),
+    'a fração escolhida tem de estar livre (não sobrepõe titularidade alheia)'
+  );
+  assert.ok(
+    /if \(candidata\) \{/.test(corpo),
+    'só se cria a titularidade quando existe uma fração livre (sem fallback)'
+  );
+  // Nenhuma fração pode ser escolhida fora do conjunto das livres.
+  assert.ok(
+    !/fracao_id:\s*(livre|candidata\s*\|\|)/.test(corpo),
+    'nenhum caminho escolhe uma fração que não esteja no conjunto das livres'
+  );
+}
+
 // ── 7c. Os ajustes manuais usam a categoria canónica do Extrato ───────
 // O invariante antigo filtrava por `referencia <> 'TRANSF'`, mas
 // `criarMovimento` grava `referencia = NULL` e `NULL <> 'TRANSF'` é NULL (não
@@ -317,6 +382,7 @@ testarFracoes();
 testarEstados();
 testarPortal();
 testarGestorAssociado();
+testarReparacaoAssociacao();
 testarAjustesManuais();
 testarFcr();
 testarReset();

@@ -137,8 +137,10 @@ const models = {
 // ── Estado mutável para o teste do `--reparar` ───────────────────────
 // O reparador altera registos, por isso precisa de modelos que guardem estado.
 // Recria-se aqui o cenário EXATO que falhou em produção: gestor com
-// `pessoa_id = null`, `role = 'condomino'` e associação `gestor`.
-function fakeModelReparacao() {
+// `pessoa_id = null`, `role = 'condomino'` e associação `gestor` ativa.
+// Os parâmetros permitem cobrir também a associação INATIVA — que é o mesmo
+// que não existir para `associacaoAtiva` (helpers/tenant.js:21).
+function fakeModelReparacao({ assocRole = 'gestor', assocEstado = 'ativo', fracoesLivres = [2, 3] } = {}) {
   // Instâncias com `.update()` (o reparador usa `gestor.update(...)` e
   // `associacao.update(...)`, tal como o código real faz).
   const user = {
@@ -147,7 +149,7 @@ function fakeModelReparacao() {
     async update(d) { Object.assign(this, d); return this; },
   };
   const associacao = {
-    id: 9, utilizador_id: 4, condominio_id: CID, role: 'gestor', estado: 'ativo',
+    id: 9, utilizador_id: 4, condominio_id: CID, role: assocRole, estado: assocEstado,
     async update(d) { Object.assign(this, d); return this; },
   };
   const estado = {
@@ -194,8 +196,21 @@ function fakeModelReparacao() {
         return estado.titularidadeCriada;
       },
     }),
-    Fracao: fakeModel({ findAll: async () => FRACOES, findOne: async () => FRACOES[0] }),
+    Fracao: fakeModel({
+      // As frações existentes; `fracoesLivres` diz quais NÃO têm titular ativa.
+      findAll: async () => FRACOES,
+      findOne: async () => FRACOES[0],
+    }),
   };
+  // Marca como ocupadas todas as frações exceto as de `fracoesLivres`, para se
+  // poder testar o caso «não há nenhuma livre» sem alterar o reparador.
+  const FRACOES_TODAS = FRACOES.map((f) => Number(f.id));
+  const ocupadas = FRACOES_TODAS.filter((id) => !fracoesLivres.includes(id));
+  for (const [i, fid] of ocupadas.entries()) {
+    estado.titularidades.push({
+      id: 100 + i, condominio_id: CID, fracao_id: fid, pessoa_id: 900 + i, estado: 'ativa',
+    });
+  }
   return { models, estado };
 }
 
@@ -369,8 +384,32 @@ async function correr() {
 // Reproduz o cenário de produção (utilizador #4, pessoa_id NULL, role
 // 'condomino', associação 'gestor') e exige que fique tudo corrigido — é a
 // função que o utilizador vai correr no servidor, por isso tem de ser provada.
+// Corre DOIS cenários de associação: `gestor` (papel errado) e `inativo`
+// (a associação deixa de contar para `associacaoAtiva`).
 async function testarReparacaoGestor(linhas) {
-  const { models: modelsReparacao, estado } = fakeModelReparacao();
+  await correrCenarioReparacao(linhas, {
+    rotulo: "associação 'gestor' ativa",
+    assocRole: 'gestor',
+    assocEstado: 'ativo',
+  });
+  await correrCenarioReparacao(linhas, {
+    rotulo: "associação 'admin' mas INATIVA",
+    assocRole: 'admin',
+    assocEstado: 'inativo',
+  });
+  // Com TODAS as frações ocupadas, o reparador não pode sobrepor-se a nenhuma:
+  // tem de terminar sem criar titularidade.
+  await correrCenarioReparacao(linhas, {
+    rotulo: 'todas as frações já ocupadas',
+    assocRole: 'gestor',
+    assocEstado: 'ativo',
+    fracoesLivres: [],
+    esperaTitularidade: false,
+  });
+}
+
+async function correrCenarioReparacao(linhas, { rotulo, assocRole, assocEstado, fracoesLivres = [2, 3], esperaTitularidade = true }) {
+  const { models: modelsReparacao, estado } = fakeModelReparacao({ assocRole, assocEstado, fracoesLivres });
 
   // Carrega o seed numa cache LIMPA, com os modelos de reparação injetados.
   const RAIZ2 = path.join(__dirname, '..');
@@ -406,21 +445,30 @@ async function testarReparacaoGestor(linhas) {
       console.log = origLog;
     }
 
-    // 1. A associação ao condomínio passou a 'admin'.
-    assert.strictEqual(estado.associacao.role, 'admin', "associação reparada para role 'admin'");
-    // 2. O papel legado passou a 'admin' (decide o destino do login).
-    assert.strictEqual(estado.user.role, 'admin', "users.role reparado para 'admin'");
-    // 3. A conta passou a estar ligada a uma Pessoa (remove o aviso do portal).
+    // 1. AS DUAS fontes de autorização, coerentes:
+    //    `destinoAposLogin` decide por `users.role`; `comPapel('admin')`
+    //    decide por `utilizador_condominios.role` (e só se `estado='ativo'`).
+    //    Se discordarem → `/` ⇄ `/admin` = ERR_TOO_MANY_REDIRECTS.
+    assert.strictEqual(estado.user.role, 'admin', "users.role reparado para 'admin' (destino do login)");
+    assert.strictEqual(estado.associacao.role, 'admin', "utilizador_condominios.role = 'admin' (comPapel)");
+    assert.strictEqual(estado.associacao.estado, 'ativo', "utilizador_condominios.estado = 'ativo' (associacaoAtiva)");
+    // 2. A conta passou a estar ligada a uma Pessoa (remove o aviso do portal).
     assert.ok(estado.user.pessoa_id, 'users.pessoa_id preenchido');
     assert.strictEqual(Number(estado.user.pessoa_id), Number(estado.pessoaCriada.id), 'pessoa_id aponta para a Pessoa criada');
-    // 4. Foi criada uma titularidade, e NÃO na fração já ocupada (a #1).
-    assert.ok(estado.titularidadeCriada, 'titularidade do gestor criada');
-    assert.notStrictEqual(Number(estado.titularidadeCriada.fracao_id), 1, 'não sobrepõe a titularidade existente');
-    assert.strictEqual(estado.titularidadeCriada.utilizador_id, estado.user.id, 'titularidade ligada ao gestor');
-    assert.strictEqual(estado.titularidadeCriada.estado, 'ativa', 'titularidade ativa');
+    // 3. Titularidade: criada na fração LIVRE (nunca na #1, que já tinha
+    //    titular) — ou NENHUMA, quando não há fração livre.
+    const nTitularidadesAntes = estado.titularidades.length;
+    if (esperaTitularidade) {
+      assert.ok(estado.titularidadeCriada, 'titularidade do gestor criada');
+      assert.notStrictEqual(Number(estado.titularidadeCriada.fracao_id), 1, 'não sobrepõe a titularidade existente');
+      assert.strictEqual(estado.titularidadeCriada.utilizador_id, estado.user.id, 'titularidade ligada ao gestor');
+      assert.strictEqual(estado.titularidadeCriada.estado, 'ativa', 'titularidade ativa');
+    } else {
+      assert.strictEqual(estado.titularidadeCriada, null, `nenhuma titularidade criada (${rotulo})`);
+    }
     assert.ok(res.alteracoes > 0, 'o reparador reporta alterações');
 
-    // 5. IDEMPOTÊNCIA: a 2.ª passagem não altera nada.
+    // 4. IDEMPOTÊNCIA: a 2.ª passagem não altera nada.
     console.log = (...a) => linhas.push(a.join(' '));
     let res2;
     try {
@@ -428,7 +476,13 @@ async function testarReparacaoGestor(linhas) {
     } finally {
       console.log = origLog;
     }
-    assert.strictEqual(res2.alteracoes, 0, 'a 2.ª execução não altera nada (idempotente)');
+    assert.strictEqual(res2.alteracoes, 0, `a 2.ª execução não altera nada (${rotulo})`);
+    // E depois da 2.ª passagem as duas fontes continuam coerentes.
+    assert.strictEqual(estado.user.role, 'admin', 'users.role mantém-se admin');
+    assert.strictEqual(estado.associacao.role, 'admin', 'a associação mantém-se admin');
+    assert.strictEqual(estado.associacao.estado, 'ativo', "a associação mantém-se 'ativo'");
+    // Nunca se acumulam titularidades (nem na 1.ª, nem na 2.ª passagem).
+    assert.strictEqual(estado.titularidades.length, nTitularidadesAntes, `nenhuma titularidade duplicada (${rotulo})`);
   } finally {
     Module._load = origLoad2;
     if (cacheAnterior) require.cache[MODELS2] = cacheAnterior; else delete require.cache[MODELS2];

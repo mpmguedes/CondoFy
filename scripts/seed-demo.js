@@ -261,6 +261,12 @@ async function repararGestorDemo(condominio, { dryRun }) {
   }
 
   // 4. O papel POR CONDOMÍNIO (fonte de verdade das permissões).
+  //    `comPapel('admin')` (helpers/tenant.js:121) exige `role = 'admin'` E a
+  //    associação ATIVA (`associacaoAtiva` filtra por `estado = 'ativo'`,
+  //    helpers/tenant.js:21). Sem as duas coisas, `/` → `/admin` → `/` produz
+  //    ERR_TOO_MANY_REDIRECTS: `destinoAposLogin` (routes/index.js:16) manda
+  //    para `/admin` por `users.role`, e `comPapel` devolve a `/` por este
+  //    papel. Aqui garantem-se as duas.
   const associacao = await UserCondominio.findOne({
     where: { utilizador_id: gestor.id, condominio_id: cid },
   });
@@ -271,55 +277,69 @@ async function repararGestorDemo(condominio, { dryRun }) {
       });
     }
     alteracoes += 1;
-    descricao.push("UserCondominio criada com role 'admin'");
+    descricao.push("UserCondominio criada com role 'admin' e estado 'ativo'");
   } else {
+    const corrigir = {};
     if (associacao.role !== 'admin') {
-      if (!dryRun) await associacao.update({ role: 'admin' });
-      alteracoes += 1;
+      corrigir.role = 'admin';
       descricao.push(`UserCondominio.role → 'admin' (era '${associacao.role}')`);
     }
     if (associacao.estado !== 'ativo') {
-      if (!dryRun) await associacao.update({ estado: 'ativo' });
-      alteracoes += 1;
-      descricao.push("UserCondominio.estado → 'ativo'");
+      corrigir.estado = 'ativo';
+      descricao.push(`UserCondominio.estado → 'ativo' (era '${associacao.estado}')`);
     }
+    // Um só UPDATE com o que falta (0 campos ⇒ nenhuma escrita).
+    if (!dryRun && Object.keys(corrigir).length) await associacao.update(corrigir);
+    alteracoes += Object.keys(corrigir).length;
   }
 
-  // 5. Titularidade própria, se ainda não existir nenhuma ativa do gestor.
-  if (pessoa && !dryRun) {
-    const jaTem = await FracaoTitularidade.findOne({
-      where: { condominio_id: cid, pessoa_id: pessoa.id, estado: 'ativa' },
+  // 5. Titularidade do gestor — NÃO é requisito de autenticação nem de
+  //    administração (essas dependem só de `users.role` e da associação).
+  //    Serve as invariantes do seed e o conteúdo do portal, pelo que só se
+  //    cria quando NÃO existe nenhuma ativa. Idempotência pelas DUAS vias de
+  //    acesso que `fracoesDoUtilizador` (helpers/titularidades.js:154)
+  //    reconhece: `utilizador_id` (tem precedência) ou `pessoa_id`. Nunca
+  //    sobrepõe uma titularidade existente de outra pessoa/conta — se todas as
+  //    frações já tiverem titular ativa, não se cria nada.
+  if (pessoa) {
+    const porConta = await FracaoTitularidade.findOne({
+      where: { condominio_id: cid, utilizador_id: gestor.id, estado: 'ativa' },
     });
-    if (!jaTem) {
+    const porPessoa = porConta
+      ? null
+      : await FracaoTitularidade.findOne({
+          where: { condominio_id: cid, pessoa_id: pessoa.id, estado: 'ativa' },
+        });
+    if (!porConta && !porPessoa) {
       // Fração de um proprietário SEM conta de portal (o caso que o
-      // administrador tem de ver e resolver) — nunca sobrepõe o acesso de
+      // administrador tem de ver e resolver). Nunca sobrepõe o acesso de
       // outra conta, porque nessas o `utilizador_id` decide.
-      const comConta = new Set(
+      const ocupadas = new Set(
         (await FracaoTitularidade.findAll({
           where: { condominio_id: cid, estado: 'ativa' },
           attributes: ['fracao_id'],
         })).map((t) => Number(t.fracao_id))
       );
-      const livre = await Fracao.findOne({
-        where: { condominio_id: cid },
-        order: [['id', 'ASC']],
-      });
       const candidata = (await Fracao.findAll({ where: { condominio_id: cid }, order: [['id', 'ASC']] }))
-        .find((f) => !comConta.has(Number(f.id)));
-      if (candidata || livre) {
-        await FracaoTitularidade.create({
-          condominio_id: cid,
-          fracao_id: (candidata || livre).id,
-          pessoa_id: pessoa.id,
-          utilizador_id: gestor.id,
-          vinculo: 'proprietario',
-          data_inicio: `${new Date().getFullYear() - 1}-01-01`,
-          data_fim: null,
-          estado: 'ativa',
-          created_by: gestor.id,
-        });
+        .find((f) => !ocupadas.has(Number(f.id)));
+      if (candidata) {
+        if (!dryRun) {
+          await FracaoTitularidade.create({
+            condominio_id: cid,
+            fracao_id: candidata.id,
+            pessoa_id: pessoa.id,
+            utilizador_id: gestor.id,
+            vinculo: 'proprietario',
+            data_inicio: `${new Date().getFullYear() - 1}-01-01`,
+            data_fim: null,
+            estado: 'ativa',
+            created_by: gestor.id,
+          });
+        }
         alteracoes += 1;
-        descricao.push(`FracaoTitularidade criada na fração #${(candidata || livre).id}`);
+        descricao.push(`FracaoTitularidade criada na fração #${candidata.id}`);
+      } else {
+        passo('Todas as frações já têm titular ativa — nenhuma titularidade criada.');
       }
     }
   }
