@@ -112,7 +112,7 @@ router.get('/orcamento', async (req, res) => {
 // ── Criar ──────────────────────────────────────────────────────────
 router.get('/orcamento/nova', async (req, res) => {
   const fracoes = await Fracao.findAll({ where: { estado: 'ativo', condominio_id: req.condominioId }, order: [['designacao', 'ASC']] });
-  const quotaConfig = await getQuotaConfig();
+  const quotaConfig = await getQuotaConfig(req.condominioId);
   const anoAtual = new Date().getFullYear();
   res.render('admin/orcamento/form', {
     titulo: 'Novo orçamento',
@@ -212,7 +212,7 @@ router.get('/orcamento/:id/editar', async (req, res) => {
     return res.redirect(`/admin/orcamento/${orcamento.id}`);
   }
   const fracoes = await Fracao.findAll({ where: { estado: 'ativo', condominio_id: req.condominioId }, order: [['designacao', 'ASC']] });
-  const quotaConfig = await getQuotaConfig();
+  const quotaConfig = await getQuotaConfig(req.condominioId);
   res.render('admin/orcamento/form', {
     titulo: 'Editar orçamento',
     orcamento: orcamento.toJSON(),

@@ -120,7 +120,7 @@ router.get('/quotas', async (req, res) => {
     Fracao.findAll({ where: { condominio_id: cid }, order: [['designacao', 'ASC']] }),
     Quota.findAll({ where: { ano, condominio_id: cid } }),
     anosDisponiveis(cid),
-    getQuotaConfig(),
+    getQuotaConfig(cid),
   ]);
 
   // Pagamentos aplicados e cobertura de recibos nas quotas do ano.

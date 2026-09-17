@@ -667,7 +667,7 @@ router.post('/quotas/config', async (req, res) => {
     return res.redirect('/admin/quotas');
   }
 
-  await setQuotaConfig({ valorPor1000, fcrPercentagem });
+  await setQuotaConfig(req.condominioId, { valorPor1000, fcrPercentagem });
 
   // Recalcular quotas futuras não pagas (se pedido)
   if (req.body.recalcular === 'futuras') {
@@ -736,7 +736,7 @@ router.get('/quotas/grelha', async (req, res) => {
 router.get('/quotas/gerar', async (req, res) => {
   const [fracoes, quotaConfig, orcamentos, existentes] = await Promise.all([
     Fracao.findAll({ where: { estado: 'ativo', condominio_id: req.condominioId }, order: [['designacao', 'ASC']] }),
-    getQuotaConfig(),
+    getQuotaConfig(req.condominioId),
     Orcamento.findAll({
       where: { estado: { [Op.ne]: 'anulado' }, condominio_id: req.condominioId },
       include: [{ model: OrcamentoRubrica, as: 'rubricas' }],
@@ -820,7 +820,7 @@ router.post('/quotas/gerar', async (req, res) => {
     const totalAnualC = orcamento.rubricas.filter((r) => r.ativo).reduce((s, r) => s + toCents(r.valor_anual), 0);
     // A percentagem do FCR vem SEMPRE da configuração do condomínio: sem ela o
     // FCR saía a zero e a quota deixava de discriminar o fundo.
-    const { fcrPercentagem: fcrOrcamento } = await getQuotaConfig();
+    const { fcrPercentagem: fcrOrcamento } = await getQuotaConfig(req.condominioId);
     valoresPorFracao = calcularQuotasOrcamento({
       fracoes,
       totalAnual: fromCents(totalAnualC),
@@ -830,7 +830,7 @@ router.post('/quotas/gerar', async (req, res) => {
     });
     metodoLabel = `orçamento ${orcamento.designacao}`;
   } else {
-    const { valorPor1000, fcrPercentagem } = await getQuotaConfig();
+    const { valorPor1000, fcrPercentagem } = await getQuotaConfig(req.condominioId);
     valoresPorFracao = new Map(
       fracoes.map((f) => [f.id, calcularQuota(f.permilagem, valorPor1000, fcrPercentagem)])
     );

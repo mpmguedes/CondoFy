@@ -154,13 +154,14 @@ function testeDivisaoComponentes() {
 // ── 6. Configuração por condomínio: ler, guardar e recusar ────────
 async function testeConfiguracao() {
   // Estado inicial: sem configuração gravada, o default é o mínimo legal.
-  const inicial = await getQuotaConfig();
+  // (O âmbito é sempre explícito — o helper nunca lê sessão nem pedido.)
+  const inicial = await getQuotaConfig(1);
   assert.strictEqual(inicial.fcrPercentagem, '10', 'sem configuração, o FCR é o mínimo legal (10%)');
   assert.strictEqual(inicial.valorPor1000, '100.0000', 'sem configuração, o valor por 1000‰ tem default');
 
   // A configuração guarda o valor aprovado pelo condomínio (acima do mínimo).
-  await setQuotaConfig({ valorPor1000: '120.0000', fcrPercentagem: 15 });
-  const depois = await getQuotaConfig();
+  await setQuotaConfig(1, { valorPor1000: '120.0000', fcrPercentagem: 15 });
+  const depois = await getQuotaConfig(1);
   assert.strictEqual(depois.fcrPercentagem, '15', 'a percentagem guardada é a do condomínio (15%)');
   assert.strictEqual(depois.valorPor1000, '120.0000', 'o valor por 1000‰ é guardado');
 
@@ -181,7 +182,8 @@ function testePrevisualizacaoUsaAMesmaRegra() {
 
   // O cálculo final passa a percentagem configurada no método orçamento.
   const blocoOrcamento = rota.slice(rota.indexOf("if (metodo === 'orcamento')"), rota.indexOf('} else {', rota.indexOf("if (metodo === 'orcamento')")));
-  assert.ok(blocoOrcamento.includes('getQuotaConfig()'), 'cálculo final: lê a configuração do condomínio');
+  assert.ok(/getQuotaConfig\(req\.condominioId\)/.test(blocoOrcamento),
+    'cálculo final: lê a configuração do condomínio ATIVO (âmbito explícito)');
   assert.ok(/calcularQuotasOrcamento\(\{[\s\S]{0,300}fcrPercentagem/.test(blocoOrcamento),
     'cálculo final: passa fcrPercentagem a calcularQuotasOrcamento (regressão corrigida)');
   assert.ok(!/calcularQuotasOrcamento\(\{[\s\S]{0,200}metodo: 'permilagem',\s*meses: 12,\s*\}\)/.test(blocoOrcamento),
