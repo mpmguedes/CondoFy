@@ -157,6 +157,54 @@ function testarPortal() {
   assert.ok(SEED.includes('conta: false'), 'há frações sem conta de portal');
 }
 
+// ── 7b. O GESTOR tem de estar ligado a uma Pessoa e ter role 'admin' ──
+// Regressões que isto trava (ambas apanhadas em produção):
+//  · sem `users.pessoa_id` → `contextoFracoes` devolve pessoa=null e TODAS as
+//    vistas do portal mostram «A sua conta ainda não está associada a um
+//    condómino neste condomínio»;
+//  · `users.role = 'condomino'` → `destinoAposLogin` manda o login para
+//    `/condomino` em vez de `/admin`.
+function testarGestorAssociado() {
+  const blocoGestor = SEED.match(/const gestor = await User\.create\(\{[\s\S]*?\n  \}\);/);
+  assert.ok(blocoGestor, 'User.create do gestor presente');
+  const t = blocoGestor[0];
+  assert.ok(/role: 'admin'/.test(t), "users.role do gestor é 'admin' (destinoAposLogin → /admin)");
+  assert.ok(
+    /pessoa_id:\s*pessoaGestor\.id/.test(t),
+    'users.pessoa_id do gestor aponta para a Pessoa criada (portal deixa de mostrar o aviso)'
+  );
+  // A Pessoa do gestor é criada ANTES do User (ordem que o modelo exige).
+  const posPessoa = SEED.indexOf('const pessoaGestor = await Pessoa.create({');
+  const posUser = SEED.indexOf('const gestor = await User.create({');
+  assert.ok(posPessoa > 0 && posUser > posPessoa, 'a Pessoa do gestor é criada antes do User');
+  assert.ok(/condominio_id: cid/.test(SEED.slice(posPessoa, posUser)), 'a Pessoa do gestor tem condominio_id');
+  // O papel por condomínio continua a ser 'admin' (comPapel('admin') em routes/admin.js).
+  assert.ok(
+    /UserCondominio\.create\(\{ utilizador_id: gestor\.id, condominio_id: cid, role: 'admin'/.test(SEED),
+    "a associação do gestor ao condomínio tem role 'admin'"
+  );
+  // O gestor tem titularidade própria, para o portal ter conteúdo.
+  assert.ok(SEED.includes('indiceFracoSemConta'), 'o gestor recebe uma titularidade (fração sem conta)');
+}
+
+// ── 7c. Os ajustes manuais usam a categoria canónica do Extrato ───────
+// O invariante antigo filtrava por `referencia <> 'TRANSF'`, mas
+// `criarMovimento` grava `referencia = NULL` e `NULL <> 'TRANSF'` é NULL (não
+// TRUE) — o COUNT devolvia sempre 0 e o seed falhava com "0 ajustes".
+function testarAjustesManuais() {
+  assert.ok(SEED.includes('extrato.categoriaDe'), 'classifica ajustes por extrato.categoriaDe (fonte de verdade)');
+  assert.ok(SEED.includes('extrato.CATEGORIAS.ajuste'), 'compara com CATEGORIAS.ajuste');
+  assert.ok(
+    !/referencia:\s*\{\s*\[Op\.ne\]:\s*'TRANSF'\s*\}/.test(SEED),
+    "não usa `referencia <> 'TRANSF'` (NULL-unsafe) para identificar ajustes"
+  );
+  // O require do extrato fica no topo da função, servindo os dois usos.
+  const posFn = SEED.indexOf('async function verificarInvariantes(cid)');
+  const posReq = SEED.indexOf("const extrato = require('../helpers/extrato');");
+  const posUsoAjuste = SEED.indexOf('extrato.categoriaDe');
+  assert.ok(posReq > posFn && posUsoAjuste > posReq, 'o extrato é carregado antes de ser usado nos ajustes');
+}
+
 // ── 8. FCR com deliberação ───────────────────────────────────────────
 function testarFcr() {
   assert.ok(SEED.includes('transferirFcr({'), 'usa transferirFcr (corrente → fundo)');
@@ -268,6 +316,8 @@ testarFicticio();
 testarFracoes();
 testarEstados();
 testarPortal();
+testarGestorAssociado();
+testarAjustesManuais();
 testarFcr();
 testarReset();
 testarInvariantes();

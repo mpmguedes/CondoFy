@@ -40,6 +40,11 @@
 //   node scripts/seed-demo.js              # cria (ou confirma que já existe)
 //   node scripts/seed-demo.js --dry-run    # mostra o plano, não escreve nada
 //   node scripts/seed-demo.js --reset      # apaga APENAS o condomínio demo
+//   node scripts/seed-demo.js --reparar    # corrige só a conta do gestor demo
+//                                          # (não apaga nem recria o resto)
+// `--reparar` aceita `--dry-run` (simula) e serve para atualizar um demo criado
+// por uma versão anterior: liga o gestor a uma `Pessoa` (`users.pessoa_id`),
+// repõe `users.role = 'admin'` e a associação `admin` ao condomínio.
 //
 // ── Sobre as transações ─────────────────────────────────────────────
 // Os writers (`registarPagamento`, `registarPagamentoExtraParcela`,
@@ -144,6 +149,7 @@ const FORNECEDORES_DEF = [
 const OPCOES = {
   dryRun: process.argv.includes('--dry-run'),
   reset: process.argv.includes('--reset'),
+  reparar: process.argv.includes('--reparar'),
 };
 
 // ── Saída legível (pt-PT, sem depender de cores) ─────────────────────
@@ -194,6 +200,137 @@ async function encontrarCondominioDemo() {
   const ligacao = await UserCondominio.findOne({ where: { utilizador_id: gestor.id } });
   if (!ligacao) return null;
   return Condominio.findByPk(ligacao.condominio_id);
+}
+
+// ── Reparação do gestor demo (dados já existentes) ──────────────────
+// Corrige, SEM apagar nada, a conta do gestor de um condomínio demo criado por
+// uma versão anterior do seed (antes da ligação a `Pessoa` e do `role` 'admin').
+// É idempotente: correr duas vezes não muda nada depois da 1.ª.
+// Não toca em mais nada do condomínio — nem quotas, nem pagamentos, nem
+// movimentos, nem utilizadores que não sejam o gestor demo.
+async function repararGestorDemo(condominio, { dryRun }) {
+  const cid = condominio.id;
+  titulo('REPARAR — associar o gestor demo ao condómino');
+  passo(`Condomínio: #${cid} ${condominio.designacao}`);
+
+  const gestor = await User.findOne({ where: { email: EMAIL_GESTOR } });
+  if (!gestor) {
+    passo(`Não existe o utilizador ${EMAIL_GESTOR}. Nada a reparar.`);
+    return { alteracoes: 0 };
+  }
+  passo(`Utilizador #${gestor.id} ${gestor.email}`);
+
+  // 1. A Pessoa do gestor: reutiliza a ligada por `pessoa_id`; senão procura
+  //    pelo nome/email dentro do condomínio; senão cria.
+  let pessoa = gestor.pessoa_id
+    ? await Pessoa.findOne({ where: { id: gestor.pessoa_id, condominio_id: cid } })
+    : null;
+  if (!pessoa) {
+    pessoa = await Pessoa.findOne({ where: { condominio_id: cid, nome: 'Gestor Demo' } });
+  }
+  if (!pessoa && !dryRun) {
+    pessoa = await Pessoa.create({
+      condominio_id: cid,
+      nome: 'Gestor Demo',
+      email: EMAIL_GESTOR,
+      telefone: '910000000',
+      nif: '999999999',
+      tipo: 'proprietario',
+      ativo: true,
+    });
+    passo(`Pessoa do gestor criada (#${pessoa.id}).`);
+  }
+
+  let alteracoes = 0;
+  const descricao = [];
+
+  // 2. `users.pessoa_id` — é isto que remove o aviso «A sua conta ainda não
+  //    está associada a um condómino neste condomínio» em todas as vistas.
+  if (pessoa && Number(gestor.pessoa_id) !== Number(pessoa.id)) {
+    if (!dryRun) await gestor.update({ pessoa_id: pessoa.id });
+    alteracoes += 1;
+    descricao.push(`users.pessoa_id → ${pessoa.id}`);
+  }
+
+  // 3. `users.role = 'admin'` — decide o destino após o login
+  //    (`routes/index.js: destinoAposLogin` → `/admin`).
+  if (gestor.role !== 'admin') {
+    if (!dryRun) await gestor.update({ role: 'admin' });
+    alteracoes += 1;
+    descricao.push("users.role → 'admin'");
+  }
+
+  // 4. O papel POR CONDOMÍNIO (fonte de verdade das permissões).
+  const associacao = await UserCondominio.findOne({
+    where: { utilizador_id: gestor.id, condominio_id: cid },
+  });
+  if (!associacao) {
+    if (!dryRun) {
+      await UserCondominio.create({
+        utilizador_id: gestor.id, condominio_id: cid, role: 'admin', estado: 'ativo',
+      });
+    }
+    alteracoes += 1;
+    descricao.push("UserCondominio criada com role 'admin'");
+  } else {
+    if (associacao.role !== 'admin') {
+      if (!dryRun) await associacao.update({ role: 'admin' });
+      alteracoes += 1;
+      descricao.push(`UserCondominio.role → 'admin' (era '${associacao.role}')`);
+    }
+    if (associacao.estado !== 'ativo') {
+      if (!dryRun) await associacao.update({ estado: 'ativo' });
+      alteracoes += 1;
+      descricao.push("UserCondominio.estado → 'ativo'");
+    }
+  }
+
+  // 5. Titularidade própria, se ainda não existir nenhuma ativa do gestor.
+  if (pessoa && !dryRun) {
+    const jaTem = await FracaoTitularidade.findOne({
+      where: { condominio_id: cid, pessoa_id: pessoa.id, estado: 'ativa' },
+    });
+    if (!jaTem) {
+      // Fração de um proprietário SEM conta de portal (o caso que o
+      // administrador tem de ver e resolver) — nunca sobrepõe o acesso de
+      // outra conta, porque nessas o `utilizador_id` decide.
+      const comConta = new Set(
+        (await FracaoTitularidade.findAll({
+          where: { condominio_id: cid, estado: 'ativa' },
+          attributes: ['fracao_id'],
+        })).map((t) => Number(t.fracao_id))
+      );
+      const livre = await Fracao.findOne({
+        where: { condominio_id: cid },
+        order: [['id', 'ASC']],
+      });
+      const candidata = (await Fracao.findAll({ where: { condominio_id: cid }, order: [['id', 'ASC']] }))
+        .find((f) => !comConta.has(Number(f.id)));
+      if (candidata || livre) {
+        await FracaoTitularidade.create({
+          condominio_id: cid,
+          fracao_id: (candidata || livre).id,
+          pessoa_id: pessoa.id,
+          utilizador_id: gestor.id,
+          vinculo: 'proprietario',
+          data_inicio: `${new Date().getFullYear() - 1}-01-01`,
+          data_fim: null,
+          estado: 'ativa',
+          created_by: gestor.id,
+        });
+        alteracoes += 1;
+        descricao.push(`FracaoTitularidade criada na fração #${(candidata || livre).id}`);
+      }
+    }
+  }
+
+  if (!alteracoes) {
+    passo('Já estava tudo correto — nada a alterar.');
+  } else {
+    for (const d of descricao) passo(`· ${d}`);
+    passo(`${alteracoes} alteração(ões)${dryRun ? ' (simuladas — --dry-run não escreveu nada)' : ''}.`);
+  }
+  return { alteracoes };
 }
 
 async function apagarCondominioDemo(condominio, { dryRun }) {
@@ -396,20 +533,43 @@ async function criarDemo() {
   const hashGestor = await bcrypt.hash(PASSWORD_GESTOR, 10);
   const hashCondomino = await bcrypt.hash(PASSWORD_CONDOMINO, 10);
 
+  // O gestor é TAMBÉM um condómino: o modelo do GesCondu liga a conta a uma
+  // `Pessoa` do condomínio por `users.pessoa_id` (é o que o fluxo real faz em
+  // `routes/admin.js` — `Pessoa.create` e depois `User.create({ pessoa_id })`).
+  // Sem essa ligação, `routes/condomino.js` (`contextoFracoes`) devolve
+  // `pessoa = null` e qualquer vista do portal mostra «A sua conta ainda não
+  // está associada a um condómino neste condomínio».
+  // Não se cria aqui nenhuma `FracaoPessoa`/`FracaoTitularidade` para o gestor:
+  // a fração do gestor é ligada a seguir, na fase 3, junto com as restantes
+  // (uma pessoa não pode ter duas titularidades ativas para a mesma fração).
+  const pessoaGestor = await Pessoa.create({
+    condominio_id: cid,
+    nome: 'Gestor Demo',
+    email: EMAIL_GESTOR,
+    telefone: '910000000',
+    nif: '999999999',
+    tipo: 'proprietario',
+    ativo: true,
+  });
+
   const gestor = await User.create({
     email: EMAIL_GESTOR,
     password_hash: hashGestor,
     nome: 'Gestor Demo',
-    role: 'condomino', // o papel de gestão é por condomínio (UserCondominio)
+    // `users.role` é o papel LEGADO que decide o destino após o login
+    // (`routes/index.js: destinoAposLogin` manda para `/admin` só quando
+    // `user.role === 'admin'`). Com 'condomino' o login caía em `/condomino`.
+    role: 'admin',
     provider: 'local',
+    pessoa_id: pessoaGestor.id, // liga a conta ao condómino (obrigatório no portal)
     email_confirmado: true,
     ativo: true,
   });
-  // Papel 'admin' (e não 'gestor') para a conta demo aceder à TOTALIDADE da
-  // aplicação, incluindo `/admin` — `routes/admin.js` exige `comPapel('admin')`
-  // e `gestor` (20) não satisfaz `admin` (30) (helpers/tenant.js: PAPEIS).
+  // O papel POR CONDOMÍNIO (fonte de verdade das permissões) tem de ser 'admin':
+  // `routes/admin.js` exige `comPapel('admin')` e `gestor` (20) não satisfaz
+  // `admin` (30) (helpers/tenant.js: PAPEIS).
   await UserCondominio.create({ utilizador_id: gestor.id, condominio_id: cid, role: 'admin', estado: 'ativo' });
-  passo(`Gestor: ${EMAIL_GESTOR} / ${PASSWORD_GESTOR} (papel: admin)`);
+  passo(`Gestor: ${EMAIL_GESTOR} / ${PASSWORD_GESTOR} (role admin + pessoa #${pessoaGestor.id})`);
 
   // ── FASE 3: frações, pessoas, titularidades ────────────────────────
   titulo('3. Frações, pessoas e titularidades');
@@ -490,6 +650,30 @@ async function criarDemo() {
   }
   passo(`${pessoas.length} pessoas · ${usersCondominos.length} contas de portal (${PESSOAS_DEF.filter((p) => !p.conta).length} sem conta)`);
   passo(`Palavra-passe dos condóminos: ${PASSWORD_CONDOMINO}`);
+
+  // O gestor tem a sua própria `Pessoa` (criada na fase 2, ligada por
+  // `users.pessoa_id`) e é também titular de uma fração — o caso mais comum num
+  // condomínio real: quem administra é muitas vezes proprietário.
+  // Escolhe-se a fração do proprietário SEM conta de portal (a 1.ª de
+  // `PESSOAS_DEF` com `conta: false`): é o cenário que o administrador tem de
+  // conseguir ver e resolver, e evita sobrepor-se a uma titularidade já
+  // associada a uma conta de portal (nessas o `utilizador_id` decide e o gestor
+  // não teria acesso). Fica exatamente UMA titularidade ativa por fração.
+  const indiceFracoSemConta = PESSOAS_DEF.findIndex((p) => !p.conta);
+  if (indiceFracoSemConta >= 0) {
+    await FracaoTitularidade.create({
+      condominio_id: cid,
+      fracao_id: fracoes[indiceFracoSemConta].id,
+      pessoa_id: pessoaGestor.id,
+      utilizador_id: gestor.id,
+      vinculo: 'proprietario',
+      data_inicio: `${anoAnterior}-01-01`,
+      data_fim: null,
+      estado: 'ativa',
+      created_by: gestor.id,
+    });
+    passo(`Titularidade do gestor na fração ${fracoes[indiceFracoSemConta].designacao} (proprietário sem conta)`);
+  }
 
   // ── FASE 4: contas bancárias ───────────────────────────────────────
   titulo('4. Contas bancárias');
@@ -1129,6 +1313,10 @@ async function criarDemo() {
 // VERIFICAÇÃO DE INVARIANTES + RESUMO
 // ═══════════════════════════════════════════════════════════════════
 async function verificarInvariantes(cid) {
+  // Fonte de verdade da categoria de um movimento (a MESMA que a rota de
+  // anulação usa) — carregada uma vez, no topo, para toda a função.
+  const extrato = require('../helpers/extrato');
+
   const falhas = [];
   const verificar = (nome, ok, detalhe) => {
     if (!ok) falhas.push(`${nome}${detalhe ? ` — ${detalhe}` : ''}`);
@@ -1220,8 +1408,7 @@ async function verificarInvariantes(cid) {
   }
 
   // 7. Saldo agregado do Extrato coerente com as contas
-  const { extrato } = require('../helpers/extrato');
-  const dados = await extrato({ condominioId: cid, filtros: {} });
+  const dados = await extrato.extrato({ condominioId: cid, filtros: {} });
   verificar(
     'Saldo agregado do Extrato = somatório das contas',
     dados.resumo.saldoFinalC === somaSaldosC,
@@ -1253,10 +1440,24 @@ async function verificarInvariantes(cid) {
   verificar('Existem movimentos anulados', anulados > 0, `${anulados} anulados`);
 
   // 11. Ajustes manuais sem origem (anuláveis no Extrato)
-  const ajustes = await MovimentoBancario.count({
-    where: { condominio_id: cid, pagamento_id: null, despesa_id: null, extra_quota_parcela_id: null, referencia: { [Op.ne]: 'TRANSF' } },
+  //     A categoria NÃO se decide por SQL: `referencia <> 'TRANSF'` descartava
+  //     todos os ajustes, porque `criarMovimento` grava `referencia = NULL`
+  //     quando não é dada, e `NULL <> 'TRANSF'` é NULL (não TRUE) — a linha não
+  //     entra no COUNT. Usa-se a MESMA função que a rota de anulação usa
+  //     (`extrato.categoriaDe`), que é a fonte de verdade da categoria.
+  const movimentosDoDemo = await MovimentoBancario.findAll({
+    where: { condominio_id: cid },
+    attributes: ['id', 'estado', 'referencia', 'tipo', 'pagamento_id', 'despesa_id', 'extra_quota_parcela_id'],
   });
-  verificar('Existem ajustes manuais (sem origem operacional)', ajustes > 0, `${ajustes} ajustes`);
+  const ajustes = movimentosDoDemo.filter(
+    (m) => extrato.categoriaDe(m) === extrato.CATEGORIAS.ajuste
+  );
+  const ajustesAtivos = ajustes.filter((m) => m.estado === 'confirmado');
+  verificar(
+    'Existem ajustes manuais (sem origem operacional)',
+    ajustesAtivos.length > 0,
+    `${ajustesAtivos.length} ativos (${ajustes.length} no total, ${ajustes.length - ajustesAtivos.length} anulados)`
+  );
 
   // 12. Documentos nunca com integração externa
   const comDrive = await Documento.count({ where: { condominio_id: cid, drive_status: { [Op.ne]: 'nao_guardado' } } });
@@ -1359,9 +1560,26 @@ async function main() {
   console.log('  Dados 100% fictícios · nunca usar em produção');
   if (OPCOES.dryRun) console.log('  MODO: --dry-run (não escreve nada)');
   if (OPCOES.reset) console.log('  MODO: --reset (apaga o condomínio de demonstração)');
+  if (OPCOES.reparar) console.log('  MODO: --reparar (corrige a conta do gestor demo, sem apagar nada)');
   console.log('═══════════════════════════════════════════════════════════════');
 
   const existente = await encontrarCondominioDemo();
+
+  // `--reparar` primeiro: é a via não destrutiva para corrigir um demo criado
+  // por uma versão anterior do seed (gestor sem `pessoa_id` / sem 'admin').
+  if (OPCOES.reparar) {
+    if (!existente) {
+      titulo('REPARAR');
+      passo('Não existe condomínio de demonstração. Nada a reparar.');
+      await sequelize.close();
+      process.exit(0);
+    }
+    await repararGestorDemo(existente, { dryRun: OPCOES.dryRun });
+    titulo('VERIFICAÇÃO DE INVARIANTES');
+    const { falhas } = await verificarInvariantes(existente.id);
+    await sequelize.close();
+    process.exit(falhas.length ? 1 : 0);
+  }
 
   if (OPCOES.reset) {
     if (!existente) {
@@ -1440,7 +1658,7 @@ function mostrarPlano() {
 // internas para serem testadas com modelos falsos. Em utilização normal nada
 // disto é usado — o script corre e termina como sempre.
 if (process.env.SEED_DEMO_EXPORTAR === '1') {
-  module.exports = { verificarInvariantes, resumir, encontrarCondominioDemo, apagarCondominioDemo, mostrarPlano, criarDemo };
+  module.exports = { verificarInvariantes, resumir, encontrarCondominioDemo, apagarCondominioDemo, repararGestorDemo, mostrarPlano, criarDemo };
 } else {
   main().catch(async (err) => {
     console.error('');

@@ -134,6 +134,71 @@ const models = {
   Numeracao: fakeModel(), EmailFila: fakeModel({ count: async () => 0 }),
 };
 
+// ── Estado mutável para o teste do `--reparar` ───────────────────────
+// O reparador altera registos, por isso precisa de modelos que guardem estado.
+// Recria-se aqui o cenário EXATO que falhou em produção: gestor com
+// `pessoa_id = null`, `role = 'condomino'` e associação `gestor`.
+function fakeModelReparacao() {
+  // Instâncias com `.update()` (o reparador usa `gestor.update(...)` e
+  // `associacao.update(...)`, tal como o código real faz).
+  const user = {
+    id: 4, email: 'demo.gestor@example.test', nome: 'Gestor Demo',
+    role: 'condomino', pessoa_id: null,
+    async update(d) { Object.assign(this, d); return this; },
+  };
+  const associacao = {
+    id: 9, utilizador_id: 4, condominio_id: CID, role: 'gestor', estado: 'ativo',
+    async update(d) { Object.assign(this, d); return this; },
+  };
+  const estado = {
+    user,
+    associacao,
+    pessoaCriada: null,
+    titularidadeCriada: null,
+    // A fração 1 já tem titularidade ativa → a reparação tem de escolher a 2.ª.
+    titularidades: [{ id: 1, condominio_id: CID, fracao_id: 1, pessoa_id: 30, estado: 'ativa' }],
+  };
+
+  // Filtro mínimo de `where` que chega para o reparador: igualdade estrita
+  // sobre os campos pedidos (os `null` comparam-se como `null` de propósito —
+  // é assim que o Sequelize traduz `{ campo: null }`).
+  const corresponde = (registo, where) =>
+    Object.entries(where || {}).every(([k, v]) => {
+      if (v !== null && typeof v === 'object') return true; // operadores (Op.*): ignora
+      return registo[k] === v;
+    });
+
+  const models = {
+    User: fakeModel({ findOne: async () => estado.user }),
+    Pessoa: fakeModel({
+      findOne: async ({ where } = {}) => {
+        if (estado.pessoaCriada && corresponde(estado.pessoaCriada, where)) return estado.pessoaCriada;
+        // Sem Pessoa ligada e ainda sem Pessoa criada → não existe nenhuma.
+        return null;
+      },
+      create: async (d) => { estado.pessoaCriada = { id: 77, ...d }; return estado.pessoaCriada; },
+    }),
+    UserCondominio: fakeModel({
+      findOne: async () => estado.associacao,
+      create: async (d) => { estado.associacao = { id: 10, ...d }; return estado.associacao; },
+    }),
+    // ESTATEFUL a sério: o `create` entra na coleção, para que a 2.ª passagem
+    // do reparador encontre a titularidade criada na 1.ª e não duplique nada.
+    // (Sem isto o teste passaria por acidente e não provaria a idempotência.)
+    FracaoTitularidade: fakeModel({
+      findOne: async ({ where } = {}) => estado.titularidades.find((t) => corresponde(t, where)) || null,
+      findAll: async ({ where } = {}) => estado.titularidades.filter((t) => corresponde(t, where)),
+      create: async (d) => {
+        estado.titularidadeCriada = { id: estado.titularidades.length + 1, ...d };
+        estado.titularidades.push(estado.titularidadeCriada);
+        return estado.titularidadeCriada;
+      },
+    }),
+    Fracao: fakeModel({ findAll: async () => FRACOES, findOne: async () => FRACOES[0] }),
+  };
+  return { models, estado };
+}
+
 // ── Interceção dos requires ──────────────────────────────────────────
 // O `models/index.js` real constrói os modelos com `sequelize.define` (e isso
 // exigiria uma BD). Em vez de o carregar, injetamos os modelos falsos na cache
@@ -189,6 +254,23 @@ const ALVO = {
         }
       }
       return { linhas: confirmados, resumo: { saldoFinalC: saldoC, entradasC, saidasC } };
+    },
+    // Categoria de um movimento — MESMA regra do módulo real
+    // (`helpers/extrato.js: categoriaDe`). O verificador de invariantes usa-a
+    // para identificar os ajustes manuais, por isso o falso tem de a expor.
+    CATEGORIAS: {
+      pagamento: 'pagamento',
+      despesa: 'despesa',
+      quotaExtra: 'quota_extra',
+      transferencia: 'transferencia',
+      ajuste: 'ajuste',
+    },
+    categoriaDe: (m) => {
+      if (Number(m.pagamento_id)) return 'pagamento';
+      if (Number(m.despesa_id)) return 'despesa';
+      if (Number(m.extra_quota_parcela_id)) return 'quota_extra';
+      if (String(m.referencia || '') === 'TRANSF' || String(m.tipo || '') === 'transferencia') return 'transferencia';
+      return 'ajuste';
     },
   },
   [path.join(RAIZ, 'helpers', 'saldos.js')]: {
@@ -278,7 +360,81 @@ async function correr() {
   }
   assert.ok(linhas.join('\n').includes('1000‰'), 'mostrarPlano mostra as permilagens');
 
+  await testarReparacaoGestor(linhas);
+
   console.log('✓ Smoke test do seed de demonstração passou (modelos falsos, sem base de dados).');
+}
+
+// ── `--reparar`: executa o reparador REAL contra os modelos com estado ─
+// Reproduz o cenário de produção (utilizador #4, pessoa_id NULL, role
+// 'condomino', associação 'gestor') e exige que fique tudo corrigido — é a
+// função que o utilizador vai correr no servidor, por isso tem de ser provada.
+async function testarReparacaoGestor(linhas) {
+  const { models: modelsReparacao, estado } = fakeModelReparacao();
+
+  // Carrega o seed numa cache LIMPA, com os modelos de reparação injetados.
+  const RAIZ2 = path.join(__dirname, '..');
+  const MODELS2 = require.resolve(path.join(RAIZ2, 'models'));
+  const cacheAnterior = require.cache[MODELS2];
+  const seedAnterior = require.cache[require.resolve(path.join(RAIZ2, 'scripts', 'seed-demo.js'))];
+  require.cache[MODELS2] = {
+    id: MODELS2, filename: MODELS2, loaded: true, exports: modelsReparacao, children: [], paths: [],
+  };
+  delete require.cache[require.resolve(path.join(RAIZ2, 'scripts', 'seed-demo.js'))];
+
+  // Interceção temporária: devolve os modelos de reparação, mantém os helpers.
+  const origLoad2 = Module._load;
+  Module._load = function (request, parent, isMain) {
+    let resolved = null;
+    try { resolved = Module._resolveFilename(request, parent, isMain); } catch (e) { /* original */ }
+    if (resolved === MODELS2) return modelsReparacao;
+    if (resolved && Object.prototype.hasOwnProperty.call(ALVO, resolved)) return ALVO[resolved];
+    return origLoad2.apply(this, arguments);
+  };
+
+  let seed2;
+  try {
+    seed2 = require(path.join(RAIZ2, 'scripts', 'seed-demo.js'));
+    assert.strictEqual(typeof seed2.repararGestorDemo, 'function', 'repararGestorDemo exportada');
+
+    const origLog = console.log;
+    console.log = (...a) => linhas.push(a.join(' '));
+    let res;
+    try {
+      res = await seed2.repararGestorDemo({ id: CID, designacao: 'Condomínio Demonstração' }, { dryRun: false });
+    } finally {
+      console.log = origLog;
+    }
+
+    // 1. A associação ao condomínio passou a 'admin'.
+    assert.strictEqual(estado.associacao.role, 'admin', "associação reparada para role 'admin'");
+    // 2. O papel legado passou a 'admin' (decide o destino do login).
+    assert.strictEqual(estado.user.role, 'admin', "users.role reparado para 'admin'");
+    // 3. A conta passou a estar ligada a uma Pessoa (remove o aviso do portal).
+    assert.ok(estado.user.pessoa_id, 'users.pessoa_id preenchido');
+    assert.strictEqual(Number(estado.user.pessoa_id), Number(estado.pessoaCriada.id), 'pessoa_id aponta para a Pessoa criada');
+    // 4. Foi criada uma titularidade, e NÃO na fração já ocupada (a #1).
+    assert.ok(estado.titularidadeCriada, 'titularidade do gestor criada');
+    assert.notStrictEqual(Number(estado.titularidadeCriada.fracao_id), 1, 'não sobrepõe a titularidade existente');
+    assert.strictEqual(estado.titularidadeCriada.utilizador_id, estado.user.id, 'titularidade ligada ao gestor');
+    assert.strictEqual(estado.titularidadeCriada.estado, 'ativa', 'titularidade ativa');
+    assert.ok(res.alteracoes > 0, 'o reparador reporta alterações');
+
+    // 5. IDEMPOTÊNCIA: a 2.ª passagem não altera nada.
+    console.log = (...a) => linhas.push(a.join(' '));
+    let res2;
+    try {
+      res2 = await seed2.repararGestorDemo({ id: CID, designacao: 'Condomínio Demonstração' }, { dryRun: false });
+    } finally {
+      console.log = origLog;
+    }
+    assert.strictEqual(res2.alteracoes, 0, 'a 2.ª execução não altera nada (idempotente)');
+  } finally {
+    Module._load = origLoad2;
+    if (cacheAnterior) require.cache[MODELS2] = cacheAnterior; else delete require.cache[MODELS2];
+    if (seedAnterior) require.cache[require.resolve(path.join(RAIZ2, 'scripts', 'seed-demo.js'))] = seedAnterior;
+    else delete require.cache[require.resolve(path.join(RAIZ2, 'scripts', 'seed-demo.js'))];
+  }
 }
 
 correr().catch((err) => {
