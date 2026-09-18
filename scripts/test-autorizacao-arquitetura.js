@@ -1161,7 +1161,8 @@ const pedir = (caminho, { papel = 'admin', global = false } = {}) =>
   const adminSrc = ler('routes/admin.js');
   assert.ok(/router\.use\(tenant\.comCondominioAtivo\)/.test(adminSrc), 'admin.js tem comCondominioAtivo');
   assert.ok(
-    /router\.use\(tenant\.comPapel\('gestor'\)\)/.test(adminSrc),
+    /router\.use\(tenant\.comPapel\('gestor'\)\)/.test(adminSrc) ||
+    /return tenant\.comPapel\('gestor'\)\(req, res, next\);/.test(adminSrc),
     'admin.js tem comPapel(gestor) no router (mesmo mínimo que o destino)'
   );
   assert.ok(

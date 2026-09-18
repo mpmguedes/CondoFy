@@ -232,6 +232,10 @@ const stubs = {
     // O módulo da área do condomínio monta este middleware à entrada; aqui já
     // há condomínio ativo na sessão, por isso só se expõe o que os handlers usam.
     comCondominioAtivo: (req, res, next) => { req.condominioId = Number(req.session.condominio_ativo_id) || 1; next(); },
+    // `routes/condomino.js` fecha a área do condómino ao acesso de suporte com
+    // `tenant.semSuporte`. No duplo, o pedido não tem contexto de suporte, pelo
+    // que o guard é um no-op (é o que acontece em produção fora do suporte).
+    semSuporte: (req, res, next) => next(),
     listarCondominios: async () => ([
       { id: 1, designacao: COND.designacao, morada: COND.morada, codigo_postal: COND.codigo_postal, localidade: COND.localidade, role: 'leitura' },
       { id: 2, designacao: 'Condomínio B', morada: null, codigo_postal: null, localidade: null, role: 'leitura' },

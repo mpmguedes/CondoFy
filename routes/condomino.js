@@ -39,6 +39,28 @@ router.use(eAutenticado);
 // Isolamento: a área do condómino mostra apenas o condomínio ativo (sessão).
 router.use(tenant.comCondominioAtivo);
 
+// ── Guarda anti-suporte (ALLOW-LIST EXPLÍCITA) ─────────────────────
+// Este router NÃO tem guarda de papel (`comPapel`), porque não é o backoffice:
+// é a área do condómino, à qual se acede por TITULARIDADE, não por papel. Sem
+// esta guarda, um acesso de suporte — que tem `req.papelCondominio = null` mas
+// `req.condominioId` preenchido — alcançava as rotas de leitura do portal
+// «por acidente»: nada o travava, e a maioria só ficava vazia porque o
+// utilizador não tem frações.
+//
+// Isso era insuficiente em dois pontos concretos (auditoria eb60558):
+//   · `GET /documentos` lista o acervo com `disponivel_condominos = true`
+//     SEM verificar titularidade — a lista não depende de frações;
+//   · `GET /documentos/:id/ficheiro` serve o ficheiro (e escreve auditoria).
+//
+// Decisão: o portal do condómino fica FORA da allow-list de diagnóstico. O
+// acesso de suporte serve para diagnosticar a GESTÃO do condomínio (backoffice),
+// não para consultar a conta pessoal de um condómino. `semSuporte` nega a
+// entrada a quem esteja em contexto de suporte e deixa tudo o resto intacto.
+//
+// A allow-list é pequena e explícita de propósito: uma lista de rotas permitidas
+// envelhece mal e esquece-se; um router inteiro recusado não esquece nada.
+router.use(tenant.semSuporte);
+
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
 // Pessoa do utilizador + frações a que tem acesso AGORA (só do condomínio

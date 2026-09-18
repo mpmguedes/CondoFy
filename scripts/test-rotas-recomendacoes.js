@@ -124,6 +124,10 @@ const stubs = {
   },
   '../helpers/tenant': {
     comCondominioAtivo: (req, res, next) => { req.condominioId = 1; next(); },
+    // `routes/condomino.js` fecha a área do condómino ao acesso de suporte com
+    // `tenant.semSuporte`. No duplo, o pedido não tem contexto de suporte, pelo
+    // que o guard é um no-op (é o que acontece em produção fora do suporte).
+    semSuporte: (req, res, next) => next(),
     listarCondominios: async () => ([{ id: 1, designacao: COND.designacao, role: 'leitura' }]),
     ativo: () => 1,
     entrarCondominio: async () => true,

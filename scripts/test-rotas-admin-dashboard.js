@@ -132,6 +132,13 @@ const stubs = {
   '../helpers/tenant': {
     comCondominioAtivo: (req, res, next) => { req.condominioId = 1; req.papelCondominio = 'admin'; next(); },
     comPapel: () => (req, res, next) => next(),
+    // `routes/admin.js` fecha a allow-list do suporte diagnóstico com estes dois
+    // guards. Neste teste o pedido é de um `admin` do condomínio (não há
+    // `req.suporte`), pelo que ambos são inertes — é o que acontece em produção
+    // fora do contexto de suporte.
+    comSuporte: () => (req, res, next) => next(),
+    semSuporte: (req, res, next) => next(),
+    somenteLeitura: (req, res, next) => next(),
     eSuperAdmin: () => false,
     ativo: () => 1,
     listarCondominios: async () => [{ id: 1, designacao: COND.designacao, role: 'admin' }],

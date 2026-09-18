@@ -82,10 +82,15 @@ function limparMarcas(sessao) {
 // garantem que nada flui por um acesso órfão. Esta chamada existe para o estado
 // ficar correto (transparência e auditoria), pelo que uma falha de BD NUNCA
 // pode impedir o logout — daí o `catch`.
-async function terminarSuporteDaSessao(req) {
+//
+// `origem` distingue PORQUE a sessão acabou (logout, inatividade, conta
+// desativada). Não é decorativo: sem isto, os três casos ficariam
+// indistinguíveis no histórico de auditoria, e uma sessão que morreu por
+// inatividade apareceria como um término deliberado.
+async function terminarSuporteDaSessao(req, origem = suporte.ORIGEM.LOGOUT) {
   if (!req || !req.session) return;
   try {
-    await suporte.terminarPorSessao(req);
+    await suporte.terminarPorSessao(req, origem);
   } catch (err) {
     console.error('[suporte/logout]', err.message);
   }
@@ -139,7 +144,7 @@ function verificarContaAtiva(req, res, next) {
 
   const encerrar = (cb) => {
     limparMarcas(req.session);
-    terminarSuporteDaSessao(req).then(() => {
+    terminarSuporteDaSessao(req, suporte.ORIGEM.CONTA_DESATIVADA).then(() => {
       if (typeof req.logout === 'function') req.logout(() => cb());
       else cb();
     });
@@ -157,7 +162,7 @@ function verificarContaAtiva(req, res, next) {
 function encerrarPorInatividade(req, res) {
   const encerrar = (cb) => {
     limparMarcas(req.session);
-    terminarSuporteDaSessao(req).then(() => {
+    terminarSuporteDaSessao(req, suporte.ORIGEM.INATIVIDADE).then(() => {
       if (typeof req.logout === 'function') {
         req.logout(() => cb());
       } else {

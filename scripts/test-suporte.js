@@ -76,6 +76,17 @@ function criarStubs() {
   // Estado das associações (utilizador ↔ condomínio), controlado pelo teste.
   let associacoes = [];
 
+  // Eventos de auditoria gravados (AuditLog). O stub é ESTADEFUL para que os
+  // testes possam provar que a expiração e o término por sessão AUDITAM — e que
+  // não duplicam o evento quando vários pedidos chegam depois do prazo.
+  const auditoria = [];
+  const AuditLog = {
+    async create(dados) {
+      auditoria.push(dados);
+      return dados;
+    },
+  };
+
   const AcessoSuporte = {
     async create(dados) {
       seq += 1;
@@ -137,12 +148,20 @@ function criarStubs() {
     },
   };
 
-  return { AcessoSuporte, UserCondominio, acessos, definirAssociacoes: UserCondominio.definir };
+  return { AcessoSuporte, UserCondominio, AuditLog, acessos, definirAssociacoes: UserCondominio.definir, auditoria };
 }
 
 // ── Injeção dos stubs ANTES de carregar os helpers ───────────────────
 const stubs = criarStubs();
 const modelosReais = require.resolve(path.join(RAIZ, 'models'));
+
+// `helpers/audit.js` faz `require('../models')` no TOPO e desestrutura
+// `AuditLog`. Se estiver em cache ANTES da injeção, guardou a referência aos
+// modelos REAIS e a auditoria passaria a escrever na BD (ou, sem BD, a falhar em
+// silêncio dentro do `try/catch` — e os testes de auditoria mediriam nada).
+// Remove-se do cache para que volte a ler o stub injetado abaixo.
+delete require.cache[require.resolve(path.join(RAIZ, 'helpers/audit'))];
+
 require.cache[modelosReais] = {
   id: modelosReais,
   filename: modelosReais,
@@ -150,6 +169,7 @@ require.cache[modelosReais] = {
   exports: {
     AcessoSuporte: stubs.AcessoSuporte,
     UserCondominio: stubs.UserCondominio,
+    AuditLog: stubs.AuditLog,
     Condominio: { findOne: async () => null, findByPk: async () => null },
     User: { findByPk: async () => null },
   },
@@ -157,6 +177,26 @@ require.cache[modelosReais] = {
 
 const suporte = require(path.join(RAIZ, 'helpers/suporte'));
 const tenant = require(path.join(RAIZ, 'helpers/tenant'));
+
+// ── Verificação da injeção da auditoria ──────────────────────────────
+// Ponto de falha SILENCIOSO: `audit.js` engole qualquer erro num `console.error`
+// e devolve `undefined`; se estivesse ligado aos modelos REAIS (ou a um stub
+// incompleto), todos os testes de auditoria passariam a medir nada sem falhar.
+// A sonda atravessa o caminho real (`helpers/audit`) e confirma que o evento
+// chega ao registo do stub.
+const AUDIT = require.resolve(path.join(RAIZ, 'helpers/audit'));
+delete require.cache[AUDIT]; // garante que relê o stub injetado acima
+{
+  const sonda = { userId: 1, acao: 'sonda_auditoria', detalhes: { sonda: true } };
+  require(AUDIT).audit(sonda);
+  const ultimo = stubs.auditoria[stubs.auditoria.length - 1];
+  if (!ultimo || ultimo.acao !== 'sonda_auditoria') {
+    throw new Error(
+      'audit.js não está ligado ao stub de AuditLog: os testes de auditoria mediriam nada em silêncio'
+    );
+  }
+  stubs.auditoria.length = 0; // a sonda não conta como evento
+}
 
 // ── Utilitários de pedido ────────────────────────────────────────────
 function reqBase(over = {}) {
@@ -303,6 +343,12 @@ titulo('vigente() — isolamento e prazo');
 
 async function testarVigente() {
   // Acesso ativo, futuro, no condomínio 30.
+  //
+  // NOTA: `iniciar` grava o `session_id` do pedido que o abre e `vigente`
+  // exige que coincida com o `req.sessionID` de quem o usa (vinculação à
+  // sessão). Por isso o arranque é feito NA MESMA sessão (`sess-1`) em que o
+  // acesso vai ser exercitado — abri-lo numa sessão sem id e usá-lo noutra
+  // seria (corretamente) recusado como acesso sem prova de vínculo.
   stubs.definirAssociacoes([]);
   const reqDono = reqBase({ user: { id: 9, role_global: 'super_admin' } });
   const criado = await suporte.iniciar({ req: reqDono, condominioId: 30, motivo: 'diagnóstico', nivel: 'diagnostico', duracaoMinutos: 60 });
@@ -328,7 +374,16 @@ async function testarVigente() {
   feito('acesso pertence ao OPERADOR: um id roubado não autoriza');
 
   // (d) Expiração ABSOLUTA: prazo no passado → recusa e formaliza `expirado`.
-  const passado = await suporte.iniciar({ req: reqBase(), condominioId: 40, motivo: 'expirado', nivel: 'diagnostico', duracaoMinutos: 15 });
+  // Arranca na sessão `sess-1` (a mesma em que será exercitado) para que a
+  // vinculação à sessão não seja a causa da recusa — o que aqui se prova é o
+  // PRAZO, não o vínculo.
+  const passado = await suporte.iniciar({
+    req: reqBase({ sessionID: 'sess-1' }),
+    condominioId: 40,
+    motivo: 'expirado',
+    nivel: 'diagnostico',
+    duracaoMinutos: 15,
+  });
   stubs.acessos.find((a) => a.id === passado.acesso.id).expira_em = new Date(Date.now() - 1000);
   req = reqBase({ session: { [suporte.CHAVE_SESSAO]: passado.acesso.id } });
   vig = await suporte.vigente(req, 40);
@@ -346,6 +401,45 @@ async function testarVigente() {
   assert.strictEqual(depois, antes, 'a atividade NÃO renova o prazo (expiração absoluta)');
   feito('a atividade não renova o prazo (ao contrário do idle da sessão)');
 
+  // (e2) VINCULAÇÃO À SESSÃO: o acesso só vale na sessão para que foi aberto.
+  // Um acesso iniciado na sessão `sess-1` não autoriza noutra sessão, mesmo com
+  // o `acesso_suporte_id` correto na sessão — o id sozinho não é prova.
+  const vinculo = await suporte.iniciar({
+    req: reqBase({ sessionID: 'sess-origem' }),
+    condominioId: 31,
+    motivo: 'vinculo',
+    nivel: 'diagnostico',
+    duracaoMinutos: 60,
+  });
+  const idVinc = vinculo.acesso.id;
+  // (i) mesma sessão → autoriza
+  let vigVinc = await suporte.vigente(reqBase({ sessionID: 'sess-origem', session: { [suporte.CHAVE_SESSAO]: idVinc } }), 31);
+  assert.ok(vigVinc, 'a MESMA sessão autoriza');
+  // (ii) sessão diferente → recusa
+  const reqOutra = reqBase({ sessionID: 'sess-atacante', session: { [suporte.CHAVE_SESSAO]: idVinc } });
+  vigVinc = await suporte.vigente(reqOutra, 31);
+  assert.strictEqual(vigVinc, null, 'sessão diferente NÃO autoriza');
+  assert.strictEqual(reqOutra.session[suporte.CHAVE_SESSAO], undefined, 'sessão intrusa é limpa');
+  // (iii) sem session_id no acesso → falha fechada
+  stubs.acessos.find((a) => a.id === idVinc).session_id = null;
+  vigVinc = await suporte.vigente(reqBase({ sessionID: 'sess-origem', session: { [suporte.CHAVE_SESSAO]: idVinc } }), 31);
+  assert.strictEqual(vigVinc, null, 'acesso sem session_id NÃO autoriza (falha fechada)');
+  // (iv) sem sessionID no pedido → falha fechada
+  stubs.acessos.find((a) => a.id === idVinc).session_id = 'sess-origem';
+  vigVinc = await suporte.vigente(reqBase({ sessionID: undefined, session: { [suporte.CHAVE_SESSAO]: idVinc } }), 31);
+  assert.strictEqual(vigVinc, null, 'pedido sem sessionID NÃO autoriza (falha fechada)');
+  feito('session_id vinculativo: só a sessão de origem autoriza');
+
+  // (e3) ÂMBITO OBRIGATÓRIO: `vigente` sem condomínio deixa de ser um caminho
+  // de autorização válido. Antes, `vigente(req, null)` autorizava sem filtro.
+  const semAmbito = await suporte.vigente(reqBase({ session: { [suporte.CHAVE_SESSAO]: id } }), null);
+  assert.strictEqual(semAmbito, null, 'vigente(req, null) NÃO autoriza');
+  const semAmbito2 = await suporte.vigente(reqBase({ session: { [suporte.CHAVE_SESSAO]: id } }), undefined);
+  assert.strictEqual(semAmbito2, null, 'vigente(req, undefined) NÃO autoriza');
+  const semAmbito3 = await suporte.vigente(reqBase({ session: { [suporte.CHAVE_SESSAO]: id } }), 0);
+  assert.strictEqual(semAmbito3, null, 'vigente(req, 0) NÃO autoriza');
+  feito('âmbito obrigatório: não existe caminho «qualquer condomínio»');
+
   // (f) Estados terminais.
   for (const estado of ['expirado', 'terminado', 'revogado']) {
     const a = await suporte.iniciar({ req: reqBase(), condominioId: 50, motivo: 'x', nivel: 'diagnostico', duracaoMinutos: 60 });
@@ -355,6 +449,66 @@ async function testarVigente() {
     assert.strictEqual(v, null, `${estado} não autoriza`);
   }
   feito('estados terminais nunca autorizam');
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// 4b. Expiração: auditoria e não-duplicação
+// ═════════════════════════════════════════════════════════════════════
+titulo('Auditoria da expiração');
+
+async function testarAuditoriaExpiracao() {
+  stubs.definirAssociacoes([]);
+
+  // Todas as chamadas usam a sessão `sess-1`, e os acessos são abertos NESSA
+  // sessão: a vinculação à sessão é um pré-requisito do acesso, não aquilo que
+  // esta secção mede. (Se o vínculo falhasse primeiro, `vigente` recusaria sem
+  // nunca avaliar o prazo — e o teste de expiração não mediria nada.)
+  const sessao = 'sess-1';
+  const pedido = (over = {}) => reqBase({ sessionID: sessao, ...over });
+
+  function eventosExpiracao(id) {
+    return stubs.auditoria.filter(
+      (e) => e.acao === 'suporte_expirado' && e.detalhes && JSON.parse(e.detalhes).acesso_suporte_id === id
+    );
+  }
+
+  // (a) `agora < expira_em` → ativo (nada expira, nada é auditado).
+  const futuro = await suporte.iniciar({ req: pedido(), condominioId: 200, motivo: 'futuro', nivel: 'diagnostico', duracaoMinutos: 60 });
+  let vig = await suporte.vigente(pedido({ session: { [suporte.CHAVE_SESSAO]: futuro.acesso.id } }), 200);
+  assert.ok(vig, 'agora < expira_em → ativo, autoriza');
+  assert.strictEqual(eventosExpiracao(futuro.acesso.id).length, 0, 'sem expiração não há auditoria de expiração');
+  feito('agora < expira_em → ativo (sem evento)');
+
+  // (b) `agora === expira_em` → expirado (o prazo é até, não inclusive).
+  const limite = await suporte.iniciar({ req: pedido(), condominioId: 201, motivo: 'limite', nivel: 'diagnostico', duracaoMinutos: 60 });
+  stubs.acessos.find((a) => a.id === limite.acesso.id).expira_em = new Date(); // == agora
+  vig = await suporte.vigente(pedido({ session: { [suporte.CHAVE_SESSAO]: limite.acesso.id } }), 201);
+  assert.strictEqual(vig, null, 'agora === expira_em → expirado');
+  assert.strictEqual(stubs.acessos.find((a) => a.id === limite.acesso.id).estado, 'expirado', 'estado formalizado');
+  feito('agora === expira_em → expirado');
+
+  // (c) `agora > expira_em` → expirado, e o evento é ÚNICO.
+  const passado = await suporte.iniciar({ req: pedido(), condominioId: 202, motivo: 'passado', nivel: 'diagnostico', duracaoMinutos: 60 });
+  stubs.acessos.find((a) => a.id === passado.acesso.id).expira_em = new Date(Date.now() - 5000);
+  const vigPassado = await suporte.vigente(pedido({ session: { [suporte.CHAVE_SESSAO]: passado.acesso.id } }), 202);
+  assert.strictEqual(vigPassado, null, 'agora > expira_em → expirado');
+  const ev1 = eventosExpiracao(passado.acesso.id);
+  assert.strictEqual(ev1.length, 1, 'exatamente UM evento de expiração');
+  const detalhes = JSON.parse(ev1[0].detalhes);
+  assert.strictEqual(detalhes.acesso_suporte_id, passado.acesso.id, 'evento tem acesso_suporte_id');
+  assert.strictEqual(Number(detalhes.condominio_id), 202, 'evento tem condominio_id');
+  assert.strictEqual(detalhes.nivel, 'diagnostico', 'evento tem nivel');
+  assert.strictEqual(detalhes.motivo, 'passado', 'evento tem motivo');
+  assert.ok(detalhes.expira_em, 'evento tem expira_em');
+  assert.ok(ev1[0].user_id, 'evento tem o utilizador');
+  feito('agora > expira_em → expirado e audita quem/onde/porquê/prazo');
+
+  // (d) Vários pedidos DEPOIS do prazo não duplicam o evento.
+  for (let i = 0; i < 5; i += 1) {
+    await suporte.vigente(pedido({ session: { [suporte.CHAVE_SESSAO]: passado.acesso.id } }), 202);
+  }
+  assert.strictEqual(eventosExpiracao(passado.acesso.id).length, 1, 'nova chamada NÃO duplica o evento');
+  feito('chamadas repetidas não duplicam o evento de expiração');
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -421,6 +575,29 @@ async function testarLogout() {
   assert.strictEqual(r.acesso.estado, 'terminado', 'o acesso é terminado no logout');
   assert.strictEqual(req.session[suporte.CHAVE_SESSAO], undefined, 'sessão limpa');
   feito('terminarPorSessao termina o acesso associado à sessão');
+
+  // O término por sessão é AUDITADO, com a origem explícita.
+  const ev = stubs.auditoria.filter(
+    (e) => e.acao === 'suporte_terminado' && e.detalhes && JSON.parse(e.detalhes).acesso_suporte_id === a.acesso.id
+  );
+  assert.strictEqual(ev.length, 1, 'o término por sessão gera um evento de auditoria');
+  assert.strictEqual(JSON.parse(ev[0].detalhes).origem, 'logout', 'origem explícita = logout');
+  feito('o término por logout é auditado com origem explícita');
+
+  // As origens distinguem-se (logout ≠ inatividade ≠ conta desativada).
+  const a2 = await suporte.iniciar({ req: reqBase(), condominioId: 101, motivo: 'inatividade', nivel: 'diagnostico', duracaoMinutos: 60 });
+  await suporte.terminarPorSessao(reqBase({ session: { [suporte.CHAVE_SESSAO]: a2.acesso.id } }), suporte.ORIGEM.INATIVIDADE);
+  const ev2 = stubs.auditoria.filter(
+    (e) => e.acao === 'suporte_terminado' && e.detalhes && JSON.parse(e.detalhes).acesso_suporte_id === a2.acesso.id
+  );
+  assert.strictEqual(JSON.parse(ev2[0].detalhes).origem, 'inatividade', 'origem distinta por inatividade');
+  const a3 = await suporte.iniciar({ req: reqBase(), condominioId: 102, motivo: 'conta', nivel: 'diagnostico', duracaoMinutos: 60 });
+  await suporte.terminarPorSessao(reqBase({ session: { [suporte.CHAVE_SESSAO]: a3.acesso.id } }), suporte.ORIGEM.CONTA_DESATIVADA);
+  const ev3 = stubs.auditoria.filter(
+    (e) => e.acao === 'suporte_terminado' && e.detalhes && JSON.parse(e.detalhes).acesso_suporte_id === a3.acesso.id
+  );
+  assert.strictEqual(JSON.parse(ev3[0].detalhes).origem, 'conta_desativada', 'origem distinta por conta desativada');
+  feito('as três origens de término por sessão são distinguíveis na auditoria');
 
   // Sem acesso na sessão → não rebenta.
   const r2 = await suporte.terminarPorSessao(reqBase());
@@ -593,6 +770,45 @@ function testarEstaticas() {
   assert.ok(!/DATEONLY/.test(blocos), 'migração: sem DATEONLY (a precisão seria o dia)');
   assert.ok(/Sequelize\.DATE/.test(blocos), 'migração: DATE (DATETIME com hora)');
   feito('iniciado_em/expira_em são DATETIME, não DATE');
+
+  // ── ALLOW-LIST do suporte (read-only explícita) ───────────────────
+  // A superfície de suporte é um conjunto FECHADO, enumerado por caminho. O que
+  // se verifica aqui é o CONTRATO estrutural: existe UM ponto de entrada
+  // (o `router.use(soDiagnostico)`), ele verifica o caminho contra a lista,
+  // aplica o nível diagnóstico e o crivo de leitura por MÉTODO.
+  const condominoSrc = ler('routes/condomino.js');
+  assert.ok(/router\.use\(soDiagnostico\)/.test(adminSrc),
+    'admin.js: a allow-list é montada num único ponto (router.use(soDiagnostico))');
+  assert.ok(/eCaminhoDeDiagnostico\(req\.path\)/.test(adminSrc),
+    'admin.js: o caminho é verificado contra a lista (não por prefixo)');
+  assert.ok(/SUPORTE_DIAGNOSTICO_ATIVO/.test(adminSrc) && /comSuporte\(\['diagnostico'\]\)/.test(adminSrc),
+    'admin.js: a allow-list exige o nível `diagnostico`');
+  assert.ok(/somenteLeitura/.test(adminSrc), 'admin.js: a allow-list exige um MÉTODO de leitura');
+  feito('admin.js: allow-list fechada, com nível diagnóstico e leitura por método');
+
+  // Cada caminho da lista tem de ser um GET de leitura montado no router — a
+  // lista não pode nomear rotas que não existem (falsa sensação de cobertura).
+  for (const rota of ['/', '/fracoes', '/condominos', '/tarefas']) {
+    const escape = rota.replace(/\//g, '\\/');
+    assert.ok(new RegExp(`router\\.get\\('${escape}'`).test(adminSrc),
+      `admin.js: a rota permitida ${rota} existe e é GET`);
+  }
+  assert.ok(/router\.get\('\/fracoes\/:id'/.test(adminSrc), 'admin.js: a rota permitida /fracoes/:id existe e é GET');
+  feito('cada caminho da allow-list corresponde a uma rota GET real');
+
+  // O portal do condómino está FECHADO ao suporte (router inteiro).
+  assert.ok(/router\.use\(tenant\.semSuporte\)/.test(condominoSrc),
+    'condomino.js: o portal recusa o acesso de suporte (montagem no router)');
+  feito('condomino.js: portal do condómino fechado ao suporte (router inteiro)');
+
+  // A guarda de papel mantém-se montada (a allow-list não a substituiu nem
+  // duplicou: um `router.use(comPapel('gestor'))` incondicional a seguir
+  // recusaria outra vez o pedido de suporte admitido).
+  assert.ok(
+    /router\.use\(tenant\.comPapel\('gestor'\)\)/.test(adminSrc) ||
+    /router\.use\(\(req, res, next\) => \{[\s\S]*?tenant\.comPapel\('gestor'\)\(req, res, next\)/.test(adminSrc),
+    'admin.js: a guarda de papel continua montada no router');
+  feito('admin.js: guarda de papel intacta (a allow-list passa por cima dela)');
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -600,6 +816,7 @@ async function main() {
   await testarInicio();
   await testarHibrido();
   await testarVigente();
+  await testarAuditoriaExpiracao();
   await testarEncerramento();
   await testarLogout();
   await testarInvariante();

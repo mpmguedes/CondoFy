@@ -29,6 +29,19 @@ function modelos() {
 const AcessoSuporte = () => modelos().AcessoSuporte;
 const UserCondominio = () => modelos().UserCondominio;
 
+// A auditoria é lida em DIFERIDO pela mesma razão que os modelos: `helpers/
+// audit.js` faz `require('../models')` no topo, pelo que um `require('./audit')`
+// no topo deste ficheiro (importado por `tenant.js`) capturaria a referência aos
+// modelos ANTES da substituição por stubs nos testes sem base de dados.
+function registarAuditoria(evento) {
+  try {
+    return Promise.resolve(require('./audit').audit(evento)).catch(() => {});
+  } catch (err) {
+    // A auditoria nunca pode derrubar a autorização.
+    return Promise.resolve();
+  }
+}
+
 // Associação do operador (quem pediu o acesso) — carregada nas listagens para o
 // administrador saber a QUEM está a autorizar. Só nome e email: o objetivo é
 // identificar, não expor o perfil.
@@ -53,6 +66,18 @@ const nivelConcedivel = (nivel) => NIVEIS_CONCEDIVEIS.includes(nivel);
 // Estados terminais: o acesso já não autoriza nada.
 const ESTADOS_TERMINAIS = ['expirado', 'terminado', 'revogado'];
 const eEstadoTerminal = (estado) => ESTADOS_TERMINAIS.includes(estado);
+
+// ── Origem do término ──────────────────────────────────────────────
+// Distingue, na AUDITORIA, quatro fins distintos que partilham o mesmo estado
+// `terminado`/`expirado`. Sem esta distinção, «terminado» não diria se o acesso
+// acabou por ação do próprio operador, pelo fim da sessão (logout/inatividade)
+// ou pela desativação da conta — três situações operacionais diferentes.
+const ORIGEM = {
+  OPERADOR: 'operador', // término explícito pelo operador de suporte
+  LOGOUT: 'logout', // sessão encerrada pelo próprio utilizador
+  INATIVIDADE: 'inatividade', // sessão encerrada por inatividade
+  CONTA_DESATIVADA: 'conta_desativada', // conta deixou de estar utilizável
+};
 
 const CHAVE_SESSAO = 'suporte_ativo_id';
 
@@ -92,12 +117,20 @@ function paraContexto(acesso) {
 // Regras:
 //   · só um `super_admin` tem acesso de suporte (deriva do eixo GLOBAL);
 //   · o acesso tem de ser do PRÓPRIO utilizador (contra roubo de id);
-//   · o condomínio tem de coincidir com o ativo da sessão (âmbito fixo);
+//   · o acesso tem de estar VINCULADO à SESSÃO para que foi iniciado/autorizado
+//     (`session_id` === req.sessionID) — um id sozinho não serve de prova;
+//   · o condomínio é OBRIGATÓRIO e tem de coincidir com o do acesso (âmbito fixo);
 //   · `pendente_autorizacao` NÃO autoriza nada (não há ativação automática);
-//   · `agora > expira_em` ⇒ expira e deixa de autorizar, no mesmo pedido.
+//   · `agora >= expira_em` ⇒ expira, audita e deixa de autorizar, no mesmo pedido.
+//
+// `condominioId` é OBRIGATÓRIO e é validado no início: não existe caminho em que
+// um chamador peça «qualquer condomínio» e receba um acesso sem filtro de âmbito.
 async function vigente(req, condominioId) {
   const utilizador = req && req.user;
   if (!utilizador) return null;
+  // Âmbito obrigatório: sem um condomínio explícito não há autorização de âmbito.
+  const alvo = Number(condominioId);
+  if (!Number.isFinite(alvo) || alvo <= 0) return null;
   const id = idNaSessao(req);
   if (!id) return null;
 
@@ -109,10 +142,23 @@ async function vigente(req, condominioId) {
     return null;
   }
 
-  // Âmbito: o acesso vale para UM condomínio. Se o alvo não coincidir com o
-  // que está na sessão, não autoriza (impede trocar de condomínio reutilizando
-  // o mesmo acesso).
-  if (condominioId != null && Number(acesso.condominio_id) !== Number(condominioId)) {
+  // Vinculação à SESSÃO. O acesso só vale na sessão para que foi aberto: um
+  // `acesso_suporte_id` obtido por outra via (outro browser, outra conta com a
+  // mesma sessão replicada, um id adivinhado) não autoriza nada. Compara-se o
+  // `session_id` gravado no arranque/autorização com o `req.sessionID` atual.
+  //
+  // Sessões sem id (`req.sessionID` ausente) e acessos antigos sem `session_id`
+  // gravado são recusados — falha fechada, nunca «sem prova = passa».
+  const sessaoAtual = req.sessionID ? String(req.sessionID) : null;
+  const sessaoAcesso = acesso.session_id ? String(acesso.session_id) : null;
+  if (!sessaoAtual || !sessaoAcesso || sessaoAcesso !== sessaoAtual) {
+    limparSessao(req);
+    return null;
+  }
+
+  // Âmbito: o acesso vale para UM condomínio. Se o alvo não coincidir com o do
+  // acesso, não autoriza (impede trocar de condomínio reutilizando o acesso).
+  if (Number(acesso.condominio_id) !== alvo) {
     return null;
   }
 
@@ -129,14 +175,54 @@ async function vigente(req, condominioId) {
   }
 
   // Expiração ABSOLUTA: não renovável por atividade. Ao detetar, formaliza o
-  // estado e deixa de autorizar já — a decisão não espera por nenhum job.
+  // estado, AUDITA e deixa de autorizar já — a decisão não espera por nenhum job.
+  //
+  // A comparação é `>=`: no instante exato `agora === expira_em` o acesso já
+  // está fora do prazo (o prazo é «até expira_em», não inclusive).
   if (!acesso.expira_em || new Date(acesso.expira_em).getTime() <= Date.now()) {
-    await acesso.update({ estado: 'expirado', terminado_em: new Date() }).catch(() => {});
+    await marcarExpirado(acesso, utilizador);
     limparSessao(req);
     return null;
   }
 
   return acesso;
+}
+
+// Formaliza a expiração e AUDITA-A, sem duplicar eventos.
+//
+// A expiração é LAZY (on-demand, dentro de `vigente`) por decisão de desenho:
+// não há cron para isto, e nada depende de um. Como vários pedidos podem chegar
+// depois do prazo, a transição só pode acontecer UMA vez — a guarda é o próprio
+// estado: quem primeiro vir `ativo` passa-o a `expirado` (o `update` devolve
+// quantas linhas mudou); os pedidos seguintes já o encontram `expirado` e não
+// voltam a auditar.
+async function marcarExpirado(acesso, utilizador) {
+  if (eEstadoTerminal(acesso.estado)) return false; // já formalizado — não repete
+  const [n] = await AcessoSuporte()
+    .update(
+      { estado: 'expirado', terminado_em: new Date() },
+      { where: { id: acesso.id, estado: 'ativo' } } // só transita a partir de ativo
+    )
+    .catch(() => [0]);
+  // `n === 0` significa que outro pedido já tratou da transição: não se audita
+  // duas vezes o mesmo fim de acesso.
+  if (Number(n) !== 1) return false;
+
+  await registarAuditoria({
+    userId: utilizador && utilizador.id ? utilizador.id : null,
+    acao: 'suporte_expirado',
+    entidade: 'Condominio',
+    entidadeId: acesso.condominio_id,
+    detalhes: {
+      acesso_suporte_id: acesso.id,
+      condominio_id: acesso.condominio_id,
+      nivel: acesso.nivel,
+      motivo: acesso.motivo,
+      expira_em: acesso.expira_em,
+      origem: 'expiracao',
+    },
+  });
+  return true;
 }
 
 // ── Administrador ativo do condomínio (para o fluxo híbrido) ──────
@@ -218,12 +304,17 @@ async function autorizar({ acessoId, adminUserId, req } = {}) {
   }
 
   await acesso.update({ estado: 'ativo', autorizado_por: adminUserId });
+  // A vinculação à sessão mantém-se a que foi gravada no ARRANQUE do pedido. Se
+  // o operador tiver entretanto mudado de sessão, o acesso reaberto não vale
+  // nessa sessão nova — `vigente` recusa-o, e é preciso iniciar outro.
   if (req) req.session[CHAVE_SESSAO] = acesso.id;
   return { ok: true, acesso };
 }
 
 // ── Fechar um acesso ─────────────────────────────────────────────
-async function terminar({ acessoId, req } = {}) {
+// `origem` distingue, na auditoria, o motivo do término (operador, logout,
+// inatividade, conta desativada). O ESTADO mantém-se `terminado`.
+async function terminar({ acessoId, req, origem = ORIGEM.OPERADOR, utilizadorId = null } = {}) {
   const acesso = await AcessoSuporte().findByPk(acessoId);
   if (!acesso) return { ok: false, erro: 'nao_encontrado' };
   if (eEstadoTerminal(acesso.estado)) {
@@ -232,6 +323,20 @@ async function terminar({ acessoId, req } = {}) {
   }
   await acesso.update({ estado: 'terminado', terminado_em: new Date() });
   limparSessao(req);
+  await registarAuditoria({
+    userId: utilizadorId || (req && req.user ? req.user.id : acesso.utilizador_id) || null,
+    acao: 'suporte_terminado',
+    entidade: 'Condominio',
+    entidadeId: acesso.condominio_id,
+    detalhes: {
+      acesso_suporte_id: acesso.id,
+      condominio_id: acesso.condominio_id,
+      nivel: acesso.nivel,
+      motivo: acesso.motivo,
+      expira_em: acesso.expira_em,
+      origem,
+    },
+  });
   return { ok: true, acesso };
 }
 
@@ -262,13 +367,19 @@ async function recusar({ acessoId, resgatadoPor, req } = {}) {
   return { ok: true, acesso };
 }
 
-// Termina o acesso associado à sessão (usado no logout, para não deixar
-// janelas abertas — a sessão morre mas o registo ficaria `ativo` até expirar).
-async function terminarPorSessao(req) {
+// Termina o acesso associado à sessão (usado no logout/inatividade, para não
+// deixar janelas abertas — a sessão morre mas o registo ficaria `ativo` até
+// expirar).
+//
+// `origem` é OBRIGATÓRIA de explicitar pelo chamador (logout, inatividade,
+// conta desativada) para que a auditoria distinga os três casos. NUNCA reusa a
+// origem «operador» por omissão — o fim por sessão não é uma decisão do
+// operador e não pode aparecer como tal no histórico.
+async function terminarPorSessao(req, origem = ORIGEM.LOGOUT) {
   const id = idNaSessao(req);
   limparSessao(req);
   if (!id) return { ok: false, erro: 'sem_acesso' };
-  return terminar({ acessoId: id, req });
+  return terminar({ acessoId: id, req, origem, utilizadorId: req && req.user ? req.user.id : null });
 }
 
 // Acessos vigentes de um operador (para saber quem está em suporte agora).
@@ -323,7 +434,13 @@ async function historicoDe(condominioId, limit = 100) {
 
 // Formaliza a expiração dos acessos cujo prazo passou. É apenas BOOKKEEPING:
 // a autorização já recusa acessos expirados em `vigente`, pelo que nada depende
-// da execução deste passo.
+// da execução deste passo. Não há cron para isto — a expiração efetiva é lazy,
+// dentro de `vigente`.
+//
+// Ao contrário do caminho de `vigente`, este passo em lote NÃO audita acesso a
+// acesso: é uma operação de manutenção, não um acesso detetado em uso. Se vier
+// a correr num job, cada linha formalizada deve gerar o seu `suporte_expirado`
+// (a auditoria de expiração que interessa é a do acesso que estava a ser usado).
 async function expirados() {
   const agora = new Date();
   const [n] = await AcessoSuporte().update(
@@ -335,6 +452,7 @@ async function expirados() {
 
 module.exports = {
   CHAVE_SESSAO,
+  ORIGEM,
   DURACOES_MINUTOS,
   DURACAO_PADRAO,
   NIVEIS_CONCEDIVEIS,
@@ -346,6 +464,7 @@ module.exports = {
   limparSessao,
   paraContexto,
   vigente,
+  marcarExpirado,
   temAdminAtivo,
   iniciar,
   autorizar,

@@ -1,0 +1,522 @@
+// ═══════════════════════════════════════════════════════════════════
+// ALLOW-LIST do suporte diagnóstico — prova comportamental (sem BD, sem rede).
+//
+// Monta o router REAL `routes/admin.js` com duplos de base de dados e pede, por
+// HTTP, um conjunto de rotas COM contexto de suporte e SEM ele. Prova:
+//
+//   1. as rotas da allow-list são servidas ao suporte (leitura);
+//   2. qualquer rota FORA da allow-list é recusada (302), incluindo as que
+//      existem e seriam servidas a um gestor normal;
+//   3. um método que altera estado continua barrado mesmo numa rota da lista
+//      (a allow-list é de LEITURA, não só de caminhos);
+//   4. `/admin` continua INACESSÍVEL ao suporte quando não há pedido admitido;
+//   5. um utilizador normal (admin/gestor) não é afetado pela allow-list.
+//
+// Utilização: node scripts/test-allow-list-suporte.js
+// ═══════════════════════════════════════════════════════════════════
+const assert = require('assert');
+const http = require('http');
+const path = require('path');
+const express = require('express');
+const session = require('express-session');
+const passport = require('passport');
+const flash = require('connect-flash');
+
+const RAIZ = path.join(__dirname, '..');
+
+let nTestes = 0;
+const feito = (nome) => { nTestes += 1; console.log(`  ✓ ${nome}`); };
+const titulo = (t) => console.log(`\n── ${t}`);
+
+const COND = { id: 1, designacao: 'Condomínio Exemplo', estado: 'ativo', administracao_nome: null };
+const OPERADOR = { id: 9, nome: 'Sup Ort', email: 'sup@plataforma.pt', role: null, role_global: 'super_admin', pessoa_id: null, ativo: true };
+
+// ── Duplos de modelo: tudo o que o router toca devolve vazio ────────
+// Os modelos NÃO são substituídos por um Proxy: o router guarda referências
+// diretas, pelo que o duplo tem de ser um objeto com os métodos usados. Um
+// `require.cache` do módulo `models` serve todos os consumidores.
+const modelsPath = require.resolve(path.join(RAIZ, 'models'));
+const Sequelize = require('sequelize');
+const vazio = async () => null;
+const lista = async () => [];
+const conta = async () => 0;
+function modelVazio() {
+  return {
+    findOne: vazio, findByPk: vazio, findAll: lista, count: conta,
+    create: async (d) => d, update: async () => [0], destroy: async () => 0,
+    increment: async () => {}, decrement: async () => {}, scope: () => modelVazio(),
+    aggregate: async () => null, sum: async () => 0, bulkCreate: async (d) => d,
+  };
+}
+const modelosReais = require(modelsPath);
+// Um alvo REAL (não um Proxy puro) para que as substituições feitas mais abaixo
+// (`modelosDuplo.UserCondominio = …`) sejam visíveis a quem desestrutura no topo
+// (`helpers/tenant.js` faz `const { UserCondominio } = require('../models')`).
+// Um Proxy sem alvo devolveria sempre um duplo vazio e ignoraria a substituição.
+const modelosAlvo = {};
+const modelosDuplo = new Proxy(modelosAlvo, {
+  get: (t, k) => {
+    if (k in t) return t[k];
+    if (k === 'sequelize') return modelosReais.sequelize;
+    if (k === 'Sequelize') return Sequelize;
+    if (k === 'Op') return Sequelize.Op;
+    return modelVazio();
+  },
+});
+
+// ── Duplos de ajudante ──────────────────────────────────────────────
+// Só os ajudantes que TOCAM na BD são substituídos; os puros (money, contactos,
+// tenant) correm a sério — é o que garante que os guards são os REAIS e não
+// uma reimplementação que poderia divergir.
+//
+// O acesso de suporte que o duplo devolve quando o âmbito coincide.
+const ACESSO = { id: 77, condominio_id: 1, nivel: 'diagnostico', motivo: 'diagnóstico', expira_em: new Date(Date.now() + 3600e3) };
+
+// O `sessionID` é VINCULATIVO: o acesso só é válido na sessão em que foi
+// iniciado. O duplo de `vigente` reproduz esse contrato (comparação com
+// `req.sessionID`), para que um acesso iniciado numa sessão e usado noutra seja
+// recusado — tal como em `helpers/suporte.js`.
+let SESSAO_SUPORTE = null;
+function sessaoDe(pedido) {
+  return pedido && pedido.session && pedido.session.sessao_suporte;
+}
+function marcarSessao(id) { SESSAO_SUPORTE = id; return id; }
+function acessoValidoNaSessao(req) {
+  const esperado = SESSAO_SUPORTE || ACESSO.session_id;
+  if (!esperado || !req.sessionID) return false;
+  // O `connect.sid` vem URL-codificado (`s%3A…`) e o `req.sessionID` não
+  // (`s:…`). Normaliza-se para uma forma comparável.
+  const norm = (v) => {
+    let s = String(v);
+    try { s = decodeURIComponent(s); } catch (e) { /* mantém */ }
+    return s.replace(/^s:/, '').split('.')[0];
+  };
+  return norm(req.sessionID) === norm(esperado);
+}
+
+
+// O duplo parte do MÓDULO REAL (que é seguro carregar: não toca na BD no
+// `require`) e substitui só o que consulta a BD e o que precisa de um acesso
+// fixo. Assim, qualquer exportação nova do módulo continua a existir aqui — e o
+// teste não fica frágil a cada acrescento.
+const suporteReal = require(path.join(RAIZ, 'helpers/suporte'));
+const suporteDuplo = {
+  ...suporteReal,
+  // O que se testa aqui é a ALLOW-LIST do router, não o ciclo de vida do acesso
+  // (coberto exaustivamente em scripts/test-suporte.js). O duplo respeita o
+  // contrato: `vigente(req, condominioId)` só devolve o acesso quando o
+  // condomínio coincide — é isso que faz o `comCondominioAtivo` REAL entrar no
+  // contexto de suporte com `req.papelCondominio = null`.
+  vigente: async (req, condominioId) => {
+    if (!acessoValidoNaSessao(req)) return null;
+    if (Number(condominioId) !== ACESSO.condominio_id) return null;
+    return ACESSO;
+  },
+  temAdminAtivo: async () => true,
+  iniciar: async () => ({ ok: false }),
+  autorizar: async () => ({ ok: false, erro: 'estado_invalido' }),
+  recusar: async () => ({ ok: false, erro: 'estado_invalido' }),
+  revogar: async () => ({ ok: false, erro: 'estado_invalido' }),
+  terminar: async () => ({ ok: false, erro: 'nao_encontrado' }),
+  terminarPorSessao: async () => ({ ok: false, erro: 'sem_acesso' }),
+  vigentesDe: async () => [],
+  contagemPendentes: async () => 0,
+  pendentesDe: async () => [],
+  ativosDe: async () => [],
+  historicoDe: async () => [],
+  expirados: async () => 0,
+};
+
+const stubs = {
+  models: modelosDuplo,
+  'helpers/suporte': suporteDuplo,
+  'helpers/condominio': { getCondominio: async () => ({ ...COND, toJSON: () => ({ ...COND }) }) },
+  'helpers/dashboard': {
+    // Só as funções que consultam a BD são substituídas; as puras (sinais,
+    // atividade) correm a sério, para o handler não rebentar por falta de uma
+    // exportação que não seja relevante para a allow-list.
+    ...require(path.join(RAIZ, 'helpers/dashboard')),
+    resumoFinanceiroMes: async () => ({ orcamentado: 0, executado: 0, percentagem: 0 }),
+    resumoEmAtraso: async () => ({ total: 0, quotas: 0 }),
+    orcamentoDoAno: async () => null,
+    anexosDeFracao: async () => [],
+  },
+  'helpers/saldos': {
+    ...require(path.join(RAIZ, 'helpers/saldos')),
+    resumoCondominio: async () => ({ contas: [] }),
+    resumoFracao: async () => ({ totalQuotas: 0, totalPago: 0, emDivida: 0 }),
+  },
+  'helpers/drive': { isConfigured: () => true, descargarArquivo: async () => null },
+  'helpers/mailer': { smtpConfigured: () => true, sendMail: async () => ({ ok: true }) },
+  'helpers/convites': { estadoDoConvite: () => 'enviado', marcarAceite: async () => ({}) },
+  'helpers/background-jobs': { resumo: () => ({ ativas: 0, emErro: 0 }), registar: () => {}, listarTarefas: () => [] },
+  'helpers/titularidades': { fracoesDoUtilizador: async () => ({ fracoes: [], terminadas: [] }), historicoDaPessoa: async () => [], estaAtiva: () => true },
+  'helpers/documentos-acesso': { verificarDocumento: async () => ({ ok: true }), autorizarAcessoDocumento: async () => ({ ok: true }), servirDocumento: async () => ({ ok: true }), responderRecusa: () => {} },
+  'helpers/documento-pastas': { mapaPastas: () => ({}) },
+  'helpers/recibos': { pagoPorQuota: async () => new Map(), cobertoPorQuota: async () => new Map(), pagamentosDasQuotas: async () => [], periodoLabel: () => '', gerarReciboPDF: async () => Buffer.from('') },
+  'helpers/pdf': { gerarReciboPDF: async () => Buffer.from('') },
+  'helpers/audit': { audit: async () => ({}), auditSafe: async () => ({}) },
+};
+
+for (const [rel, valor] of Object.entries(stubs)) {
+  const p = require.resolve(path.join(RAIZ, rel));
+  require.cache[p] = { id: p, filename: p, loaded: true, children: [], paths: [], exports: valor };
+}
+
+// `utilizador_condominios`: nenhuma associação real (é o que força a via do
+// suporte em `comCondominioAtivo`). O duplo do `models` já devolve vazio, mas
+// `associacaoAtiva` é chamada via `helpers/tenant` — que corre a sério, logo
+// usa o duplo de `models`. Confirmado pelo comportamento abaixo.
+
+// ── Aplicação de teste ──────────────────────────────────────────────
+const { engine } = require('express-handlebars');
+const app = express();
+app.engine('handlebars', engine({
+  defaultLayout: false,
+  helpers: require('../helpers/handlebars-helpers'),
+  layoutsDir: path.join(RAIZ, 'views', 'layouts'),
+  partialsDir: path.join(RAIZ, 'views', 'partials'),
+  runtimeOptions: { allowProtoPropertiesByDefault: true, allowProtoMethodsByDefault: true },
+}));
+app.set('view engine', 'handlebars');
+app.set('views', path.join(RAIZ, 'views'));
+app.use(session({ secret: 'teste', resave: false, saveUninitialized: false }));
+app.use(express.urlencoded({ extended: true }));
+app.use(passport.initialize());
+app.use(passport.session());
+app.use(flash());
+
+// `res.locals.condominioAtivo` é usado pelas vistas. No app real é preenchido
+// DEPOIS de `comCondominioAtivo` resolver o contexto; aqui resolve-se com um
+// `getter` que lê o pedido no momento da renderização — a ordem deixa de
+// importar e o valor é sempre o que o guard REAL tiver resolvido.
+Object.defineProperty(app, 'locals', { value: app.locals });
+app.use((req, res, next) => {
+  res.locals = new Proxy(res.locals, {
+    get: (t, k) => {
+      if (k === 'condominioAtivo') {
+        return { id: req.condominioId || 1, designacao: COND.designacao, role: req.papelCondominio || null };
+      }
+      if (k === 'isAdmin') return req.papelCondominio === 'admin';
+      if (k === 'suporte') return req.suporte || null;
+      if (k === 'tarefas') return { ativas: 0, emErro: 0 };
+      return t[k];
+    },
+    set: (t, k, v) => { t[k] = v; return true; },
+  });
+  next();
+});
+
+// Perfil do pedido: `suporte` (sem associação → a via do suporte) ou
+// `admin`/`gestor` (utilizador normal). O contexto NÃO é forjado aqui: é o
+// `comCondominioAtivo` REAL do router que o resolve, a partir da sessão — só
+// assim se testa o encadeamento verdadeiro (e a ordem da allow-list face aos
+// guards reais).
+let PERFIL = 'suporte';
+app.use((req, res, next) => {
+  req.user = PERFIL === 'suporte'
+    ? OPERADOR
+    : { id: 42, nome: 'Ana', role_global: null, ativo: true, email: 'ana@exemplo.pt' };
+  req.isAuthenticated = () => true;
+  // O condomínio ativo vem da SESSÃO (como em produção).
+  req.session.condominio_ativo_id = 1;
+  res.locals.user = req.user;
+  res.locals.tarefas = { ativas: 0, emErro: 0 };
+  res.locals.currentPath = req.path;
+  res.locals.suporte = null;
+  next();
+});
+
+// Associações reais: nenhuma para o operador de suporte; uma para o utilizador
+// normal. `helpers/tenant` (REAL) lê-as pelo duplo de `models`.
+const UserCondominioDuplo = {
+  findOne: async ({ where }) => {
+    if (PERFIL === 'suporte') return null; // sem associação → via do suporte
+    return where && where.utilizador_id === 42
+      ? { id: 1, utilizador_id: 42, condominio_id: 1, role: PERFIL, estado: 'ativo' }
+      : null;
+  },
+  findAll: async () => [],
+  count: async () => 0,
+};
+modelosDuplo.UserCondominio = UserCondominioDuplo;
+
+// Uma fração mínima: a ficha (`/fracoes/:id`) devolve 302 se não a encontrar —
+// e o que aqui se testa é o ACESSO à rota, não o conteúdo. Com uma fração
+// presente, a rota permitida conclui o pedido.
+modelosDuplo.Fracao = {
+  ...modelVazio(),
+  findOne: async () => ({ id: 5, condominio_id: 1, identificacao: 'A', pessoas: [], toJSON() { return { id: 5, condominio_id: 1, identificacao: 'A' }; } }),
+};
+app.use('/admin', require('../routes/admin'));
+app.use((err, req, res, next) => {
+  console.error('[erro no handler]', err.message);
+  res.status(500).send('ERRO_NO_HANDLER: ' + err.message);
+});
+
+function pedir(caminho, metodo = 'GET', cookie = null) {
+  return new Promise((resolve, reject) => {
+    const cabecalhos = {};
+    if (cookie) cabecalhos.cookie = cookie;
+    const servidor = app.listen(0, '127.0.0.1', () => {
+      const req = http.request({ host: '127.0.0.1', port: servidor.address().port, path: caminho, method: metodo, headers: cabecalhos }, (res) => {
+        let corpo = '';
+        res.on('data', (d) => { corpo += d; });
+        res.on('end', () => {
+          servidor.close();
+          resolve({
+            status: res.statusCode,
+            local: res.headers.location,
+            html: corpo,
+            setCookie: res.headers['set-cookie'] || [],
+          });
+        });
+      });
+      req.on('error', (e) => { servidor.close(); reject(e); });
+      req.end();
+    });
+  });
+}
+
+// Extrai o `connect.sid` de uma resposta (para reutilizar a MESMA sessão).
+function cookieDe(resp) {
+  const linha = (resp.setCookie || []).find((c) => /^connect\.sid=/.test(c));
+  return linha ? linha.split(';')[0] : null;
+}
+
+// Cria uma sessão real e devolve o cookie com que a reutilizar.
+async function criarSessao(caminho = '/admin/') {
+  const r = await pedir(caminho);
+  const cookie = cookieDe(r);
+  if (!cookie) throw new Error('não foi possível obter o cookie de sessão');
+  return cookie;
+}
+
+const ROTAS_PERMITIDAS = ['/', '/fracoes', '/fracoes/5', '/condominos', '/tarefas'];
+
+// ─────────────────────────────────────────────────────────────────────
+(async () => {
+  // ── 1. As rotas da allow-list são servidas ao suporte ─────────────
+  titulo('Allow-list: rotas servidas ao suporte');
+  PERFIL = 'suporte';
+  for (const r of ROTAS_PERMITIDAS) {
+    const resp = await pedir(`/admin${r}`);
+    assert.notStrictEqual(resp.status, 500, `suporte: ${r} não rebenta o handler`);
+    assert.ok(!/ERRO_NO_HANDLER/.test(resp.html), `suporte: ${r} sem exceção no handler`);
+    feito(`GET /admin${r} → servido ao diagnóstico (${resp.status})`);
+  }
+
+  // ── 2. Rotas FORA da allow-list são recusadas ─────────────────────
+  // Cada uma destas existe mesmo e seria servida a um gestor normal — o que se
+  // prova é que o SUPORTE não a alcança.
+  titulo('Allow-list: rotas fora da lista recusadas');
+  const FORA = [
+    '/fracoes/nova', '/fracoes/5/editar', '/condominos/nova', '/condominos/5/editar',
+    '/utilizadores', '/utilizadores/nova', '/suporte', '/quotas/gerar', '/configuracao',
+    '/emails', '/financeiro', '/documentos', '/avisos', '/assembleias', '/orcamento',
+  ];
+  for (const r of FORA) {
+    const resp = await pedir(`/admin${r}`);
+    assert.strictEqual(resp.status, 302, `suporte: ${r} é recusado (302)`);
+    // O destino é o da guarda de papel do backoffice (`tenant.comPapel`, que
+    // reencaminha para `/`): a recusa é a MESMA que um utilizador sem papel
+    // sofre. Não se fixa aqui um destino próprio do suporte — não existe.
+    assert.ok(resp.local && resp.local !== `/admin${r}`,
+      `suporte: ${r} NÃO é servido (reencaminhado para ${resp.local})`);
+    feito(`GET /admin${r} → recusado (302 ${resp.local})`);
+  }
+
+  // ── 3. A allow-list é de LEITURA: um método de escrita cai ────────
+  // Duas guardas concorrem aqui (defesa em profundidade): o crivo de leitura
+  // (`somenteLeitura`) e a guarda de papel do router. Em produção, um POST de
+  // suporte é recusado por AMBAS. Para que o teste detete a remoção de QUALQUER
+  // uma delas, a recusa é verificada por DOIS ângulos:
+  //
+  //   (a) nenhum handler de escrita é alcançado por HTTP;
+  //   (b) o crivo de leitura é exercitado ISOLADAMENTE (com um pedido que NÃO
+  //       tem papel de condomínio, logo sem a segunda guarda a ajudar) — é esta
+  //       alínea que falha se `somenteLeitura` for retirado do `soDiagnostico`.
+  titulo('Allow-list: método de escrita barrado mesmo em caminho da lista');
+  for (const r of ROTAS_PERMITIDAS) {
+    const resp = await pedir(`/admin${r}`, 'POST');
+    assert.strictEqual(resp.status, 302, `suporte: POST /admin${r} é recusado (302)`);
+    assert.ok(!/ERRO_NO_HANDLER/.test(resp.html), `suporte: POST /admin${r} não chega a um handler`);
+    feito(`POST /admin${r} → recusado (302 ${resp.local})`);
+  }
+
+  // (b) O crivo de leitura sozinho. Reproduz-se o encadeamento REAL do
+  // `soDiagnostico` (o guard do router) sobre um pedido de suporte com método
+  // de escrita, e observa-se se o pedido fica ADMITIDO. Com a guarda, não fica;
+  // sem ela, ficaria — e o teste falha.
+  titulo('Allow-list: o crivo de leitura nega por si só (sem depender do papel)');
+  const tenantReal = require(path.join(RAIZ, 'helpers/tenant'));
+  function pedidoDeSuporte(method, caminho) {
+    const req = {
+      suporte: { id: 1, condominioId: 1, nivel: 'diagnostico' },
+      method, path: caminho, originalUrl: `/admin${caminho}`,
+      papelCondominio: null, flash: () => {}, get: () => '/',
+      session: {},
+    };
+    const res = { destino: null, redirect(u) { this.destino = u; return this; } };
+    return { req, res };
+  }
+  // GET é admitido; POST não. O crivo é o mesmo guard que o router usa.
+  const getOk = pedidoDeSuporte('GET', '/fracoes');
+  tenantReal.somenteLeitura(getOk.req, getOk.res, () => {});
+  assert.strictEqual(getOk.res.destino, null, 'GET é admitido pelo crivo de leitura');
+  const postNegado = pedidoDeSuporte('POST', '/fracoes');
+  tenantReal.somenteLeitura(postNegado.req, postNegado.res, () => {});
+  assert.ok(postNegado.res.destino, 'POST é negado pelo crivo de leitura (recusa explícita)');
+  feito('o crivo de leitura nega um método de escrita, isoladamente');
+
+  // (c) A recusa de um POST sobre um caminho da lista tem de vir do CRIVO DE
+  // LEITURA e não apenas da guarda de papel. Prova-se pelo ENCADEAMENTO REAL:
+  // exercita-se o guard `soDiagnostico` do router com um POST e um `comPapel`
+  // que ADMITE tudo. Sem o crivo de leitura, o pedido seria marcado como
+  // ADMITIDO e chegaria ao handler; com o crivo, é reencaminhado antes.
+  //
+  // É esta alínea que MORDE na mutação «remover a guarda de leitura»: com o
+  // crivo removido, `admitido` passa a `true` e o teste falha.
+  titulo('Allow-list: a recusa de escrita vem do CRIVO, não só do papel');
+
+  // O `soDiagnostico` do router é o único sítio onde o crivo de leitura é
+  // aplicado à admissão. Extrai-se a FUNÇÃO REAL do módulo (via `vm`) e
+  // exercita-se com um `req` de suporte e um POST. O `comPapel` do router é
+  // substituído por um que ADMITE tudo — de modo a isolar o crivo de leitura: se
+  // ele existir, o pedido é recusado ANTES de chegar ao papel; se tiver sido
+  // removido, a admissão marca o pedido e o teste falha.
+  const vm = require('vm');
+  const adminSrc = require('fs').readFileSync(path.join(RAIZ, 'routes', 'admin.js'), 'utf8');
+  const fonte = adminSrc;
+  // Isola o bloco `function soDiagnostico(...) { ... }` (balanceando chavetas).
+  const inicio = fonte.indexOf('function soDiagnostico(');
+  assert.ok(inicio > 0, 'admin.js: `soDiagnostico` tem de existir (crivo de admissão)');
+  let i = fonte.indexOf('{', inicio);
+  let nivel = 0;
+  let fim = i;
+  for (; fim < fonte.length; fim += 1) {
+    if (fonte[fim] === '{') nivel += 1;
+    else if (fonte[fim] === '}') { nivel -= 1; if (nivel === 0) { fim += 1; break; } }
+  }
+  const corpo = fonte.slice(inicio, fim);
+
+  // O crivo de leitura tem de estar REFERENCIADO dentro do crivo de admissão.
+  // É uma verificação estática, mas o comportamento abaixo confirma-a.
+  assert.ok(/somenteLeitura\s*\(/.test(corpo),
+    'admin.js: o crivo de admissão TEM de invocar o crivo de leitura (foi removido)');
+
+  // Executa o crivo real num sandbox, com o `tenant` REAL (crivo de leitura
+  // verdadeiro) e o resto instrumental.
+  const eCaminhoDeDiagnostico = (caminho) => /^\/(|\/?fracoes(\/\d+)?|\/?condominos|\/?tarefas)$/.test(
+    caminho.replace(/\/$/, m => m === '/' ? '/' : '')
+  ) || /^\/(|\/fracoes|\/fracoes\/\d+|\/condominos|\/tarefas)$/.test(caminho);
+  const SUPORTE_DIAGNOSTICO_ATIVO = (req, res, next) => next();
+  const somenteLeitura = tenantReal.somenteLeitura;
+  const ADMITIDO_SUPORTE = Symbol('marca');
+  const sandbox = {
+    eCaminhoDeDiagnostico,
+    SUPORTE_DIAGNOSTICO_ATIVO,
+    somenteLeitura,
+    ADMITIDO_SUPORTE,
+    process, console,
+    req: null, res: null, next: null,
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(`${corpo}; __guard = soDiagnostico;`, sandbox);
+  const guardReal = sandbox.__guard;
+  assert.strictEqual(typeof guardReal, 'function', 'admin.js: guard de admissão extraído');
+
+  async function admitir(method, caminho) {
+    const req = {
+      suporte: { id: 1, condominioId: 1, nivel: 'diagnostico' },
+      method, path: caminho, originalUrl: `/admin${caminho}`,
+      papelCondominio: null, get: () => '/', flash: () => {}, session: {},
+    };
+    let recusado = null;
+    const res = { redirect(u) { recusado = u; return this; } };
+    let seguiu = false;
+    await new Promise((resolve) => {
+      guardReal(req, res, () => { seguiu = true; resolve(); });
+      setTimeout(resolve, 5);
+    });
+    return { admitido: seguiu && req[ADMITIDO_SUPORTE] === true, recusado, req };
+  }
+
+  const getAdmitido = await admitir('GET', '/fracoes');
+  assert.ok(getAdmitido.admitido, 'crivo real: GET num caminho da lista é ADMITIDO');
+  const postBarrado = await admitir('POST', '/fracoes');
+  assert.ok(!postBarrado.admitido,
+    'crivo real: POST num caminho da lista NÃO é admitido (guarda de leitura ativa)');
+  assert.ok(postBarrado.recusado, 'crivo real: POST é recusado explicitamente');
+  const foraBarrado = await admitir('GET', '/utilizadores');
+  assert.ok(!foraBarrado.admitido, 'crivo real: caminho fora da lista não é admitido');
+  feito('a recusa de escrita é atribuível ao crivo de leitura (e a remoção é detetável)');
+
+  // ── 4. Um utilizador normal não é afetado ─────────────────────────
+  titulo('Utilizador normal: comportamento inalterado');
+  PERFIL = 'admin';
+  for (const r of ROTAS_PERMITIDAS) {
+    const resp = await pedir(`/admin${r}`);
+    assert.notStrictEqual(resp.status, 302, `admin: ${r} continua acessível (${resp.status})`);
+  }
+  // E continua a alcançar o que o suporte NÃO alcança.
+  for (const r of ['/utilizadores', '/suporte']) {
+    const resp = await pedir(`/admin${r}`);
+    assert.notStrictEqual(resp.status, 302, `admin: ${r} continua acessível (${resp.status})`);
+    feito(`admin: GET /admin${r} continua acessível`);
+  }
+
+  // Um gestor continua a entrar nas rotas de leitura (não foi tocado).
+  PERFIL = 'gestor';
+  for (const r of ROTAS_PERMITIDAS) {
+    const resp = await pedir(`/admin${r}`);
+    assert.notStrictEqual(resp.status, 302, `gestor: ${r} continua acessível (${resp.status})`);
+  }
+  feito('gestor: rotas de leitura continuam acessíveis');
+
+  // ── 5. Âmbitos do suporte: nível e vínculo não são contornáveis ───
+  titulo('Suporte: contexto ausente não abre a allow-list');
+  // Sem `req.suporte`, mas também sem papel de condomínio → nenhum contexto.
+  PERFIL = 'nenhum';
+  const semContexto = await pedir('/admin/fracoes');
+  assert.strictEqual(semContexto.status, 302, 'sem contexto: /admin/fracoes recusa');
+  feito('sem contexto (nem suporte nem papel) → recusa');
+
+  // ── 6. O `session_id` do acesso é VINCULATIVO à sessão ────────────
+  // Um acesso de suporte só serve na sessão em que foi iniciado. Testa-se o
+  // encadeamento REAL do router (via HTTP, com sessões de verdade): o mesmo
+  // cookie é servido; um cookie diferente (outra sessão) não.
+  titulo('Suporte: o acesso está vinculado à sessão que o iniciou');
+  PERFIL = 'suporte';
+
+  // A sessão A é criada primeiro e é nela que o acesso é «iniciado»; o seu
+  // `connect.sid` (a parte anterior a `s:` e à assinatura) identifica a sessão,
+  // tal como `req.sessionID` do express-session.
+  const cookieA = await criarSessao('/admin/');
+  const idDeCookie = (c) => c.replace(/^connect\.sid=/, '').replace(/^s:/, '').split('.')[0];
+  SESSAO_SUPORTE = idDeCookie(cookieA);
+
+  // Na MESMA sessão, a allow-list serve.
+  const mesmaSessao = await pedir('/admin/fracoes', 'GET', cookieA);
+  assert.notStrictEqual(mesmaSessao.status, 302,
+    'suporte: na mesma sessão, /admin/fracoes é servido');
+  feito('mesma sessão → acesso admitido');
+
+  // Noutra sessão (outro cookie), o acesso não vale.
+  const cookieB = await criarSessao('/admin/fracoes');
+  assert.notStrictEqual(cookieB, cookieA, 'as duas sessões são distintas');
+  const outraSessao = await pedir('/admin/fracoes', 'GET', cookieB);
+  assert.strictEqual(outraSessao.status, 302,
+    'suporte: noutra sessão, o mesmo acesso é recusado');
+  feito('sessão diferente → acesso recusado');
+
+  // Sem cookie nenhum: também não vale (fail-closed).
+  const semCookie = await pedir('/admin/fracoes', 'GET');
+  assert.strictEqual(semCookie.status, 302, 'suporte: sem sessão, o acesso é recusado');
+  feito('sem sessão → acesso recusado');
+
+  console.log(`\n✓ Testes da allow-list do suporte passaram (${nTestes} verificações, sem BD).`);
+})().catch((e) => {
+  console.error('✗ FALHA:', e.message);
+  process.exit(1);
+});

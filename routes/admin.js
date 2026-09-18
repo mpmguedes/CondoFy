@@ -69,7 +69,87 @@ router.use(tenant.comCondominioAtivo);
 //   · os restantes módulos de `/admin` usam `comPapel('gestor')`.
 // Fonte do papel: `utilizador_condominios.role` (associação ativa). Nunca
 // `users.role`, que é legado.
-router.use(tenant.comPapel('gestor'));
+//
+// ── ALLOW-LIST do suporte diagnóstico (mínima e explícita) ────────
+// A superfície de suporte é um CONJUNTO FECHADO de rotas de LEITURA. Nenhuma
+// delas cria, altera, elimina, envia, sincroniza, autoriza, revoga, muda
+// configuração, muda permissões, toca em dados financeiros ou executa qualquer
+// ação operacional.
+//
+// A entrada é UM SÓ PONTO — `soDiagnostico` — montado como `router.use` ANTES
+// de qualquer rota. Ele admite o pedido de suporte apenas quando:
+//   (1) o CAMINHO está na lista abaixo; e
+//   (2) o MÉTODO é de leitura (GET/HEAD).
+// Só então é que a guarda de papel do router é contornada; tudo o resto é
+// recusado. Uma rota nova neste ficheiro nasce INACESSÍVEL ao suporte.
+const SUPORTE_DIAGNOSTICO_ATIVO = tenant.comSuporte(['diagnostico']);
+
+// Caminhos da allow-list (relativos ao router, montado em `/admin`).
+// `/fracoes/:id` é comparado como PADRÃO (o pedido traz o id concreto). A
+// comparação nunca é por prefixo: `/fracoes/nova` e `/fracoes/:id/editar` NÃO
+// estão na lista e caem na guarda de papel.
+const CAMINHOS_SUPORTE_DIAGNOSTICO = [
+  { padrao: /^\/$/, rotulo: '/' },                          // painel do condomínio
+  { padrao: /^\/fracoes$/, rotulo: '/fracoes' },            // lista de frações
+  { padrao: /^\/fracoes\/\d+$/, rotulo: '/fracoes/:id' },   // ficha de uma fração
+  { padrao: /^\/condominos$/, rotulo: '/condominos' },      // lista de condóminos
+  { padrao: /^\/tarefas$/, rotulo: '/tarefas' },            // tarefas em segundo plano
+];
+function eCaminhoDeDiagnostico(caminho) {
+  return CAMINHOS_SUPORTE_DIAGNOSTICO.some((e) => e.padrao.test(caminho));
+}
+
+// Leitura por MÉTODO (GET/HEAD). Sem isto, um POST para um caminho da lista
+// seria admitido e cairia no handler de escrita homónimo — a allow-list é de
+// LEITURA, não apenas de caminhos.
+const somenteLeitura = tenant.somenteLeitura;
+
+// MARCA de admissão: só existe neste ficheiro (Symbol local, impossível de
+// forjar a partir de fora). É posta em `req` por `soDiagnostico` DEPOIS de o
+// caminho, o nível e o método terem sido aceites, e é o único sinal que a
+// guarda de papel usa para deixar passar um pedido de suporte.
+const ADMITIDO_SUPORTE = Symbol('suporte_diagnostico_admitido');
+
+// Guard de ROTA da allow-list: decide, ANTES da guarda de papel, se o pedido de
+// suporte fica ADMITIDO. Sem suporte → segue (a guarda de papel decide). Com
+// suporte → caminho na lista E método de leitura, senão recusa.
+function soDiagnostico(req, res, next) {
+  if (!req.suporte) return next();
+  // Fora da lista: NÃO admite. O pedido segue para a guarda de papel do
+  // backoffice, que o recusa por não ter papel (`req.papelCondominio === null`).
+  if (!eCaminhoDeDiagnostico(req.path)) return next();
+  return SUPORTE_DIAGNOSTICO_ATIVO(req, res, (err) => {
+    if (err) return next(err);
+    // ALLOW-LIST é de LEITURA: um POST/PUT/PATCH/DELETE sobre um caminho da
+    // lista é recusado aqui e NUNCA chega ao handler de escrita homónimo.
+    return somenteLeitura(req, res, (err2) => {
+      if (err2) return next(err2);
+      req[ADMITIDO_SUPORTE] = true;
+      return next();
+    });
+  });
+}
+router.use(soDiagnostico);
+
+// ── Guarda de papel do backoffice: mínimo `gestor` ─────────────────
+// `tenant.destinoInicial()` dá a `admin` e `gestor`; as operações estritamente
+// de admin usam `apenasAdmin`, rota a rota.
+//
+// Um acesso de suporte admitido pela allow-list (`soDiagnostico`) NÃO tem papel
+// (`req.papelCondominio === null`) e seria recusado pela guarda de papel. O
+// crivo de admissão corre ANTES e marca `req[ADMITIDO_SUPORTE]`; a guarda de
+// papel continua a ser a ÚNICA decisora de todos os outros pedidos.
+//
+// A montagem é CONDICIONAL porque um `router.use` incondicional a seguir
+// recusaria outra vez, e sempre, o pedido de suporte que a admissão acabou de
+// deixar passar — a allow-list deixaria de funcionar por completo. A guarda de
+// papel em si (`tenant.comPapel('gestor')`) não é alterada: é o mesmo mínimo,
+// aplicado pelo mesmo guard, aos mesmos pedidos (todos os que não são suporte
+// admitido).
+router.use((req, res, next) => {
+  if (req.suporte && req[ADMITIDO_SUPORTE] === true) return next();
+  return tenant.comPapel('gestor')(req, res, next);
+});
 
 // Guarda por rota, para o que exige estritamente `admin`. Como o `router.use`
 // acima já garante `gestor`, isto só recusa efetivamente o gestor.
@@ -1429,6 +1509,18 @@ router.get('/tarefas', async (req, res) => {
 // apenas por compatibilidade e redireciona para a edição.
 router.get('/condominos/:id/contactos', (req, res) => {
   res.redirect(`/admin/condominos/${req.params.id}/editar#contactos`);
+});
+
+// ── Rede de segurança da allow-list do suporte diagnóstico ─────────
+// A guarda de papel do router (acima) já recusa qualquer pedido de suporte que
+// não tenha sido admitido pela allow-list, pelo que este ponto só é alcançado
+// por um caminho que escape àquela guarda (por exemplo, uma rota registada
+// antes dela). Fica no FIM do ficheiro e fecha a superfície: um acesso de
+// suporte que chegue aqui é, por definição, uma rota FORA da lista.
+router.use((req, res, next) => {
+  if (!req.suporte) return next();
+  req.flash('error_msg', 'O acesso de suporte é de diagnóstico: esta área não está disponível.');
+  return res.redirect('/admin');
 });
 
 module.exports = router;
