@@ -524,25 +524,38 @@ function testarMecanismoIntacto() {
 
   // Contexto de condomínio só com sessão (a fuga original vinha daqui).
   // A garantia deixou de ser «a expressão contém req.user ?» e passou a ser
-  // estrutural: `condominio` começa a `null` e a (única) leitura do condomínio
-  // está DENTRO do ramo `if (escolhido)`, que por sua vez vive dentro de
-  // `if (req.user)`. Sem sessão não há leitura nenhuma — nem do condomínio
-  // escolhido, nem do primeiro da base de dados.
+  // estrutural: `condominio` começa a `null` e há DUAS leituras, ambas dentro de
+  // `if (req.user)` e ambas do condomínio ESCOLHIDO — a via normal
+  // (`if (escolhido)`) e a via de SUPORTE (`else if (ativoId)`, para a faixa de
+  // contexto). Nenhuma lê o primeiro condomínio da base de dados, e sem sessão
+  // não há leitura nenhuma.
   const fonteApp = ler('app.js');
   assert.ok(
     /let condominio = null;/.test(fonteApp),
     'app.js não parte do primeiro condomínio da base de dados (começa a null)'
   );
-  assert.strictEqual(
-    (fonteApp.match(/await getCondominio\(/g) || []).length,
-    1,
-    'existe uma única leitura de condomínio no middleware de contexto'
-  );
+  const leituras = fonteApp.match(/await getCondominio\(/g) || [];
+  assert.strictEqual(leituras.length, 2, 'duas leituras de condomínio: via normal + via de suporte');
+  // AMBAS com id explícito — nenhuma leitura «sem id» (que leria o primeiro da BD).
+  for (const m of fonteApp.matchAll(/await getCondominio\(([^)]*)\)/g)) {
+    assert.ok(
+      /id:/.test(m[1]),
+      `getCondominio com id explícito (encontrado: ${m[1].trim() || 'sem argumentos'})`
+    );
+  }
   const idxLeitura = fonteApp.indexOf('condominio = await getCondominio({ id: escolhido.id });');
   const idxEscolhido = fonteApp.indexOf('if (escolhido) {', fonteApp.indexOf('res.locals.isAdmin = false;'));
   assert.ok(
     idxLeitura > -1 && idxEscolhido > -1 && idxLeitura > idxEscolhido,
     'a leitura do condomínio acontece só dentro do ramo `if (escolhido)`'
+  );
+  // A leitura da via de suporte vive no `else if (ativoId)` e só depois de
+  // `suporte.vigente` confirmar o acesso — nunca antes de haver concessão.
+  const idxSuporte = fonteApp.indexOf('condominio = await getCondominio({ id: ativoId }).catch(() => null);');
+  const idxVigente = fonteApp.indexOf('const acesso = await suporte.vigente(req, ativoId)');
+  assert.ok(
+    idxSuporte > -1 && idxVigente > -1 && idxSuporte > idxVigente,
+    'a leitura da via de suporte só acontece depois de suporte.vigente() confirmar o acesso'
   );
   assert.ok(
     !/req\.user \? await getCondominio\(\)/.test(fonteApp),
@@ -584,7 +597,7 @@ function extrairMiddlewareDeContexto() {
   // Devolve uma função que corre o código REAL do app.js com injeção de
   // dependências (tenant/getCondominio/Aviso/storage/background/sessao).
   const fabrica = new Function(
-    'req', 'res', 'next', 'tenant', 'getCondominio', 'Aviso', 'Op', 'storage', 'background', 'sessao',
+    'req', 'res', 'next', 'tenant', 'getCondominio', 'Aviso', 'Op', 'storage', 'background', 'sessao', 'suporte',
     `return (async () => { ${corpo} })();`
   );
   return fabrica;
@@ -621,9 +634,17 @@ async function testarContextoAdministrativo() {
     resumo: () => ({ ativas: 0, emErro: 0 }),
   };
   const sessaoFalsa = { expiraEm: () => null, AVISO_MS: 0, IDLE_MS: 0 };
+  // Stub do acesso de suporte: sem concessões, o ramo de suporte nunca abre.
+  // Os testes do contexto de suporte propriamente dito vivem em test-suporte.js
+  // (aqui interessa garantir que o middleware NÃO promove ninguém por via global).
+  const suporteFalso = {
+    vigente: async () => null,
+    paraContexto: (a) => (a ? { id: a.id, condominioId: a.condominio_id, nivel: a.nivel } : null),
+    contagemPendentes: async () => 0,
+  };
 
   // Corre o middleware real com um utilizador, associações e ativo escolhidos.
-  async function correr({ user, meus, ativoId }) {
+  async function correr({ user, meus, ativoId, acessoSuporte = null }) {
     const req = {
       user,
       session: ativoId == null ? {} : { condominio_ativo_id: ativoId },
@@ -635,15 +656,14 @@ async function testarContextoAdministrativo() {
       ...tenant,
       listarCondominios: async () => meus,
       ativo: (r) => (r.session && r.session.condominio_ativo_id ? Number(r.session.condominio_ativo_id) : null),
-      // O papel REAL: associação ativa do utilizador, com precedência; modo
-      // suporte do super admin só quando não há associação.
+      // O papel REAL: associação ativa do utilizador. NÃO há promoção por
+      // `role_global` — o privilégio global é um eixo separado e o acesso de
+      // suporte é uma concessão própria, não um papel de condomínio.
       papelNoAtivo: async (r) => {
         const id = r.session && r.session.condominio_ativo_id ? Number(r.session.condominio_ativo_id) : null;
         if (!id) return null;
         const assoc = meus.find((c) => Number(c.id) === id);
-        if (assoc) return assoc.role;
-        if (tenant.eSuperAdmin(r.user)) return 'admin';
-        return null;
+        return assoc ? assoc.role : null;
       },
       Condominio: { findOne: async ({ where }) => meus.find((c) => Number(c.id) === Number(where.id)) || null },
     };
@@ -651,6 +671,10 @@ async function testarContextoAdministrativo() {
       if (!o.id) return null;
       const c = meus.find((x) => Number(x.id) === Number(o.id));
       return c ? { id: c.id, designacao: c.designacao, toJSON: () => ({ id: c.id, designacao: c.designacao }) } : null;
+    };
+    const suporteInjetado = {
+      ...suporteFalso,
+      vigente: async () => acessoSuporte,
     };
     await fabrica(
       req,
@@ -662,9 +686,14 @@ async function testarContextoAdministrativo() {
       { gte: Symbol('gte') },
       estatico,
       estatico,
-      sessaoFalsa
+      sessaoFalsa,
+      suporteInjetado
     );
-    return { isAdmin: res.locals.isAdmin, condominioAtivo: res.locals.condominioAtivo };
+    return {
+      isAdmin: res.locals.isAdmin,
+      condominioAtivo: res.locals.condominioAtivo,
+      suporteAtivo: res.locals.suporteAtivo,
+    };
   }
 
   const cAdmin = { id: 5, designacao: 'Prédio A', role: 'admin' };

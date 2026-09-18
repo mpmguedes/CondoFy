@@ -402,9 +402,13 @@ router.post('/conta/2fa/desativar', eAutenticado, async (req, res) => {
   res.redirect('/conta/seguranca');
 });
 
-router.get('/logout', (req, res, next) => {
+router.get('/logout', async (req, res, next) => {
   const userId = req.user ? req.user.id : null;
   const email = req.user ? req.user.email : null;
+  // Terminar sessão termina também o acesso de suporte (se houver): sem isto, a
+  // concessão ficava `ativo` em base de dados até ao prazo, sem ninguém do outro
+  // lado. Best-effort — uma falha aqui nunca impede o logout.
+  await sessao.terminarSuporteDaSessao(req);
   req.logout((err) => {
     if (err) return next(err);
     if (userId) {

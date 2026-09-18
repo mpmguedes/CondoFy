@@ -24,6 +24,7 @@ const titularidades = require('../helpers/titularidades');
 const { eAutenticado } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
 const tenant = require('../helpers/tenant');
+const suporte = require('../helpers/suporte');
 const { validarNif } = require('../public/js/validacao-fiscal');
 
 // Prefixo do namespace global nos URLs gerados pelo router. Mantém-se
@@ -189,15 +190,115 @@ router.post('/global/condominios/:id/eliminar', async (req, res) => {
   return res.redirect(urlGlobal(req, '/condominios'));
 });
 
-// Suporte: entrar num condomínio (define o ativo da sessão e segue).
-router.post('/global/condominios/:id/entrar', async (req, res) => {
-  const ok = await tenant.entrarCondominio(req, parseInt(req.params.id, 10));
-  if (!ok) {
-    req.flash('error_msg', 'Não foi possível entrar no condomínio.');
+// ── Acesso de SUPORTE (terceiro contexto) ───────────────────────────
+// O Super Admin é administrador da PLATAFORMA: não tem acesso permanente aos
+// dados de um condomínio, não fica associado a ele e não recebe
+// `req.condominioId` por omissão. O acesso a um condomínio só acontece por uma
+// CONCESSÃO explícita registada em `acessos_suporte` — com condomínio alvo,
+// motivo obrigatório, prazo absoluto e estado auditável.
+//
+// Estas rotas apenas CRIAM/GEREM a concessão. O contexto em si é materializado
+// por `tenant.comCondominioAtivo` (via `req.suporte`), que nunca produz
+// `req.papelCondominio = 'admin'|'gestor'`.
+router.get('/global/condominios/:id/suporte', async (req, res) => {
+  const condominio = await Condominio.findByPk(req.params.id);
+  if (!condominio) {
+    req.flash('error_msg', 'Condomínio não encontrado.');
     return res.redirect(urlGlobal(req, '/condominios'));
   }
-  await audit({ userId: req.user.id, acao: 'super_admin_entrar_condominio', entidade: 'Condominio', entidadeId: req.params.id }).catch(() => {});
-  return res.redirect('/');
+  const [vigentes, pendentes, historico, temAdmin] = await Promise.all([
+    suporte.vigentesDe(req.user.id),
+    suporte.pendentesDe(condominio.id),
+    suporte.historicoDe(condominio.id, 50),
+    suporte.temAdminAtivo(condominio.id),
+  ]);
+  res.render('admin/global/suporte', {
+    titulo: `Suporte · ${condominio.designacao}`,
+    condominio,
+    vigentes,
+    pendentes,
+    historico,
+    temAdmin,
+    duracoes: suporte.DURACOES_MINUTOS,
+    niveis: suporte.NIVEIS_CONCEDIVEIS,
+  });
+});
+
+router.post('/global/condominios/:id/suporte', async (req, res) => {
+  const condominio = await Condominio.findByPk(req.params.id);
+  if (!condominio) {
+    req.flash('error_msg', 'Condomínio não encontrado.');
+    return res.redirect(urlGlobal(req, '/condominios'));
+  }
+  const r = await suporte.iniciar({
+    req,
+    condominioId: condominio.id,
+    motivo: req.body.motivo,
+    nivel: req.body.nivel,
+    duracaoMinutos: req.body.duracao_minutos,
+  });
+  if (!r.ok) {
+    const MENSAGENS = {
+      motivo_obrigatorio: 'Indique o motivo do acesso de suporte.',
+      nivel_nao_concedivel: 'O nível pedido não pode ser concedido.',
+      duracao_invalida: 'Escolha uma duração da lista.',
+    };
+    req.flash('error_msg', MENSAGENS[r.erro] || 'Não foi possível iniciar o acesso de suporte.');
+    return res.redirect(urlGlobal(req, `/condominios/${condominio.id}/suporte`));
+  }
+
+  await audit({
+    userId: req.user.id,
+    acao: r.pendente ? 'suporte_pendente_autorizacao' : 'suporte_iniciado',
+    entidade: 'Condominio',
+    entidadeId: condominio.id,
+    detalhes: {
+      acesso_suporte_id: r.acesso.id,
+      nivel: r.acesso.nivel,
+      motivo: r.acesso.motivo,
+      condominio_id: condominio.id,
+      expira_em: r.acesso.expira_em,
+    },
+  });
+
+  if (r.pendente) {
+    req.flash('success_msg', 'Pedido registado. Aguarda autorização de um administrador do condomínio.');
+    return res.redirect(urlGlobal(req, `/condominios/${condominio.id}/suporte`));
+  }
+  req.flash('success_msg', `Acesso de suporte ativo (só leitura) até ${new Date(r.acesso.expira_em).toISOString().slice(11, 16)} UTC.`);
+  return res.redirect('/admin');
+});
+
+router.post('/global/suporte/:id/terminar', async (req, res) => {
+  const acesso = await suporte.terminar({ acessoId: req.params.id, req });
+  const destino = acesso && acesso.acesso
+    ? urlGlobal(req, `/condominios/${acesso.acesso.condominio_id}/suporte`)
+    : urlGlobal(req, '/condominios');
+  await audit({
+    userId: req.user.id,
+    acao: 'suporte_terminado',
+    entidade: 'Condominio',
+    entidadeId: acesso && acesso.acesso ? acesso.acesso.condominio_id : null,
+    detalhes: { acesso_suporte_id: req.params.id },
+  });
+  req.flash('success_msg', 'Acesso de suporte terminado.');
+  return res.redirect(destino);
+});
+
+router.post('/global/suporte/:id/revogar', async (req, res) => {
+  const r = await suporte.revogar({ acessoId: req.params.id, revogadoPor: req.user.id, req });
+  await audit({
+    userId: req.user.id,
+    acao: 'suporte_revogado',
+    entidade: 'Condominio',
+    entidadeId: r && r.acesso ? r.acesso.condominio_id : null,
+    detalhes: { acesso_suporte_id: req.params.id },
+  });
+  req.flash('success_msg', 'Acesso de suporte revogado.');
+  const destino = r && r.acesso
+    ? urlGlobal(req, `/condominios/${r.acesso.condominio_id}/suporte`)
+    : urlGlobal(req, '/condominios');
+  return res.redirect(destino);
 });
 
 // ── Detalhe do condomínio (membros/associações) ────────────────────

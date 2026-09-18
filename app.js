@@ -14,6 +14,7 @@ const { Aviso } = require('./models');
 const handlebarsHelpers = require('./helpers/handlebars-helpers');
 const { getCondominio } = require('./helpers/condominio');
 const tenant = require('./helpers/tenant');
+const suporte = require('./helpers/suporte');
 const drive = require('./helpers/drive');
 // Fachada de armazenamento (rótulo do serviço principal usado nas vistas).
 const storage = require('./helpers/storage');
@@ -96,13 +97,26 @@ app.use(async (req, res, next) => {
   // `isAdmin` = «esta conta tem interface de GESTÃO no contexto atual?».
   // NÃO vem de `users.role` (legado): o que decide é o papel no CONDOMÍNIO
   // ATIVO (`utilizador_condominios.role`), resolvido mais abaixo quando o
-  // contexto é carregado — admin e gestor usam o backoffice. O Super Admin
-  // mantém a interface de gestão porque pode entrar em suporte em qualquer
-  // condomínio ativo. Sem contexto de condomínio fica false: quem não tem
-  // condomínio ativo só pode ver a escolha de condomínio.
+  // contexto é carregado — admin e gestor usam o backoffice.
+  //
+  // Um Super Admin NÃO ganha aqui interface de gestão: sem associação ao
+  // condomínio ativo fica `false`. O acesso de suporte é um contexto à parte,
+  // com interface própria, resolvido por `comCondominioAtivo` (via
+  // `req.suporte`) — nunca por uma promoção em `isAdmin`.
   res.locals.isAdmin = false;
   res.locals.meusCondominios = [];
   res.locals.condominioAtivo = null;
+  // Pedidos de acesso de suporte à espera de decisão do administrador do
+  // condomínio ativo. Alimenta o aviso na navegação (`main.handlebars`) — sem
+  // ele, um pedido pendente expirava sem ninguém dar por isso. Zero por omissão:
+  // só é consultado quando há condomínio escolhido e interface de gestão.
+  res.locals.pedidosSuportePendentes = 0;
+  // Contexto de SUPORTE (nível diagnóstico) — `null` para a esmagadora maioria
+  // dos pedidos. Preenchido em baixo apenas quando o condomínio ativo NÃO tem
+  // associação para o utilizador mas existe um acesso de suporte vigente. A
+  // casca usa-o para mostrar a faixa de «só leitura»; a autorização continua a
+  // ser revalidada em cada rota por `tenant.comCondominioAtivo`.
+  res.locals.suporteAtivo = null;
   // Contexto de condomínio: só existe para quem tem sessão. Num pedido sem
   // autenticação (entrada, verificação em duas etapas, recuperação de
   // palavra-passe, página de erro…) não se lê sequer o primeiro condomínio da
@@ -122,26 +136,20 @@ app.use(async (req, res, next) => {
       // Só o condomínio ESCOLHIDO explicitamente (sessão) é o ativo — nunca se
       // escolhe automaticamente o primeiro/último usado.
       let escolhido = meus.find((c) => c.id === ativoId) || null;
-      if (!escolhido && ativoId && !tenant.eSuperAdmin(req.user)) {
+      if (!escolhido && ativoId) {
         delete req.session.condominio_ativo_id; // sessão com ativo que já não é válido
-      }
-      // Super Admin em modo suporte: o condomínio ativo pode não ter associação
-      // (entrou via "Entrar (suporte)") — mostra-o mesmo assim no seletor.
-      if (!escolhido && tenant.eSuperAdmin(req.user) && ativoId) {
-        const suporte = await tenant.Condominio.findOne({ where: { id: ativoId, estado: 'ativo' } });
-        if (suporte) {
-          escolhido = { id: suporte.id, designacao: suporte.designacao, morada: suporte.morada, localidade: suporte.localidade, role: 'admin' };
-          res.locals.meusCondominios = [escolhido, ...meus];
-        } else {
-          delete req.session.condominio_ativo_id;
-        }
       }
       res.locals.condominioAtivo = escolhido;
       // Interface conforme o papel no condomínio ATIVO (admin/gestor vêm a
       // navegação de gestão; leitura usa a área do condómino). O papel é
-      // resolvido pelo tenant (associação real; modo suporte do Super Admin
-      // quando não há associação) e substitui a promoção que existia antes por
-      // `users.role` — legado que não corresponde ao condomínio ativo.
+      // resolvido pelo tenant (associação real) e substitui a promoção que
+      // existia antes por `users.role` — legado que não corresponde ao
+      // condomínio ativo.
+      //
+      // Um Super Admin NÃO aparece aqui com um condomínio «fabricado»: o acesso
+      // de suporte é resolvido por `comCondominioAtivo` (via `req.suporte`), no
+      // momento em que a rota o exige. Sem associação, `escolhido` é `null` e
+      // `isAdmin` fica `false` — o menu de gestão não é oferecido.
       if (escolhido) {
         const papel = await tenant.papelNoAtivo(req).catch(() => null);
         if (papel === 'admin' || papel === 'gestor') res.locals.isAdmin = true;
@@ -150,6 +158,26 @@ app.use(async (req, res, next) => {
         // fica `null` e não há consulta nenhuma (antes lia-se o primeiro
         // condomínio da base de dados para o descartar de seguida).
         condominio = await getCondominio({ id: escolhido.id });
+      } else if (ativoId) {
+        // Sem associação ao ativo: pode ser um ACESSO DE SUPORTE. Aqui só se
+        // resolve o que a CASCA precisa de saber — nome do condomínio e faixa de
+        // contexto. A autorização em si continua a ser decidida em cada rota por
+        // `tenant.comCondominioAtivo`; esta leitura não concede nada e é
+        // revalidada (âmbito, estado, prazo) tal como lá.
+        const acesso = await suporte.vigente(req, ativoId).catch(() => null);
+        if (acesso) {
+          res.locals.suporteAtivo = suporte.paraContexto(acesso);
+          condominio = await getCondominio({ id: ativoId }).catch(() => null);
+          // A casca (cabeçalho, título, seletor) lê SEMPRE `condominioAtivo`.
+          // Em contexto de suporte não há associação, mas o utilizador precisa de
+          // saber ONDE está — sem isto o cabeçalho mostrava a aplicação e não o
+          // condomínio concedido. `role` fica deliberadamente a `null`: a vista
+          // do seletor e a navegação de gestão decidem por ele, e é exatamente
+          // essa ausência que impede o menu de administração de aparecer.
+          if (condominio) {
+            res.locals.condominioAtivo = { ...condominio.toJSON(), role: null };
+          }
+        }
       }
     } catch (err) {
       console.error('[multi-condominio]', err.message);
@@ -165,6 +193,15 @@ app.use(async (req, res, next) => {
   res.locals.armazenamentoRotulo = storage.rotuloPrincipal(res.locals.condominioAtivo && res.locals.condominioAtivo.id);
   res.locals.armazenamentoAbrePasta = storage.abrePastaNoFornecedor(res.locals.condominioAtivo && res.locals.condominioAtivo.id);
   res.locals.armazenamentoIcone = storage.iconePrincipal(res.locals.condominioAtivo && res.locals.condominioAtivo.id);
+  // Pedidos de suporte pendentes do condomínio ATIVO, para o administrador
+  // decidir sem ter de abrir a página. Só faz sentido com interface de gestão
+  // (`isAdmin`) — quem não administra não decide nada e não precisa do aviso.
+  // Falha em silêncio: é um contador informativo e não pode derrubar a página.
+  if (res.locals.isAdmin && res.locals.condominioAtivo) {
+    res.locals.pedidosSuportePendentes = await suporte
+      .contagemPendentes(res.locals.condominioAtivo.id)
+      .catch(() => 0);
+  }
   res.locals.tarefas = background.resumo();
   // Área do condómino: número de avisos RECENTES do condomínio ativo (últimos
   // 14 dias), para o atalho de avisos no cabeçalho. Não existe estado de

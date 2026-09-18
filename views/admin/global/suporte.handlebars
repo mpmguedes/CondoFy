@@ -1,0 +1,148 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Acesso de suporte</h1>
+    <p class="subtitle">{{condominio.designacao}} · Administração global</p>
+  </div>
+  <a href="/admin/global/condominios/{{condominio.id}}" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1" style="font-size:1rem">arrow_back</span>Condomínio</a>
+</div>
+
+{{!--
+  O Super Admin é administrador da PLATAFORMA: não tem acesso ao condomínio.
+  Este pedido é uma concessão com âmbito (este condomínio), prazo e motivo.
+  Não é uma mudança de papel: durante o acesso, `req.papelCondominio` continua
+  `null` e o backend recusa tudo o que não seja leitura.
+--}}
+<div class="alert alert-info d-flex gap-2 align-items-start" role="alert">
+  <span class="material-symbols-outlined" style="font-size:1.25rem">info</span>
+  <div class="small">
+    O acesso de suporte é <strong>só de leitura</strong> e <strong>limitado a este condomínio</strong>.
+    Enquanto estiver ativo, as ações de gestão continuam bloqueadas no backend — este pedido não
+    concede papel de administrador. O prazo é fixo e não se renova por atividade.
+    {{#if temAdmin}}
+    Este condomínio <strong>tem administrador ativo</strong>: o pedido fica pendente até um administrador o autorizar.
+    {{else}}
+    Este condomínio <strong>não tem administrador ativo</strong>: o pedido inicia de imediato, com motivo e prazo registados.
+    {{/if}}
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h2 class="h6 mb-3">Novo acesso</h2>
+    <form action="/admin/global/condominios/{{condominio.id}}/suporte" method="POST" class="row g-3 align-items-end">
+      <div class="col-12 col-md-5">
+        <label class="form-label" for="motivo">Motivo *</label>
+        <input type="text" class="form-control" id="motivo" name="motivo" required maxlength="255"
+               placeholder="Ex: Diagnóstico de erro reportado no recibo de agosto" />
+        <div class="form-text">Fica registado na auditoria e visível ao condomínio.</div>
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label" for="nivel">Nível</label>
+        <select class="form-select" id="nivel" name="nivel">
+          {{#each niveis}}<option value="{{this}}">Diagnóstico (só leitura)</option>{{/each}}
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label" for="duracao_minutos">Duração</label>
+        <select class="form-select" id="duracao_minutos" name="duracao_minutos">
+          {{#each duracoes}}<option value="{{this}}">{{this}} min</option>{{/each}}
+        </select>
+      </div>
+      <div class="col-12 col-md-3 d-grid">
+        <button class="btn btn-primary" type="submit">
+          <span class="material-symbols-outlined me-1" style="font-size:1rem">support_agent</span>Pedir acesso
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{{#if pendentes.length}}
+<div class="card mb-4">
+  <div class="card-header bg-white">Pendentes de autorização</div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr><th>Operador</th><th>Motivo</th><th>Prazo</th><th>Estado</th></tr>
+      </thead>
+      <tbody>
+        {{#each pendentes}}
+        <tr>
+          <td>{{#if operador}}{{operador.nome}}{{else}}#{{utilizador_id}}{{/if}}</td>
+          <td class="small">{{motivo}}</td>
+          <td class="small text-nowrap">{{expira_em}}</td>
+          <td><span class="badge text-bg-warning">Aguarda administrador</span></td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-body small text-muted">
+    Um pedido pendente <strong>não dá acesso nenhum</strong>. Só passa a ativo quando um administrador do
+    condomínio o autorizar (em <em>Utilizadores → Acessos de suporte</em>). Não existe ativação automática:
+    se o prazo passar, o pedido fica expirado.
+  </div>
+</div>
+{{/if}}
+
+{{#if vigentes.length}}
+<div class="card mb-4">
+  <div class="card-header bg-white">Acessos ativos agora</div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr><th>Operador</th><th>Motivo</th><th>Nível</th><th>Expira</th><th class="text-end">Ações</th></tr>
+      </thead>
+      <tbody>
+        {{#each vigentes}}
+        <tr>
+          <td>{{#if operador}}{{operador.nome}}{{else}}#{{utilizador_id}}{{/if}}</td>
+          <td class="small">{{motivo}}</td>
+          <td><span class="badge text-bg-secondary">{{nivel}}</span></td>
+          <td class="small text-nowrap">{{expira_em}}</td>
+          <td class="text-end">
+            <form action="/admin/global/suporte/{{id}}/terminar" method="POST" class="d-inline">
+              <button class="btn btn-sm btn-outline-danger">Terminar</button>
+            </form>
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{else}}
+<p class="text-muted small">Sem acessos de suporte ativos neste momento.</p>
+{{/if}}
+
+{{#if historico.length}}
+<div class="card">
+  <div class="card-header bg-white">Histórico</div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead class="table-light">
+        <tr><th>#</th><th>Operador</th><th>Motivo</th><th>Nível</th><th>Início</th><th>Fim</th><th>Estado</th></tr>
+      </thead>
+      <tbody>
+        {{#each historico}}
+        <tr>
+          <td class="text-muted">{{id}}</td>
+          <td>{{#if operador}}{{operador.nome}}{{else}}#{{utilizador_id}}{{/if}}</td>
+          <td class="small">{{motivo}}</td>
+          <td class="small">{{nivel}}</td>
+          <td class="small text-nowrap">{{iniciado_em}}</td>
+          <td class="small text-nowrap">{{terminado_em}}</td>
+          <td>
+            {{#if (eq estado 'ativo')}}<span class="badge text-bg-success">Ativo</span>
+            {{else if (eq estado 'pendente_autorizacao')}}<span class="badge text-bg-warning">Pendente</span>
+            {{else if (eq estado 'expirado')}}<span class="badge text-bg-secondary">Expirado</span>
+            {{else if (eq estado 'revogado')}}<span class="badge text-bg-danger">Revogado</span>
+            {{else}}<span class="badge text-bg-secondary">Terminado</span>{{/if}}
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{/if}}

@@ -10,6 +10,13 @@
 //   SESSION_IDLE_MINUTOS   minutos de inatividade até encerrar (defeito: 120)
 //   SESSION_AVISO_SEGUNDOS segundos de aviso antes de expirar (defeito: 120)
 // ─────────────────────────────────────────────────────────────────────
+// Nota sobre o ACESSO DE SUPORTE: terminar a sessão tem de terminar também a
+// concessão de suporte, senão o registo ficava `ativo` em `acessos_suporte` até
+// ao prazo — uma janela aberta sem ninguém do outro lado. Todas as saídas de
+// sessão (logout explícito, inatividade, conta desativada) passam por
+// `terminarSuporteDaSessao()`. A autorização em si já não dependeria do registo
+// (a sessão morreu), mas o ESTADO tem de refletir a realidade.
+const suporte = require('./suporte');
 
 const CHAVE_ULTIMA = 'sessaoUltimaAtividade';
 const CHAVE_INICIO = 'sessaoInicio';
@@ -69,6 +76,21 @@ function limparMarcas(sessao) {
   delete sessao.pendente2faAtivar;
 }
 
+// Termina o acesso de suporte associado à sessão (se existir).
+//
+// É BEST-EFFORT: a expiração absoluta e a revalidação em cada pedido já
+// garantem que nada flui por um acesso órfão. Esta chamada existe para o estado
+// ficar correto (transparência e auditoria), pelo que uma falha de BD NUNCA
+// pode impedir o logout — daí o `catch`.
+async function terminarSuporteDaSessao(req) {
+  if (!req || !req.session) return;
+  try {
+    await suporte.terminarPorSessao(req);
+  } catch (err) {
+    console.error('[suporte/logout]', err.message);
+  }
+}
+
 function ePedidoTecnico(req) {
   return req.path === ROTA_ESTADO || req.path === '/sessao/renovar';
 }
@@ -117,8 +139,10 @@ function verificarContaAtiva(req, res, next) {
 
   const encerrar = (cb) => {
     limparMarcas(req.session);
-    if (typeof req.logout === 'function') req.logout(() => cb());
-    else cb();
+    terminarSuporteDaSessao(req).then(() => {
+      if (typeof req.logout === 'function') req.logout(() => cb());
+      else cb();
+    });
   };
   encerrar(() => {
     if (eFetch(req)) {
@@ -133,11 +157,13 @@ function verificarContaAtiva(req, res, next) {
 function encerrarPorInatividade(req, res) {
   const encerrar = (cb) => {
     limparMarcas(req.session);
-    if (typeof req.logout === 'function') {
-      req.logout(() => cb());
-    } else {
-      cb();
-    }
+    terminarSuporteDaSessao(req).then(() => {
+      if (typeof req.logout === 'function') {
+        req.logout(() => cb());
+      } else {
+        cb();
+      }
+    });
   };
   encerrar(() => {
     if (eFetch(req)) {
@@ -160,6 +186,7 @@ module.exports = {
   expirada,
   marcarAtividade,
   limparMarcas,
+  terminarSuporteDaSessao,
   middlewareSessao,
   verificarContaAtiva,
   encerrarPorInatividade,

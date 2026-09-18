@@ -33,21 +33,32 @@ async function testarComCondominioAtivo() {
   const origUC = models.UserCondominio.findOne;
   const origCond = models.Condominio.findOne;
 
+  // Sem associação para ninguém nas alíneas (a) e (b): o lookup do tenant tem de
+  // estar stubado ANTES de o exercitar. Antes, a alínea (b) não precisava disto
+  // porque o ramo de super admin curto-circuitava o lookup — com o bypass
+  // removido, `comCondominioAtivo` procura a associação em qualquer caso.
+  models.UserCondominio.findOne = async () => null;
+
   // a) Sem condomínio ativo na sessão → redireciona para /condominios.
   let req = stubReq();
   let res = stubRes();
   await tenant.comCondominioAtivo(req, res, () => { throw new Error('não devia avançar'); });
   assert.strictEqual(res.redirectUrl, '/condominios', 'sem ativo → /condominios');
 
-  // b) Super Admin em modo suporte (sem associação) → entra se o condomínio existe/ativo.
+  // b) INVARIANTE CENTRAL — SUPER-ADMIN ≠ ADMIN DE CONDOMÍNIO.
+  // Ter `condominio_ativo_id` na sessão NÃO dá contexto nenhum a um super admin
+  // sem associação: não ganha `req.condominioId` nem, muito menos,
+  // `req.papelCondominio = 'admin'`. Só o acesso de suporte (`acessos_suporte`),
+  // iniciado explicitamente e com prazo, resolve o contexto — e mesmo esse
+  // deixa `req.papelCondominio` a `null`.
   models.Condominio.findOne = async ({ where }) => (where.id === 3 && where.estado === 'ativo' ? { id: 3, estado: 'ativo' } : null);
   req = stubReq({ session: { condominio_ativo_id: 3 }, user: { id: 9, role_global: 'super_admin' } });
   res = stubRes();
-  let avancou = null;
-  await tenant.comCondominioAtivo(req, res, () => { avancou = true; });
-  assert.ok(avancou, 'super admin com condomínio ativo avança');
-  assert.strictEqual(req.condominioId, 3, 'super admin: condominioId definido');
-  assert.strictEqual(req.papelCondominio, 'admin', 'super admin: papel admin (suporte)');
+  await tenant.comCondominioAtivo(req, res, () => { throw new Error('não devia avançar'); });
+  assert.strictEqual(res.redirectUrl, '/condominios', 'super admin sem associação → /condominios (nunca entra)');
+  assert.strictEqual(req.papelCondominio, undefined, 'super admin: NÃO recebe papel de condomínio');
+  assert.strictEqual(req.condominioId, undefined, 'super admin: NÃO recebe condominioId');
+  assert.strictEqual(req.session.condominio_ativo_id, undefined, 'super admin: ativo inválido é limpo');
 
   // Super Admin sem condomínio válido → redireciona.
   req = stubReq({ session: { condominio_ativo_id: 99 }, user: { id: 9, role_global: 'super_admin' } });
@@ -62,13 +73,16 @@ async function testarComCondominioAtivo() {
       : null;
   req = stubReq({ session: { condominio_ativo_id: 5 } });
   res = stubRes();
-  avancou = false;
+  let avancou = false;
   await tenant.comCondominioAtivo(req, res, () => { avancou = true; });
   assert.ok(avancou, 'utilizador associado avança');
   assert.strictEqual(req.condominioId, 5, 'utilizador: condominioId definido');
   assert.strictEqual(req.papelCondominio, 'gestor', 'utilizador: papel da associação');
+  assert.strictEqual(req.contexto, 'condominio', 'utilizador: contexto de condomínio');
+  assert.strictEqual(req.suporte, null, 'utilizador: sem suporte no contexto normal');
 
   // d) Utilizador sem associação → redireciona e limpa a sessão.
+  models.UserCondominio.findOne = async () => null;
   req = stubReq({ session: { condominio_ativo_id: 8 } });
   res = stubRes();
   await tenant.comCondominioAtivo(req, res, () => { throw new Error('não devia avançar'); });

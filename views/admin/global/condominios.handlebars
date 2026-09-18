@@ -38,9 +38,7 @@
           <td>{{#if (eq estado 'ativo')}}<span class="badge text-bg-success">Ativo</span>{{else}}<span class="badge text-bg-secondary">Desativado</span>{{/if}}</td>
           <td class="text-end text-nowrap">
             <a href="/admin/global/condominios/{{id}}" class="btn btn-sm btn-outline-secondary" title="Gerir"><span class="material-symbols-outlined" style="font-size:1rem">manage_accounts</span></a>
-            <form action="/admin/global/condominios/{{id}}/entrar" method="POST" class="d-inline">
-              <button class="btn btn-sm btn-outline-primary" title="Entrar (suporte)"><span class="material-symbols-outlined" style="font-size:1rem">login</span></button>
-            </form>
+            <a href="/admin/global/condominios/{{id}}/suporte" class="btn btn-sm btn-outline-primary" title="Acesso de suporte"><span class="material-symbols-outlined" style="font-size:1rem">support_agent</span></a>
             <form action="/admin/global/condominios/{{id}}/estado" method="POST" class="d-inline">
               {{#if (eq estado 'ativo')}}
               <button class="btn btn-sm btn-outline-danger" title="Desativar"><span class="material-symbols-outlined" style="font-size:1rem">pause_circle</span></button>

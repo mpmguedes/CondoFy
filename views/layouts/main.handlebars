@@ -169,6 +169,14 @@
             <span class="material-symbols-outlined">manage_accounts</span>
             <span class="sidebar-item-text">Utilizadores</span>
           </a>
+          {{!-- Pedidos de acesso de suporte feitos por um Super Admin. Visível
+               apenas ao administrador: é ele quem autoriza. O contador avisa
+               sem obrigar a abrir a página. --}}
+          <a class="sidebar-item {{isActive currentPath '/admin/suporte'}}" href="/admin/suporte" title="Acessos de suporte">
+            <span class="material-symbols-outlined">support_agent</span>
+            <span class="sidebar-item-text">Acessos de suporte</span>
+            {{#if pedidosSuportePendentes}}<span class="badge rounded-pill text-bg-warning ms-2">{{pedidosSuportePendentes}}</span>{{/if}}
+          </a>
           <a class="sidebar-item {{isActive currentPath '/admin/config'}}" href="/admin/config" title="Configuração">
             <span class="material-symbols-outlined">settings</span>
             <span class="sidebar-item-text">Configuração</span>
@@ -330,6 +338,25 @@
       </div>
 
       <main class="app-content" id="conteudo">
+        {{#if suporteAtivo}}
+        {{!--
+          Faixa de contexto de SUPORTE. Só aparece quando o pedido está a ser
+          servido em contexto de suporte (`req.suporte`), o que implica que o
+          utilizador NÃO tem associação a este condomínio. Existe para que
+          ninguém confunda leitura de diagnóstico com gestão: tudo o que não for
+          leitura está bloqueado no backend. Nunca é mostrada a quem administra
+          o condomínio a sério.
+        --}}
+        <div class="alert alert-warning py-2 px-3 small d-flex align-items-center gap-2 mb-3" role="status">
+          <span class="material-symbols-outlined" style="font-size:1.1rem">support_agent</span>
+          <span>
+            <strong>Acesso de suporte (só leitura)</strong> — nível {{suporteAtivo.nivel}}.
+            Todas as ações de gestão estão bloqueadas.
+            {{#if suporteAtivo.motivo}}Motivo: {{suporteAtivo.motivo}}.{{/if}}
+            {{#if suporteAtivo.expiraEm}}Termina automaticamente em {{suporteAtivo.expiraEm}}.{{/if}}
+          </span>
+        </div>
+        {{/if}}
         {{#if isAdmin}}
           {{#if tarefas.ativas}}
           <div class="alert alert-info py-2 px-3 small d-flex align-items-center gap-2 mb-3">

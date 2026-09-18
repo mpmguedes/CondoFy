@@ -13,8 +13,12 @@ const { validarNif } = require('../public/js/validacao-fiscal');
 
 const router = express.Router();
 
-// Pode criar condomínios: Super Admin global OU utilizador sem nenhum
-// condomínio (arranque do primeiro condomínio).
+// Pode criar condomínios: Super Admin global (criação de condomínios da
+// plataforma) OU utilizador sem nenhum condomínio (arranque do primeiro
+// condomínio — sem esta via, ninguém podia instalar a aplicação).
+//
+// Criar um condomínio NÃO exige estar associado a ele (ver o POST abaixo): o
+// Super Admin cria sem se tornar membro e convida depois o administrador.
 async function podeCriar(req) {
   if (tenant.eSuperAdmin(req.user)) return true;
   const meus = await tenant.listarCondominios(req.user.id);
@@ -79,24 +83,44 @@ router.post('/condominios', eAutenticado, async (req, res) => {
       nif: nifValidado.valor || null,
       estado: 'ativo',
     });
-    await UserCondominio.create({
-      utilizador_id: req.user.id,
-      condominio_id: condominio.id,
-      // Quem cria um condomínio fica sempre como `admin` desse condomínio —
-      // independentemente de ser super_admin global. O super_admin não ganha
-      // aqui um papel acrescido: o eixo de condomínio é independente do global.
-      role: 'admin',
-      estado: 'ativo',
-    });
-    req.session.condominio_ativo_id = condominio.id;
+
+    // Quem cria NÃO fica automaticamente associado ao condomínio.
+    //
+    // Antes criava-se sempre uma associação `role: 'admin'` para o criador. Para
+    // um Super Admin isso significava que criar um condomínio o tornava
+    // administrador dele — o Super Admin é administrador da PLATAFORMA e não
+    // deve herdar o condomínio por o ter criado. O administrador do condomínio
+    // nasce do convite (`helpers/convites.js`), que é quem define o dono.
+    //
+    // A exceção é o ARRANQUE: um utilizador sem nenhum condomínio (o cenário
+    // de instalação, o primeiro condomínio da plataforma) continua a ser
+    // associado como `admin`, senão criava um condomínio que ninguém podia
+    // administrar. O critério é factual e não depende do eixo global.
+    const jaTinha = await tenant.listarCondominios(req.user.id);
+    const primeiro = jaTinha.length === 0;
+    if (primeiro) {
+      await UserCondominio.create({
+        utilizador_id: req.user.id,
+        condominio_id: condominio.id,
+        role: 'admin',
+        estado: 'ativo',
+      });
+      req.session.condominio_ativo_id = condominio.id;
+    } else {
+      // Não se «entra» num condomínio onde não se tem associação: o ativo na
+      // sessão ficaria órfão e o pedido seguinte caía em /condominios.
+      delete req.session.condominio_ativo_id;
+    }
+
     await audit({
       userId: req.user.id,
       acao: 'condominio_criado',
       entidade: 'Condominio',
       entidadeId: condominio.id,
+      detalhes: { associacaoCriada: primeiro ? 'admin' : null },
     });
     req.flash('success_msg', `Condomínio "${condominio.designacao}" criado.`);
-    return res.redirect('/');
+    return res.redirect(primeiro ? '/' : '/condominios');
   } catch (err) {
     console.error('[criar-condominio]', err);
     req.flash('error_msg', 'Erro ao criar o condomínio.');
@@ -105,6 +129,10 @@ router.post('/condominios', eAutenticado, async (req, res) => {
 });
 
 // ── Entrar num condomínio (valida associação; define o ativo na sessão) ──
+// Só a associação real entra por aqui. O Super Admin não «entra» num
+// condomínio: quando precisa de o consultar, faz um pedido de ACESSO DE SUPORTE
+// (ver `routes/global-admin.js` → `/global/condominios/:id/suporte`), que fica
+// registado com motivo e prazo.
 router.post('/condominios/:id/entrar', eAutenticado, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const ok = await tenant.entrarCondominio(req, id);
@@ -117,7 +145,7 @@ router.post('/condominios/:id/entrar', eAutenticado, async (req, res) => {
     acao: 'entrar_condominio',
     entidade: 'Condominio',
     entidadeId: id,
-    detalhes: { superAdminSuporte: tenant.eSuperAdmin(req.user) },
+    detalhes: { via: 'associacao' },
   }).catch(() => {});
   return res.redirect('/');
 });

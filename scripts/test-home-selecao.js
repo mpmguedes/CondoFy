@@ -35,11 +35,27 @@ function testar() {
   d = destinoAposLogin({ meus: [], ativo: null, user: { role: 'condomino', role_global: 'super_admin' } });
   assert.strictEqual(d.redirecionar, '/admin/global', 'super admin sem ativo → painel global');
 
-  // 5. Super Admin em SUPORTE (condomínio ativo sem associação) → painel do
-  //    condomínio. Nunca o painel global (criaria /admin → / → /admin/global).
+  // 5. INVARIANTE CENTRAL — SUPER-ADMIN ≠ ADMIN DE CONDOMÍNIO.
+  //    Um super admin com um id de condomínio na sessão mas SEM associação NÃO
+  //    ganha contexto de condomínio: vai para o painel global. Antes isto era
+  //    «modo suporte» e mandava-o para `/admin` — ou seja, a administração da
+  //    plataforma convertia-se em administração do condomínio. O acesso de
+  //    suporte é agora uma concessão própria (`acessos_suporte`), com motivo e
+  //    prazo, resolvida em `comCondominioAtivo` e nunca pelo destino pós-login.
   d = destinoAposLogin({ meus: [], ativo: 7, user: { role: 'condomino', role_global: 'super_admin' } });
-  assert.strictEqual(d.redirecionar, '/admin', 'super admin em suporte → painel do condomínio');
-  assert.strictEqual(d.modoSuporte, true, 'marcado como modo suporte');
+  assert.strictEqual(d.redirecionar, '/admin/global', 'super admin sem associação → painel global (nunca /admin)');
+  assert.notStrictEqual(d.redirecionar, '/admin', 'um id na sessão NÃO dá contexto de condomínio');
+  assert.strictEqual(d.modoSuporte, false, 'não existe modo suporte implícito');
+  assert.strictEqual(d.limparAtivo, true, 'o ativo órfão é limpo');
+
+  // 6. O único caminho para `/admin` é a ASSOCIAÇÃO REAL — em todos os papéis
+  //    de gestão e com o eixo global ligado ou desligado.
+  for (const role_global of [null, 'super_admin']) {
+    for (const papel of ['admin', 'gestor']) {
+      d = destinoAposLogin({ meus: [meu(7, papel)], ativo: 7, user: { role: 'condomino', role_global } });
+      assert.strictEqual(d.redirecionar, '/admin', `${papel} associado → /admin (role_global=${role_global})`);
+    }
+  }
 }
 
 testar();

@@ -87,23 +87,41 @@ d = destinoAposLogin({ meus: [], ativo: null, user: USER({ role: 'admin', role_g
 assert.strictEqual(d.redirecionar, '/admin/global', 'D: role_global decide, users.role é irrelevante');
 feito('D. super admin com users.role=admin → /admin/global (mesmo destino)');
 
-// ── D2. Super Admin em SUPORTE (condomínio ativo) → painel do condomínio ─
+// ── D2. Super Admin com id de condomínio na sessão SEM associação ────
+// INVARIANTE CENTRAL: SUPER-ADMIN ≠ ADMIN DE CONDOMÍNIO.
+//
+// Antes, ter um id de condomínio na sessão bastava para o super admin ser
+// enviado para `/admin` em «modo suporte» — ou seja, a administração da
+// PLATAFORMA convertia-se em administração do CONDOMÍNIO por via indireta.
+// Isso está invertido: sem ASSOCIAÇÃO REAL, o destino é o painel global.
+// Um id de sessão não é contexto nenhum — quem concede acesso a um condomínio é
+// o acesso de suporte (`acessos_suporte`), resolvido em `comCondominioAtivo`
+// via `req.suporte`, e que nunca produz `req.papelCondominio` de admin/gestor.
 d = destinoAposLogin({ meus: [], ativo: 5, user: USER({ role: 'condomino', role_global: 'super_admin' }) });
-assert.strictEqual(d.redirecionar, '/admin', 'D2: super admin em suporte → /admin');
-assert.strictEqual(d.modoSuporte, true, 'D2: marcado como modo suporte');
-feito('D2. super admin em suporte (ativo definido) → /admin');
+assert.strictEqual(d.redirecionar, '/admin/global', 'D2: super admin sem associação → /admin/global (nunca /admin)');
+assert.notStrictEqual(d.redirecionar, '/admin', 'D2: um id na sessão NÃO dá contexto de condomínio');
+feito('D2. super admin sem associação (ativo na sessão) → /admin/global');
 
-// Este é o ponto que evita o ciclo NOVO: em suporte o destino nunca é o
-// painel global, que devolveria o super admin a `/global` num ping-pong.
-assert.notStrictEqual(d.redirecionar, '/admin/global', 'D2: modo suporte não vai para o painel global');
-feito('D2. modo suporte não cria /admin → / → /admin/global');
+// Já não existe "modo suporte" derivado do eixo global: o contexto de suporte é
+// uma concessão própria e vive em `req.suporte`, não no destino pós-login.
+assert.strictEqual(d.modoSuporte, false, 'D2: não há modo suporte implícito');
+feito('D2. modoSuporte é sempre false no destino');
+
+// O id inválido é limpo — não fica um ativo «fantasma» a poluir pedidos futuros.
+assert.strictEqual(d.limparAtivo, true, 'D2: ativo sem associação é limpo');
+feito('D2. ativo sem associação é limpo do contexto');
 
 // Super admin que TAMBÉM tem associação admin no condomínio ativo:
-// a associação real tem precedência e o contexto não é "suporte".
+// a associação real é o que decide — e é o único caminho para /admin.
 d = destinoAposLogin({ meus: [COND(5, 'admin')], ativo: 5, user: USER({ role: 'condomino', role_global: 'super_admin' }) });
 assert.strictEqual(d.redirecionar, '/admin', 'D2: associação real → /admin');
 assert.strictEqual(d.modoSuporte, false, 'D2b: com associação real não é modo suporte');
 feito('D2b. super admin com associação real → /admin (associação tem precedência)');
+
+// E o inverso: sem associação, mesmo com o id na sessão, NUNCA /admin.
+d = destinoAposLogin({ meus: [COND(9, 'admin')], ativo: 5, user: USER({ role: 'condomino', role_global: 'super_admin' }) });
+assert.strictEqual(d.redirecionar, '/admin/global', 'D2c: ativo que não é meu → /admin/global');
+feito('D2c. super admin com ativo de OUTRO condomínio → /admin/global');
 
 // ── E. Vários condomínios com papéis diferentes ─────────────────────
 const VARIOS = [COND(3, 'leitura'), COND(5, 'admin'), COND(7, 'gestor')];

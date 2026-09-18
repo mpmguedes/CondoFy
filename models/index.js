@@ -58,6 +58,7 @@ const {
   ExtraQuota,
   ExtraQuotaParcela,
   AgendaItem,
+  AcessoSuporte,
 } = db;
 
 // Utilizador ↔ Pessoa (relação explícita, nunca por nome)
@@ -314,6 +315,17 @@ Categoria.belongsToMany(Documento, {
 
 // Auditoria
 AuditLog.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+// ── Acessos de suporte (terceiro contexto) ─────────────────────────
+// Concessão temporária de um Super Admin sobre UM condomínio. Não é um papel
+// de condomínio: existe para dar suporte técnico auditável, nunca para
+// substituir `utilizador_condominios`.
+AcessoSuporte.belongsTo(User, { foreignKey: 'utilizador_id', as: 'operador' });
+AcessoSuporte.belongsTo(Condominio, { foreignKey: 'condominio_id', as: 'condominio' });
+AcessoSuporte.belongsTo(User, { foreignKey: 'revogado_por', as: 'revogador' });
+AcessoSuporte.belongsTo(User, { foreignKey: 'autorizado_por', as: 'autorizador' });
+User.hasMany(AcessoSuporte, { foreignKey: 'utilizador_id', as: 'acessos_suporte' });
+Condominio.hasMany(AcessoSuporte, { foreignKey: 'condominio_id', as: 'acessos_suporte' });
 
 // Estado de apresentação das recomendações contextuais do portal (Fase 2G).
 // Por conta (sem condomínio): uma recomendação sobre a conta não pertence a um

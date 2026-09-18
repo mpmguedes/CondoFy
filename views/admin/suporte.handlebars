@@ -1,0 +1,125 @@
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Acessos de suporte</h1>
+    <p class="subtitle">Pedidos de diagnóstico feitos pela administração da plataforma</p>
+  </div>
+</div>
+
+{{!--
+  Um Super Admin NÃO tem acesso a este condomínio: quando precisa de o
+  consultar, faz um pedido registado com motivo e prazo. Se houver
+  administrador ativo, o pedido espera aqui por decisão — não existe ativação
+  automática. Autorizar concede LEITURA (nível diagnóstico) até ao prazo: não
+  altera papéis, não dá acesso a gestão e pode ser revogado a qualquer momento.
+--}}
+<div class="alert alert-secondary d-flex gap-2 align-items-start" role="alert">
+  <span class="material-symbols-outlined" style="font-size:1.25rem">shield_person</span>
+  <div class="small">
+    Autorizar um pedido dá <strong>apenas leitura</strong> dos dados deste condomínio, durante o prazo
+    indicado e sem qualquer alteração de papéis. Os pedidos ficam registados na auditoria e podem ser
+    revogados a meio.
+    {{#unless temAdmin}}
+    <br /><strong>Este condomínio não tem administrador ativo</strong> — nesse caso, os pedidos de suporte
+    iniciam de imediato (com motivo e prazo registados), porque não há ninguém a quem pedir autorização.
+    {{/unless}}
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header bg-white">Pendentes de autorização</div>
+  {{#if pendentes.length}}
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr><th>Operador</th><th>Motivo</th><th>Nível</th><th>Pedido em</th><th>Expira</th><th class="text-end">Decisão</th></tr>
+      </thead>
+      <tbody>
+        {{#each pendentes}}
+        <tr>
+          <td>
+            <div class="fw-semibold">{{#if operador}}{{operador.nome}}{{else}}#{{utilizador_id}}{{/if}}</div>
+            <div class="small text-muted">{{#if operador}}{{operador.email}}{{/if}}</div>
+          </td>
+          <td class="small">{{motivo}}</td>
+          <td><span class="badge text-bg-secondary">{{nivel}}</span></td>
+          <td class="small text-nowrap">{{iniciado_em}}</td>
+          <td class="small text-nowrap">{{expira_em}}</td>
+          <td class="text-end text-nowrap">
+            <form action="/admin/suporte/{{id}}/autorizar" method="POST" class="d-inline">
+              <button class="btn btn-sm btn-primary">Autorizar</button>
+            </form>
+            <form action="/admin/suporte/{{id}}/recusar" method="POST" class="d-inline">
+              <button class="btn btn-sm btn-outline-danger">Recusar</button>
+            </form>
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <div class="card-body text-muted small">Sem pedidos pendentes.</div>
+  {{/if}}
+</div>
+
+<div class="card mb-4">
+  <div class="card-header bg-white">Acessos ativos</div>
+  {{#if ativos.length}}
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr><th>Operador</th><th>Motivo</th><th>Nível</th><th>Expira</th><th class="text-end">Ação</th></tr>
+      </thead>
+      <tbody>
+        {{#each ativos}}
+        <tr>
+          <td>{{#if operador}}{{operador.nome}}{{else}}#{{utilizador_id}}{{/if}}</td>
+          <td class="small">{{motivo}}</td>
+          <td><span class="badge text-bg-secondary">{{nivel}}</span></td>
+          <td class="small text-nowrap">{{expira_em}}</td>
+          <td class="text-end">
+            <form action="/admin/suporte/{{id}}/revogar" method="POST" class="d-inline">
+              <button class="btn btn-sm btn-outline-danger">Revogar</button>
+            </form>
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <div class="card-body text-muted small">Nenhum acesso de suporte ativo neste momento.</div>
+  {{/if}}
+</div>
+
+{{#if historico.length}}
+<div class="card">
+  <div class="card-header bg-white">Histórico</div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead class="table-light">
+        <tr><th>#</th><th>Operador</th><th>Motivo</th><th>Nível</th><th>Início</th><th>Fim</th><th>Estado</th></tr>
+      </thead>
+      <tbody>
+        {{#each historico}}
+        <tr>
+          <td class="text-muted">{{id}}</td>
+          <td>{{#if operador}}{{operador.nome}}{{else}}#{{utilizador_id}}{{/if}}</td>
+          <td class="small">{{motivo}}</td>
+          <td class="small">{{nivel}}</td>
+          <td class="small text-nowrap">{{iniciado_em}}</td>
+          <td class="small text-nowrap">{{terminado_em}}</td>
+          <td>
+            {{#if (eq estado 'ativo')}}<span class="badge text-bg-success">Ativo</span>
+            {{else if (eq estado 'pendente_autorizacao')}}<span class="badge text-bg-warning">Pendente</span>
+            {{else if (eq estado 'expirado')}}<span class="badge text-bg-secondary">Expirado</span>
+            {{else if (eq estado 'revogado')}}<span class="badge text-bg-danger">Revogado</span>
+            {{else}}<span class="badge text-bg-secondary">Terminado</span>{{/if}}
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{/if}}

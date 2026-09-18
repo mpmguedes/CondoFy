@@ -39,6 +39,10 @@ const { validarNif } = require('../public/js/validacao-fiscal');
 const drive = require('../helpers/drive');
 const { smtpConfigured, sendMail } = require('../helpers/mailer');
 const convites = require('../helpers/convites');
+// Acesso de suporte (terceiro contexto de autorização) — usado apenas no bloco
+// que autoriza/recusa/revoga os pedidos de diagnóstico feitos por um Super
+// Admin. As restantes rotas deste router ignoram-no por completo.
+const suporte = require('../helpers/suporte');
 const background = require('../helpers/background-jobs');
 const { sincronizarContactosPessoa, parseContactosForm, validarContactos, contactosParaForm } = require('../helpers/contactos');
 
@@ -1314,6 +1318,103 @@ router.post('/utilizadores/:id/revogar-convite', apenasAdmin, async (req, res) =
   await audit({ userId: req.user.id, acao: 'revogar_convite', entidade: 'User', entidadeId: user.id, detalhes: { email: user.email } }).catch(() => {});
   req.flash('success_msg', 'Convite revogado.');
   res.redirect('/admin/utilizadores');
+});
+
+// ── Pedidos de acesso de SUPORTE ───────────────────────────────────
+// O Super Admin é administrador da PLATAFORMA: quando precisa de consultar um
+// condomínio, faz um pedido registado (`acessos_suporte`) com motivo e prazo.
+// Se o condomínio TEM administrador ativo, o pedido fica `pendente_autorizacao`
+// e é o administrador que autoriza aqui — não existe ativação automática, nem
+// prazo que promova sozinho o pedido.
+//
+// Bloco exclusivo do `admin` (como o resto da gestão de utilizadores): o gestor
+// não decide quem entra no condomínio em diagnóstico.
+router.get('/suporte', apenasAdmin, async (req, res) => {
+  const [pendentes, ativos, historico, temAdmin] = await Promise.all([
+    suporte.pendentesDe(req.condominioId),
+    suporte.ativosDe(req.condominioId),
+    suporte.historicoDe(req.condominioId, 100),
+    suporte.temAdminAtivo(req.condominioId),
+  ]);
+  res.render('admin/suporte', {
+    titulo: 'Acessos de suporte',
+    pendentes,
+    ativos,
+    historico,
+    temAdmin,
+  });
+});
+
+router.post('/suporte/:id/autorizar', apenasAdmin, async (req, res) => {
+  // A autorização é concedida em nome de QUEM A DÁ (`req.user.id`), e
+  // `suporte.autorizar` verifica que essa conta é admin ATIVO do condomínio do
+  // acesso. Um admin de outro condomínio não autoriza nada — o âmbito do acesso
+  // nunca vem do formulário.
+  const r = await suporte.autorizar({
+    acessoId: req.params.id,
+    adminUserId: req.user.id,
+    req,
+  });
+  if (!r.ok) {
+    const MENSAGENS = {
+      nao_encontrado: 'Pedido de suporte não encontrado.',
+      estado_invalido: 'Este pedido já não está pendente.',
+      sem_permissao: 'Não tem permissão para autorizar este acesso.',
+      expirado: 'O prazo deste pedido já tinha passado — foi fechado.',
+    };
+    req.flash('error_msg', MENSAGENS[r.erro] || 'Não foi possível autorizar o acesso.');
+    return res.redirect('/admin/suporte');
+  }
+  await audit({
+    userId: req.user.id,
+    acao: 'suporte_autorizado',
+    entidade: 'Condominio',
+    entidadeId: r.acesso.condominio_id,
+    detalhes: {
+      acesso_suporte_id: r.acesso.id,
+      nivel: r.acesso.nivel,
+      expira_em: r.acesso.expira_em,
+    },
+  }).catch(() => {});
+  req.flash('success_msg', 'Acesso de suporte autorizado (só leitura, com prazo).');
+  return res.redirect('/admin/suporte');
+});
+
+router.post('/suporte/:id/recusar', apenasAdmin, async (req, res) => {
+  const r = await suporte.recusar({ acessoId: req.params.id, resgatadoPor: req.user.id, req });
+  if (!r.ok) {
+    req.flash('error_msg', 'Este pedido já não está pendente.');
+    return res.redirect('/admin/suporte');
+  }
+  await audit({
+    userId: req.user.id,
+    acao: 'suporte_recusado',
+    entidade: 'Condominio',
+    entidadeId: r.acesso.condominio_id,
+    detalhes: { acesso_suporte_id: r.acesso.id },
+  }).catch(() => {});
+  req.flash('success_msg', 'Pedido de suporte recusado.');
+  return res.redirect('/admin/suporte');
+});
+
+// Revogação pelo administrador do condomínio: um acesso JÁ ATIVO pode ser
+// cortado a meio — a decisão não é irreversível. O impacto é imediato porque o
+// estado é revalidado em cada pedido (`suporte.vigente`).
+router.post('/suporte/:id/revogar', apenasAdmin, async (req, res) => {
+  const r = await suporte.revogar({ acessoId: req.params.id, revogadoPor: req.user.id, req });
+  if (!r.ok) {
+    req.flash('error_msg', 'Este acesso já não estava ativo.');
+    return res.redirect('/admin/suporte');
+  }
+  await audit({
+    userId: req.user.id,
+    acao: 'suporte_revogado_pelo_condominio',
+    entidade: 'Condominio',
+    entidadeId: r.acesso.condominio_id,
+    detalhes: { acesso_suporte_id: r.acesso.id },
+  }).catch(() => {});
+  req.flash('success_msg', 'Acesso de suporte revogado.');
+  return res.redirect('/admin/suporte');
 });
 
 // Tarefas de processamento em segundo plano (estado/consulta)
