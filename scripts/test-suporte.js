@@ -772,41 +772,97 @@ function testarEstaticas() {
   feito('iniciado_em/expira_em são DATETIME, não DATE');
 
   // ── ALLOW-LIST do suporte (read-only explícita) ───────────────────
-  // A superfície de suporte é um conjunto FECHADO, enumerado por caminho. O que
-  // se verifica aqui é o CONTRATO estrutural: existe UM ponto de entrada
-  // (o `router.use(soDiagnostico)`), ele verifica o caminho contra a lista,
-  // aplica o nível diagnóstico e o crivo de leitura por MÉTODO.
+  // A superfície de suporte é um conjunto FECHADO, enumerado por caminho. Desde
+  // a extração, a lista vive em `helpers/suporte-allowlist.js` (fonte única,
+  // consumida por TODOS os routers de `/admin`); o CONTRATO estrutural que se
+  // verifica aqui é: existe UM ponto de entrada por módulo
+  // (`router.use(allowlistSuporte.soDiagnostico('<modulo>'))`), a lista é
+  // consultada por PADRÃO COMPLETO (âncora, nunca por prefixo), exige o nível
+  // `diagnostico` e aplica o crivo de leitura por MÉTODO.
   const condominoSrc = ler('routes/condomino.js');
-  assert.ok(/router\.use\(soDiagnostico\)/.test(adminSrc),
-    'admin.js: a allow-list é montada num único ponto (router.use(soDiagnostico))');
-  assert.ok(/eCaminhoDeDiagnostico\(req\.path\)/.test(adminSrc),
-    'admin.js: o caminho é verificado contra a lista (não por prefixo)');
-  assert.ok(/SUPORTE_DIAGNOSTICO_ATIVO/.test(adminSrc) && /comSuporte\(\['diagnostico'\]\)/.test(adminSrc),
-    'admin.js: a allow-list exige o nível `diagnostico`');
-  assert.ok(/somenteLeitura/.test(adminSrc), 'admin.js: a allow-list exige um MÉTODO de leitura');
-  feito('admin.js: allow-list fechada, com nível diagnóstico e leitura por método');
+  const allowlistSrc = ler('helpers/suporte-allowlist.js');
 
-  // Cada caminho da lista tem de ser um GET de leitura montado no router — a
-  // lista não pode nomear rotas que não existem (falsa sensação de cobertura).
+  // 1. A lista é a fonte única e o guard monta-a por módulo.
+  assert.ok(/router\.use\(allowlistSuporte\.soDiagnostico\('admin'\)\)/.test(adminSrc),
+    'admin.js: a allow-list é montada num único ponto (soDiagnostico(\'admin\'))');
+  assert.ok(/const allowlistSuporte = require\('\.\.\/helpers\/suporte-allowlist'\)/.test(adminSrc),
+    'admin.js: a allow-list vem do módulo partilhado');
+  feito('admin.js: allow-list montada num único ponto, vinda do módulo partilhado');
+
+  // 2. O contrato das quatro condições vive no módulo partilhado.
+  //
+  // O caminho é verificado contra a lista (por PADRÃO completo, nunca por
+  // prefixo). A admissão do módulo `admin` usa `caminhoAdmitidoEmAlgumModulo`
+  // porque esse router é o PRIMEIRO montado sob `/admin` e a sua guarda de papel
+  // corre para todos os caminhos — se só conhecesse a lista de `admin`,
+  // estrangulava a admissão dos routers montados depois dele. A `LISTA` continua
+  // a ser o conjunto fechado (a união não admite nada de novo).
+  assert.ok(/caminhoAdmitido\(modulo, caminho\)/.test(allowlistSrc)
+    && /entradas\.some\(\(e\) => e\.padrao\.test\(caminho\)\)/.test(allowlistSrc),
+    'suporte-allowlist.js: o caminho é verificado contra a lista (não por prefixo)');
+  assert.ok(/caminhoAdmitidoEmAlgumModulo\(caminho\)/.test(allowlistSrc)
+    && /MODULOS\.some\(\(m\) => caminhoAdmitido\(m, caminho\)\)/.test(allowlistSrc),
+    'suporte-allowlist.js: a admissão do router `admin` aceita a união da lista (senão estrangula os routers seguintes)');
+  assert.ok(/if \(!admitir\(req\.path\)\) return next\(\)/.test(allowlistSrc),
+    'suporte-allowlist.js: o crivo de admissão consulta a lista pelo caminho real do pedido');
+  assert.ok(/comSuporte\(NIVEIS_ADMITIDOS\)/.test(allowlistSrc) && /NIVEIS_ADMITIDOS = \['diagnostico'\]/.test(allowlistSrc),
+    'suporte-allowlist.js: a allow-list exige o nível `diagnostico`');
+  assert.ok(/somenteLeitura\(req, res/.test(allowlistSrc),
+    'suporte-allowlist.js: a allow-list exige um MÉTODO de leitura');
+  assert.ok(/ADMITIDO_SUPORTE = Symbol\.for\(/.test(allowlistSrc),
+    'suporte-allowlist.js: a marca de admissão é um Symbol GLOBAL (partilhada entre routers)');
+  assert.ok(/allowlistSuporte\.comPapelOuSuporteAdmitido\('gestor'\)/.test(adminSrc),
+    'admin.js: a guarda de papel é CONDICIONAL (delegada no helper)');
+  feito('suporte-allowlist.js: caminho + nível + método, marca global e guarda condicional');
+
+  // 3. A lista fecha as rotas que NÃO podem ser admitidas (estrutura, não máscara).
+  assert.ok(!/padrao: \/\^\\\/fracoes\\\/\\d\+\$/.test(allowlistSrc),
+    'suporte-allowlist.js: /fracoes/:id NÃO está na lista (ficha que junta identidade e finanças)');
+  assert.ok(!/documentos\\\//.test(allowlistSrc.match(/documentos:[\s\S]*?\n\n/)[0]),
+    'suporte-allowlist.js: nenhuma rota de /documentos além de /documentos (sem ficheiro/token/pasta)');
+  feito('a lista exclui /fracoes/:id e todas as sub-rotas de documentos');
+
+  // 4. Cada caminho da lista de `admin` corresponde a um GET real do router.
+  //    (`/fracoes/:id` deixou de ser admitido — a verificação passou a exigir a
+  //    sua AUSÊNCIA da lista, acima.)
   for (const rota of ['/', '/fracoes', '/condominos', '/tarefas']) {
     const escape = rota.replace(/\//g, '\\/');
     assert.ok(new RegExp(`router\\.get\\('${escape}'`).test(adminSrc),
       `admin.js: a rota permitida ${rota} existe e é GET`);
   }
-  assert.ok(/router\.get\('\/fracoes\/:id'/.test(adminSrc), 'admin.js: a rota permitida /fracoes/:id existe e é GET');
-  feito('cada caminho da allow-list corresponde a uma rota GET real');
+  feito('cada caminho da allow-list de admin corresponde a uma rota GET real');
 
   // O portal do condómino está FECHADO ao suporte (router inteiro).
   assert.ok(/router\.use\(tenant\.semSuporte\)/.test(condominoSrc),
     'condomino.js: o portal recusa o acesso de suporte (montagem no router)');
   feito('condomino.js: portal do condómino fechado ao suporte (router inteiro)');
 
+  // Cada router de `/condomino` declara a negação explícita (defesa em
+  // profundidade) e `app.js` monta a guarda GLOBAL antes das montagens.
+  for (const f of ['condomino.js', 'condomino-conta.js', 'condomino-recomendacoes.js', 'saida-condominio.js']) {
+    assert.ok(/router\.use\(tenant\.semSuporte\)/.test(ler('routes/' + f)),
+      `${f}: declara tenant.semSuporte (defesa em profundidade)`);
+  }
+  const appSrcGuard = ler('app.js');
+  // A guarda global NÃO pode ler `req.suporte`: `comCondominioAtivo` (que o
+  // cria) é montado DENTRO de cada router, pelo que a esta altura do pipeline
+  // ele ainda não existe — e a guarda deixaria passar. Lê a marca da SESSÃO
+  // (`suporte_ativo_id`), a única coisa que a sessão de suporte guarda. A
+  // leitura da sessão e o destino vivem em `tenant.bloqueioSuporteNaSessao`.
+  assert.ok(/app\.use\('\/condomino', tenant\.bloqueioSuporteNaSessao\)/.test(appSrcGuard),
+    'app.js: guarda GLOBAL em /condomino montada ANTES de todos os routers do portal');
+  const tenantSrcGD = ler('helpers/tenant.js');
+  assert.ok(/function bloqueioSuporteNaSessao\(req, res, next\)[\s\S]*?req\.session\[suporte\.CHAVE_SESSAO\][\s\S]*?redirect\(DESTINO_PAINEL\)/.test(tenantSrcGD),
+    'tenant.bloqueioSuporteNaSessao: lê a marca de suporte da SESSÃO e redireciona para o painel (/admin)');
+  feito('todos os routers de /condomino fechados + guarda global em app.js');
+
   // A guarda de papel mantém-se montada (a allow-list não a substituiu nem
   // duplicou: um `router.use(comPapel('gestor'))` incondicional a seguir
   // recusaria outra vez o pedido de suporte admitido).
   assert.ok(
     /router\.use\(tenant\.comPapel\('gestor'\)\)/.test(adminSrc) ||
-    /router\.use\(\(req, res, next\) => \{[\s\S]*?tenant\.comPapel\('gestor'\)\(req, res, next\)/.test(adminSrc),
+    /router\.use\(\(req, res, next\) => \{[\s\S]*?tenant\.comPapel\('gestor'\)\(req, res, next\)/.test(adminSrc) ||
+    /router\.use\(allowlistSuporte\.comPapelOuSuporteAdmitido\('gestor'\)\)/.test(adminSrc),
     'admin.js: a guarda de papel continua montada no router');
   feito('admin.js: guarda de papel intacta (a allow-list passa por cima dela)');
 }

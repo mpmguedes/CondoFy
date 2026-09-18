@@ -117,6 +117,13 @@ app.use(async (req, res, next) => {
   // casca usa-o para mostrar a faixa de «só leitura»; a autorização continua a
   // ser revalidada em cada rota por `tenant.comCondominioAtivo`.
   res.locals.suporteAtivo = null;
+  // Indicador para as VISTAS: `true` quando o pedido é de suporte de nível
+  // `diagnostico`. As vistas de módulos abertos ao suporte (frações, quotas,
+  // condóminos…) escolhem por ele a apresentação DESPERSONALIZADA (iniciais em
+  // vez de nomes, IBAN/NIF/contacto mascarados, sem ações de escrita). Não
+  // concede nada: é apresentação. A admissão e o isolamento são decididos por
+  // `helpers/suporte-allowlist.js` e pela consulta de cada handler.
+  res.locals.suporteDiagnostico = false;
   // Contexto de condomínio: só existe para quem tem sessão. Num pedido sem
   // autenticação (entrada, verificação em duas etapas, recuperação de
   // palavra-passe, página de erro…) não se lê sequer o primeiro condomínio da
@@ -167,6 +174,8 @@ app.use(async (req, res, next) => {
         const acesso = await suporte.vigente(req, ativoId).catch(() => null);
         if (acesso) {
           res.locals.suporteAtivo = suporte.paraContexto(acesso);
+          // As vistas de suporte decidem por este indicador (e só por ele).
+          res.locals.suporteDiagnostico = acesso.nivel === 'diagnostico';
           condominio = await getCondominio({ id: ativoId }).catch(() => null);
           // A casca (cabeçalho, título, seletor) lê SEMPRE `condominioAtivo`.
           // Em contexto de suporte não há associação, mas o utilizador precisa de
@@ -283,6 +292,16 @@ app.use('/admin', require('./routes/fornecedores'));
 // routes/relatorios.js. Montado antes dos placeholders.
 app.use('/admin', require('./routes/relatorios'));
 app.use('/admin', require('./routes/placeholders'));
+// ── Defesa estrutural do portal do condómino ───────────────────────
+// O suporte diagnóstico NUNCA entra no portal do condómino. Esta guarda é
+// GLOBAL e montada ANTES de todos os routers de `/condomino`, de modo a
+// sobreviver a uma reordenação das montagens: mesmo que a ordem mude, o
+// suporte não passa. Lê a marca da SESSÃO (`suporte_ativo_id`), porque
+// `req.suporte` só existe depois de um router montar `comCondominioAtivo` —
+// e uma guarda global corre antes disso. Os quatro routers declaram também
+// `tenant.semSuporte` (defesa em profundidade), mas nenhum deles é a
+// primeira linha.
+app.use('/condomino', tenant.bloqueioSuporteNaSessao);
 app.use('/condomino', require('./routes/condomino'));
 // Área pessoal do portal (perfil, condomínios e a única ação de sessão do
 // portal — trocar o condomínio ativo). Router próprio e montado ANTES do

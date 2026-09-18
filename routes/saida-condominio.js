@@ -35,6 +35,9 @@ const { getCondominio } = require('../helpers/condominio');
 const router = express.Router();
 
 router.use(eAutenticado);
+// Defesa em profundidade: o suporte diagnóstico nunca entra no portal. A guarda
+// global em `app.js` já cobre este prefixo.
+router.use(tenant.semSuporte);
 // Isolamento: tudo acontece no condomínio ativo da sessão.
 router.use(tenant.comCondominioAtivo);
 

@@ -15,6 +15,7 @@ const {
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const { toCents, fromCents, toNumber } = require('../helpers/money');
+const helpersHbs = require('../helpers/handlebars-helpers');
 const { monthName } = require('../helpers/dates');
 const { distribuirValorAnual } = require('../helpers/distribuicao');
 const { calcularPlano } = require('../helpers/plano');
@@ -25,7 +26,18 @@ const orcamentoEstado = require('../helpers/orcamento-estado');
 const router = express.Router();
 // Isolamento: condomínio ativo (sessão validada) em todas as operações.
 router.use(tenant.comCondominioAtivo);
-router.use(tenant.comPapel('gestor'));
+
+// ── Suporte diagnóstico: admissão explícita DESTE módulo ───────────
+// A allow-list é partilhada (`helpers/suporte-allowlist.js`). Só as rotas
+// declaradas para o módulo `orcamento` são admitidas ao suporte; as
+// restantes caem na guarda de papel abaixo.
+const allowlistSuporte = require('../helpers/suporte-allowlist');
+router.use(allowlistSuporte.soDiagnostico('orcamento'));
+
+// Guarda de papel CONDICIONAL (única): contornada só pelo suporte ADMITIDO.
+// Um `router.use(tenant.comPapel('gestor'))` incondicional a seguir anularia a
+// admissão — o Express corre os dois e o segundo recusaria o pedido admitido.
+router.use(allowlistSuporte.comPapelOuSuporteAdmitido('gestor'));
 
 // Orçamento do condomínio ATIVO (null quando não pertence — bloqueia IDOR).
 // `incluir` aceita um array de includes ({model, as}) — usado pela maioria das
@@ -190,7 +202,19 @@ router.get('/orcamento/:id', async (req, res) => {
     OrcamentoAlteracao.findAll({ where: { orcamento_id: orcamento.id }, include: [{ model: User, as: 'utilizador', attributes: ['nome'] }], order: [['id', 'DESC']], limit: 10 }),
   ]);
 
-  res.render('admin/orcamento/detalhe', {
+  // Suporte diagnóstico: o autor de cada alteração é reduzido a iniciais —
+  // o histórico continua legível sem expor nomes pessoais completos.
+  if (req.suporte && Array.isArray(alteracoes)) {
+    for (const alt of alteracoes) {
+      const u = alt.utilizador;
+      if (u && u.nome) {
+        const ini = helpersHbs.iniciais(u.nome);
+        u.setDataValue ? u.setDataValue('nome', ini) : (u.nome = ini);
+      }
+    }
+  }
+
+  res.render(req.suporte ? 'admin/orcamento/detalhe-suporte' : 'admin/orcamento/detalhe', {
     titulo: `Orçamento ${rotuloPeriodo(orcamento)}`,
     orcamento: orcamento.toJSON(),
     rotulo: rotuloPeriodo(orcamento),

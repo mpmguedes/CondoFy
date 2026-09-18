@@ -19,7 +19,18 @@ const { listarPreferencias, guardarPreferencias } = require('../helpers/notifica
 const router = express.Router();
 // Central de emails (fila + SMTP) — módulo de plataforma/condomínio admin.
 router.use(tenant.comCondominioAtivo);
-router.use(tenant.comPapel('admin'));
+
+// ── Suporte diagnóstico: admissão explícita DESTE módulo ───────────
+// A allow-list é partilhada (`helpers/suporte-allowlist.js`). Só as rotas
+// declaradas para o módulo `emails` são admitidas ao suporte; as
+// restantes caem na guarda de papel abaixo.
+const allowlistSuporte = require('../helpers/suporte-allowlist');
+router.use(allowlistSuporte.soDiagnostico('emails'));
+
+// Guarda de papel CONDICIONAL (única): contornada só pelo suporte ADMITIDO.
+// Um `router.use(tenant.comPapel('admin'))` incondicional a seguir anularia a
+// admissão — o Express corre os dois e o segundo recusaria o pedido admitido.
+router.use(allowlistSuporte.comPapelOuSuporteAdmitido('admin'));
 
 const ESTADOS_LABEL = {
   pendente: 'Pendente',
@@ -78,7 +89,7 @@ router.get('/emails', async (req, res) => {
     listarPreferencias(),
   ]);
 
-  res.render('admin/emails/index', {
+  res.render(req.suporte ? 'admin/emails/index-suporte' : 'admin/emails/index', {
     titulo: 'Emails',
     emails,
     filtro,

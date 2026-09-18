@@ -3,8 +3,15 @@
     <h1>Despesas</h1>
     <p class="subtitle">Despesas do condomínio por categoria</p>
   </div>
-  <a href="/admin/despesas/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">add</span>Nova despesa</a>
+  {{#unless suporteDiagnostico}}<a href="/admin/despesas/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">add</span>Nova despesa</a>{{/unless}}
 </div>
+
+{{#if suporteDiagnostico}}
+<div class="alert alert-info d-flex align-items-center gap-2 small">
+  <span class="material-symbols-outlined">info</span>
+  <div>Vista de diagnóstico — apenas leitura. Sem criação, edição nem anulação.</div>
+</div>
+{{/if}}
 
 {{#if despesas}}
 <div class="card">
@@ -46,10 +53,14 @@
             {{else}}<span class="badge text-bg-warning">Registada</span>{{/if}}
           </td>
           <td class="text-end">
+            {{#if suporteDiagnostico}}
+            <span class="text-muted small">—</span>
+            {{else}}
             <a href="/admin/despesas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
             <form action="/admin/despesas/{{id}}/anular" method="POST" class="d-inline" data-confirmar="Anular esta despesa?" data-confirmar-perigo="1">
               <button class="btn btn-sm btn-outline-danger" title="Anular"><span class="material-symbols-outlined">block</span></button>
             </form>
+            {{/if}}
           </td>
         </tr>
         {{/each}}

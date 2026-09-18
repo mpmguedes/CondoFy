@@ -24,6 +24,9 @@ const flash = require('connect-flash');
 
 const RAIZ = path.join(__dirname, '..');
 
+// A chave da sessão onde vive a marca de suporte (espelha `helpers/suporte.js`).
+const CHAVE_SESSAO_SUPORTE = 'suporte_ativo_id';
+
 let nTestes = 0;
 const feito = (nome) => { nTestes += 1; console.log(`  ✓ ${nome}`); };
 const titulo = (t) => console.log(`\n── ${t}`);
@@ -82,7 +85,14 @@ function sessaoDe(pedido) {
 }
 function marcarSessao(id) { SESSAO_SUPORTE = id; return id; }
 function acessoValidoNaSessao(req) {
-  const esperado = SESSAO_SUPORTE || ACESSO.session_id;
+  // O vínculo do acesso à sessão é o objeto do bloco §6, que fixa
+  // `SESSAO_SUPORTE`. Enquanto ele não estiver fixado, o vínculo NÃO é o que
+  // está a ser testado (T1–T5 pedem com sessões novas de cada vez, por
+  // construção) — e exigi-lo aqui só testaria o mecanismo de sessão do
+  // `express-session`, não a allow-list. O vínculo é provado a sério, com
+  // sessões reais, em §6 (e exaustivamente em `scripts/test-suporte.js`).
+  if (SESSAO_SUPORTE === null) return true;
+  const esperado = SESSAO_SUPORTE;
   if (!esperado || !req.sessionID) return false;
   // O `connect.sid` vem URL-codificado (`s%3A…`) e o `req.sessionID` não
   // (`s:…`). Normaliza-se para uma forma comparável.
@@ -147,12 +157,23 @@ const stubs = {
     resumoFracao: async () => ({ totalQuotas: 0, totalPago: 0, emDivida: 0 }),
   },
   'helpers/drive': { isConfigured: () => true, descargarArquivo: async () => null },
-  'helpers/mailer': { smtpConfigured: () => true, sendMail: async () => ({ ok: true }) },
+  // Estende o módulo real: só o envio/estado que toca na rede é substituído; a
+  // superfície do módulo (ex.: `obterEstadoSmtp`) mantém-se intacta. A vista de
+  // suporte de `/emails` NÃO expõe a configuração SMTP — expõe apenas o estado.
+  'helpers/mailer': {
+    ...require(path.join(RAIZ, 'helpers/mailer')),
+    smtpConfigured: () => true,
+    obterEstadoSmtp: async () => ({ configurado: true, ok: true, erro: null }),
+    sendMail: async () => ({ ok: true }),
+  },
   'helpers/convites': { estadoDoConvite: () => 'enviado', marcarAceite: async () => ({}) },
   'helpers/background-jobs': { resumo: () => ({ ativas: 0, emErro: 0 }), registar: () => {}, listarTarefas: () => [] },
   'helpers/titularidades': { fracoesDoUtilizador: async () => ({ fracoes: [], terminadas: [] }), historicoDaPessoa: async () => [], estaAtiva: () => true },
   'helpers/documentos-acesso': { verificarDocumento: async () => ({ ok: true }), autorizarAcessoDocumento: async () => ({ ok: true }), servirDocumento: async () => ({ ok: true }), responderRecusa: () => {} },
-  'helpers/documento-pastas': { mapaPastas: () => ({}) },
+  // As pastas são PURAS (derivam do registo do condomínio) — correm a sério. Só
+  // o que toca na BD fica de fora. Estender o módulo real (em vez de o
+  // substituir) evita que um export novo deixe o teste frágil.
+  'helpers/documento-pastas': require(path.join(RAIZ, 'helpers/documento-pastas')),
   'helpers/recibos': { pagoPorQuota: async () => new Map(), cobertoPorQuota: async () => new Map(), pagamentosDasQuotas: async () => [], periodoLabel: () => '', gerarReciboPDF: async () => Buffer.from('') },
   'helpers/pdf': { gerarReciboPDF: async () => Buffer.from('') },
   'helpers/audit': { audit: async () => ({}), auditSafe: async () => ({}) },
@@ -220,6 +241,11 @@ app.use((req, res, next) => {
   req.isAuthenticated = () => true;
   // O condomínio ativo vem da SESSÃO (como em produção).
   req.session.condominio_ativo_id = 1;
+  // A marca de suporte na SESSÃO (a única coisa que a sessão de suporte guarda).
+  // É o que a guarda GLOBAL de `/condomino` lê — ela corre antes de qualquer
+  // router, quando `req.suporte` ainda não existe. Só no perfil de suporte.
+  if (PERFIL === 'suporte') req.session[CHAVE_SESSAO_SUPORTE] = ACESSO.id;
+  else delete req.session[CHAVE_SESSAO_SUPORTE];
   res.locals.user = req.user;
   res.locals.tarefas = { ativas: 0, emErro: 0 };
   res.locals.currentPath = req.path;
@@ -248,7 +274,45 @@ modelosDuplo.Fracao = {
   ...modelVazio(),
   findOne: async () => ({ id: 5, condominio_id: 1, identificacao: 'A', pessoas: [], toJSON() { return { id: 5, condominio_id: 1, identificacao: 'A' }; } }),
 };
-app.use('/admin', require('../routes/admin'));
+// Rotas admitidas do módulo `admin` — espelha `LISTA.admin`. `/fracoes/:id`
+// NÃO consta (deliberadamente excluído: ficha que junta identidade e finanças).
+const ROTAS_PERMITIDAS_ADMIN = ['/', '/fracoes', '/condominos', '/tarefas'];
+
+// ── Todos os routers de `/admin` (T1/T2/T3/T4 por módulo) ───────────
+// Cada módulo é um ROUTER SEPARADO com a sua própria admissão. A allow-list só
+// é verdadeiramente fechada se TODOS eles forem montados — daí este mapa.
+// `rotas`: caminhos do módulo que DEVEM ser servidos ao suporte (da `LISTA`).
+// `fora`: caminhos do mesmo módulo que DEVEM ser recusados (existem, mas não
+//         constam da lista).
+const MODULOS = [
+  { ficheiro: 'admin', rotas: ['/', '/fracoes', '/condominos', '/tarefas'],
+    fora: ['/fracoes/nova', '/fracoes/5', '/fracoes/5/editar', '/condominos/nova', '/condominos/5/editar', '/utilizadores', '/utilizadores/nova', '/suporte'] },
+  { ficheiro: 'financeiro', rotas: ['/quotas', '/quotas/1', '/quotas/grelha', '/pagamentos', '/pagamentos/1', '/despesas', '/movimentos', '/contas'],
+    fora: ['/quotas/gerar', '/quotas/enviar', '/pagamentos/nova', '/despesas/nova', '/contas/nova', '/contas/transferir-fcr', '/categorias'] },
+  { ficheiro: 'quotas-modulo', rotas: ['/quotas', '/quotas/grelha', '/quotas/conta-corrente'],
+    fora: ['/quotas/comprovativos', '/quotas/recibos', '/quotas/transitados'] },
+  { ficheiro: 'extra-quotas', rotas: ['/quotas-extra', '/quotas-extra/1'],
+    fora: ['/quotas-extra/nova', '/quotas-extra/1/editar'] },
+  { ficheiro: 'orcamento', rotas: ['/orcamento', '/orcamento/1'],
+    fora: ['/orcamento/nova', '/orcamento/1/editar', '/orcamento/1/distribuicao', '/orcamento/1/plano', '/orcamento/1/emitir', '/orcamento/1/historico'] },
+  { ficheiro: 'assembleias', rotas: ['/assembleias', '/assembleias/1'],
+    fora: ['/assembleias/nova', '/assembleias/1/editar', '/assembleias/1/convocatoria', '/assembleias/1/ata'] },
+  { ficheiro: 'documentos', rotas: ['/documentos'],
+    fora: ['/documentos/nova', '/documentos/1/ficheiro', '/documentos/drive/pasta', '/documentos/1/email'] },
+  { ficheiro: 'emails', rotas: ['/emails'],
+    fora: ['/emails/smtp', '/emails/teste'] },
+  { ficheiro: 'relatorios', rotas: ['/relatorios/financeiro'], fora: [] },
+];
+
+for (const m of MODULOS) {
+  app.use('/admin', require(`../routes/${m.ficheiro}`));
+}
+// A guarda GLOBAL de `/condomino` (espelha `app.js`): o suporte é recusado antes
+// de qualquer router do portal, e é reencaminhado para `/admin`. Usa a guarda
+// REAL do `tenant` — que lê a marca da SESSÃO, porque `req.suporte` só existe
+// depois de um router montar `comCondominioAtivo` (e esta corre antes disso).
+app.use('/condomino', require(path.join(RAIZ, 'helpers/tenant')).bloqueioSuporteNaSessao);
+app.use('/condomino', require('../routes/condomino'));
 app.use((err, req, res, next) => {
   console.error('[erro no handler]', err.message);
   res.status(500).send('ERRO_NO_HANDLER: ' + err.message);
@@ -292,28 +356,25 @@ async function criarSessao(caminho = '/admin/') {
   return cookie;
 }
 
-const ROTAS_PERMITIDAS = ['/', '/fracoes', '/fracoes/5', '/condominos', '/tarefas'];
-
 // ─────────────────────────────────────────────────────────────────────
 (async () => {
   // ── 1. As rotas da allow-list são servidas ao suporte ─────────────
-  titulo('Allow-list: rotas servidas ao suporte');
+  titulo('Allow-list: rotas servidas ao suporte (módulo admin)');
   PERFIL = 'suporte';
-  for (const r of ROTAS_PERMITIDAS) {
+  for (const r of ROTAS_PERMITIDAS_ADMIN) {
     const resp = await pedir(`/admin${r}`);
     assert.notStrictEqual(resp.status, 500, `suporte: ${r} não rebenta o handler`);
     assert.ok(!/ERRO_NO_HANDLER/.test(resp.html), `suporte: ${r} sem exceção no handler`);
     feito(`GET /admin${r} → servido ao diagnóstico (${resp.status})`);
   }
 
-  // ── 2. Rotas FORA da allow-list são recusadas ─────────────────────
+  // ── 2. Rotas FORA da allow-list são recusadas (módulo admin) ──────
   // Cada uma destas existe mesmo e seria servida a um gestor normal — o que se
   // prova é que o SUPORTE não a alcança.
-  titulo('Allow-list: rotas fora da lista recusadas');
+  titulo('Allow-list: rotas fora da lista recusadas (módulo admin)');
   const FORA = [
-    '/fracoes/nova', '/fracoes/5/editar', '/condominos/nova', '/condominos/5/editar',
-    '/utilizadores', '/utilizadores/nova', '/suporte', '/quotas/gerar', '/configuracao',
-    '/emails', '/financeiro', '/documentos', '/avisos', '/assembleias', '/orcamento',
+    '/fracoes/nova', '/fracoes/5', '/fracoes/5/editar', '/condominos/nova',
+    '/condominos/5/editar', '/utilizadores', '/utilizadores/nova', '/suporte',
   ];
   for (const r of FORA) {
     const resp = await pedir(`/admin${r}`);
@@ -324,6 +385,73 @@ const ROTAS_PERMITIDAS = ['/', '/fracoes', '/fracoes/5', '/condominos', '/tarefa
     assert.ok(resp.local && resp.local !== `/admin${r}`,
       `suporte: ${r} NÃO é servido (reencaminhado para ${resp.local})`);
     feito(`GET /admin${r} → recusado (302 ${resp.local})`);
+  }
+
+  // ── 2-bis. T1 POR MÓDULO: admitido vs. recusado, router a router ──
+  // A allow-list só vale se CADA router de `/admin` a montar. Aqui prova-se,
+  // por HTTP, que em CADA módulo as rotas da `LISTA` são servidas e as restantes
+  // (que existem de verdade) são recusadas. É esta prova que falha se um router
+  // deixar de montar `soDiagnostico`, ou se alguém acrescentar uma rota e a
+  // listar por engano.
+  titulo('T1 — allow-list por módulo (router a router)');
+  PERFIL = 'suporte';
+  for (const m of MODULOS) {
+    for (const r of m.rotas) {
+      const resp = await pedir(`/admin${r}`);
+      assert.notStrictEqual(resp.status, 500, `suporte [${m.ficheiro}]: ${r} não rebenta`);
+      assert.ok(!/ERRO_NO_HANDLER/.test(resp.html), `suporte [${m.ficheiro}]: ${r} sem exceção`);
+      // ADMITIDO = de facto servido ao suporte. Uma rota que caia na guarda de
+      // papel devolve 302 para `/`/`/condominios` — isso é uma RECUSA e não
+      // pode passar por admissão (era o ponto cego que deixava uma remoção da
+      // allow-list passar despercebida).
+      //
+      // Um 302 só é admissão quando o DESTINO é a própria rota admitida (ou uma
+      // rota admitida do mesmo módulo, ex.: `/quotas/grelha` → `/quotas`).
+      // Em particular, um 302 para `/admin` A PARTIR de uma rota que não é `/`
+      // é a REDE DE SEGURANÇA do router-frente a intercetar um pedido que devia
+      // ter chegado ao router seguinte — ou seja, uma não-admissão disfarçada.
+      // Era exatamente o defeito que a rede de segurança sem exceção criava.
+      if (resp.status === 302) {
+        const destino = resp.local || '';
+        const destinosAdmitidos = new Set([`/admin${r}`, ...m.rotas.map((x) => `/admin${x}`)]);
+        assert.ok(!['/condominios', '/login', '/'].includes(destino)
+          && destinosAdmitidos.has(destino),
+          `suporte [${m.ficheiro}]: ${r} foi RECUSADO (302 ${destino}) — não é admitido`);
+      }
+      feito(`[${m.ficheiro}] GET /admin${r} → admitido (${resp.status}${resp.local ? ' ' + resp.local : ''})`);
+    }
+    for (const r of m.fora) {
+      const resp = await pedir(`/admin${r}`);
+      assert.strictEqual(resp.status, 302,
+        `suporte [${m.ficheiro}]: ${r} tem de ser recusado (302, recebeu ${resp.status})`);
+      assert.ok(resp.local && resp.local !== `/admin${r}`,
+        `suporte [${m.ficheiro}]: ${r} não é servido`);
+      feito(`[${m.ficheiro}] GET /admin${r} → recusado (302 ${resp.local})`);
+    }
+  }
+
+  // ── 2-ter. T1: uma rota NOVA (não listada) nasce inacessível ──────
+  // A propriedade que faz a lista envelhecer bem: o caminho é comparado por
+  // PADRÃO COMPLETO. Uma rota que partilhe o prefixo de uma admitida
+  // (`/quotas/qualquer-coisa-nova`) fica FORA por omissão.
+  titulo('T1 — rota nova não listada nasce inacessível');
+  for (const r of ['/quotas/rota-nova-inexistente', '/pagamentos/1/extra', '/documentos/1/qualquer', '/emails/1/qualquer']) {
+    const resp = await pedir(`/admin${r}`);
+    assert.strictEqual(resp.status, 302,
+      `suporte: rota nova ${r} tem de cair (302, recebeu ${resp.status})`);
+    feito(`GET /admin${r} → fora da lista (302)`);
+  }
+
+  // ── 2-quater. T5: o suporte NUNCA entra no portal do condómino ────
+  // O portal tem quatro routers. Aqui prova-se a negação GLOBAL (montada em
+  // `app.js` antes das montagens) — que é a que sobrevive a uma reordenação.
+  titulo('T5 — portal do condómino fechado ao suporte');
+  for (const r of ['/condomino', '/condomino/perfil', '/condomino/documentos', '/condomino/quotas',
+    '/condomino/recibos', '/condomino/assembleias', '/condomino/avisos', '/condomino/orcamento', '/condomino/saida']) {
+    const resp = await pedir(r);
+    assert.strictEqual(resp.status, 302, `suporte: ${r} tem de ser recusado (302, recebeu ${resp.status})`);
+    assert.strictEqual(resp.local, '/admin', `suporte: ${r} redireciona para /admin (recebeu ${resp.local})`);
+    feito(`GET ${r} → recusado (302 /admin)`);
   }
 
   // ── 3. A allow-list é de LEITURA: um método de escrita cai ────────
@@ -337,7 +465,7 @@ const ROTAS_PERMITIDAS = ['/', '/fracoes', '/fracoes/5', '/condominos', '/tarefa
   //       tem papel de condomínio, logo sem a segunda guarda a ajudar) — é esta
   //       alínea que falha se `somenteLeitura` for retirado do `soDiagnostico`.
   titulo('Allow-list: método de escrita barrado mesmo em caminho da lista');
-  for (const r of ROTAS_PERMITIDAS) {
+  for (const r of ROTAS_PERMITIDAS_ADMIN) {
     const resp = await pedir(`/admin${r}`, 'POST');
     assert.strictEqual(resp.status, 302, `suporte: POST /admin${r} é recusado (302)`);
     assert.ok(!/ERRO_NO_HANDLER/.test(resp.html), `suporte: POST /admin${r} não chega a um handler`);
@@ -380,17 +508,19 @@ const ROTAS_PERMITIDAS = ['/', '/fracoes', '/fracoes/5', '/condominos', '/tarefa
   titulo('Allow-list: a recusa de escrita vem do CRIVO, não só do papel');
 
   // O `soDiagnostico` do router é o único sítio onde o crivo de leitura é
-  // aplicado à admissão. Extrai-se a FUNÇÃO REAL do módulo (via `vm`) e
-  // exercita-se com um `req` de suporte e um POST. O `comPapel` do router é
-  // substituído por um que ADMITE tudo — de modo a isolar o crivo de leitura: se
-  // ele existir, o pedido é recusado ANTES de chegar ao papel; se tiver sido
-  // removido, a admissão marca o pedido e o teste falha.
+  // aplicado à admissão. Desde a extração, a função vive em
+  // `helpers/suporte-allowlist.js` (fonte única). Extrai-se de LÁ a FUNÇÃO REAL
+  // (via `vm`) e exercita-se com um `req` de suporte e um POST. O `comSuporte`
+  // interno é substituído por um que ADMITE tudo — de modo a isolar o crivo de
+  // leitura: se ele existir, o pedido é recusado ANTES de chegar ao papel; se
+  // tiver sido removido, a admissão marca o pedido e o teste falha.
   const vm = require('vm');
-  const adminSrc = require('fs').readFileSync(path.join(RAIZ, 'routes', 'admin.js'), 'utf8');
-  const fonte = adminSrc;
+  const allowlistSrc = require('fs').readFileSync(
+    path.join(RAIZ, 'helpers', 'suporte-allowlist.js'), 'utf8');
+  const fonte = allowlistSrc;
   // Isola o bloco `function soDiagnostico(...) { ... }` (balanceando chavetas).
   const inicio = fonte.indexOf('function soDiagnostico(');
-  assert.ok(inicio > 0, 'admin.js: `soDiagnostico` tem de existir (crivo de admissão)');
+  assert.ok(inicio > 0, 'suporte-allowlist.js: `soDiagnostico` tem de existir (crivo de admissão)');
   let i = fonte.indexOf('{', inicio);
   let nivel = 0;
   let fim = i;
@@ -403,28 +533,41 @@ const ROTAS_PERMITIDAS = ['/', '/fracoes', '/fracoes/5', '/condominos', '/tarefa
   // O crivo de leitura tem de estar REFERENCIADO dentro do crivo de admissão.
   // É uma verificação estática, mas o comportamento abaixo confirma-a.
   assert.ok(/somenteLeitura\s*\(/.test(corpo),
-    'admin.js: o crivo de admissão TEM de invocar o crivo de leitura (foi removido)');
+    'suporte-allowlist.js: o crivo de admissão TEM de invocar o crivo de leitura (foi removido)');
 
   // Executa o crivo real num sandbox, com o `tenant` REAL (crivo de leitura
-  // verdadeiro) e o resto instrumental.
-  const eCaminhoDeDiagnostico = (caminho) => /^\/(|\/?fracoes(\/\d+)?|\/?condominos|\/?tarefas)$/.test(
-    caminho.replace(/\/$/, m => m === '/' ? '/' : '')
-  ) || /^\/(|\/fracoes|\/fracoes\/\d+|\/condominos|\/tarefas)$/.test(caminho);
-  const SUPORTE_DIAGNOSTICO_ATIVO = (req, res, next) => next();
-  const somenteLeitura = tenantReal.somenteLeitura;
+  // verdadeiro) e o resto instrumental. A lista e o `caminhoAdmitido` reais vêm
+  // do módulo — a admissão só marca quando o caminho consta da lista DE VERDADE.
+  const caminhoAdmitido = (modulo, caminho) =>
+    require(path.join(RAIZ, 'helpers', 'suporte-allowlist')).caminhoAdmitido(modulo, caminho);
+  // O guard de `admin` consulta a união da lista (é o router PRIMEIRO montado
+  // sob `/admin` e a sua guarda de papel corre para todos os caminhos). O
+  // sandbox executa o corpo REAL do guard, pelo que esta função tem de estar
+  // presente — e é a REAL, não uma reimplementação.
+  const caminhoAdmitidoEmAlgumModulo = (caminho) =>
+    require(path.join(RAIZ, 'helpers', 'suporte-allowlist')).caminhoAdmitidoEmAlgumModulo(caminho);
+  const eSuporteDiagnostico = (req) => Boolean(req && req.suporte && req.suporte.nivel === 'diagnostico');
+  const NIVEIS_ADMITIDOS = ['diagnostico'];
+  const tenant = {
+    comSuporte: () => (req, res, next) => next(), // isola o crivo de leitura
+    somenteLeitura: tenantReal.somenteLeitura,
+  };
   const ADMITIDO_SUPORTE = Symbol('marca');
   const sandbox = {
-    eCaminhoDeDiagnostico,
-    SUPORTE_DIAGNOSTICO_ATIVO,
-    somenteLeitura,
+    LISTA: require(path.join(RAIZ, 'helpers', 'suporte-allowlist')).LISTA,
+    NIVEIS_ADMITIDOS,
+    caminhoAdmitido,
+    caminhoAdmitidoEmAlgumModulo,
+    eSuporteDiagnostico,
+    tenant,
     ADMITIDO_SUPORTE,
     process, console,
     req: null, res: null, next: null,
   };
   vm.createContext(sandbox);
   vm.runInContext(`${corpo}; __guard = soDiagnostico;`, sandbox);
-  const guardReal = sandbox.__guard;
-  assert.strictEqual(typeof guardReal, 'function', 'admin.js: guard de admissão extraído');
+  const guardReal = sandbox.__guard('admin');
+  assert.strictEqual(typeof guardReal, 'function', 'suporte-allowlist.js: guard de admissão extraído');
 
   async function admitir(method, caminho) {
     const req = {
@@ -455,7 +598,7 @@ const ROTAS_PERMITIDAS = ['/', '/fracoes', '/fracoes/5', '/condominos', '/tarefa
   // ── 4. Um utilizador normal não é afetado ─────────────────────────
   titulo('Utilizador normal: comportamento inalterado');
   PERFIL = 'admin';
-  for (const r of ROTAS_PERMITIDAS) {
+  for (const r of ROTAS_PERMITIDAS_ADMIN) {
     const resp = await pedir(`/admin${r}`);
     assert.notStrictEqual(resp.status, 302, `admin: ${r} continua acessível (${resp.status})`);
   }
@@ -468,7 +611,7 @@ const ROTAS_PERMITIDAS = ['/', '/fracoes', '/fracoes/5', '/condominos', '/tarefa
 
   // Um gestor continua a entrar nas rotas de leitura (não foi tocado).
   PERFIL = 'gestor';
-  for (const r of ROTAS_PERMITIDAS) {
+  for (const r of ROTAS_PERMITIDAS_ADMIN) {
     const resp = await pedir(`/admin${r}`);
     assert.notStrictEqual(resp.status, 302, `gestor: ${r} continua acessível (${resp.status})`);
   }

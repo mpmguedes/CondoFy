@@ -217,6 +217,29 @@ function semSuporte(req, res, next) {
   return next();
 }
 
+// Negação do suporte numa guarda de APP (montada antes de qualquer router).
+//
+// `semSuporte` só é útil DENTRO de um router: `req.suporte` é criado por
+// `comCondominioAtivo`, que cada router monta no seu próprio âmbito. Uma guarda
+// global (em `app.js`, sobre `/condomino`) corre ANTES de qualquer router, pelo
+// que `req.suporte` ainda não existe — e `semSuporte` deixaria passar.
+//
+// Esta guarda lê a marca da SESSÃO (`suporte_ativo_id`, a única coisa que a
+// sessão de suporte guarda) — que está disponível antes de qualquer router. É
+// deliberadamente conservadora: se houver QUALQUER marca de suporte na sessão,
+// a área é negada e o pedido vai para `/admin`, onde `comCondominioAtivo`
+// revalida o acesso (e o recusa se já não estiver vigente). Não substitui
+// `semSuporte`; é a primeira linha, com `semSuporte` como defesa em profundidade
+// dentro de cada router.
+function bloqueioSuporteNaSessao(req, res, next) {
+  const temMarcaDeSuporte = Boolean(req.session && req.session[suporte.CHAVE_SESSAO]);
+  if (temMarcaDeSuporte) {
+    req.flash('error_msg', 'A área do condómino não está disponível em modo de suporte.');
+    return res.redirect(DESTINO_PAINEL);
+  }
+  return next();
+}
+
 // Leitura apenas: o nível `diagnostico` é read-only POR MÉTODO (não por
 // enumerar rotas — uma allow-list de rotas envelhece e esquece-se).
 function somenteLeitura(req, res, next) {
@@ -303,6 +326,7 @@ module.exports = {
   comPapel,
   comSuporte,
   semSuporte,
+  bloqueioSuporteNaSessao,
   somenteLeitura,
   pertenceAoAtivo,
   PAPEIS,

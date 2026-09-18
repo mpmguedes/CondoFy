@@ -1,6 +1,7 @@
 const { formatEUR } = require('./money');
 const { formatDate, formatDateTime, toDateInput, currentYear, monthName, diaSemana } = require('./dates');
 const { urlExternaSegura } = require('./urls');
+const mascara = require('./mascara');
 
 // Helpers Handlebars usados nas views.
 module.exports = {
@@ -69,4 +70,19 @@ module.exports = {
           .join('')
           .toUpperCase()
       : '?',
+  // ── Máscaras (vistas de suporte diagnóstico) ─────────────────────
+  // O acesso de suporte lê dados reais para diagnosticar, mas não precisa de
+  // IDENTIFICAR pessoas nem de conhecer números de conta por inteiro. Estas
+  // funções são a única forma de uma vista de suporte apresentar IBAN/NIF/
+  // e-mail/telefone. Ver `helpers/mascara.js` (puro, sem I/O e sem BD) para o
+  // contrato completo — incluindo a distinção entre «sem dado» («—») e «valor
+  // irreconhecível» («***»), que a vista pode querer representar de forma
+  // diferente do valor mascarado.
+  maskIban: (v) => mascara.iban(v),
+  maskNif: (v) => mascara.nif(v),
+  maskEmail: (v) => mascara.email(v),
+  maskTelefone: (v) => mascara.telefone(v),
+  // mascaraAusente(v) → true quando não há nada a mostrar (campo vazio ou
+  // ausente). Permite à vista escrever «—» em vez de passar a máscara.
+  mascaraAusente: (v) => mascara.ausente(v),
 };

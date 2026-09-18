@@ -1,0 +1,130 @@
+{{!--
+  Vista de DIAGNÓSTICO (suporte read-only) da Central de Emails.
+
+  Objetivo: permitir diagnosticar falhas de envio (erro, tentativas, message_id)
+  sem expor conteúdo nem credenciais.
+
+  NUNCA expõe: corpo, corpo_html, anexo_nome/anexo_caminho, servidor SMTP,
+  porta, utilizador SMTP, remetente, password, tokens. O destinatário aparece
+  MASCARADO. Não há ações (reenviar/cancelar/testar/configurar).
+--}}
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Emails</h1>
+    <p class="subtitle mb-0">Diagnóstico da fila de emails — apenas leitura</p>
+  </div>
+</div>
+
+<div class="alert alert-info d-flex align-items-start gap-2">
+  <span class="material-symbols-outlined">info</span>
+  <div class="small">
+    Vista de diagnóstico. Destinatários mascarados e sem conteúdo de mensagem.
+    Não é possível reenviar, cancelar nem alterar a configuração SMTP.
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Pendentes</div>
+      <div class="fs-4 fw-semibold">{{#if contagens}}{{contagens.pendentes}}{{else}}—{{/if}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Enviados</div>
+      <div class="fs-4 fw-semibold">{{#if contagens}}{{contagens.enviados}}{{else}}—{{/if}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Erros</div>
+      <div class="fs-4 fw-semibold text-danger">{{#if contagens}}{{contagens.erros}}{{else}}—{{/if}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Cancelados</div>
+      <div class="fs-4 fw-semibold">{{#if contagens}}{{contagens.cancelados}}{{else}}—{{/if}}</div>
+    </div></div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="text-muted small mb-1">Configuração SMTP (apenas estado)</div>
+    {{#if estadoSmtp}}
+      {{#if estadoSmtp.configurado}}
+      <span class="badge text-bg-success">Configurado</span>
+      {{else}}
+      <span class="badge text-bg-warning">Não configurado</span>
+      {{/if}}
+      {{#if estadoSmtp.remetente}}<span class="ms-2 small text-muted">Remetente: {{maskEmail estadoSmtp.remetente}}</span>{{/if}}
+      {{#if estadoSmtp.ultimo_erro}}<div class="small text-danger mt-2">Último erro: {{estadoSmtp.ultimo_erro}}</div>{{/if}}
+    {{else}}
+      <span class="text-muted">—</span>
+    {{/if}}
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="d-flex flex-wrap gap-2">
+      <a href="/admin/emails" class="btn btn-sm {{#if (eq filtro 'todas')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Todas</a>
+      <a href="/admin/emails?estado=pendentes" class="btn btn-sm {{#if (eq filtro 'pendentes')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Pendentes</a>
+      <a href="/admin/emails?estado=enviados" class="btn btn-sm {{#if (eq filtro 'enviados')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Enviados</a>
+      <a href="/admin/emails?estado=erros" class="btn btn-sm {{#if (eq filtro 'erros')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Erros</a>
+      <a href="/admin/emails?estado=cancelados" class="btn btn-sm {{#if (eq filtro 'cancelados')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Cancelados</a>
+    </div>
+  </div>
+</div>
+
+{{#if emails}}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>ID</th>
+          <th>Data</th>
+          <th>Tipo</th>
+          <th>Estado</th>
+          <th>Destinatário</th>
+          <th>Assunto</th>
+          <th>Mensagem</th>
+          <th>Erro</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each emails}}
+        <tr>
+          <td class="text-muted small">#{{id}}</td>
+          <td class="text-nowrap small">{{#if data_enviada}}{{formatDate data_enviada}}{{else if data_prevista}}{{formatDate data_prevista}}{{else}}—{{/if}}</td>
+          <td class="small">{{tipo}}</td>
+          <td>
+            {{#if (eq estado 'enviado')}}<span class="badge text-bg-success">Enviado</span>
+            {{else if (eq estado 'erro')}}<span class="badge text-bg-danger">Erro</span>
+            {{else if (eq estado 'a_enviar')}}<span class="badge text-bg-info">A enviar</span>
+            {{else if (eq estado 'cancelado')}}<span class="badge text-bg-secondary">Cancelado</span>
+            {{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}
+            {{#if tentativas}}<span class="badge text-bg-light ms-1" title="Tentativas de envio">{{tentativas}}×</span>{{/if}}
+          </td>
+          <td class="small text-nowrap">{{maskEmail destinatario_email}}</td>
+          <td class="small">{{assunto}}</td>
+          <td class="small text-muted">
+            {{#if message_id}}<span class="font-monospace" style="word-break:break-all">{{message_id}}</span>
+            {{else}}—{{/if}}
+          </td>
+          <td class="small">
+            {{#if erro}}<span class="text-danger" style="white-space:pre-wrap;word-break:break-word">{{erro}}</span>
+            {{else}}—{{/if}}
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{else}}
+{{> _empty-state icon="mail" titulo="Sem emails" descricao="Não há registos na fila para este filtro."}}
+{{/if}}

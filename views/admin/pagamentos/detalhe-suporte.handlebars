@@ -1,0 +1,124 @@
+{{!--
+  Pagamento — VISTA DE SUPORTE (despersonalizada).
+
+  Substitui `admin/pagamentos/detalhe` quando o pedido é de suporte diagnóstico.
+  Motivo: a vista administrativa traz o fluxo completo de comprovativos
+  (anexar/substituir/validar/rejeitar) e a emissão de recibos — tudo escrita, com
+  modais e `multipart/form-data`. Em suporte não só não é utilizável (a
+  allow-list é só de leitura) como abriria caminhos que a lista não admite.
+
+  O que se MANTÉM — é o que serve para diagnosticar um pagamento:
+    · número do documento, valor, data, estado, método, referência;
+    · fração (designação apenas — não há titular, NIF, IBAN nem contacto nesta
+      vista, porque o pagamento não os expõe);
+    · aplicações às quotas (de que quotas este pagamento pagou o quê);
+    · se existe recibo emitido (só o facto, sem link para o PDF).
+
+  O que NÃO existe: comprovativo (visualizar/descarregar/substituir/validar/
+  rejeitar), emitir recibo, anular pagamento, «Enviar por email».
+--}}
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Pagamento {{pagamento.numero_documento}}</h1>
+    <p class="subtitle">Leitura de diagnóstico — {{#if (eq pagamento.estado 'confirmado')}}recebimento confirmado{{else}}pagamento anulado{{/if}}</p>
+  </div>
+  <a href="/admin/pagamentos" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1" style="font-size:1rem">arrow_back</span>Pagamentos</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-5">
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-receipt me-1"></i>Dados do pagamento</div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-6">Documento</dt><dd class="col-6 font-monospace">{{#if pagamento.numero_documento}}{{pagamento.numero_documento}}{{else}}—{{/if}}</dd>
+          <dt class="col-6">Fração</dt><dd class="col-6">{{pagamento.fracao.designacao}}</dd>
+          <dt class="col-6">Valor</dt><dd class="col-6 fw-semibold">{{eur pagamento.valor}}</dd>
+          <dt class="col-6">Data</dt><dd class="col-6">{{formatDate pagamento.data_pagamento}}</dd>
+          <dt class="col-6">Método</dt><dd class="col-6">{{#if pagamento.metodo_pagamento}}{{pagamento.metodo_pagamento.nome}}{{else}}—{{/if}}</dd>
+          <dt class="col-6">Referência</dt><dd class="col-6">{{#if pagamento.referencia}}{{pagamento.referencia}}{{else}}—{{/if}}</dd>
+          <dt class="col-6">Estado</dt><dd class="col-6">{{#if (eq pagamento.estado 'confirmado')}}<span class="badge text-bg-success">Confirmado</span>{{else}}<span class="badge text-bg-secondary">Anulado</span>{{/if}}</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-header bg-white"><i class="bi bi-paperclip me-1"></i>Comprovativo</div>
+      <div class="card-body">
+        {{#if pagamento.comprovativo_ficheiro}}
+        <dl class="row mb-0">
+          <dt class="col-6">Situação</dt>
+          <dd class="col-6">
+            {{#if (eq pagamento.comprovativo_estado 'validado')}}<span class="badge text-bg-success">Validado</span>
+            {{else if (eq pagamento.comprovativo_estado 'rejeitado')}}<span class="badge text-bg-danger">Rejeitado</span>
+            {{else}}<span class="badge text-bg-warning">Pendente de validação</span>{{/if}}
+          </dd>
+          <dt class="col-6">Anexado em</dt><dd class="col-6">{{#if pagamento.comprovativo_data}}{{formatDate pagamento.comprovativo_data}}{{else}}—{{/if}}</dd>
+        </dl>
+        <p class="small text-muted mb-0 mt-2">
+          <span class="material-symbols-outlined me-1" style="font-size:1rem">visibility_off</span>
+          O ficheiro do comprovativo não é apresentado em modo de diagnóstico.
+        </p>
+        {{else}}
+        <p class="text-muted mb-0 small">Sem comprovativo anexado.</p>
+        {{/if}}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-7">
+    <div class="card mb-3">
+      <div class="card-header bg-white"><i class="bi bi-link-45deg me-1"></i>Aplicações às quotas</div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light">
+            <tr><th>Quota</th><th>Período</th><th class="text-end">Valor aplicado</th></tr>
+          </thead>
+          <tbody>
+            {{#each pagamento.quotas}}
+            <tr>
+              <td class="font-monospace small">{{numero_documento}}</td>
+              <td>{{monthName mes}} {{ano}}</td>
+              <td class="text-end">{{eur this.PagamentoQuota.valor_aplicado}}</td>
+            </tr>
+            {{else}}
+            <tr><td colspan="3" class="text-center text-muted py-4">Sem aplicações a quotas.</td></tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {{#if pagamento.parcelasExtra.length}}
+    <div class="card mb-3">
+      <div class="card-header bg-white"><i class="bi bi-link-45deg me-1"></i>Aplicações a quotas extra</div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light">
+            <tr><th>Quota extra</th><th class="text-end">Valor aplicado</th></tr>
+          </thead>
+          <tbody>
+            {{#each pagamento.parcelasExtra}}
+            <tr>
+              <td>{{#if extra_quota}}{{extra_quota.designacao}}{{else}}—{{/if}}</td>
+              <td class="text-end">{{eur this.PagamentoExtraParcela.valor_aplicado}}</td>
+            </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {{/if}}
+
+    <div class="card">
+      <div class="card-header bg-white"><i class="bi bi-receipt me-1"></i>Recibo</div>
+      <div class="card-body">
+        {{#if temRecibo}}
+        <p class="mb-0 small">Existe recibo emitido para este pagamento ({{recibosPagamento.length}}).</p>
+        {{else}}
+        <p class="mb-0 small text-muted">Ainda não foi emitido recibo para este pagamento.</p>
+        {{/if}}
+      </div>
+    </div>
+  </div>
+</div>

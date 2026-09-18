@@ -46,8 +46,19 @@ const storage = require('../helpers/storage');
 const { mapaPastas, resolverPastaDocumento } = require('../helpers/documento-pastas');
 
 const router = express.Router();
-router.use(tenant.comCondominioAtivo); // condomínio ativo (sessão) validado
-router.use(tenant.comPapel('gestor'));
+router.use(tenant.comCondominioAtivo);
+
+// ── Suporte diagnóstico: admissão explícita DESTE módulo ───────────
+// A allow-list é partilhada (`helpers/suporte-allowlist.js`). Só as rotas
+// declaradas para o módulo `quotas-modulo` são admitidas ao suporte; as
+// restantes caem na guarda de papel abaixo.
+const allowlistSuporte = require('../helpers/suporte-allowlist');
+router.use(allowlistSuporte.soDiagnostico('quotas-modulo'));
+
+// Guarda de papel CONDICIONAL (única): contornada só pelo suporte ADMITIDO.
+// Um `router.use(tenant.comPapel('gestor'))` incondicional a seguir anularia a
+// admissão — o Express corre os dois e o segundo recusaria o pedido admitido.
+router.use(allowlistSuporte.comPapelOuSuporteAdmitido('gestor'));
 
 // Abreviaturas PT-PT de meses.
 const MESES_CURTO = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -253,6 +264,7 @@ router.get('/quotas', async (req, res) => {
   res.render('admin/quotas/mapa', {
     titulo: 'Quotas',
     secao: 'mapa',
+    suporteDiagnostico: Boolean(req.suporte),
     ano,
     anos,
     linhas,

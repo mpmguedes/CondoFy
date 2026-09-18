@@ -1,0 +1,109 @@
+{{!--
+  Vista de DIAGNÓSTICO (suporte read-only). Objetivo principal: tornar VISÍVEL o
+  estado real de armazenamento de cada documento — sobretudo `drive_erro`, que é
+  a causa mais frequente de documentos «desaparecidos» para o condómino.
+
+  Nunca expõe: drive_file_id, drive_folder_id, credenciais, tokens, conteúdo do
+  documento, nem qualquer ação de escrita (criar/editar/eliminar/enviar/download).
+--}}
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Documentos</h1>
+    <p class="subtitle mb-0">Diagnóstico do repositório documental — apenas leitura</p>
+  </div>
+</div>
+
+<div class="alert alert-info d-flex align-items-start gap-2">
+  <span class="material-symbols-outlined">info</span>
+  <div class="small">
+    Vista de diagnóstico. O estado de armazenamento é apresentado em detalhe — nomeadamente
+    os erros de envio para o serviço de armazenamento — mas não há ações disponíveis.
+  </div>
+</div>
+
+{{#if driveLigado}}
+<div class="alert alert-success d-flex align-items-center gap-2 small">
+  <span class="material-symbols-outlined">cloud_done</span>
+  <div>Serviço de armazenamento ligado para este condomínio.</div>
+</div>
+{{else}}
+<div class="alert alert-warning d-flex align-items-center gap-2 small">
+  <span class="material-symbols-outlined">cloud_off</span>
+  <div>Sem serviço de armazenamento ligado — os documentos não estão a ser enviados para a nuvem.</div>
+</div>
+{{/if}}
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="text-muted small mb-2">Filtro por pasta</div>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="/admin/documentos" class="btn btn-sm {{#unless pasta}}{{#unless pastasMulti}}btn-primary{{else}}btn-outline-secondary{{/unless}}{{else}}btn-outline-secondary{{/unless}}">Todas</a>
+      {{#each pastas}}
+      <a href="/admin/documentos?pasta={{@key}}" class="btn btn-sm {{#if (eq ../pasta @key)}}btn-primary{{else}}btn-outline-secondary{{/if}}">{{this}}</a>
+      {{/each}}
+    </div>
+    {{#if rotulo}}<div class="small text-muted mt-2">A mostrar: <strong>{{rotulo}}</strong></div>{{/if}}
+  </div>
+</div>
+
+{{#if documentos}}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>ID</th>
+          <th>Nome</th>
+          <th>Pasta</th>
+          <th>Tipo</th>
+          <th>Data</th>
+          <th>Armazenamento</th>
+          <th>Enviado em</th>
+          <th>Aos condóminos</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each documentos}}
+        <tr>
+          <td class="text-muted small">#{{id}}</td>
+          <td class="fw-semibold">{{nome}}</td>
+          <td><span class="badge text-bg-light">{{lookup ../pastas pasta}}</span></td>
+          <td>
+            {{#if (eq tipo 'ata')}}Ata
+            {{else if (eq tipo 'convocatoria')}}Convocatória
+            {{else if (eq tipo 'aviso_quota')}}Aviso de quota
+            {{else if (eq tipo 'recibo')}}Recibo
+            {{else if (eq tipo 'fatura')}}Fatura
+            {{else if (eq tipo 'contrato')}}Contrato
+            {{else if (eq tipo 'orcamento')}}Orçamento
+            {{else if (eq tipo 'relatorio')}}Relatório
+            {{else if (eq tipo 'comprovativo')}}Comprovativo
+            {{else}}Outro{{/if}}
+          </td>
+          <td class="text-nowrap">{{formatDate data}}</td>
+          <td>
+            {{#if (eq drive_status 'guardado')}}<span class="badge text-bg-success">☁ Guardado</span>
+            {{else if (eq drive_status 'erro')}}<span class="badge text-bg-danger">Erro</span>
+            {{else if (eq drive_status 'pendente')}}<span class="badge text-bg-warning">A guardar</span>
+            {{else}}<span class="badge text-bg-secondary">Não guardado</span>{{/if}}
+            {{#if drive_erro}}
+            <div class="mt-1">
+              <div class="small text-danger fw-semibold">Erro de armazenamento:</div>
+              <pre class="small text-danger bg-danger-subtle border border-danger-subtle rounded p-2 mb-0" style="white-space:pre-wrap;word-break:break-word">{{drive_erro}}</pre>
+            </div>
+            {{/if}}
+          </td>
+          <td class="text-nowrap small text-muted">{{#if drive_uploaded_at}}{{formatDate drive_uploaded_at}}{{else}}—{{/if}}</td>
+          <td class="text-nowrap">
+            {{#if disponivel_condominos}}<span class="badge text-bg-success">Sim</span>
+            {{else}}<span class="badge text-bg-secondary">Não</span>{{/if}}
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{else}}
+{{> _empty-state icon="folder" titulo="Sem documentos" descricao="Esta categoria/pasta ainda não tem documentos."}}
+{{/if}}

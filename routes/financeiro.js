@@ -69,7 +69,18 @@ const router = express.Router();
 
 // Isolamento: condomínio ativo (sessão validada) nas operações deste módulo.
 router.use(tenant.comCondominioAtivo);
-router.use(tenant.comPapel('gestor'));
+
+// ── Suporte diagnóstico: admissão explícita DESTE módulo ───────────
+// A allow-list é partilhada (`helpers/suporte-allowlist.js`); aqui declara-se
+// apenas que este router admite o suporte nas rotas que lá constam para o
+// módulo `financeiro`. Fora disso, o pedido segue para a guarda de papel.
+const allowlistSuporte = require('../helpers/suporte-allowlist');
+router.use(allowlistSuporte.soDiagnostico('financeiro'));
+
+// Guarda de papel CONDICIONAL (única): contornada só pelo suporte ADMITIDO.
+// Um `router.use(tenant.comPapel('gestor'))` incondicional a seguir anularia a
+// admissão — o Express corre os dois e o segundo recusaria o pedido admitido.
+router.use(allowlistSuporte.comPapelOuSuporteAdmitido('gestor'));
 
 // Carregadores restritos ao condomínio ativo (bloqueiam IDOR).
 function carregarConta(req) {
@@ -121,7 +132,10 @@ router.get('/contas', async (req, res) => {
   const saldoPorId = {};
   resumo.contas.forEach((c) => (saldoPorId[c.id] = c.saldo));
   const linhas = contas.map((c) => ({ ...c.toJSON(), saldo: saldoPorId[c.id] }));
-  res.render('admin/contas/listar', { titulo: 'Contas bancárias', contas: linhas, resumo });
+  // Vista de SUPORTE: IBAN mascarado (`maskIban`) e sem ações de escrita. A
+  // vista administrativa (com o IBAN completo e a edição) não é tocada.
+  const vista = req.suporte ? 'admin/contas/listar-suporte' : 'admin/contas/listar';
+  res.render(vista, { titulo: 'Contas bancárias', contas: linhas, resumo });
 });
 
 router.get('/contas/nova', (req, res) => {
@@ -402,6 +416,7 @@ router.get('/movimentos', async (req, res) => {
 
   return res.render('admin/movimentos/listar', {
     titulo: 'Extrato bancário',
+    suporteDiagnostico: Boolean(req.suporte),
     contas: contas.map((c) => ({
       id: c.id, nome: c.nome, banco: c.banco, tipo: c.tipo, ativa: c.ativa,
     })),
@@ -501,7 +516,7 @@ router.get('/despesas', async (req, res) => {
     ],
     order: [['data', 'DESC']],
   });
-  res.render('admin/despesas/listar', { titulo: 'Despesas', despesas });
+  res.render('admin/despesas/listar', { titulo: 'Despesas', despesas, suporteDiagnostico: Boolean(req.suporte) });
 });
 
 // Deliberações aprovadas com valor ainda disponível para despesas (só as que
@@ -706,7 +721,14 @@ router.post('/despesas/:id/anular', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 router.get('/quotas', async (req, res) => {
   const { ano, mes, estado } = req.query;
-  const where = {};
+  // Isolamento OBRIGATÓRIO na própria consulta: `condominio_id` vem do
+  // condomínio ATIVO (`comCondominioAtivo`, resolvido da sessão/revalidação) e
+  // nunca do pedido. Um `where` sem este filtro devolveria quotas de TODOS os
+  // condomínios da instalação — a guarda de papel não basta, porque durante o
+  // acesso de suporte `req.papelCondominio` é `null` e a via de leitura passa
+  // a ser a allow-list, não o papel. A vista nunca é responsável pelo
+  // isolamento (ver `scripts/test-quotas-isolamento.js`).
+  const where = { condominio_id: req.condominioId };
   if (ano) where.ano = parseInt(ano, 10);
   if (mes) where.mes = parseInt(mes, 10);
 
@@ -745,9 +767,17 @@ router.get('/quotas', async (req, res) => {
     .filter((q) => (estado ? q.estadoEfetivo === estado : true));
 
   const [anos, quotaConfig, fracoes] = await Promise.all([
-    Quota.findAll({ attributes: [[sequelize.fn('DISTINCT', sequelize.col('ano')), 'ano']], order: [['ano', 'DESC']], raw: true }),
+    // Anos COM quotas/EXTRA quotas deste condomínio (nunca globais: a lista de
+    // anos alimenta o filtro da vista e não pode revelar a existência de dados
+    // de outro condomínio).
+    Quota.findAll({
+      attributes: [[sequelize.fn('DISTINCT', sequelize.col('ano')), 'ano']],
+      where: ondeCondominio(req),
+      order: [['ano', 'DESC']],
+      raw: true,
+    }),
     getQuotaConfig(),
-    Fracao.findAll({ where: { estado: 'ativo' } }),
+    Fracao.findAll({ where: ondeCondominio(req, { estado: 'ativo' }) }),
   ]);
 
   // Validação da soma das permilagens (ideal: 1000‰)
@@ -769,6 +799,10 @@ router.get('/quotas', async (req, res) => {
     permilagem,
     previstasMes: fromCents(previstasMesC),
     driveLigado: storage.isConfigured(req.condominioId),
+    // Em suporte a vista esconde as ações de escrita e os links com efeito
+    // lateral (aviso PDF / enviar por email). Só apresentação: a autorização
+    // já foi decidida pela allow-list e o método já é GET.
+    suporteDiagnostico: Boolean(req.suporte),
   });
 });
 
@@ -1266,6 +1300,9 @@ router.get('/quotas/:id', async (req, res) => {
     emFalta: fromCents(toCents(quota.valor) - pagoC),
     ultimaData: ultima || null,
     driveLigado: storage.isConfigured(req.condominioId),
+    // Em suporte a vista esconde as ações com efeito lateral (aviso PDF /
+    // aviso com quotas extra / guardar no armazenamento).
+    suporteDiagnostico: Boolean(req.suporte),
   });
 });
 
@@ -1313,7 +1350,12 @@ router.get('/pagamentos', async (req, res) => {
     ],
     order: [['data_pagamento', 'DESC'], ['id', 'DESC']],
   });
-  res.render('admin/pagamentos/listar', { titulo: 'Pagamentos', pagamentos, driveLigado: storage.isConfigured(req.condominioId) });
+  res.render('admin/pagamentos/listar', {
+    titulo: 'Pagamentos',
+    pagamentos,
+    driveLigado: storage.isConfigured(req.condominioId),
+    suporteDiagnostico: Boolean(req.suporte),
+  });
 });
 
 router.get('/pagamentos/nova', async (req, res) => {
@@ -1632,7 +1674,12 @@ router.get('/pagamentos/:id', async (req, res) => {
       })
     : [];
 
-  res.render('admin/pagamentos/detalhe', {
+  // Vista de SUPORTE quando o pedido vem do contexto de suporte: a vista
+  // administrativa traz o fluxo completo de comprovativos e a emissão de
+  // recibos (escrita). A de suporte mostra os mesmos dados de diagnóstico
+  // (documento, valor, data, estado, método, referência, aplicações) sem nada
+  // de escrita e sem o ficheiro do comprovativo.
+  res.render(req.suporte ? 'admin/pagamentos/detalhe-suporte' : 'admin/pagamentos/detalhe', {
     titulo: `Pagamento ${pagamento.numero_documento || ''}`,
     pagamento,
     driveLigado: storage.isConfigured(req.condominioId),

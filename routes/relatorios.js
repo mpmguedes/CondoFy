@@ -25,7 +25,18 @@ const router = express.Router();
 // Sem `eAdmin`: essa guarda decidia por `users.role` (legado) e expulsava para
 // `/` gestores de condomínio legítimos cujo `users.role` é 'condomino'.
 router.use(tenant.comCondominioAtivo);
-router.use(tenant.comPapel('gestor'));
+
+// ── Suporte diagnóstico: admissão explícita DESTE módulo ───────────
+// A allow-list é partilhada (`helpers/suporte-allowlist.js`). Só as rotas
+// declaradas para o módulo `relatorios` são admitidas ao suporte; as
+// restantes caem na guarda de papel abaixo.
+const allowlistSuporte = require('../helpers/suporte-allowlist');
+router.use(allowlistSuporte.soDiagnostico('relatorios'));
+
+// Guarda de papel CONDICIONAL (única): contornada só pelo suporte ADMITIDO.
+// Um `router.use(tenant.comPapel('gestor'))` incondicional a seguir anularia a
+// admissão — o Express corre os dois e o segundo recusaria o pedido admitido.
+router.use(allowlistSuporte.comPapelOuSuporteAdmitido('gestor'));
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const eur = (c) => formatEUR(fromCents(c || 0));

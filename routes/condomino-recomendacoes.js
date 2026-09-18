@@ -15,6 +15,7 @@
 // ─────────────────────────────────────────────────────────────────────
 const express = require('express');
 const { eAutenticado } = require('../helpers/eAdmin');
+const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const recomendacoes = require('../helpers/recomendacoes');
 const { RecomendacaoEstado } = require('../models');
@@ -22,6 +23,9 @@ const { RecomendacaoEstado } = require('../models');
 const router = express.Router();
 
 router.use(eAutenticado);
+// Defesa em profundidade: o suporte diagnóstico nunca entra no portal. A guarda
+// global em `app.js` já cobre este prefixo.
+router.use(tenant.semSuporte);
 
 // ── Dispensar uma recomendação ─────────────────────────────────────
 // Guarda apenas o estado de apresentação (dispensada + até quando). Não altera

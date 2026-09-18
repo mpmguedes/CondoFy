@@ -1160,9 +1160,14 @@ const pedir = (caminho, { papel = 'admin', global = false } = {}) =>
   // gestão de utilizadores é protegida rota a rota em `admin.js`.
   const adminSrc = ler('routes/admin.js');
   assert.ok(/router\.use\(tenant\.comCondominioAtivo\)/.test(adminSrc), 'admin.js tem comCondominioAtivo');
+  // Aceita a guarda direta, a condicional inline e a condicional DELEGADA no
+  // helper partilhado (`allowlistSuporte.comPapelOuSuporteAdmitido('gestor')`):
+  // as três são o MESMO mínimo `gestor`, e o mínimo do router tem de coincidir
+  // com o destino de `destinoInicial` (que manda admin e gestor para /admin).
   assert.ok(
     /router\.use\(tenant\.comPapel\('gestor'\)\)/.test(adminSrc) ||
-    /return tenant\.comPapel\('gestor'\)\(req, res, next\);/.test(adminSrc),
+    /return tenant\.comPapel\('gestor'\)\(req, res, next\);/.test(adminSrc) ||
+    /router\.use\(allowlistSuporte\.comPapelOuSuporteAdmitido\('gestor'\)\)/.test(adminSrc),
     'admin.js tem comPapel(gestor) no router (mesmo mínimo que o destino)'
   );
   assert.ok(

@@ -1,3 +1,67 @@
+{{!--
+  Lista de frações.
+
+  Duas apresentações na MESMA vista, escolhidas pelo contexto (nunca pelo papel):
+
+    · gestão (admin/gestor) — como sempre: designação com link para a ficha,
+      permilagem, andar, titulares com NOME COMPLETO e ações de editar/eliminar;
+    · suporte diagnóstico (`req.contexto === 'suporte'`) — despersonalizada:
+      a ficha individual (`/admin/fracoes/:id`) NÃO está na allow-list, por isso
+      a designação deixa de ser um link; os titulares aparecem só com as
+      INICIAIS (basta para confirmar «esta fração tem titular associado»); e as
+      ações de escrita desaparecem — o suporte não pode editar nem eliminar.
+
+  A vista não decide a autorização: se o suporte chegar aqui, já foi admitido
+  pela allow-list, que é só de leitura. Isto é apresentação.
+--}}
+{{#if suporteDiagnostico}}
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Frações</h1>
+    <p class="subtitle">Leitura de diagnóstico — sem identificação de titulares nem ações de alteração</p>
+  </div>
+</div>
+
+{{#if fracoes}}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Designação</th>
+          <th>Permilagem</th>
+          <th>Andar</th>
+          <th>Titulares</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each fracoes}}
+        <tr>
+          {{!-- Sem link para a ficha: `/fracoes/:id` está FORA da allow-list. --}}
+          <td class="fw-semibold">{{designacao}}</td>
+          <td>{{#if permilagem}}{{permilagem}} ‰{{else}}—{{/if}}</td>
+          <td>{{#if andar}}{{andar}}{{else}}—{{/if}}</td>
+          <td>
+            {{#each pessoas}}
+              <span class="badge text-bg-light border" title="Titular (identificação reduzida a iniciais)">{{iniciais nome}} {{#if (eq this.FracaoPessoa.vinculo 'arrendatario')}}(arrend.){{/if}}</span>
+            {{else}}
+              <span class="text-muted">Sem titular</span>
+            {{/each}}
+          </td>
+          <td>
+            {{#if (eq estado 'ativo')}}<span class="badge text-bg-success">Ativa</span>{{else}}<span class="badge text-bg-secondary">Inativa</span>{{/if}}
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{else}}
+{{> _empty-state icon="apartment" titulo="Ainda não existem frações" descricao="Este condomínio ainda não tem frações registadas."}}
+{{/if}}
+{{else}}
 <div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
     <h1>Frações</h1>
@@ -51,4 +115,5 @@
 </div>
 {{else}}
 {{> _empty-state icon="apartment" titulo="Ainda não existem frações" descricao="Adicione a primeira fração do condomínio para começar a gerir quotas e residentes." link="/admin/fracoes/nova" linkTexto="Nova fração"}}
+{{/if}}
 {{/if}}

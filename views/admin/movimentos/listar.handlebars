@@ -10,6 +10,13 @@
   <a href="/admin/contas" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">account_balance</span>Contas</a>
 </div>
 
+{{#if suporteDiagnostico}}
+<div class="alert alert-info d-flex align-items-center gap-2 small">
+  <span class="material-symbols-outlined">info</span>
+  <div>Vista de diagnóstico — apenas leitura. Os movimentos não podem ser anulados nem alterados aqui.</div>
+</div>
+{{/if}}
+
 <form method="GET" action="/admin/movimentos" class="card mb-3">
   <div class="card-body row g-2 align-items-end">
     <div class="col-12 col-md-6 col-lg-3">
@@ -145,7 +152,9 @@
             {{else}}<span class="badge text-bg-success">Confirmado</span>{{/if}}
           </td>
           <td class="text-end">
-            {{#if anulado}}
+            {{#if suporteDiagnostico}}
+            <span class="text-muted small">—</span>
+            {{else if anulado}}
             <span class="text-muted small">—</span>
             {{else if editavel}}
             <form action="/admin/movimentos/{{id}}/anular" method="POST" class="d-inline" data-confirmar="Anular este movimento?" data-confirmar-perigo="1">

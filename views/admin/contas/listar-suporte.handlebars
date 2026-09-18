@@ -1,0 +1,77 @@
+{{!--
+  Contas bancárias — VISTA DE SUPORTE.
+
+  Substitui `admin/contas/listar` quando o pedido é de suporte diagnóstico.
+
+  Diferença essencial: o IBAN é MASCARADO (`maskIban`) — mostra o país e os
+  últimos 4 caracteres, que bastam para confirmar «é a conta certa?» e «está
+  preenchida?», sem o expor por inteiro. Um IBAN completo é um identificador
+  bancário: com ele faz-se uma transferência, e o suporte não precisa disso para
+  diagnosticar um saldo.
+
+  Mantém-se: nome, banco, tipo, saldo e estado (ativa/inativa) — é o que serve
+  para diagnosticar. Não há transferência de FCR, criação nem edição.
+--}}
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Contas bancárias</h1>
+    <p class="subtitle">Leitura de diagnóstico — IBAN mascarado</p>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-4 col-lg-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Saldo total</div>
+      <div class="stat-value">{{eur resumo.saldoContas}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-3">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Fundo de reserva</div>
+      <div class="stat-value">{{eur resumo.fundoReserva}}</div>
+    </div></div>
+  </div>
+</div>
+
+{{#if contas}}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Nome</th>
+          <th>Banco</th>
+          <th>IBAN</th>
+          <th>Tipo</th>
+          <th class="text-end">Saldo</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each contas}}
+        <tr>
+          <td class="fw-semibold">{{nome}}</td>
+          <td>{{#if banco}}{{banco}}{{else}}—{{/if}}</td>
+          <td><span class="font-monospace small">{{maskIban iban}}</span></td>
+          <td>
+            {{#if (eq tipo 'fundo_reserva')}}<span class="badge text-bg-warning">Fundo de reserva</span>
+            {{else if (eq tipo 'poupanca')}}<span class="badge text-bg-info">Poupança</span>
+            {{else if (eq tipo 'corrente')}}<span class="badge text-bg-primary">Corrente</span>
+            {{else}}<span class="badge text-bg-secondary">Outra</span>{{/if}}
+          </td>
+          <td class="text-end fw-semibold">{{eur saldo}}</td>
+          <td>{{#if ativa}}<span class="badge text-bg-success">Ativa</span>{{else}}<span class="badge text-bg-secondary">Inativa</span>{{/if}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="alert alert-secondary small mt-3 mb-0">
+  <span class="material-symbols-outlined me-1" style="font-size:1rem">visibility_off</span>
+  O IBAN é apresentado mascarado (país e últimos 4 caracteres). O acesso de diagnóstico permite confirmar que a conta está configurada, não identificá-la por inteiro.
+</div>
+{{else}}
+{{> _empty-state icon="account_balance" titulo="Sem contas bancárias" descricao="Este condomínio não tem contas bancárias registadas."}}
+{{/if}}

@@ -1,11 +1,27 @@
+{{!--
+  Lista de quotas. Em contexto de suporte (`suporteDiagnostico`) a MESMA tabela é
+  apresentada sem:
+    · ações de escrita — gerar, anular, editar, guardar no Drive;
+    · o modal de configuração das quotas (é escrita);
+    · os links com EFEITO LATERAL — «Aviso PDF» (emite/descarrega um documento)
+      e «Enviar por email». `/quotas/:id/aviso` não está na allow-list, por isso
+      o link seria um beco sem saída (302); não se mostra o que não se pode usar.
+  Passa a haver um link de leitura para o detalhe (`/quotas/:id`), que está na
+  allow-list, e a grelha continua acessível (Serve para responder a «as quotas
+  deste ano foram geradas?»).
+--}}
 <div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
     <h1>Quotas</h1>
-    <p class="subtitle">Quotas emitidas por fração e período</p>
+    <p class="subtitle">{{#if suporteDiagnostico}}Leitura de diagnóstico — sem alterações{{else}}Quotas emitidas por fração e período{{/if}}</p>
   </div>
-  <a href="/admin/quotas/grelha" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">grid_view</span>Grelha</a>
-  <a href="/admin/quotas/enviar" class="btn btn-outline-primary"><span class="material-symbols-outlined me-1">mail</span>Enviar por email</a>
-  <a href="/admin/quotas/gerar" class="btn btn-primary"><span class="material-symbols-outlined me-1">auto_awesome</span>Gerar quotas</a>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="/admin/quotas/grelha" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">grid_view</span>Grelha</a>
+    {{#unless suporteDiagnostico}}
+    <a href="/admin/quotas/enviar" class="btn btn-outline-primary"><span class="material-symbols-outlined me-1">mail</span>Enviar por email</a>
+    <a href="/admin/quotas/gerar" class="btn btn-primary"><span class="material-symbols-outlined me-1">auto_awesome</span>Gerar quotas</a>
+    {{/unless}}
+  </div>
 </div>
 
 {{#unless permilagem.ok}}
@@ -20,7 +36,9 @@
     <div class="card stat-card h-100"><div class="card-body">
       <div class="stat-label">Valor por 1000‰</div>
       <div class="stat-value">{{quotaConfig.valorPor1000}} €</div>
+      {{#unless suporteDiagnostico}}
       <button class="btn btn-sm btn-outline-primary mt-2" data-bs-toggle="modal" data-bs-target="#modalConfig"><span class="material-symbols-outlined me-1">tune</span>Alterar</button>
+      {{/unless}}
     </div></div>
   </div>
   <div class="col-6 col-md-4">
@@ -37,6 +55,7 @@
   </div>
 </div>
 
+{{#unless suporteDiagnostico}}
 <div class="modal fade" id="modalConfig" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -70,6 +89,7 @@
     </div>
   </div>
 </div>
+{{/unless}}
 
 <div class="card mb-4">
   <div class="card-body">
@@ -120,7 +140,7 @@
           <th class="text-end">Pago</th>
           <th class="text-end">Em aberto</th>
           <th>Estado</th>
-          <th class="text-end">Ações</th>
+          {{#unless suporteDiagnostico}}<th class="text-end">Ações</th>{{/unless}}
         </tr>
       </thead>
       <tbody>
@@ -140,6 +160,7 @@
             {{else if (eq estadoEfetivo 'anulada')}}<span class="badge text-bg-secondary">Anulada</span>
             {{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}
           </td>
+          {{#unless ../suporteDiagnostico}}
           <td class="text-end text-nowrap">
             <a href="/admin/quotas/{{id}}/aviso" target="_blank" class="btn btn-sm btn-outline-primary" title="Aviso PDF"><span class="material-symbols-outlined">picture_as_pdf</span></a>
             {{#if ../driveLigado}}
@@ -153,6 +174,12 @@
               <button class="btn btn-sm btn-outline-danger" title="Anular"><span class="material-symbols-outlined">block</span></button>
             </form>
           </td>
+          {{else}}
+          {{!-- Suporte: único acesso de leitura — o detalhe (`/quotas/:id`). --}}
+          <td class="text-end text-nowrap">
+            <a href="/admin/quotas/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver detalhe"><span class="material-symbols-outlined">visibility</span></a>
+          </td>
+          {{/unless}}
         </tr>
         {{/each}}
       </tbody>

@@ -26,7 +26,18 @@ const {
 const router = express.Router();
 // Isolamento: condomínio ativo (sessão validada) em todas as operações.
 router.use(tenant.comCondominioAtivo);
-router.use(tenant.comPapel('gestor'));
+
+// ── Suporte diagnóstico: admissão explícita DESTE módulo ───────────
+// A allow-list é partilhada (`helpers/suporte-allowlist.js`). Só as rotas
+// declaradas para o módulo `assembleias` são admitidas ao suporte; as
+// restantes caem na guarda de papel abaixo.
+const allowlistSuporte = require('../helpers/suporte-allowlist');
+router.use(allowlistSuporte.soDiagnostico('assembleias'));
+
+// Guarda de papel CONDICIONAL (única): contornada só pelo suporte ADMITIDO.
+// Um `router.use(tenant.comPapel('gestor'))` incondicional a seguir anularia a
+// admissão — o Express corre os dois e o segundo recusaria o pedido admitido.
+router.use(allowlistSuporte.comPapelOuSuporteAdmitido('gestor'));
 
 // Anexos: PDF, JPG, PNG, WebP até 20 MB.
 const upload = multer({
@@ -206,7 +217,7 @@ router.get('/assembleias/:id', async (req, res) => {
     });
   }
 
-  res.render('admin/assembleias/detalhe', {
+  res.render(req.suporte ? 'admin/assembleias/detalhe-suporte' : 'admin/assembleias/detalhe', {
     titulo: assembleia.numero ? `Assembleia ${assembleia.numero}` : 'Assembleia',
     assembleia,
     participantes,

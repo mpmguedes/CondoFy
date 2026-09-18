@@ -36,6 +36,10 @@ const router = express.Router();
 // redirecionar para fora para o pedir). O isolamento não depende disso — cada
 // consulta filtra pelas associações ATIVAS do próprio utilizador.
 router.use(eAutenticado);
+// Defesa em profundidade: o suporte diagnóstico nunca entra no portal. A guarda
+// global em `app.js` já cobre este prefixo; esta linha documenta a decisão na
+// própria rota e sobrevive a uma alteração de montagem.
+router.use(tenant.semSuporte);
 // Este router é da área do condómino: um gestor/admin do condomínio tem a sua
 // área própria (backoffice) e não é encaminhado para o portal.
 router.use((req, res, next) => {

@@ -18,7 +18,18 @@ const { autorizarAcessoDocumento, servirDocumento, verificarDocumento, responder
 const router = express.Router();
 // Isolamento: todas as operações usam o condomínio ativo (sessão validada).
 router.use(tenant.comCondominioAtivo);
-router.use(tenant.comPapel('gestor'));
+
+// ── Suporte diagnóstico: admissão explícita DESTE módulo ───────────
+// A allow-list é partilhada (`helpers/suporte-allowlist.js`). Só as rotas
+// declaradas para o módulo `documentos` são admitidas ao suporte; as
+// restantes caem na guarda de papel abaixo.
+const allowlistSuporte = require('../helpers/suporte-allowlist');
+router.use(allowlistSuporte.soDiagnostico('documentos'));
+
+// Guarda de papel CONDICIONAL (única): contornada só pelo suporte ADMITIDO.
+// Um `router.use(tenant.comPapel('gestor'))` incondicional a seguir anularia a
+// admissão — o Express corre os dois e o segundo recusaria o pedido admitido.
+router.use(allowlistSuporte.comPapelOuSuporteAdmitido('gestor'));
 
 function toArray(v) {
   if (!v) return [];
@@ -93,6 +104,24 @@ router.get('/documentos', async (req, res) => {
       contagem: contagem.get(p.key) || 0,
       href: `/admin/documentos?pastas=${encodeURIComponent(p.key)}`,
     }));
+    if (req.suporte) {
+      // Diagnóstico: a biblioteca (cartões) não é admitida — o suporte vê a
+      // listagem técnica com o estado de armazenamento.
+      const todos = await Documento.findAll({
+        where,
+        order: [['data', 'DESC'], ['id', 'DESC']],
+      });
+      return res.render('admin/documentos/listar-suporte', {
+        titulo: 'Documentos',
+        documentos: todos,
+        pasta: null,
+        pastasMulti: null,
+        rotulo: null,
+        nDocumentos: todos.length,
+        pastas: mapa,
+        driveLigado: drive.isConfigured(req.condominioId),
+      });
+    }
     return res.render('admin/documentos/biblioteca', {
       titulo: 'Documentos',
       categorias,
@@ -187,7 +216,7 @@ router.get('/documentos', async (req, res) => {
     include: [{ model: Categoria, as: 'categorias', through: { attributes: [] }, required: false }],
     order: [['data', 'DESC'], ['id', 'DESC']],
   });
-  res.render('admin/documentos/listar', {
+  res.render(req.suporte ? 'admin/documentos/listar-suporte' : 'admin/documentos/listar', {
     titulo: rotulo ? `Documentos · ${rotulo}` : 'Documentos',
     documentos,
     pasta,

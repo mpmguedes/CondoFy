@@ -1,0 +1,73 @@
+{{!--
+  Lista de condóminos — VISTA DE SUPORTE (despersonalizada).
+
+  Mostrada apenas quando o pedido é de suporte diagnóstico (`suporteDiagnostico`).
+  A vista administrativa normal (`admin/condominos/listar`) continua a ser usada
+  por admin/gestor e não é alterada.
+
+  O que se mostra e porquê:
+    · NOME — mantido: é preciso saber A QUEM pertence a fração para diagnosticar
+      («o condómino X diz que a quota está errada»). Não é um dado financeiro
+      nem um segredo; sem ele o suporte não consegue sequer situar o problema.
+    · FRAÇÕES — mantido: é a chave de todo o diagnóstico financeiro.
+    · E-MAIL, TELEFONE, NIF — MASCARADOS. Permitem confirmar que o campo está
+      preenchido e que o valor tem a forma esperada (domínio, comprimento,
+      NIF com 9 dígitos) sem expor o dado. É este o ponto central desta vista.
+    · TIPO (proprietário/arrendatário) — mantido: enquadra o diagnóstico.
+
+  O que NÃO existe aqui: ações de editar/eliminar (o suporte é só de leitura) e
+  qualquer ligação para a ficha de edição.
+--}}
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Condóminos</h1>
+    <p class="subtitle">Leitura de diagnóstico — contactos e NIF mascarados</p>
+  </div>
+</div>
+
+{{#if pessoas}}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Nome</th>
+          <th>Email</th>
+          <th>Telefone</th>
+          <th>NIF</th>
+          <th>Tipo</th>
+          <th>Frações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each pessoas}}
+        <tr>
+          <td class="fw-semibold">{{nome}}</td>
+          <td class="font-monospace small">{{maskEmail email}}</td>
+          <td class="font-monospace small">{{maskTelefone telefone}}</td>
+          <td class="font-monospace small">{{maskNif nif}}</td>
+          <td>
+            {{#if (eq tipo 'proprietario')}}<span class="badge text-bg-primary">Proprietário</span>
+            {{else if (eq tipo 'arrendatario')}}<span class="badge text-bg-info">Arrendatário</span>
+            {{else}}<span class="badge text-bg-secondary">Outro</span>{{/if}}
+          </td>
+          <td>
+            {{#each fracoes}}
+              <span class="badge text-bg-light border">{{designacao}}</span>
+            {{else}}
+              <span class="text-muted">—</span>
+            {{/each}}
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="alert alert-secondary small mt-3 mb-0">
+  <span class="material-symbols-outlined me-1" style="font-size:1rem">visibility_off</span>
+  Contactos e NIF são apresentados mascarados. O acesso de diagnóstico permite confirmar que os dados existem e estão bem formados, não identificá-los.
+</div>
+{{else}}
+{{> _empty-state icon="groups" titulo="Ainda não existem condóminos" descricao="Este condomínio ainda não tem condóminos registados."}}
+{{/if}}

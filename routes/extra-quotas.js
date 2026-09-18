@@ -25,7 +25,18 @@ const router = express.Router();
 
 // Isolamento: condomínio ativo (sessão validada) em todas as operações.
 router.use(tenant.comCondominioAtivo);
-router.use(tenant.comPapel('gestor'));
+
+// ── Suporte diagnóstico: admissão explícita DESTE módulo ───────────
+// A allow-list é partilhada (`helpers/suporte-allowlist.js`). Só as rotas
+// declaradas para o módulo `extra-quotas` são admitidas ao suporte; as
+// restantes caem na guarda de papel abaixo.
+const allowlistSuporte = require('../helpers/suporte-allowlist');
+router.use(allowlistSuporte.soDiagnostico('extra-quotas'));
+
+// Guarda de papel CONDICIONAL (única): contornada só pelo suporte ADMITIDO.
+// Um `router.use(tenant.comPapel('gestor'))` incondicional a seguir anularia a
+// admissão — o Express corre os dois e o segundo recusaria o pedido admitido.
+router.use(allowlistSuporte.comPapelOuSuporteAdmitido('gestor'));
 
 function parseDecimal(value, fallback = 0) {
   if (value === null || value === undefined || value === '') return fallback;
@@ -298,7 +309,7 @@ router.get('/quotas-extra/:id', async (req, res) => {
   const resumo = await resumoExtra(extra);
   const hoje = new Date().toISOString().slice(0, 10);
 
-  res.render('admin/quotas-extra/detalhe', {
+  res.render(req.suporte ? 'admin/quotas-extra/detalhe-suporte' : 'admin/quotas-extra/detalhe', {
     titulo: extra.designacao,
     extra,
     grupos,

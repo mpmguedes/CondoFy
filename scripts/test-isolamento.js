@@ -172,17 +172,24 @@ function testarRoutersIsolados() {
       // passar um ficheiro cujo gate real fosse outro (era o caso de admin.js,
       // onde o comentário e o value `apenasAdmin` satisfaziam a procura antiga).
       //
-      // Aceitam-se duas formas, ambas a MESMA guarda: a montagem direta
-      // `router.use(tenant.comPapel('X'))` e a condicional (admin.js, onde o
-      // acesso de suporte admitido pela allow-list tem de contornar o papel) —
-      // nesta última, `tenant.comPapel('X')` é chamado dentro do `router.use`.
+      // Aceitam-se três formas, todas a MESMA guarda: a montagem direta
+      // `router.use(tenant.comPapel('X'))`, a condicional inline (um
+      // `router.use((req,res,next) => { … return tenant.comPapel('X')(…) })`) e a
+      // condicional delegada no helper partilhado
+      // (`router.use(allowlistSuporte.comPapelOuSuporteAdmitido('X'))`). Nas duas
+      // últimas, o suporte admitido pela allow-list tem de contornar o papel.
+      // Nunca se relaxa para `includes`: foi essa a imprecisão que deixava
+      // passar um ficheiro cujo gate real fosse outro.
       const direto = new RegExp(
         `router\\.use\\(\\s*tenant\\.comPapel\\(\\s*'${COM_PAPEL[nome]}'\\s*\\)\\s*\\)`
       );
       const condicional = new RegExp(
         `router\\.use\\(\\(req, res, next\\) => \\{[\\s\\S]*?return tenant\\.comPapel\\('${COM_PAPEL[nome]}'\\)\\(req, res, next\\);`
       );
-      assert.ok(direto.test(src) || condicional.test(src),
+      const delegado = new RegExp(
+        `router\\.use\\(\\s*allowlistSuporte\\.comPapelOuSuporteAdmitido\\(\\s*'${COM_PAPEL[nome]}'\\s*\\)\\s*\\)`
+      );
+      assert.ok(direto.test(src) || condicional.test(src) || delegado.test(src),
         `${nome}: o router monta tenant.comPapel('${COM_PAPEL[nome]}')`);
     }
     // Área do Condómino: toda a consulta filtra pelo condomínio ativo e pela
@@ -223,12 +230,14 @@ function testarGuardaDoBackoffice() {
   const semComentarios = src.replace(/\/\/.*$/gm, '');
 
   // 1. O router monta o mínimo `gestor` (o gate efetivo corre em todos os pedidos).
-  // Admite-se a forma direta e a condicional (admin.js: o acesso de suporte
-  // admitido pela allow-list tem de contornar o papel; um `router.use`
-  // incondicional a seguir recusá-lo-ia outra vez).
+  // Admite-se a forma direta, a condicional inline e a condicional DELEGADA no
+  // helper partilhado (`allowlistSuporte.comPapelOuSuporteAdmitido('gestor')`):
+  // em admin.js o acesso de suporte admitido pela allow-list tem de contornar o
+  // papel, e um `router.use` incondicional a seguir recusá-lo-ia outra vez.
   assert.ok(
     /router\.use\(\s*tenant\.comPapel\('gestor'\)\s*\)/.test(semComentarios) ||
-    /router\.use\(\(req, res, next\) => \{[\s\S]*?return tenant\.comPapel\('gestor'\)\(req, res, next\);/.test(semComentarios),
+    /router\.use\(\(req, res, next\) => \{[\s\S]*?return tenant\.comPapel\('gestor'\)\(req, res, next\);/.test(semComentarios) ||
+    /router\.use\(\s*allowlistSuporte\.comPapelOuSuporteAdmitido\('gestor'\)\s*\)/.test(semComentarios),
     'admin.js: router.use(tenant.comPapel(\'gestor\')) — backoffice comum'
   );
   // 2. O gate do router NÃO pode voltar a ser `admin` (era a inconsistência

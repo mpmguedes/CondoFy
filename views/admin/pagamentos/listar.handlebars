@@ -1,10 +1,14 @@
 <div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
     <h1>Pagamentos</h1>
-    <p class="subtitle">Recebimentos de quotas e respetivos recibos</p>
+    <p class="subtitle">{{#if suporteDiagnostico}}Leitura de diagnóstico — sem alterações{{else}}Recebimentos de quotas e respetivos recibos{{/if}}</p>
   </div>
-  <a href="/admin/pagamentos/enviar-recibos" class="btn btn-outline-primary"><span class="material-symbols-outlined me-1">mail</span>Enviar recibos</a>
-  <a href="/admin/pagamentos/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">add</span>Registar pagamento</a>
+  {{#unless suporteDiagnostico}}
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="/admin/pagamentos/enviar-recibos" class="btn btn-outline-primary"><span class="material-symbols-outlined me-1">mail</span>Enviar recibos</a>
+    <a href="/admin/pagamentos/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">add</span>Registar pagamento</a>
+  </div>
+  {{/unless}}
 </div>
 
 {{#if pagamentos}}
@@ -19,7 +23,7 @@
           <th>Método</th>
           <th class="text-end">Valor</th>
           <th>Estado</th>
-          <th class="text-end">Ações</th>
+          <th class="text-end">{{#if suporteDiagnostico}}Detalhe{{else}}Ações{{/if}}</th>
         </tr>
       </thead>
       <tbody>
@@ -35,6 +39,11 @@
             {{else}}<span class="badge text-bg-secondary">Anulado</span>{{/if}}
           </td>
           <td class="text-end text-nowrap">
+            {{#if ../suporteDiagnostico}}
+            {{!-- Suporte: único acesso de leitura — o detalhe. Nada de recibo
+                 PDF (emite documento) nem de anular (escrita). --}}
+            <a href="/admin/pagamentos/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver detalhe"><span class="material-symbols-outlined">visibility</span></a>
+            {{else}}
             <a href="/admin/pagamentos/{{id}}/recibo" target="_blank" class="btn btn-sm btn-outline-primary" title="Recibo PDF"><span class="material-symbols-outlined">picture_as_pdf</span></a>
             {{#if ../driveLigado}}
             <form action="/admin/pagamentos/{{id}}/recibo/drive" method="POST" class="d-inline">
@@ -47,6 +56,7 @@
               <button class="btn btn-sm btn-outline-danger" title="Anular"><span class="material-symbols-outlined">block</span></button>
             </form>
             {{/if}}
+            {{/if}}
           </td>
         </tr>
         {{/each}}
@@ -55,5 +65,9 @@
   </div>
 </div>
 {{else}}
+{{#if suporteDiagnostico}}
+{{> _empty-state icon="payments" titulo="Sem pagamentos" descricao="Este condomínio não tem pagamentos registados."}}
+{{else}}
 {{> _empty-state icon="payments" titulo="Sem pagamentos" descricao="Registe o primeiro pagamento de quota." link="/admin/pagamentos/nova" linkTexto="Registar pagamento"}}
+{{/if}}
 {{/if}}
