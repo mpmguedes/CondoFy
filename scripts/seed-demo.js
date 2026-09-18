@@ -44,7 +44,8 @@
 //                                          # (não apaga nem recria o resto)
 // `--reparar` aceita `--dry-run` (simula) e serve para atualizar um demo criado
 // por uma versão anterior: liga o gestor a uma `Pessoa` (`users.pessoa_id`),
-// repõe `users.role = 'admin'` e a associação `admin` ao condomínio.
+// repõe `users.role = 'admin'` (legado) e a associação ativa `admin` ao
+// condomínio — é esta última que autoriza, não a coluna legada.
 //
 // ── Sobre as transações ─────────────────────────────────────────────
 // Os writers (`registarPagamento`, `registarPagamentoExtraParcela`,
@@ -252,21 +253,26 @@ async function repararGestorDemo(condominio, { dryRun }) {
     descricao.push(`users.pessoa_id → ${pessoa.id}`);
   }
 
-  // 3. `users.role = 'admin'` — decide o destino após o login
-  //    (`routes/index.js: destinoAposLogin` → `/admin`).
+  // 3. `users.role` — coluna LEGADO, mantida por compatibilidade.
+  //    Já NÃO decide o destino após o login: quem decide é o papel no
+  //    condomínio ativo (`utilizador_condominios.role`), através de
+  //    `tenant.destinoInicial`. O valor 'admin' é reposto apenas para que a
+  //    linha fique coerente com o modelo antigo (ferramentas e traduções
+  //    legado↔novo em routes/admin.js); se estivesse 'condomino', o demo
+  //    continuaria a entrar no painel — é isso que o passo 4 garante.
   if (gestor.role !== 'admin') {
     if (!dryRun) await gestor.update({ role: 'admin' });
     alteracoes += 1;
-    descricao.push("users.role → 'admin'");
+    descricao.push("users.role → 'admin' (legado/compatibilidade)");
   }
 
-  // 4. O papel POR CONDOMÍNIO (fonte de verdade das permissões).
-  //    `comPapel('admin')` (helpers/tenant.js:121) exige `role = 'admin'` E a
-  //    associação ATIVA (`associacaoAtiva` filtra por `estado = 'ativo'`,
-  //    helpers/tenant.js:21). Sem as duas coisas, `/` → `/admin` → `/` produz
-  //    ERR_TOO_MANY_REDIRECTS: `destinoAposLogin` (routes/index.js:16) manda
-  //    para `/admin` por `users.role`, e `comPapel` devolve a `/` por este
-  //    papel. Aqui garantem-se as duas.
+  // 4. O papel POR CONDOMÍNIO (fonte de verdade das permissões e do destino).
+  //    `comPapel('admin')` (helpers/tenant.js) exige `role = 'admin'` E a
+  //    associação ATIVA (`associacaoAtiva` filtra por `estado = 'ativo'`).
+  //    O destino pós-login (`tenant.destinoInicial`) lê o papel desta mesma
+  //    associação: com a associação em falta ou inativa, `/` não sabe para onde
+  //    mandar o gestor e o ciclo `/admin → / → /admin` reaparece por outra via.
+  //    Aqui garantem-se as duas coisas.
   const associacao = await UserCondominio.findOne({
     where: { utilizador_id: gestor.id, condominio_id: cid },
   });
@@ -294,7 +300,9 @@ async function repararGestorDemo(condominio, { dryRun }) {
   }
 
   // 5. Titularidade do gestor — NÃO é requisito de autenticação nem de
-  //    administração (essas dependem só de `users.role` e da associação).
+  //    administração (essas dependem só da associação ATIVA em
+  //    `utilizador_condominios`, que é o que `comPapel` e o destino pós-login
+  //    consultam; `users.role` é legado e não decide nada).
   //    Serve as invariantes do seed e o conteúdo do portal, pelo que só se
   //    cria quando NÃO existe nenhuma ativa. Idempotência pelas DUAS vias de
   //    acesso que `fracoesDoUtilizador` (helpers/titularidades.js:154)
@@ -576,18 +584,20 @@ async function criarDemo() {
     email: EMAIL_GESTOR,
     password_hash: hashGestor,
     nome: 'Gestor Demo',
-    // `users.role` é o papel LEGADO que decide o destino após o login
-    // (`routes/index.js: destinoAposLogin` manda para `/admin` só quando
-    // `user.role === 'admin'`). Com 'condomino' o login caía em `/condomino`.
+    // `users.role` é a coluna LEGADO (mantida por compatibilidade; não decide
+    // autorização nem destino). O que dá acesso ao painel é a associação ATIVA
+    // a `utilizador_condominios` com `role = 'admin'`, criada logo abaixo.
     role: 'admin',
     provider: 'local',
     pessoa_id: pessoaGestor.id, // liga a conta ao condómino (obrigatório no portal)
     email_confirmado: true,
     ativo: true,
   });
-  // O papel POR CONDOMÍNIO (fonte de verdade das permissões) tem de ser 'admin':
-  // `routes/admin.js` exige `comPapel('admin')` e `gestor` (20) não satisfaz
-  // `admin` (30) (helpers/tenant.js: PAPEIS).
+  // O papel POR CONDOMÍNIO (fonte de verdade das permissões) tem de ser 'admin'
+  // ou 'gestor' — é um destes que o backoffice aceita: `routes/admin.js` exige
+  // `comPapel('gestor')` no router e `comPapel('admin')` na gestão de
+  // utilizadores (`helpers/tenant.js`: PAPEIS admin 30 > gestor 20 > leitura 10).
+  // Ambos dão acesso a `/admin`; o gestor fica sem as áreas reservadas ao admin.
   await UserCondominio.create({ utilizador_id: gestor.id, condominio_id: cid, role: 'admin', estado: 'ativo' });
   passo(`Gestor: ${EMAIL_GESTOR} / ${PASSWORD_GESTOR} (role admin + pessoa #${pessoaGestor.id})`);
 
@@ -1449,6 +1459,44 @@ async function verificarInvariantes(cid) {
   });
   const fugas = fugasQuota + fugasPessoa + fugasMov;
   verificar('Isolamento do condomínio demo', fugas === 0, `${fugas} fugas (quotas/pessoas/movimentos)`);
+
+  // 8b. A arquitetura de autorização: o gestor demo NÃO pode depender de
+  //     `users.role` para entrar no painel. O que decide é a associação ATIVA
+  //     com papel admin em `utilizador_condominios` (o `users.role` fica
+  //     gravado como 'admin' apenas por compatibilidade com o legado).
+  const gestorDemo = await User.findOne({ where: { email: EMAIL_GESTOR } });
+  if (gestorDemo) {
+    const assocGestor = await UserCondominio.findOne({
+      where: { utilizador_id: gestorDemo.id, condominio_id: cid },
+    });
+    verificar(
+      'Gestor demo: associação ativa com papel admin (fonte de verdade)',
+      Boolean(assocGestor && assocGestor.estado === 'ativo' && assocGestor.role === 'admin'),
+      assocGestor ? `estado=${assocGestor.estado}, role=${assocGestor.role}` : 'sem associação'
+    );
+    // Não é super admin: o destino pós-login é o painel do condomínio, obtido
+    // pelo caminho do condomínio — nunca pelo caminho global.
+    verificar(
+      'Gestor demo: role_global NULL (sem privilégio global)',
+      !gestorDemo.role_global,
+      gestorDemo.role_global || '(NULL)'
+    );
+    // Trava a regressão: o destino pós-login deixa de depender de `users.role`.
+    // Com o papel de condomínio a decidir, o mesmo resultado (painel) tem de
+    // sair independentemente do valor legado de `users.role`.
+    const tenant = require('../helpers/tenant');
+    const destinoReal = tenant.destinoInicial({ meus: [{ id: cid, role: 'admin' }], ativo: cid, user: gestorDemo });
+    const destinoSeLegado = tenant.destinoInicial({
+      meus: [{ id: cid, role: 'admin' }],
+      ativo: cid,
+      user: { id: gestorDemo.id, role: 'condomino', role_global: null },
+    });
+    verificar(
+      'Destino pós-login não depende de users.role',
+      destinoReal.redirecionar === '/admin' && destinoSeLegado.redirecionar === '/admin',
+      `real=${destinoReal.redirecionar}, legado='condomino'→${destinoSeLegado.redirecionar}`
+    );
+  }
 
   // 9. Movimentos anteriores ao período atual (para o "Saldo anterior")
   const anoAtual = new Date().getFullYear();

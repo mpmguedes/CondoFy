@@ -2,7 +2,6 @@ const express = require('express');
 const multer = require('multer');
 const { Op } = require('sequelize');
 const { Documento, Pessoa, Categoria, DocumentoCategoria, Recibo, Fracao, Quota } = require('../models');
-const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 // StorageProvider: os documentos falam com a fachada helpers/storage

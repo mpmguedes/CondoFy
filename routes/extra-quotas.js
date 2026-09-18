@@ -12,7 +12,6 @@ const {
   Recibo,
   ReciboExtraParcela,
 } = require('../models');
-const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const { toCents, fromCents } = require('../helpers/money');

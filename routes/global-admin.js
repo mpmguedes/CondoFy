@@ -2,6 +2,13 @@
 // Administração GLOBAL (Super Admin) — condomínios, utilizadores,
 // associações, auditoria e suporte. Apenas utilizadores role_global =
 // 'super_admin' têm acesso a estas rotas.
+//
+// Namespace: este router está montado em `/global` (app.js). Os URLs
+// `/admin/global*` continuam a responder através de um shim de compatibilidade
+// que redireciona para `/global*`. Por isso, e enquanto as vistas mantiverem
+// os links antigos `/admin/global…`, os redirects internos usam `urlGlobal()`
+// — devolvem o caminho LEGADO, que é o que o browser acabou de pedir, evitando
+// um salto extra via shim em cada POST→GET.
 // ─────────────────────────────────────────────────────────────────────
 const express = require('express');
 const { Op } = require('sequelize');
@@ -19,15 +26,30 @@ const { audit } = require('../helpers/audit');
 const tenant = require('../helpers/tenant');
 const { validarNif } = require('../public/js/validacao-fiscal');
 
+// Prefixo do namespace global nos URLs gerados pelo router. Mantém-se
+// `/admin/global` por compatibilidade com as vistas e com os marcadores e
+// links já existentes; o shim do app.js garante que continua a funcionar.
+const PREFIXO_GLOBAL = '/admin/global';
+
 const router = express.Router();
 router.use(eAutenticado);
 
-// Guarda: apenas Super Admin global.
+// Guarda: apenas Super Admin global — decidida EXCLUSIVAMENTE por
+// `users.role_global` (`tenant.eSuperAdmin`). Um admin ou gestor de condomínio
+// nunca entra aqui, mesmo que `users.role` seja 'admin' (coluna legado).
 router.use((req, res, next) => {
   if (tenant.eSuperAdmin(req.user)) return next();
   req.flash('error_msg', 'Acesso restrito à administração global.');
   return res.redirect('/');
 });
+
+// Caminho de um recurso da administração global, no prefixo público atual.
+// Deriva o prefixo da MONTAGEM (`req.baseUrl`) para não haver duas verdades
+// sobre o namespace; cai no prefixo de compatibilidade quando não há pedido
+// (chamadas directas em testes).
+function urlGlobal(req, resto = '') {
+  return (req && req.baseUrl ? req.baseUrl : PREFIXO_GLOBAL) + resto;
+}
 
 const TABELAS_ELIMINAR = ['fracoes', 'pessoas', 'contactos_pessoa', 'quotas', 'pagamentos', 'recibos', 'documentos', 'assembleias', 'despesas', 'contas_bancarias', 'orcamentos', 'extra_quotas', 'avisos'];
 
@@ -71,13 +93,13 @@ router.post('/global/condominios', async (req, res) => {
   const designacao = String(req.body.designacao || '').trim();
   if (!designacao) {
     req.flash('error_msg', 'Indique o nome do condomínio.');
-    return res.redirect('/admin/global/condominios');
+    return res.redirect(urlGlobal(req, '/condominios'));
   }
   try {
     const nifValidado = validarNif(req.body.nif);
     if (!nifValidado.ok) {
       req.flash('error_msg', nifValidado.mensagem);
-      return res.redirect('/admin/global/condominios');
+      return res.redirect(urlGlobal(req, '/condominios'));
     }
     const condominio = await Condominio.create({
       designacao,
@@ -89,11 +111,11 @@ router.post('/global/condominios', async (req, res) => {
     });
     await audit({ userId: req.user.id, acao: 'condominio_criado', entidade: 'Condominio', entidadeId: condominio.id });
     req.flash('success_msg', `Condomínio "${condominio.designacao}" criado.`);
-    return res.redirect('/admin/global/condominios');
+    return res.redirect(urlGlobal(req, '/condominios'));
   } catch (err) {
     console.error('[global-condominio]', err);
     req.flash('error_msg', 'Erro ao criar o condomínio.');
-    return res.redirect('/admin/global/condominios');
+    return res.redirect(urlGlobal(req, '/condominios'));
   }
 });
 
@@ -102,7 +124,7 @@ router.post('/global/condominios/:id/estado', async (req, res) => {
   const condominio = await Condominio.findByPk(req.params.id);
   if (!condominio) {
     req.flash('error_msg', 'Condomínio não encontrado.');
-    return res.redirect('/admin/global/condominios');
+    return res.redirect(urlGlobal(req, '/condominios'));
   }
   const proximo = condominio.estado === 'ativo' ? 'inativo' : 'ativo';
   await condominio.update({ estado: proximo });
@@ -113,7 +135,7 @@ router.post('/global/condominios/:id/estado', async (req, res) => {
     entidadeId: condominio.id,
   });
   req.flash('success_msg', proximo === 'inativo' ? 'Condomínio desativado.' : 'Condomínio reativado.');
-  return res.redirect('/admin/global/condominios');
+  return res.redirect(urlGlobal(req, '/condominios'));
 });
 
 // Eliminação permanente — requer condomínio DESATIVADO + confirmação forte.
@@ -121,15 +143,15 @@ router.post('/global/condominios/:id/eliminar', async (req, res) => {
   const condominio = await Condominio.findByPk(req.params.id);
   if (!condominio) {
     req.flash('error_msg', 'Condomínio não encontrado.');
-    return res.redirect('/admin/global/condominios');
+    return res.redirect(urlGlobal(req, '/condominios'));
   }
   if (String(req.body.confirmo || '').trim() !== 'ELIMINAR') {
     req.flash('error_msg', 'Confirmação inválida. Escreva ELIMINAR para confirmar a eliminação permanente.');
-    return res.redirect(`/admin/global/condominios/${condominio.id}`);
+    return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
   }
   if (condominio.estado !== 'inativo') {
     req.flash('error_msg', 'Para eliminar definitivamente, o condomínio tem de estar desativado primeiro.');
-    return res.redirect(`/admin/global/condominios/${condominio.id}`);
+    return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
   }
   const sequelize = require('../config/database');
   const t = await sequelize.transaction();
@@ -160,11 +182,11 @@ router.post('/global/condominios/:id/eliminar', async (req, res) => {
     await t.rollback();
     console.error('[global-eliminar]', err);
     req.flash('error_msg', 'Erro ao eliminar o condomínio.');
-    return res.redirect(`/admin/global/condominios/${condominio.id}`);
+    return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
   }
   await audit({ userId: req.user.id, acao: 'condominio_eliminado', entidade: 'Condominio', entidadeId: req.params.id });
   req.flash('success_msg', 'Condomínio eliminado permanentemente.');
-  return res.redirect('/admin/global/condominios');
+  return res.redirect(urlGlobal(req, '/condominios'));
 });
 
 // Suporte: entrar num condomínio (define o ativo da sessão e segue).
@@ -172,7 +194,7 @@ router.post('/global/condominios/:id/entrar', async (req, res) => {
   const ok = await tenant.entrarCondominio(req, parseInt(req.params.id, 10));
   if (!ok) {
     req.flash('error_msg', 'Não foi possível entrar no condomínio.');
-    return res.redirect('/admin/global/condominios');
+    return res.redirect(urlGlobal(req, '/condominios'));
   }
   await audit({ userId: req.user.id, acao: 'super_admin_entrar_condominio', entidade: 'Condominio', entidadeId: req.params.id }).catch(() => {});
   return res.redirect('/');
@@ -183,7 +205,7 @@ router.get('/global/condominios/:id', async (req, res) => {
   const condominio = await Condominio.findByPk(req.params.id);
   if (!condominio) {
     req.flash('error_msg', 'Condomínio não encontrado.');
-    return res.redirect('/admin/global/condominios');
+    return res.redirect(urlGlobal(req, '/condominios'));
   }
   const associacoes = await UserCondominio.findAll({
     where: { condominio_id: condominio.id },
@@ -203,18 +225,18 @@ router.post('/global/condominios/:id/associacoes', async (req, res) => {
   const condominio = await Condominio.findByPk(req.params.id);
   if (!condominio) {
     req.flash('error_msg', 'Condomínio não encontrado.');
-    return res.redirect('/admin/global/condominios');
+    return res.redirect(urlGlobal(req, '/condominios'));
   }
   const email = String(req.body.email || '').trim().toLowerCase();
   const papel = ['admin', 'gestor', 'leitura'].includes(req.body.role) ? req.body.role : 'leitura';
   if (!email) {
     req.flash('error_msg', 'Indique o email do utilizador.');
-    return res.redirect(`/admin/global/condominios/${condominio.id}`);
+    return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
   }
   const utilizador = await User.findOne({ where: { email } });
   if (!utilizador) {
     req.flash('error_msg', 'Não existe nenhum utilizador com esse email.');
-    return res.redirect(`/admin/global/condominios/${condominio.id}`);
+    return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
   }
   const [associacao] = await UserCondominio.findOrCreate({
     where: { utilizador_id: utilizador.id, condominio_id: condominio.id },
@@ -248,34 +270,34 @@ router.post('/global/condominios/:id/associacoes', async (req, res) => {
   } else {
     req.flash('success_msg', `Associação atualizada (${email} → ${papel}).`);
   }
-  return res.redirect(`/admin/global/condominios/${condominio.id}`);
+  return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
 });
 
 router.post('/global/associacoes/:id/estado', async (req, res) => {
   const assoc = await UserCondominio.findByPk(req.params.id);
   if (!assoc) {
     req.flash('error_msg', 'Associação não encontrada.');
-    return res.redirect('/admin/global/condominios');
+    return res.redirect(urlGlobal(req, '/condominios'));
   }
   const papel = ['admin', 'gestor', 'leitura'].includes(req.body.role) ? req.body.role : assoc.role;
   const estado = req.body.estado === 'ativo' ? 'ativo' : req.body.estado === 'inativo' ? 'inativo' : assoc.estado;
   await assoc.update({ role: papel, estado });
   await audit({ userId: req.user.id, acao: 'alterar_associacao_condominio', entidade: 'Condominio', entidadeId: assoc.condominio_id, detalhes: { papel, estado } });
   req.flash('success_msg', 'Associação atualizada.');
-  return res.redirect(`/admin/global/condominios/${assoc.condominio_id}`);
+  return res.redirect(urlGlobal(req, `/condominios/${assoc.condominio_id}`));
 });
 
 router.post('/global/associacoes/:id/eliminar', async (req, res) => {
   const assoc = await UserCondominio.findByPk(req.params.id);
   if (!assoc) {
     req.flash('error_msg', 'Associação não encontrada.');
-    return res.redirect('/admin/global/condominios');
+    return res.redirect(urlGlobal(req, '/condominios'));
   }
   const condominioId = assoc.condominio_id;
   await assoc.destroy();
   await audit({ userId: req.user.id, acao: 'remover_associacao_condominio', entidade: 'Condominio', entidadeId: condominioId });
   req.flash('success_msg', 'Associação removida.');
-  return res.redirect(`/admin/global/condominios/${condominioId}`);
+  return res.redirect(urlGlobal(req, `/condominios/${condominioId}`));
 });
 
 // ── Utilizadores (global) ───────────────────────────────────────────
@@ -300,17 +322,17 @@ router.post('/global/utilizadores/:id/global', async (req, res) => {
   const utilizador = await User.findByPk(req.params.id);
   if (!utilizador) {
     req.flash('error_msg', 'Utilizador não encontrado.');
-    return res.redirect('/admin/global/utilizadores');
+    return res.redirect(urlGlobal(req, '/utilizadores'));
   }
   if (utilizador.id === req.user.id) {
     req.flash('error_msg', 'Não pode remover o seu próprio papel de Super Admin.');
-    return res.redirect('/admin/global/utilizadores');
+    return res.redirect(urlGlobal(req, '/utilizadores'));
   }
   const novo = req.body.role === 'super_admin' ? 'super_admin' : null;
   await utilizador.update({ role_global: novo });
   await audit({ userId: req.user.id, acao: novo ? 'promover_super_admin' : 'remover_super_admin', entidade: 'User', entidadeId: utilizador.id });
   req.flash('success_msg', novo ? 'Utilizador promovido a Super Admin global.' : 'Papel global removido.');
-  return res.redirect('/admin/global/utilizadores');
+  return res.redirect(urlGlobal(req, '/utilizadores'));
 });
 
 // ── Auditoria global ────────────────────────────────────────────────

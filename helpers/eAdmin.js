@@ -1,17 +1,16 @@
-// Middlewares de proteção de rotas.
-// eAutenticado  → qualquer utilizador com sessão iniciada
-// eAdmin        → administrador (papel 'admin' OU Super Admin global)
+// Middlewares de proteção de rotas — AUTENTICAÇÃO apenas.
+//
+// Este ficheiro tinha também `eAdmin`, que decidia por `users.role` (coluna
+// LEGADO) e por isso autorizava/negava consoante um papel que não corresponde
+// ao do condomínio ativo. Foi removido; a autorização passa a usar, por âmbito:
+//
+//   GLOBAL (GesCondu)  → `tenant.eSuperAdmin`  (`users.role_global`)
+//   CONDOMÍNIO         → `tenant.comCondominioAtivo` + `tenant.comPapel(...)`
+//                        (`utilizador_condominios.role`, com o modo suporte do
+//                        Super Admin resolvido dentro de `comCondominioAtivo`)
+//   AUTENTICAÇÃO       → `eAutenticado` (abaixo)
 
 module.exports = {
-  eAdmin(req, res, next) {
-    const global = req.user && req.user.role_global === 'super_admin';
-    if (req.isAuthenticated() && req.user && (req.user.role === 'admin' || global)) {
-      return next();
-    }
-    req.flash('error_msg', 'Precisa de permissões de administrador.');
-    return res.redirect('/');
-  },
-
   eAutenticado(req, res, next) {
     if (req.isAuthenticated()) {
       return next();

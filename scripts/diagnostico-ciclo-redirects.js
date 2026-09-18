@@ -167,18 +167,31 @@ async function contarUserCondominioDuplicados(utilizadorId, condominioId) {
 // Reproduz, em SQL, exatamente o que cada guard consulta:
 //   listarCondominios  → uc.estado='ativo' AND c.estado='ativo'
 //   associacaoAtiva    → uc.estado='ativo'
-//   app.js isAdmin     → users.role='admin' OR users.role_global='super_admin'
-//   destinoAposLogin   → depois de listarCondominios, decide por users.role
+//   destinoInicial     → papel no CONDOMINIO ATIVO (uc.role), nao users.role
+//
+// NOTA (arquitetura corrigida): `users.role` deixou de ser fonte de
+// autorizacao, destino e UI. O eixo global e `users.role_global`; o eixo do
+// condominio e `utilizador_condominios.role`. A coluna `users.role` mantem-se
+// apenas por compatibilidade e a linha abaixo e INFORMATIVA (nunca decide).
 function avaliar({ user, cond, assoc, associacoes, nDuplicados, listarCondominios, associacaoAtiva, globalAdmin }) {
   const linhas = [];
+  const papelCond = assoc ? assoc.role : null;
+  const eAdminCond = papelCond === 'admin' || papelCond === 'gestor';
 
   linhas.push({
-    guard: 'users.role',
+    guard: 'users.role (legado)',
     valor: txt(vazio(user.role), 20),
-    efeito: user.role === 'admin'
-      ? "destinoAposLogin() → '/admin' (routes/index.js:16)"
-      : "destinoAposLogin() → '/condomino' (routes/index.js:16)",
-    veredicto: user.role === 'admin' ? 'OK' : 'atencao',
+    efeito: 'INFORMATIVO: coluna legado, ja nao decide destino nem autorizacao',
+    veredicto: 'OK',
+  });
+
+  linhas.push({
+    guard: 'uc.role (condominio)',
+    valor: txt(vazio(papelCond), 20),
+    efeito: eAdminCond
+      ? `destinoInicial() → '/admin' (papel '${papelCond}')`
+      : "destinoInicial() → '/condomino' (sem papel administrativo)",
+    veredicto: eAdminCond ? 'OK' : 'atencao',
   });
 
   linhas.push({
@@ -282,22 +295,41 @@ function avaliar({ user, cond, assoc, associacoes, nDuplicados, listarCondominio
 }
 
 // ── 3. Ciclo previsto a partir do estado ──────────────────────────────
-// Reproduz o fluxo exato do codigo atual:
-//   GET /            routes/index.js:26-42   → destinoAposLogin()
-//   POST /condominios/:id/entrar  routes/condominios.js:105-120
-//   GET /admin       routes/admin.js:49-50 (comCondominioAtivo + comPapel('admin'))
-//   GET /condominios routes/condominios.js:25
-//   GET /condomino   routes/condomino.js:38-40 + condomino-conta.js:38-44
+// Reproduz o fluxo do codigo JA CORRIGIDO:
+//   GET /            routes/index.js   → tenent.destinoInicial()
+//   POST /condominios/:id/entrar  routes/condominios.js
+//   GET /admin       routes/admin.js (comCondominioAtivo + comPapel('admin'))
+//   GET /admin/global  shim 302 → /global* (app.js)
+//   GET /global      routes/global-admin.js (guarda eSuperAdmin)
+//   GET /condominios routes/condominios.js
+//   GET /condomino   routes/condomino.js + condomino-conta.js
+//
+// O destino deixou de depender de `users.role`: passou a depender do papel no
+// CONDOMINIO ATIVO (uc.role), com o modo suporte do Super Admin. O ciclo A
+// (`/ ⇄ /admin`) so volta a acontecer se o papel do condominio nao for
+// administrativo — e mesmo nesse caso o portal e o destino concordam, porque
+// ambos leem a mesma fonte.
 function preverFluxo({ user, cond, assoc, listarCondominios, associacaoAtiva, globalAdmin }) {
-  const roleAdmin = user.role === 'admin' || user.role_global === 'super_admin';
-  const papelAdmin = assoc && assoc.role === 'admin';
-  const associacaoOk = Boolean(assoc) || user.role_global === 'super_admin';
-  const condOk = listarCondominios || user.role_global === 'super_admin';
+  const eGlobal = Boolean(globalAdmin);
+  const papelCond = assoc ? assoc.role : null;
+  const papelAdmin = papelCond === 'admin';
+  const papelGestor = papelCond === 'gestor';
+  const modoSuporte = eGlobal && !assoc;
+  const entradaPainel = modoSuporte || papelAdmin || papelGestor;
+  const associacaoOk = Boolean(assoc) || eGlobal;
+  const condOk = listarCondominios || eGlobal;
 
   const evento = [];
 
-  // GET / (sem condomínio ativo na sessão) — decide destinoAposLogin().
-  evento.push({ de: 'GET /', para: "GET /condominios", razao: "sem condominio ativo na sessao → 'limparAtivo' (routes/index.js:13)" });
+  // GET / (sem condomínio ativo na sessão) — decide destinoInicial().
+  if (eGlobal) {
+    evento.push({ de: 'GET /', para: 'GET /admin/global', razao: "privilegio global sem condominio ativo → painel global (helpers/tenant.js: destinoInicial)" });
+    evento.push({ de: 'GET /admin/global', para: 'GET /global', razao: 'shim 302 (app.js): namespace global separado do backoffice' });
+    evento.push({ de: 'GET /global', para: 'HTTP 200', razao: 'guarda eSuperAdmin passa (routes/global-admin.js)' });
+    return { ciclo: null, evento };
+  }
+
+  evento.push({ de: 'GET /', para: "GET /condominios", razao: "sem condominio ativo na sessao → 'limparAtivo' (helpers/tenant.js: destinoInicial)" });
   evento.push({
     de: 'GET /condominios',
     para: listarCondominios ? `POST /condominios/${CONDOMINIO_ID}/entrar` : `(lista SEM #${CONDOMINIO_ID})`,
@@ -307,57 +339,42 @@ function preverFluxo({ user, cond, assoc, listarCondominios, associacaoAtiva, gl
     evento.push({
       de: `POST /condominios/${CONDOMINIO_ID}/entrar`,
       para: 'GET /condominios',
-      razao: 'entrarCondominio()=false (helpers/tenant.js:55) → redirect /condominios (routes/condominios.js:110)',
+      razao: 'entrarCondominio()=false (helpers/tenant.js) → redirect /condominios',
     });
     return { ciclo: 'B', evento };
   }
   evento.push({
     de: `POST /condominios/${CONDOMINIO_ID}/entrar`,
     para: 'GET /',
-    razao: 'entrada aceite → redirect / (routes/condominios.js:119)',
+    razao: 'entrada aceite → redirect / (routes/condominios.js)',
   });
 
-  // GET / com o condomínio ativo #5 já na sessão
-  const destino = roleAdmin ? '/admin' : '/condomino';
-  evento.push({ de: 'GET /', para: `GET ${destino}`, razao: 'destinoAposLogin() (routes/index.js:16)' });
+  // GET / com o condomínio ativo #5 já na sessão.
+  const destino = entradaPainel ? '/admin' : '/condomino';
+  evento.push({ de: 'GET /', para: `GET ${destino}`, razao: `destinoInicial() pelo uc.role='${papelCond || '(nenhum)'}' (helpers/tenant.js)` });
 
   if (destino === '/admin') {
     if (!condOk) {
-      evento.push({ de: 'GET /admin', para: "GET /condominios", razao: 'comCondominioAtivo: condominio indisponivel (helpers/tenant.js:102)' });
-      evento.push({ de: 'GET /condominios', para: `POST /condominios/${CONDOMINIO_ID}/entrar`, razao: 'tenta voltar a entrar' });
-      evento.push({ de: `POST /condominios/${CONDOMINIO_ID}/entrar`, para: 'GET /condominios', razao: 'entrarCondominio()=false (helpers/tenant.js:55)' });
+      evento.push({ de: 'GET /admin', para: 'GET /condominios', razao: 'comCondominioAtivo: condominio indisponivel (helpers/tenant.js)' });
       return { ciclo: 'B', evento };
     }
     if (!associacaoOk) {
-      evento.push({ de: 'GET /admin', para: "GET /condominios", razao: 'comCondominioAtivo: sem associacao (helpers/tenant.js:109-113)' });
-      evento.push({ de: 'GET /condominios', para: `POST /condominios/${CONDOMINIO_ID}/entrar`, razao: 'tenta voltar a entrar' });
-      evento.push({ de: `POST /condominios/${CONDOMINIO_ID}/entrar`, para: 'GET /condominios', razao: 'entrarCondominio()=false (helpers/tenant.js:55)' });
+      evento.push({ de: 'GET /admin', para: 'GET /condominios', razao: 'comCondominioAtivo: sem associacao (helpers/tenant.js)' });
       return { ciclo: 'B', evento };
     }
-    if (!papelAdmin) {
-      const papel = assoc ? assoc.role : '(super_admin)';
-      evento.push({ de: 'GET /admin', para: 'GET /', razao: `comPapel('admin') recusa papel '${papel}' (helpers/tenant.js:124-126)` });
-      evento.push({ de: 'GET /', para: 'GET /admin', razao: 'destinoAposLogin() volta a mandar para /admin (routes/index.js:16)' });
-      return { ciclo: 'A', evento };
-    }
-    evento.push({ de: 'GET /admin', para: 'HTTP 200', razao: 'comCondominioAtivo + comPapel(admin) passam' });
+    // O papel que decide o destino e o MESMO que o guard consulta: ja nao ha
+    // duas fontes a discordar, logo o ciclo A nao se pode formar.
+    evento.push({ de: 'GET /admin', para: 'HTTP 200', razao: 'comCondominioAtivo + comPapel (mesma fonte: uc.role)' });
     return { ciclo: null, evento };
   }
 
-  // destino /condomino
-  // destinoAposLogin() decide por `users.role` (legado); o código do portal
-  // decide por `res.locals.isAdmin` (global + papel por condomínio). Se as duas
-  // fontes discordarem, o portal expulsa para '/' e '/' volta a mandar para cá.
-  const papelPortal = assoc ? assoc.role : null; // admin/gestor ⇒ isAdmin (app.js:133)
-  const isAdminEfetivo = globalAdmin || papelPortal === 'admin' || papelPortal === 'gestor';
+  // destino /condomino: o portal le o MESMO papel (res.locals.isAdmin vem de
+  // papelNoAtivo, nao de users.role), pelo que a recusa deixa de ser possivel.
+  const isAdminEfetivo = eGlobal || papelAdmin || papelGestor;
   if (isAdminEfetivo) {
-    evento.push({ de: 'GET /condomino', para: 'GET /', razao: 'res.locals.isAdmin=true → portal expulsa (routes/condomino-conta.js:42)' });
-    evento.push({ de: 'GET /', para: `GET ${roleAdmin ? '/admin' : '/condomino'}`, razao: 'destinoAposLogin() decide por users.role (routes/index.js:16)' });
-    if (!roleAdmin) {
-      evento.push({ de: 'GET /condomino', para: 'GET /', razao: `ciclo confirmado: papel '${papelPortal}' marca isAdmin mas users.role='${user.role}'` });
-      return { ciclo: 'C', evento };
-    }
-    return { ciclo: null, evento };
+    evento.push({ de: 'GET /condomino', para: 'GET /', razao: 'res.locals.isAdmin=true → portal expulsa (routes/condomino-conta.js)' });
+    evento.push({ de: 'GET /', para: `GET ${entradaPainel ? '/admin' : '/condomino'}`, razao: 'destinoInicial() le o MESMO papel (nao ha divergencia)' });
+    return { ciclo: 'A', evento };
   }
   evento.push({ de: 'GET /condomino', para: 'HTTP 200', razao: 'portal acessivel' });
   return { ciclo: null, evento };
@@ -500,7 +517,7 @@ async function main() {
     console.log('  users #' + user.id);
     console.log('    nome .................... ' + vazio(user.nome));
     console.log('    email ................... ' + vazio(user.email));
-    console.log('    role .................... ' + txtFim(vazio(user.role), 0) + '   <── decide destinoAposLogin()');
+    console.log('    role .................... ' + txtFim(vazio(user.role), 0) + '   <── LEGADO (ja nao decide nada)');
     console.log('    role_global ............. ' + vazio(user.role_global));
     console.log('    pessoa_id ............... ' + vazio(user.pessoa_id));
     console.log('    ativo ................... ' + vazio(user.ativo));

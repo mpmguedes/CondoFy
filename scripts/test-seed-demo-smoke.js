@@ -446,11 +446,13 @@ async function correrCenarioReparacao(linhas, { rotulo, assocRole, assocEstado, 
     }
 
     // 1. AS DUAS fontes de autorização, coerentes:
-    //    `destinoAposLogin` decide por `users.role`; `comPapel('admin')`
-    //    decide por `utilizador_condominios.role` (e só se `estado='ativo'`).
-    //    Se discordarem → `/` ⇄ `/admin` = ERR_TOO_MANY_REDIRECTS.
-    assert.strictEqual(estado.user.role, 'admin', "users.role reparado para 'admin' (destino do login)");
-    assert.strictEqual(estado.associacao.role, 'admin', "utilizador_condominios.role = 'admin' (comPapel)");
+    //    Após a correção da arquitetura, o destino pós-login e a guarda do
+    //    backoffice leem a MESMA fonte (`utilizador_condominios.role` +
+    //    `estado='ativo'`), pelo que o ciclo `/` ⇄ `/admin` deixou de ser
+    //    possível por construção. `users.role` é legado, mantido por
+    //    compatibilidade — o reparador continua a normalizá-lo para 'admin'.
+    assert.strictEqual(estado.user.role, 'admin', "users.role normalizado para 'admin' (legado/compatibilidade)");
+    assert.strictEqual(estado.associacao.role, 'admin', "utilizador_condominios.role = 'admin' (fonte do backoffice)");
     assert.strictEqual(estado.associacao.estado, 'ativo', "utilizador_condominios.estado = 'ativo' (associacaoAtiva)");
     // 2. A conta passou a estar ligada a uma Pessoa (remove o aviso do portal).
     assert.ok(estado.user.pessoa_id, 'users.pessoa_id preenchido');
@@ -478,7 +480,7 @@ async function correrCenarioReparacao(linhas, { rotulo, assocRole, assocEstado, 
     }
     assert.strictEqual(res2.alteracoes, 0, `a 2.ª execução não altera nada (${rotulo})`);
     // E depois da 2.ª passagem as duas fontes continuam coerentes.
-    assert.strictEqual(estado.user.role, 'admin', 'users.role mantém-se admin');
+    assert.strictEqual(estado.user.role, 'admin', 'users.role mantém-se admin (legado)');
     assert.strictEqual(estado.associacao.role, 'admin', 'a associação mantém-se admin');
     assert.strictEqual(estado.associacao.estado, 'ativo', "a associação mantém-se 'ativo'");
     // Nunca se acumulam titularidades (nem na 1.ª, nem na 2.ª passagem).

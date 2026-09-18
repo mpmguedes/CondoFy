@@ -93,7 +93,18 @@ app.use(async (req, res, next) => {
   res.locals.error_msg = req.flash('error_msg');
   res.locals.error = req.flash('error');
   res.locals.user = req.user || null;
-  res.locals.isAdmin = !!(req.user && (req.user.role === 'admin' || req.user.role_global === 'super_admin'));
+  // `isAdmin` = «esta conta tem interface de GESTÃO no contexto atual?».
+  // NÃO vem de `users.role` (legado): o que decide é o papel no CONDOMÍNIO
+  // ATIVO (`utilizador_condominios.role`), resolvido mais abaixo quando o
+  // contexto é carregado — admin e gestor usam o backoffice. O Super Admin
+  // mantém a interface de gestão porque pode entrar em suporte em qualquer
+  // condomínio ativo. Sem contexto de condomínio fica false: quem não tem
+  // condomínio ativo só pode ver a escolha de condomínio.
+  res.locals.isAdmin = false;
+  // `isSuperAdmin` (privilégio GLOBAL, só para o menu de administração global)
+  // é distinto de `isAdmin` (gestão de um condomínio): nunca se usa um como
+  // substituto do outro.
+  res.locals.isSuperAdmin = Boolean(req.user && tenant.eSuperAdmin(req.user));
   res.locals.meusCondominios = [];
   res.locals.condominioAtivo = null;
   // Contexto de condomínio: só existe para quem tem sessão. Num pedido sem
@@ -126,11 +137,15 @@ app.use(async (req, res, next) => {
         }
       }
       res.locals.condominioAtivo = escolhido;
-      // Interface conforme o papel no condomínio ativo (admin/gestor vêm a
-      // navegação de gestão; leitura usa a área do condómino).
+      // Interface conforme o papel no condomínio ATIVO (admin/gestor vêm a
+      // navegação de gestão; leitura usa a área do condómino). O papel é
+      // resolvido pelo tenant (associação real; modo suporte do Super Admin
+      // quando não há associação) e substitui a promoção que existia antes por
+      // `users.role` — legado que não corresponde ao condomínio ativo.
       if (escolhido) {
         const papel = await tenant.papelNoAtivo(req).catch(() => null);
         if (papel === 'admin' || papel === 'gestor') res.locals.isAdmin = true;
+        res.locals.eSuperAdmin = tenant.eSuperAdmin(req.user);
       }
       if (escolhido) {
         req.session.condominio_ativo_id = escolhido.id;
@@ -194,7 +209,25 @@ app.use('/', require('./routes/auth'));
 // Páginas legais públicas (Política de Privacidade e Termos de Utilização):
 // sem sessão, sem condomínio ativo e sem permissões — ver routes/publicas.js.
 app.use('/', require('./routes/publicas'));
-app.use('/admin', require('./routes/global-admin'));
+// ── Administração GLOBAL (GesCondu) — namespace PRÓPRIO: /global ────
+// Antes estava montado em `/admin`, o que colidia com o backoffice do
+// condomínio: o router global declara a sua guarda com `router.use`, que corre
+// em TODOS os pedidos que entram no router (mesmo sem correspondência de rota),
+// pelo que `GET /admin` de um admin/gestor de condomínio era interceptado e
+// devolvia `302 /` — e `routes/admin.js`, montado depois, nunca era alcançado.
+// Causa do ciclo `/ → /admin → / → …`.
+// Agora `/admin` é EXCLUSIVAMENTE o backoffice do condomínio.
+app.use('/global', require('./routes/global-admin'));
+// Compatibilidade: os URLs antigos `/admin/global*` continuam a responder,
+// redirecionados (302, para não ser cacheado como permanente por browsers ou
+// pelo proxy) para o equivalente em `/global*`. Preserva o resto do caminho e
+// a query string. Fica ANTES dos routers de `/admin` e é montado por prefixo
+// exato de subárvore (`/admin/global`), pelo que não captura `/admin` nem
+// `/admin/global-outra-coisa`.
+app.use('/admin/global', (req, res) => {
+  const resto = req.originalUrl.slice('/admin/global'.length);
+  return res.redirect(302, '/global' + resto);
+});
 app.use('/admin', require('./routes/admin'));
 const rotasQuotasModulo = require('./routes/quotas-modulo');
 app.use('/admin', rotasQuotasModulo);

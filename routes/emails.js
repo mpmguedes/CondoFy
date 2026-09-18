@@ -4,7 +4,6 @@
 const express = require('express');
 const { Op } = require('sequelize');
 const { EmailFila, Documento, Aviso, User } = require('../models');
-const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const mailer = require('../helpers/mailer');

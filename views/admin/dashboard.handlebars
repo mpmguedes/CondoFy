@@ -115,7 +115,14 @@
 
     {{#if (or (gt sistema.filaPendentes 0) (gt sistema.filaErros 0))}}
     <div class="atencao-estado small">
+      {{!-- Emails exige `comPapel('admin')` (routes/emails.js): o gestor vê a
+           contagem mas não um link que o expulsaria para `/`. O papel vem de
+           `condominioAtivo.role` (associação ativa), nunca de `users.role`. --}}
+      {{#if (ne condominioAtivo.role 'gestor')}}
       <div>Fila de emails: <a href="/admin/emails">{{sistema.filaPendentes}} por enviar · <span class="{{#if (gt sistema.filaErros 0)}}text-danger{{/if}}">{{sistema.filaErros}} com erro</span></a></div>
+      {{else}}
+      <div>Fila de emails: {{sistema.filaPendentes}} por enviar · <span class="{{#if (gt sistema.filaErros 0)}}text-danger{{/if}}">{{sistema.filaErros}} com erro</span></div>
+      {{/if}}
     </div>
     {{/if}}
   </div>
@@ -201,7 +208,11 @@
     <div class="card h-100">
       <div class="card-header bg-white d-flex justify-content-between align-items-center">
         <span class="fw-semibold">Atividade recente</span>
+        {{!-- O registo de auditoria vive em `routes/configuracao.js`
+             (`comPapel('admin')`): escondido ao gestor, como na navegação. --}}
+        {{#if (ne condominioAtivo.role 'gestor')}}
         <a href="/admin/config/auditoria" class="small">Ver registo →</a>
+        {{/if}}
       </div>
       {{#if atividade.length}}
       <ul class="list-group list-group-flush">
@@ -229,9 +240,17 @@
   <div class="card-body py-2 small">
     <div class="painel-strip">
       <a class="strip-item text-decoration-none" href="/admin/documentos"><div class="strip-label">Documentos</div><div class="strip-value">{{nDriveDocs}}</div></a>
+      {{!-- Emails e Automações exigem `comPapel('admin')` (routes/emails.js e
+           routes/configuracao.js): escondidos ao gestor, como na navegação. O
+           papel vem de `condominioAtivo.role` (associação ativa), nunca de
+           `users.role`. Documentos e Fornecedores ficam: exigem só `gestor`. --}}
+      {{#if (ne condominioAtivo.role 'gestor')}}
       <a class="strip-item text-decoration-none" href="/admin/emails"><div class="strip-label">Emails</div><div class="strip-value">{{nEmailsEnviados}}<span class="text-muted small"> · {{sistema.filaErros}} erros</span></div></a>
+      {{/if}}
       <a class="strip-item text-decoration-none" href="/admin/fornecedores"><div class="strip-label">Fornecedores</div><div class="strip-value">{{nFornecedores}} <span class="text-muted small">ativos</span></div></a>
+      {{#if (ne condominioAtivo.role 'gestor')}}
       <a class="strip-item text-decoration-none" href="/admin/config/automacoes"><div class="strip-label">Automações</div><div class="strip-value">Configuradas</div></a>
+      {{/if}}
     </div>
   </div>
 </div>

@@ -4,7 +4,6 @@ const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
 const { Condominio, BackupLog, AuditLog, User } = require('../models');
-const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const { getCondominio, clearCondominioCache } = require('../helpers/condominio');

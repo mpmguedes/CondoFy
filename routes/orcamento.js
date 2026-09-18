@@ -12,7 +12,6 @@ const {
   Fracao,
   User,
 } = require('../models');
-const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const { toCents, fromCents, toNumber } = require('../helpers/money');

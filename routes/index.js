@@ -3,17 +3,13 @@ const tenant = require('../helpers/tenant');
 const homePublica = require('../helpers/home-publica');
 const router = express.Router();
 
-// Decisão pura do destino após autenticação (testável offline):
-//  - sem condomínio ESCOLHIDO válido na sessão → voltar sempre a
-//    "Os meus condomínios" (mesmo com apenas um condomínio);
-//  - com condomínio escolhido → dashboard conforme o papel (legado mantido).
+// Decisão pura do destino após autenticação (testável offline).
+// Delega a decisão no tenant (`tenant.destinoInicial`) — a autorização e o
+// contexto são decididos num só sítio, a partir do papel no CONDOMÍNIO ATIVO.
+// `users.role` é legado e já não decide o destino (era a origem do ciclo
+// `/ → /admin → /` em contas cujo papel de condomínio não era administrativo).
 function destinoAposLogin({ meus = [], ativo = null, user = {} } = {}) {
-  const valido = meus.some((c) => c.id === ativo);
-  if (!valido) {
-    return { redirecionar: '/condominios', limparAtivo: Boolean(ativo) };
-  }
-  const global = user.role_global === 'super_admin';
-  return { redirecionar: user.role === 'admin' || global ? '/admin' : '/condomino', limparAtivo: false };
+  return tenant.destinoInicial({ meus, ativo, user });
 }
 
 // Página inicial: LOGIN → "Os meus condomínios" → escolha → dashboard.

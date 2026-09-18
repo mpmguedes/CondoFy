@@ -25,7 +25,6 @@ const {
   ExtraQuotaParcela,
   Documento,
 } = require('../models');
-const { eAdmin } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
 const { toCents, fromCents, toNumber } = require('../helpers/money');
 const { resumoFracao } = require('../helpers/saldos');

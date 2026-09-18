@@ -158,17 +158,18 @@ function testarPortal() {
 }
 
 // ── 7b. O GESTOR tem de estar ligado a uma Pessoa e ter role 'admin' ──
-// Regressões que isto trava (ambas apanhadas em produção):
+// Regressões que isto trava:
 //  · sem `users.pessoa_id` → `contextoFracoes` devolve pessoa=null e TODAS as
 //    vistas do portal mostram «A sua conta ainda não está associada a um
-//    condómino neste condomínio»;
-//  · `users.role = 'condomino'` → `destinoAposLogin` manda o login para
-//    `/condomino` em vez de `/admin`.
+//    condómino neste condomínio».
+// `users.role` é LEGADO e já não decide o destino — o valor 'admin' mantém-se
+// apenas por compatibilidade. O destino vem da associação ativa
+// (`utilizador_condominios.role`), provada em 7b-ter e no teste da arquitetura.
 function testarGestorAssociado() {
   const blocoGestor = SEED.match(/const gestor = await User\.create\(\{[\s\S]*?\n  \}\);/);
   assert.ok(blocoGestor, 'User.create do gestor presente');
   const t = blocoGestor[0];
-  assert.ok(/role: 'admin'/.test(t), "users.role do gestor é 'admin' (destinoAposLogin → /admin)");
+  assert.ok(/role: 'admin'/.test(t), "users.role do gestor é 'admin' (legado, mantido por compatibilidade)");
   assert.ok(
     /pessoa_id:\s*pessoaGestor\.id/.test(t),
     'users.pessoa_id do gestor aponta para a Pessoa criada (portal deixa de mostrar o aviso)'
@@ -178,7 +179,9 @@ function testarGestorAssociado() {
   const posUser = SEED.indexOf('const gestor = await User.create({');
   assert.ok(posPessoa > 0 && posUser > posPessoa, 'a Pessoa do gestor é criada antes do User');
   assert.ok(/condominio_id: cid/.test(SEED.slice(posPessoa, posUser)), 'a Pessoa do gestor tem condominio_id');
-  // O papel por condomínio continua a ser 'admin' (comPapel('admin') em routes/admin.js).
+  // O papel por condomínio é 'admin' — é ESTA a fonte do acesso ao backoffice
+  // (routes/admin.js exige `comPapel('gestor')` no router e `admin` na gestão
+  // de utilizadores; 'admin' satisfaz ambos).
   assert.ok(
     /UserCondominio\.create\(\{ utilizador_id: gestor\.id, condominio_id: cid, role: 'admin'/.test(SEED),
     "a associação do gestor ao condomínio tem role 'admin'"
@@ -188,13 +191,13 @@ function testarGestorAssociado() {
 }
 
 // ── 7b-bis. `--reparar` garante AS DUAS fontes de autorização do gestor ─
-// O ciclo `/` → `/admin` → `/` (ERR_TOO_MANY_REDIRECTS) acontece quando as
-// duas fontes discordam: `destinoAposLogin` (routes/index.js:16) decide por
-// `users.role` e manda para `/admin`; `comPapel('admin')`
-// (helpers/tenant.js:121) decide por `utilizador_condominios.role` e devolve a
-// `/`. Além disso, `associacaoAtiva` (helpers/tenant.js:21) só conta a
-// associação com `estado = 'ativo'` — uma linha inativa é o mesmo que não
-// existir. O reparador tem de garantir `role = 'admin'` E `estado = 'ativo'`.
+// O ciclo `/` → `/admin` → `/` (ERR_TOO_MANY_REDIRECTS) acontecia quando as
+// duas fontes discordavam. A arquitetura foi corrigida (o destino e a guarda
+// leem agora a MESMA fonte — `utilizador_condominios.role`), mas o reparador
+// continua a ter de garantir `role = 'admin'` E `estado = 'ativo'`: sem uma
+// associação ATIVA o gestor perde o acesso ao backoffice, porque
+// `associacaoAtiva` (helpers/tenant.js) só conta as linhas com
+// `estado = 'ativo'` — uma linha inativa é o mesmo que não existir.
 function testarReparacaoAssociacao() {
   const inicio = SEED.indexOf('async function repararGestorDemo(');
   assert.ok(inicio > 0, 'repararGestorDemo presente');

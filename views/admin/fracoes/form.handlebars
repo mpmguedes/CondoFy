@@ -77,8 +77,12 @@
                 </div>
                 {{#unless this.temConta}}
                 <div class="small mt-1">
-                  <a href="/admin/utilizadores/novo">Criar conta por convite</a>
+                  {{#if (ne @root.condominioAtivo.role 'gestor')}}
+                  <a href="/admin/utilizadores/nova">Criar conta por convite</a>
                   <span class="text-muted">— sem conta, o titular fica registado mas não acede ao GesCondu. Cada proprietário tem a sua própria conta: nunca reutilize as credenciais do anterior.</span>
+                  {{else}}
+                  <span class="text-muted">Sem conta, o titular fica registado mas não acede ao GesCondu. A criação de contas por convite é feita por um administrador. Cada proprietário tem a sua própria conta: nunca reutilize as credenciais do anterior.</span>
+                  {{/if}}
                 </div>
                 {{/unless}}
                 {{#if this.contasMultiplas}}

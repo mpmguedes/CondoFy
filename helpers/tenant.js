@@ -6,6 +6,9 @@
 // ─────────────────────────────────────────────────────────────────────
 const { UserCondominio, Condominio, User } = require('../models');
 
+// ── Privilégio GLOBAL ──────────────────────────────────────────────
+// A administração global (GesCondu) é decidida EXCLUSIVAMENTE por
+// `users.role_global`. `users.role` é legado e nunca decide nada aqui.
 function eSuperAdmin(utilizador) {
   return Boolean(utilizador && utilizador.role_global === 'super_admin');
 }
@@ -58,12 +61,41 @@ async function entrarCondominio(req, condominioId) {
 }
 
 // Papel do utilizador no condomínio ativo (null se sem acesso).
+//
+// IMPORTANTE — as três noções são distintas e não se substituem:
+//   1. privilégio GLOBAL  → `users.role_global` (eSuperAdmin);
+//   2. papel NO CONDOMÍNIO → `utilizador_condominios.role` (admin/gestor/leitura);
+//   3. modo SUPORTE        → super admin com condomínio ativo escolhido por si.
+//
+// No modo suporte (ponto 3) não existe associação e o papel administrativo do
+// condomínio é atribuído pelo próprio ato de entrar em suporte — é essa a
+// convenção que o backoffice sempre usou (`comCondominioAtivo` faz o mesmo em
+// `req.papelCondominio`). Sem esta distinção, o super admin que entra em
+// suporte perdia o acesso ao painel do condomínio.
 async function papelNoAtivo(req) {
   const id = ativo(req);
   if (!id) return null;
-  if (req.user && eSuperAdmin(req.user)) return 'admin';
   const associacao = await associacaoAtiva(req.user && req.user.id, id);
-  return associacao ? associacao.role : null;
+  if (associacao) return associacao.role; // papel REAL da associação (precedência)
+  if (req.user && eSuperAdmin(req.user)) return 'admin'; // modo suporte
+  return null;
+}
+
+// Papel EFETIVO a apresentar na interface para o contexto atual.
+// Devolve `{ global, modoSuporte, papel }`:
+//  - `global`      → administrador global (menu de administração global);
+//  - `modoSuporte` → super admin com condomínio ativo escolhido manualmente;
+//  - `papel`       → papel no condomínio ativo (associação real), quando existe.
+// Nunca lê `users.role`: a UI não pode continuar a depender do legado.
+async function contextoAdministrativo(req) {
+  const global = eSuperAdmin(req.user);
+  const associacao = req.user ? await associacaoAtiva(req.user.id, ativo(req)) : null;
+  const modoSuporte = global && !associacao && Boolean(ativo(req));
+  return {
+    global,
+    modoSuporte,
+    papel: associacao ? associacao.role : modoSuporte ? 'admin' : null,
+  };
 }
 
 // Permissões por papel (leitura só consulta; gestor escreve; admin tudo).
@@ -117,15 +149,78 @@ function comCondominioAtivo(req, res, next) {
   })();
 }
 
-// Permite apenas papéis ≥ mínimo (usa req.papelCondominio definido antes).
+// Permite apenas papéis ≥ mínimo.
+// O papel vem de `req.papelCondominio`, definido por `comCondominioAtivo` — é
+// esse middleware que materializa o modo suporte do super admin (a associação
+// real tem precedência). Não se volta a promover o super admin aqui: se este
+// middleware fosse usado sem `comCondominioAtivo` antes, a promoção implícita
+// mascararia a ausência de contexto de condomínio.
 function comPapel(minimo) {
   return (req, res, next) => {
-    const papel = req.papelCondominio || (req.user && eSuperAdmin(req.user) ? 'admin' : null);
+    const papel = req.papelCondominio || null;
     if (!papel || !papelMaiorOuIgual(papel, minimo)) {
       req.flash('error_msg', 'Não tem permissões para esta ação.');
       return res.redirect('/');
     }
     return next();
+  };
+}
+
+// Destinos canónicos do contexto autenticado.
+const DESTINO_PAINEL = '/admin'; // backoffice do condomínio (admin e gestor)
+const DESTINO_GLOBAL = '/admin/global'; // administração global (super admin)
+const DESTINO_PORTAL = '/condomino'; // área do condómino
+
+// ── Destino inicial (pós-login / entrada na raiz) ──────────────────
+// Decisão ÚNICA do contexto e do destino. Todas as entradas (`GET /`, depois
+// do login, depois de escolher condomínio) passam por aqui — não existe
+// lógica paralela em `routes/index.js`.
+//
+// Regras (por ordem):
+//   1. super admin sem condomínio ativo      → painel de administração global;
+//   2. super admin com condomínio ativo      → modo suporte: painel do
+//      condomínio. Vale mesmo sem associação (entrou por "Entrar (suporte)").
+//      O modo suporte nunca aponta para o painel global, para não criar
+//      `/admin → / → /admin/global` (ciclo novo);
+//   3. sem condomínio ativo válido           → "Os meus condomínios";
+//   4. papel no condomínio ativo admin/gestor → painel do condomínio;
+//   5. qualquer outro papel                   → área do condómino.
+//
+// O papel vem SEMPRE do condomínio ativo (associação real, ou modo suporte) e
+// NUNCA de `users.role` — é essa a correção estrutural: `users.role` deixa de
+// decidir o destino pós-login.
+function destinoInicial({ meus = [], ativo = null, user = null } = {}) {
+  const ids = (meus || []).map((c) => Number(c && c.id));
+  const ativoValido = ativo != null && ids.includes(Number(ativo));
+  const escolhido = ativoValido ? meus.find((c) => Number(c.id) === Number(ativo)) : null;
+  const global = eSuperAdmin(user);
+  // Modo SUPORTE: o Super Admin pode ter um condomínio ativo SEM associação
+  // (entrou via "Entrar (suporte)", que aceita qualquer condomínio ativo).
+  // Nesse caso o condomínio não aparece em `meus` — é o próprio id ativo que
+  // identifica o contexto, e o papel administrativo é o do modo suporte.
+  // Com associação real, o contexto NÃO é suporte: o papel é o da associação.
+  const suporte = global && !escolhido && ativo != null;
+
+  // 1. Administrador global, sem condomínio escolhido: vai para a sua área.
+  if (global && !escolhido && !suporte) {
+    return { redirecionar: DESTINO_GLOBAL, limparAtivo: false, modoSuporte: false };
+  }
+  // 2/4. Com condomínio em contexto (associação real OU suporte), o destino é
+  //      o painel do condomínio: é para lá que aponta o modo suporte e é o
+  //      papel da associação que decide nos restantes casos (abaixo).
+  if (global && (escolhido || suporte)) {
+    return { redirecionar: DESTINO_PAINEL, limparAtivo: false, modoSuporte: suporte };
+  }
+  // 3. Sem condomínio escolhido: escolha explícita (mesmo com um só).
+  if (!escolhido) {
+    return { redirecionar: '/condominios', limparAtivo: Boolean(ativo), modoSuporte: false };
+  }
+  // 4/5. Papel do condomínio ATIVO decide entre painel e portal.
+  const papel = escolhido.role;
+  return {
+    redirecionar: papel === 'admin' || papel === 'gestor' ? DESTINO_PAINEL : DESTINO_PORTAL,
+    limparAtivo: false,
+    modoSuporte: false,
   };
 }
 
@@ -141,6 +236,11 @@ module.exports = {
   listarCondominios,
   entrarCondominio,
   papelNoAtivo,
+  contextoAdministrativo,
+  destinoInicial,
+  DESTINO_PAINEL,
+  DESTINO_GLOBAL,
+  DESTINO_PORTAL,
   podeEscrever,
   papelMaiorOuIgual,
   eAdminCondominio,

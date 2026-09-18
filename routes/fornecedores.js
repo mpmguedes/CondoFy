@@ -22,7 +22,6 @@ const {
   EmailFila,
   User,
 } = require('../models');
-const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const storage = require('../helpers/storage');

@@ -599,12 +599,13 @@ async function main() {
   assert.strictEqual(typeof routerIndex.destinoAposLogin, 'function', 'destinoAposLogin continua exportado');
   assert.deepStrictEqual(
     routerIndex.destinoAposLogin({ meus: [], ativo: null, user: {} }),
-    { redirecionar: '/condominios', limparAtivo: false },
+    { redirecionar: '/condominios', limparAtivo: false, modoSuporte: false },
     'sem condomínio escolhido, o destino após login é o mesmo de antes'
   );
+  // O papel do CONDOMÍNIO decide o destino (não `users.role`, que é legado).
   assert.deepStrictEqual(
-    routerIndex.destinoAposLogin({ meus: [{ id: 7 }], ativo: 7, user: { role: 'admin' } }),
-    { redirecionar: '/admin', limparAtivo: false },
+    routerIndex.destinoAposLogin({ meus: [{ id: 7, role: 'admin' }], ativo: 7, user: { role: 'admin' } }),
+    { redirecionar: '/admin', limparAtivo: false, modoSuporte: false },
     'com condomínio escolhido, administrador vai para o painel'
   );
   assert.ok(ler('app.js').includes("app.use('/', require('./routes'));"), 'router da raiz montado no app.js');

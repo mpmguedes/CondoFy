@@ -8,7 +8,6 @@ const {
   EmailFila,
 } = require('../models');
 const { Op } = require('sequelize');
-const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const { resolverDestinatarios } = require('../helpers/avisos');

@@ -4,7 +4,6 @@
 const express = require('express');
 const { Op } = require('sequelize');
 const { Assembleia, Documento } = require('../models');
-const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { getCondominio } = require('../helpers/condominio');
 const { audit } = require('../helpers/audit');

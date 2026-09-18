@@ -25,7 +25,6 @@ const {
   BackupLog,
   EmailFila,
 } = require('../models');
-const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { toCents, fromCents } = require('../helpers/money');
 const { audit } = require('../helpers/audit');
@@ -47,7 +46,30 @@ const router = express.Router();
 
 // Isolamento: condomínio ativo (sessão validada) em todas as operações.
 router.use(tenant.comCondominioAtivo);
-router.use(tenant.comPapel('admin'));
+
+// ── Guarda do backoffice: mínimo `gestor` (não `admin`) ─────────────
+// `/admin` é o backoffice COMUM de `admin` e `gestor` — é o destino que
+// `tenant.destinoInicial()` dá a ambos (`uc.role` ∈ {'admin','gestor'}).
+// A guarda do router tem de ter o MESMO mínimo que o destino, senão um gestor
+// é enviado para `/admin` e imediatamente expulso para `/` (a inconsistência
+// que esta alteração corrige).
+//
+// As permissões ESPECÍFICAS continuam protegidas nos sítios próprios, com o
+// mínimo respetivo — um gestor não ganha nada com isto:
+//   · rotas de gestão de utilizadores deste router → `comPapel('admin')`
+//     (ver `apenasAdmin` abaixo, aplicado rota a rota);
+//   · `routes/configuracao.js`, `routes/sistema.js` e `routes/emails.js`
+//     mantêm o seu próprio `router.use(comPapel('admin'))`;
+//   · os módulos `Calendário`/`Tickets`/`Seguros` mantêm `comPapel('admin')`
+//     em `routes/placeholders.js`;
+//   · os restantes módulos de `/admin` usam `comPapel('gestor')`.
+// Fonte do papel: `utilizador_condominios.role` (associação ativa). Nunca
+// `users.role`, que é legado.
+router.use(tenant.comPapel('gestor'));
+
+// Guarda por rota, para o que exige estritamente `admin`. Como o `router.use`
+// acima já garante `gestor`, isto só recusa efetivamente o gestor.
+const apenasAdmin = tenant.comPapel('admin');
 
 // Escopo e carregadores restritos ao condomínio ativo (bloqueiam IDOR).
 function onde(req, extra = {}) {
@@ -204,8 +226,13 @@ router.get('/', async (req, res) => {
 
   // Sinais de atenção: a decisão é do ajudante (lógica pura); aqui só se reúne o
   // que ele precisa. Sem sinais a apresentar, a vista mostra o estado tranquilo.
+  // `podeAdmin` vem do papel do condomínio ATIVO (a mesma fonte que
+  // `comPapel('admin')` usa) — nunca de `users.role`, que é legado. Serve para
+  // não mostrar ao gestor sinais que o levariam a módulos reservados ao admin.
+  const podeAdmin = tenant.papelMaiorOuIgual(req.papelCondominio, 'admin');
   const orcamentoPorConcluir = dashboardHelpers.orcamentoPorConcluir(orcamentoAno);
   const sinais = dashboardHelpers.sinaisDeAtencao({
+    podeAdmin,
     nVencidas,
     comprovativosPendentes,
     quotasMesEmitidas: quotasDoMes,
@@ -874,6 +901,21 @@ router.post('/condominos/:id/eliminar', async (req, res) => {
 // utilizador_condominios). O papel legado mantém-se para a interface:
 // 'admin' ↔ papel de condomínio admin; restantes ↔ 'leitura'.
 // ═══════════════════════════════════════════════════════════════════
+// TRADUÇÃO LEGADO ↔ NOVO — único ponto onde `users.role` ainda é lido/escrito.
+//
+// `users.role` é a coluna LEGADO (ENUM 'admin'|'condomino') mantida por
+// compatibilidade. Já NÃO decide autorização, destino pós-login nem interface:
+//   · autorização e destino → `utilizador_condominios.role` (helpers/tenant.js);
+//   · privilégio global     → `users.role_global` (tenant.eSuperAdmin).
+//
+// O que resta aqui é a TRADUÇÃO entre os dois vocabulários, para que o
+// formulário de utilizadores (que fala 'condomino'/'admin') continue a
+// escrever um valor coerente na coluna legada e para que a coluna legada
+// continue a poder alimentar o papel POR CONDOMÍNIO. NOTA: a tradução é
+// lossy — o formulário não distingue 'gestor' de 'leitura', pelo que qualquer
+// papel não-admin é traduzido para 'leitura' (e 'leitura' de volta para
+// 'condomino'). Não alterar sem desenhar os dois sentidos em conjunto.
+// ═══════════════════════════════════════════════════════════════════
 function papelDaAssociacao(role) {
   return role === 'admin' ? 'admin' : 'leitura';
 }
@@ -913,7 +955,12 @@ async function assocDeUtilizador(req, userId) {
   return UserCondominio.findOne({ where: { utilizador_id: userId, condominio_id: req.condominioId } });
 }
 
-router.get('/utilizadores', async (req, res) => {
+// ── Gestão de utilizadores — exclusiva do `admin` ──────────────────
+// Bloco escondido ao gestor na navegação (`main.handlebars`, grupo «Sistema»,
+// em `{{#if (ne condominioAtivo.role 'gestor')}}`) e por isso protegido aqui
+// rota a rota com `comPapel('admin')`. O gestor continua autorizado a entrar
+// no backoffice, mas não a criar/editar/encerrar acessos.
+router.get('/utilizadores', apenasAdmin, async (req, res) => {
   const assocs = await UserCondominio.findAll({
     where: { condominio_id: req.condominioId },
     include: [
@@ -937,12 +984,12 @@ router.get('/utilizadores', async (req, res) => {
   res.render('admin/utilizadores/listar', { titulo: 'Utilizadores', users });
 });
 
-router.get('/utilizadores/nova', async (req, res) => {
+router.get('/utilizadores/nova', apenasAdmin, async (req, res) => {
   const pessoas = await Pessoa.findAll({ where: onde(req, { ativo: true }), order: [['nome', 'ASC']] });
   res.render('admin/utilizadores/form', { titulo: 'Novo utilizador', user: null, pessoas });
 });
 
-router.post('/utilizadores', async (req, res) => {
+router.post('/utilizadores', apenasAdmin, async (req, res) => {
   const { nome, email, password, role, pessoa_id, ativo } = req.body;
   const enviarConvite = req.body.enviar_convite === '1' || req.body.enviar_convite === 'on';
   try {
@@ -998,7 +1045,7 @@ router.post('/utilizadores', async (req, res) => {
   }
 });
 
-router.get('/utilizadores/:id/editar', async (req, res) => {
+router.get('/utilizadores/:id/editar', apenasAdmin, async (req, res) => {
   const assoc = await assocDeUtilizador(req, req.params.id);
   if (!assoc) {
     req.flash('error_msg', 'Utilizador não encontrado neste condomínio.');
@@ -1023,7 +1070,7 @@ router.get('/utilizadores/:id/editar', async (req, res) => {
   });
 });
 
-router.post('/utilizadores/:id', async (req, res) => {
+router.post('/utilizadores/:id', apenasAdmin, async (req, res) => {
   const assoc = await assocDeUtilizador(req, req.params.id);
   if (!assoc) return res.redirect('/admin/utilizadores');
   const user = await User.findByPk(req.params.id);
@@ -1141,7 +1188,7 @@ async function deixariaCondominioSemGestao(req, assoc) {
   return titularidades.eUltimoGestorAtivo({ papel: assoc.role, nGestores: n });
 }
 
-router.post('/utilizadores/:id/encerrar-acesso', async (req, res) => {
+router.post('/utilizadores/:id/encerrar-acesso', apenasAdmin, async (req, res) => {
   const assoc = await assocDeUtilizador(req, req.params.id);
   if (!assoc) return res.redirect('/admin/utilizadores');
   const destino = `/admin/utilizadores/${req.params.id}/editar`;
@@ -1183,7 +1230,7 @@ router.post('/utilizadores/:id/encerrar-acesso', async (req, res) => {
   res.redirect('/admin/utilizadores');
 });
 
-router.post('/utilizadores/:id/reativar-acesso', async (req, res) => {
+router.post('/utilizadores/:id/reativar-acesso', apenasAdmin, async (req, res) => {
   const assoc = await assocDeUtilizador(req, req.params.id);
   if (!assoc) return res.redirect('/admin/utilizadores');
   const destino = `/admin/utilizadores/${req.params.id}/editar`;
@@ -1213,7 +1260,7 @@ router.post('/utilizadores/:id/reativar-acesso', async (req, res) => {
   res.redirect('/admin/utilizadores');
 });
 
-router.post('/utilizadores/:id/eliminar', async (req, res) => {
+router.post('/utilizadores/:id/eliminar', apenasAdmin, async (req, res) => {
   const userId = parseInt(req.params.id, 10);
   const assoc = await assocDeUtilizador(req, userId);
   if (!assoc || userId === req.user.id) {
@@ -1233,7 +1280,7 @@ router.post('/utilizadores/:id/eliminar', async (req, res) => {
 });
 
 // ── Convites (estados/validade; confirmação de email) ──────────────
-router.post('/utilizadores/:id/reenviar-convite', async (req, res) => {
+router.post('/utilizadores/:id/reenviar-convite', apenasAdmin, async (req, res) => {
   const assoc = await assocDeUtilizador(req, req.params.id);
   if (!assoc) return res.redirect('/admin/utilizadores');
   const user = await User.findByPk(req.params.id);
@@ -1254,7 +1301,7 @@ router.post('/utilizadores/:id/reenviar-convite', async (req, res) => {
   res.redirect('/admin/utilizadores');
 });
 
-router.post('/utilizadores/:id/revogar-convite', async (req, res) => {
+router.post('/utilizadores/:id/revogar-convite', apenasAdmin, async (req, res) => {
   const assoc = await assocDeUtilizador(req, req.params.id);
   if (!assoc) return res.redirect('/admin/utilizadores');
   const user = await User.findByPk(req.params.id);

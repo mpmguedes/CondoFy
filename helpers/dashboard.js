@@ -137,6 +137,13 @@ const PRIORIDADE_SINAL = {
   smtp: 30,
 };
 
+// Sinais cujo DESTINO exige `comPapel('admin')` nos routers de `/admin`
+// (`routes/emails.js` → email_erros/smtp; `routes/configuracao.js` → drive).
+// Só se mostram a quem tem efetivamente esse papel: um gestor receberia um
+// `302 /` ao clicar. O papel NÃO vem de `users.role` (legado) — quem chama
+// passa `podeAdmin` a partir do papel do condomínio ATIVO.
+const SINAIS_SO_ADMIN = new Set(['email_erros', 'drive', 'smtp']);
+
 // Constrói os sinais. `dados`:
 //  · nVencidas {number}, comprovativosPendentes {number}
 //  · quotasMesEmitidas {number}, documentosPorDisponibilizar {number}
@@ -144,9 +151,15 @@ const PRIORIDADE_SINAL = {
 //  · proximasAssembleias {Array<{id, numero, data, designacao}>}
 //  · pagamentosFornecedorPendentes {number}, filaErros {number}
 //  · driveLigado {boolean}, smtp {boolean}
+//  · podeAdmin {boolean} — o perfil tem papel `admin` no condomínio ativo?
+//    Omisso ⇒ true (compatibilidade: quem não passa o contexto mantém o
+//    comportamento anterior). Com `false`, são omitidos os sinais cujo destino
+//    exige `admin` — ver SINAIS_SO_ADMIN.
 function sinaisDeAtencao(dados = {}) {
   const sinais = [];
+  const podeAdmin = dados.podeAdmin !== false;
   const juntar = (id, campos) => {
+    if (!podeAdmin && SINAIS_SO_ADMIN.has(id)) return;
     sinais.push({ id, tipo: campos.tipo || 'trabalho', quantidade: Number(campos.quantidade) || 0, prioridade: PRIORIDADE_SINAL[id] || 0, ...campos });
   };
 

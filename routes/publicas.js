@@ -6,7 +6,7 @@
 //
 // São públicas por natureza: NÃO exigem sessão, condomínio ativo nem qualquer
 // permissão (obrigatório para as indicar na Google Auth Platform → Branding).
-// Não usam `tenant`/`eAdmin` e não dependem de dados de negócio.
+// Não usam `tenant` nem guardas de sessão e não dependem de dados de negócio.
 //
 // Utilizam o layout público já existente (`blank`, o mesmo das páginas de
 // entrada e de seleção de condomínio) e o parcial `_pagina-legal`, que dá a

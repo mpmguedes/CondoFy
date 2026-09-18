@@ -35,7 +35,12 @@
               <i class="bi bi-send me-1"></i>Enviar agora (fila)
             </button>
           </form>
+          {{!-- A Central de emails exige `comPapel('admin')` (routes/emails.js):
+               escondida ao gestor, como na navegação, para não o expulsar para
+               `/`. O papel vem do condomínio ativo (`condominioAtivo.role`). --}}
+          {{#if (ne condominioAtivo.role 'gestor')}}
           <a href="/admin/emails?estado=pendentes" class="btn btn-outline-secondary w-100"><i class="bi bi-envelope me-1"></i>Central de emails</a>
+          {{/if}}
         </div>
         {{#unless smtp}}
         <p class="text-muted small mt-2 mb-0">SMTP não configurado — configure o <code>.env</code> para poder enviar.</p>
@@ -79,6 +84,9 @@
               <td>{{#if data_enviada}}{{formatDateTime data_enviada}}{{else}}—{{/if}}</td>
               <td>{{tentativas}}</td>
               <td class="text-end text-nowrap">
+                {{!-- Reenviar/cancelar vivem em routes/emails.js (`comPapel('admin')`):
+                     escondidos ao gestor, para não oferecer ações que o expulsariam. --}}
+                {{#if (ne condominioAtivo.role 'gestor')}}
                 {{#if (or (eq estado 'pendente') (eq estado 'erro'))}}
                 <form action="/admin/emails/{{id}}/reenviar" method="POST" class="d-inline">
                   <button class="btn btn-sm btn-outline-primary" title="Reenviar"><span class="material-symbols-outlined">refresh</span></button>
@@ -88,6 +96,9 @@
                 <form action="/admin/emails/{{id}}/cancelar" method="POST" class="d-inline" data-confirmar="Cancelar este envio?" data-confirmar-perigo="1">
                   <button class="btn btn-sm btn-outline-danger" title="Cancelar"><span class="material-symbols-outlined">close</span></button>
                 </form>
+                {{/if}}
+                {{else}}
+                <span class="text-muted small">—</span>
                 {{/if}}
               </td>
             </tr>

@@ -11,7 +11,6 @@
 // financeiras (gestor).
 // ─────────────────────────────────────────────────────────────────────
 const express = require('express');
-const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { getCondominio } = require('../helpers/condominio');
 const { balanceteFinanceiro } = require('../helpers/relatorio-financeiro');
@@ -22,7 +21,9 @@ const cabecalhos = require('../helpers/cabecalhos-ficheiro');
 
 const router = express.Router();
 
-router.use(eAdmin);
+// Acesso: condomínio ativo (associação real ou modo suporte) + papel ≥ gestor.
+// Sem `eAdmin`: essa guarda decidia por `users.role` (legado) e expulsava para
+// `/` gestores de condomínio legítimos cujo `users.role` é 'condomino'.
 router.use(tenant.comCondominioAtivo);
 router.use(tenant.comPapel('gestor'));
 

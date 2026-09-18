@@ -140,6 +140,11 @@ const stubs = {
     papelNoAtivo: async () => 'admin',
     eAdminCondominio: async () => true,
     pertenceAoAtivo: () => true,
+    // O painel usa esta função para decidir se mostra os sinais cujo destino
+    // exige `admin` (routes/admin.js). Mesma hierarquia de `helpers/tenant.js`.
+    papelMaiorOuIgual: (papel, minimo) =>
+      ({ admin: 30, gestor: 20, leitura: 10 }[papel] || 0) >=
+      ({ admin: 30, gestor: 20, leitura: 10 }[minimo] || 99),
   },
   '../helpers/audit': { audit: async () => ({}), auditSafe: async () => ({}) },
   '../helpers/condominio': { getCondominio: async () => ({ id: 1, designacao: COND.designacao, administracao_nome: null, toJSON() { return { ...COND }; } }) },
@@ -204,6 +209,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(flash());
+// O papel do condomínio ativo decide o que o painel mostra. Os testes correm
+// com `admin` e repetem as asserções de UI com `gestor` (ver o fim do ficheiro).
+let PAPEL = 'admin';
 app.use((req, res, next) => {
   req.user = ADMIN;
   req.isAuthenticated = () => true;
@@ -212,7 +220,7 @@ app.use((req, res, next) => {
   res.locals.tarefas = { ativas: 0, emErro: 0 };
   res.locals.armazenamentoIcone = 'bi bi-cloud';
   res.locals.armazenamentoRotulo = 'Google Drive';
-  res.locals.condominioAtivo = { id: 1, designacao: COND.designacao, role: 'admin' };
+  res.locals.condominioAtivo = { id: 1, designacao: COND.designacao, role: PAPEL };
   res.locals.currentPath = req.path;
   next();
 });
@@ -309,6 +317,32 @@ function pedir(caminho) {
   const ids = Array.isArray(condicao) ? condicao : valoresCondicao(condicao).find((v) => Array.isArray(v));
   assert.ok(ids, `painel: auditoria limitada aos utilizadores do condomínio (${JSON.stringify(condicao)})`);
   assert.ok(ids.includes(42) && ids.includes(43), `painel: auditoria restrita aos utilizadores associados (${ids})`);
+
+  // ── UI por papel: gestor não recebe links para módulos de admin ───
+  // As guards ficaram intocadas; o que se garante aqui é que o painel não
+  // oferece ao gestor ligações que o expulsariam para `/`. O critério é
+  // `condominioAtivo.role` (associação do condomínio ativo), não `users.role`.
+  const ADMIN_ONLY = ['/admin/emails', '/admin/config/auditoria', '/admin/config/automacoes'];
+  PAPEL = 'admin';
+  const rAdmin = await pedir('/admin');
+  assert.strictEqual(rAdmin.status, 200, 'painel (admin): responde 200');
+  for (const url of ADMIN_ONLY) {
+    assert.ok(rAdmin.html.includes(`href="${url}"`), `painel (admin): mantém a ligação para ${url}`);
+  }
+
+  PAPEL = 'gestor';
+  const rGestor = await pedir('/admin');
+  assert.strictEqual(rGestor.status, 200, 'painel (gestor): responde 200');
+  for (const url of ADMIN_ONLY) {
+    assert.ok(!rGestor.html.includes(`href="${url}"`), `painel (gestor): SEM ligação para ${url}`);
+  }
+  // O gestor não perde nada que consiga mesmo usar.
+  for (const url of ['/admin/documentos', '/admin/fornecedores']) {
+    assert.ok(rGestor.html.includes(`href="${url}"`), `painel (gestor): mantém a ligação para ${url}`);
+  }
+  assert.ok(/Fila de emails:/.test(rGestor.html) === /Fila de emails:/.test(rAdmin.html),
+    'painel: a linha «Fila de emails» depende só dos dados, não do papel');
+  PAPEL = 'admin';
 
   console.log(`✓ Testes das rotas do painel passaram (cenário «${CENARIO}», sem base de dados).`);
 })().catch((err) => {

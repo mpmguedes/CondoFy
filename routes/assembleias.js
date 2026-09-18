@@ -8,7 +8,6 @@ const {
   Pessoa,
   Documento,
 } = require('../models');
-const { eAdmin } = require('../helpers/eAdmin');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const { getCondominio } = require('../helpers/condominio');

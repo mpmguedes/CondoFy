@@ -133,7 +133,6 @@ const stubs = {
   '../helpers/titularidades': TITULARIDADES,
   '../helpers/eAdmin': {
     eAutenticado: (req, res, next) => (req.isAuthenticated() ? next() : res.redirect('/login')),
-    eAdmin: (req, res, next) => next(),
   },
 };
 for (const [rel, valor] of Object.entries(stubs)) {
