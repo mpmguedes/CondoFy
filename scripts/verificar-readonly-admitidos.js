@@ -14,20 +14,14 @@
 const fs = require('fs');
 const path = require('path');
 const RAIZ = path.join(__dirname, '..');
-const L = require('../helpers/suporte-allowlist').LISTA;
+const allowlist = require('../helpers/suporte-allowlist');
+const L = allowlist.LISTA;
 
-// Onde vive cada módulo da allow-list.
-const FICHEIROS = {
-  admin: 'routes/admin.js',
-  financeiro: 'routes/financeiro.js',
-  'quotas-modulo': 'routes/quotas-modulo.js',
-  'extra-quotas': 'routes/extra-quotas.js',
-  orcamento: 'routes/orcamento.js',
-  assembleias: 'routes/assembleias.js',
-  documentos: 'routes/documentos.js',
-  emails: 'routes/emails.js',
-  relatorios: 'routes/relatorios.js',
-};
+// O mapa módulo → ficheiro vem da FONTE ÚNICA (`helpers/suporte-allowlist`),
+// não de uma cópia local. Antes este ficheiro tinha o seu próprio `FICHEIROS`,
+// e um módulo novo na `LISTA` era aqui silenciosamente IGNORADO («sem ficheiro
+// mapeado — ignorado») sem fazer falhar nada. Ver `ROUTERS` no allow-list.
+const FICHEIROS = allowlist.ROUTERS;
 
 // Marcadores de efeito lateral dentro do handler.
 //
@@ -80,11 +74,35 @@ function blocoDoHandler(fonte, metodo, rota) {
 
 let nOk = 0;
 let nSuspeitos = 0;
+let nNaoLocalizados = 0;
 console.log('§23 — GETs admitidos: verificação de read-only\n');
+
+// ── Portão de coerência LISTA ↔ ROUTERS ────────────────────────────
+// Antes de verificar seja o que for, garantir que a lista de módulos e o mapa
+// de routers concordam. Sem isto, um módulo novo na `LISTA` era aqui ignorado
+// em silêncio e o verificador devolvia sucesso — um falso verde.
+const co = allowlist.incoerencias((f) => fs.existsSync(path.join(RAIZ, f)));
+if (co.semRouter.length || co.ficheiroInexistente.length || co.routersOrfaos.length) {
+  console.log('✗ INCOERÊNCIA entre a LISTA e o mapa de routers:');
+  for (const m of co.semRouter) console.log(`    · módulo «${m}» está na LISTA mas NÃO declara router`);
+  for (const { modulo, ficheiro } of co.ficheiroInexistente) {
+    console.log(`    · módulo «${modulo}» aponta para «${ficheiro}», que não existe`);
+  }
+  for (const m of co.routersOrfaos) console.log(`    · router declarado para «${m}», que NÃO está na LISTA`);
+  console.log('\n  Nenhum módulo pode ser admitido ao suporte sem router declarado e existente.');
+  console.log('  Declare-o em `ROUTERS` (`helpers/suporte-allowlist.js`).');
+  process.exit(1);
+}
 
 for (const [mod, entradas] of Object.entries(L)) {
   const ficheiro = FICHEIROS[mod];
-  if (!ficheiro) { console.log(`· ${mod}: (sem ficheiro mapeado — ignorado)\n`); continue; }
+  if (!ficheiro) {
+    // Inalcançável com o portão acima, mas mantém-se como falha explícita para
+    // que uma futura alteração do portão não reintroduza o salto silencioso.
+    nNaoLocalizados += 1;
+    console.log(`  ✗ ${mod}: módulo da LISTA sem ficheiro de router mapeado\n`);
+    continue;
+  }
   const fonte = fs.readFileSync(path.join(RAIZ, ficheiro), 'utf8');
 
   for (const e of entradas) {
@@ -92,7 +110,11 @@ for (const [mod, entradas] of Object.entries(L)) {
     const bloco = blocoDoHandler(fonte, 'get', e.padrao.source.includes('\\d+') ? rota : rota)
       || blocoDoHandler(fonte, 'get', rota);
     if (!bloco) {
-      console.log(`  ? ${mod}  ${e.rotulo}  → handler não localizado (pode estar noutro router — ver nota)`);
+      // FALHA, não salto: a rota está admitida na LISTA mas não se encontrou o
+      // handler no router declarado. Ou o router mudou, ou a `LISTA` mente —
+      // em qualquer dos casos a rota deixou de estar verificada.
+      nNaoLocalizados += 1;
+      console.log(`  ✗ ${mod}  ${e.rotulo}  → handler NÃO LOCALIZADO em ${ficheiro}`);
       continue;
     }
     const achados = EFEITOS.filter(([re]) => re.test(semComentarios(bloco))).map(([, nome]) => nome);
@@ -107,5 +129,7 @@ for (const [mod, entradas] of Object.entries(L)) {
   console.log('');
 }
 
-console.log(`Resumo: ${nOk} GET(s) read-only · ${nSuspeitos} com efeito lateral.`);
-if (nSuspeitos > 0) process.exitCode = 1;
+console.log(
+  `Resumo: ${nOk} GET(s) read-only · ${nSuspeitos} com efeito lateral · ${nNaoLocalizados} não verificado(s).`
+);
+if (nSuspeitos > 0 || nNaoLocalizados > 0) process.exitCode = 1;

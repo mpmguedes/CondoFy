@@ -181,6 +181,32 @@ function mutacao({ nome, ficheiro, de, para, global = false, script, esperaFalha
     script: 'test-allow-list-suporte.js',
   });
 
+  // ── 8. Módulo NOVO na LISTA sem router declarado ─────────────────
+  // A deriva que motivou esta alteração: um módulo entra na `LISTA` e fica
+  // ADMITIDO ao suporte sem nunca ser exercitado por HTTP nem verificado
+  // quanto a efeitos laterais. Antes desta fase, nada falhava (era um falso
+  // verde: o verificador §23 saltava-o em silêncio). Agora o portão de
+  // coerência e o teste T1 têm de detetar.
+  mutacao({
+    nome: '8. módulo novo na LISTA sem router declarado (deriva da fonte única)',
+    ficheiro: 'helpers/suporte-allowlist.js',
+    de: "  // Relatórios. Ver `routes/relatorios.js`.",
+    para: "  inventado: [{ padrao: /^\\/inventado$/, rotulo: '/inventado' }],\n\n  // Relatórios. Ver `routes/relatorios.js`.",
+    script: 'test-allow-list-suporte.js',
+  });
+
+  // ── 9. Rota admitida retirada do teste (deriva do teste) ─────────
+  // O inverso: o teste deixa de pedir uma rota que continua admitida. Sem a
+  // asserção de coerência, a rota ficaria admitida mas nunca exercitada —
+  // exatamente o mesmo falso verde, pela porta do teste.
+  mutacao({
+    nome: '9. remover /despesas das rotas exercitadas no teste (deriva do teste)',
+    ficheiro: 'scripts/test-allow-list-suporte.js',
+    de: "'/despesas', '/movimentos', '/contas']",
+    para: "'/movimentos', '/contas']",
+    script: 'test-allow-list-suporte.js',
+  });
+
   console.log(`\n✓ Testes de mutação passaram (${nTestes} mutações, todas detetadas e revertidas).`);
 })().catch((e) => {
   console.error('✗ FALHA:', e.message);

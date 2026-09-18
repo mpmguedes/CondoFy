@@ -307,6 +307,57 @@ const MODULOS = [
 for (const m of MODULOS) {
   app.use('/admin', require(`../routes/${m.ficheiro}`));
 }
+
+// ── Coerência: a lista montada AQUI tem de ser a `LISTA` real ──────
+// Este teste mantém a sua própria lista de módulos (precisa de saber que
+// ficheiro montar), mas essa lista NÃO pode divergir da `LISTA` — senão um
+// módulo admitido ao suporte simplesmente deixaria de ser exercitado por HTTP,
+// com o teste a continuar verde. É a mesma classe de defeito do front-gate:
+// código correto que ninguém verifica. Deriva-se da FONTE ÚNICA.
+const allowlistReal = require(path.join(RAIZ, 'helpers', 'suporte-allowlist'));
+
+// (a) todo o módulo da LISTA é montado aqui, e cada router montado existe;
+// (b) nenhum módulo extra é montado só neste teste;
+// (c) cada módulo da LISTA declara router (ou seja, é verificável).
+{
+  const modulosDaLista = allowlistReal.MODULOS.slice().sort();
+  const modulosMontados = MODULOS.map((m) => m.ficheiro).sort();
+  assert.deepStrictEqual(
+    modulosMontados,
+    modulosDaLista,
+    `test-allow-list: os módulos montados (${modulosMontados.join(', ')}) têm de coincidir `
+    + `com a LISTA (${modulosDaLista.join(', ')}). Um módulo novo na LISTA tem de ser `
+    + 'acrescentado a `MODULOS` neste teste e ao mapa `ROUTERS` do allow-list.'
+  );
+
+  const co = allowlistReal.incoerencias((f) => require('fs').existsSync(path.join(RAIZ, f)));
+  assert.deepStrictEqual(co.semRouter, [], `módulos da LISTA sem router declarado: ${co.semRouter.join(', ')}`);
+  assert.deepStrictEqual(
+    co.ficheiroInexistente, [],
+    `módulos da LISTA com router inexistente: ${co.ficheiroInexistente.map((x) => x.modulo).join(', ')}`
+  );
+  assert.deepStrictEqual(co.routersOrfaos, [], `routers declarados sem módulo na LISTA: ${co.routersOrfaos.join(', ')}`);
+
+  // Cada módulo da LISTA tem de ter também as rotas admitidas declaradas aqui,
+  // para serem realmente pedidas por HTTP (não bastar estar na LISTA).
+  //
+  // A comparação é de PADRÕES, não de caminhos literais: a `LISTA` guarda
+  // `rotulo` (`/quotas/:id`) e este teste pede o caminho concreto (`/quotas/1`).
+  // Normaliza-se o literal para o rótulo (`\d+` → `:id`) antes de comparar.
+  const comoRotulo = (p) => p.replace(/\/\d+$/, '/:id');
+  for (const m of MODULOS) {
+    const doModulo = allowlistReal.caminhosDo(m.ficheiro).slice().sort();
+    const doTeste = m.rotas.map(comoRotulo).sort();
+    assert.deepStrictEqual(
+      doTeste,
+      doModulo,
+      `test-allow-list: as rotas de «${m.ficheiro}» neste teste (${doTeste.join(', ')}) `
+      + `têm de coincidir com a LISTA (${doModulo.join(', ')})`
+    );
+  }
+  feito(`coerência LISTA↔teste: ${modulosDaLista.length} módulos e todas as rotas coincidem`);
+}
+
 // A guarda GLOBAL de `/condomino` (espelha `app.js`): o suporte é recusado antes
 // de qualquer router do portal, e é reencaminhado para `/admin`. Usa a guarda
 // REAL do `tenant` — que lê a marca da SESSÃO, porque `req.suporte` só existe

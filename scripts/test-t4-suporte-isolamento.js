@@ -185,8 +185,20 @@ app.use((req, res, next) => {
   next();
 });
 
-const MODULOS = ['admin', 'financeiro', 'quotas-modulo', 'extra-quotas', 'orcamento', 'assembleias', 'documentos', 'emails', 'relatorios'];
-for (const m of MODULOS) app.use('/admin', require(`../routes/${m}`));
+// Os módulos montados derivam-se da FONTE ÚNICA (`helpers/suporte-allowlist`):
+// manter aqui uma segunda lista à mão permitia que um módulo novo na `LISTA`
+// deixasse de ser exercitado por HTTP sem o teste dar por isso.
+const allowlistReal = require(path.join(RAIZ, 'helpers', 'suporte-allowlist'));
+const MODULOS = allowlistReal.MODULOS.slice();
+{
+  const co = allowlistReal.incoerencias((f) => require('fs').existsSync(path.join(RAIZ, f)));
+  assert.deepStrictEqual(
+    [co.semRouter, co.ficheiroInexistente.map((x) => x.modulo), co.routersOrfaos],
+    [[], [], []],
+    'a LISTA tem de declarar um router existente para cada módulo (ver ROUTERS no allow-list)'
+  );
+}
+for (const m of MODULOS) app.use('/admin', require(`../routes/${allowlistReal.routerDo(m).replace(/^routes\//, '')}`));
 app.use((err, req, res, next) => {
   console.error('[erro no handler]', err.message);
   res.status(500).send('ERRO_NO_HANDLER: ' + err.message);

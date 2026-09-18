@@ -58,6 +58,31 @@ const ADMITIDO_SUPORTE = Symbol.for('condofy.suporte.diagnostico.admitido');
 // ENUM do modelo para evolução futura, mas não é concedível nem admitido aqui.
 const NIVEIS_ADMITIDOS = ['diagnostico'];
 
+// ── O router de cada módulo ────────────────────────────────────────
+// Mapa MÓDULO → ficheiro do router, e a RAZÃO de ele viver AQUI e não nos
+// testes: sem isto havia TRÊS cópias manuais desta lista (em
+// `test-allow-list-suporte.js`, `test-t4-suporte-isolamento.js` e
+// `verificar-readonly-admitidos.js`) que nada obrigava a concordar com a
+// `LISTA`. Um módulo novo entrava na lista e ficava ADMITIDO ao suporte sem
+// nunca ser exercitado por HTTP nem verificado quanto a efeitos laterais — um
+// falso verde. Provado: injetar um módulo na `LISTA` não fazia falhar nada.
+//
+// Regra: um módulo com entrada na `LISTA` TEM de declarar aqui o seu router, e
+// o ficheiro TEM de existir. Os verificadores derivam deste mapa (ver
+// `routerDo`/`ROUTERS`), pelo que acrescentar um módulo novo obriga a
+// acrescentar o router — e a falha é imediata se não o fizer.
+const ROUTERS = {
+  admin: 'routes/admin.js',
+  financeiro: 'routes/financeiro.js',
+  'quotas-modulo': 'routes/quotas-modulo.js',
+  'extra-quotas': 'routes/extra-quotas.js',
+  orcamento: 'routes/orcamento.js',
+  assembleias: 'routes/assembleias.js',
+  documentos: 'routes/documentos.js',
+  emails: 'routes/emails.js',
+  relatorios: 'routes/relatorios.js',
+};
+
 // ── A lista ────────────────────────────────────────────────────────
 // Cada chave é um MÓDULO (o router onde a admissão é montada); cada valor, a
 // lista de caminhos admitidos NESSE router (relativos ao próprio router).
@@ -196,6 +221,40 @@ function caminhosDo(modulo) {
 // Módulos conhecidos (para provar que um módulo novo precisa de entrada própria).
 const MODULOS = Object.keys(LISTA);
 
+// ── Coerência LISTA ↔ ROUTERS ──────────────────────────────────────
+// Uma lista fechada só é fechada se cada módulo tiver router declarado e o
+// ficheiro existir. Estas duas funções são a única porta para essa verificação,
+// para que os testes não voltem a escrever a sua própria cópia da lista.
+//
+// `routerDo` devolve o ficheiro do router de um módulo, ou `null` se o módulo
+// não o declarar. Não lança: quem chama decide como falhar.
+function routerDo(modulo) {
+  return Object.prototype.hasOwnProperty.call(ROUTERS, modulo) ? ROUTERS[modulo] : null;
+}
+
+// Módulos da `LISTA` que NÃO declaram router (ou cujo ficheiro não existe).
+//
+// É uma verificação de ESTRUTURA, não de disco: recebe a função que diz se um
+// ficheiro existe, para poder ser exercitada sem sistema de ficheiros (testes
+// DB-free e provas de mutação) — o mesmo princípio do resto do projeto.
+//
+// Devolve `{ semRouter: [...], ficheiroInexistente: [...] }`, ambos vazios
+// quando a lista está coerente.
+function incoerencias(existeFicheiro) {
+  const existe = typeof existeFicheiro === 'function' ? existeFicheiro : () => true;
+  const semRouter = [];
+  const ficheiroInexistente = [];
+  for (const modulo of MODULOS) {
+    const ficheiro = routerDo(modulo);
+    if (!ficheiro) { semRouter.push(modulo); continue; }
+    if (!existe(ficheiro)) ficheiroInexistente.push({ modulo, ficheiro });
+  }
+  // Também ao contrário: um router declarado para um módulo que não existe na
+  // `LISTA` é código morto/erro de escrita e tem de ser visível.
+  const routersOrfaos = Object.keys(ROUTERS).filter((m) => !Object.prototype.hasOwnProperty.call(LISTA, m));
+  return { semRouter, ficheiroInexistente, routersOrfaos };
+}
+
 // `true` quando o pedido é um acesso de suporte ao nível admitido.
 function eSuporteDiagnostico(req) {
   return Boolean(req && req.suporte && NIVEIS_ADMITIDOS.includes(req.suporte.nivel));
@@ -272,7 +331,10 @@ module.exports = {
   ADMITIDO_SUPORTE,
   NIVEIS_ADMITIDOS,
   LISTA,
+  ROUTERS,
   MODULOS,
+  routerDo,
+  incoerencias,
   caminhoAdmitido,
   caminhoAdmitidoEmAlgumModulo,
   caminhosDo,
