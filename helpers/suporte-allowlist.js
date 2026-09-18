@@ -168,9 +168,50 @@ const LISTA = {
   // criação de pastas e os callbacks OAuth ficam todos fora.
   documentos: [{ padrao: /^\/documentos$/, rotulo: '/documentos' }],
 
-  // Central de emails. Ver `routes/emails.js`. Só estado/erro/`message_id` e
-  // destinatário mascarado; nem corpo, nem anexos, nem o bloco SMTP
-  // (servidor/porta/utilizador/password seriam segredos de infraestrutura).
+  // ── Central de emails — EXCEÇÃO DELIBERADA (ler antes de alterar) ──
+  // Ver `routes/emails.js`. Só estado/erro/`message_id` e destinatário
+  // mascarado; nem corpo, nem anexos, nem o bloco SMTP (servidor/porta/
+  // utilizador/password seriam segredos de infraestrutura).
+  //
+  // ⚠️ ASSIMETRIA CONHECIDA, MANTIDA POR DECISÃO: `/emails` é o ÚNICO módulo
+  // admitido cujo router exige o papel `admin` do condomínio (os outros oito
+  // exigem `gestor` — ver o `comPapelOuSuporteAdmitido(...)` de cada router).
+  // Na navegação, a Central de Emails está escondida ao gestor
+  // (`views/layouts/main.handlebars`, `{{#if (ne condominioAtivo.role 'gestor')}}`).
+  // Logo, neste módulo, o nível `diagnostico` alcança algo que um GESTOR do
+  // próprio condomínio não alcança.
+  //
+  // Porque é que isto se mantém, e não é uma inversão de hierarquia:
+  //
+  //   1. O acesso existe para DIAGNOSTICAR a fila de envio — responder a «o
+  //      email não saiu? foi enviado? qual o erro?». É o estado da fila que o
+  //      diagnostica, e é isso que a rota serve.
+  //   2. NÃO confere as capacidades normais de administração de Emails: o
+  //      suporte não reenvia, não cancela, não configura SMTP nem testa o
+  //      envio — a allow-list é de LEITURA (GET/HEAD, `somenteLeitura`) e as
+  //      rotas de escrita (`/emails/smtp`, `/emails/teste`, …) ficam fora.
+  //   3. A vista de diagnóstico é deliberadamente MINIMIZADA
+  //      (`views/admin/emails/index-suporte.handlebars`): sem corpo, sem
+  //      anexos, sem configuração SMTP, e com o destinatário mascarado
+  //      (`maskEmail`). Não há aqui mais PII do que nas outras vistas de suporte.
+  //   4. O requisito `admin` do condomínio NÃO foi alterado — baixá-lo para
+  //      `gestor` só para acomodar o suporte seria relaxar uma autorização
+  //      existente, o que é expressamente proibido. A hierarquia normal do
+  //      GesCondu mantém-se intacta.
+  //
+  // Isto é uma EXCEÇÃO DE DIAGNÓSTICO, não uma alteração da hierarquia de
+  // permissões: distingue-se **privilégio de utilização** (que continua
+  // reservado ao `admin` do condomínio, com todas as capacidades) de **acesso
+  // de diagnóstico** (leitura minimizada do estado da fila).
+  //
+  // Alternativa considerada e rejeitada: criar um nível de suporte `operacional`
+  // só para esta assimetria. Rejeitada por aumentar a complexidade do modelo de
+  // autorização sem necessidade concreta demonstrada. Ver a auditoria §9 e o
+  // `docs/DESENHO-SUPORTE-DIAGNOSTICO.md` §3 (linha do módulo Emails/fila).
+  //
+  // Um teste que fixe esta decisão NÃO deve afirmar que o mínimo é `gestor`
+  // (seria falso para `emails`); deve afirmar que a exceção é CONSCIENTE —
+  // ver `test-allow-list-suporte.js` (asserção `EXCECOES_ADMIN`).
   emails: [{ padrao: /^\/emails$/, rotulo: '/emails' }],
 
   // Relatórios. Ver `routes/relatorios.js`. A vista já não imprime IBAN —

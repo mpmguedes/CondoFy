@@ -1,0 +1,68 @@
+# ─────────────────────────────────────────────────────────────────────
+# Política de finais de linha do GesCondu/CondoFy
+#
+# PORQUE É QUE ISTO EXISTE
+# Sem este ficheiro o repositório dependia de `core.autocrlf`, que é uma
+# configuração LOCAL de cada máquina e não viaja com o código. Neste clone
+# (`core.autocrlf=true`, Windows) o Git guardava LF nos objetos mas escrevia
+# CRLF no working copy. Consequência real: testes que leem um ficheiro de
+# produção e o comparam com um regex que contém `\n` literal FALHAVAM só por
+# causa do sistema operativo — em Linux passavam, em Windows não.
+# Exemplos: `scripts/test-movimentos-integridade.js:302`,
+# `scripts/test-seed-demo.js:310`. O sintoma era VARIÁVEL dentro da mesma
+# sessão: ficheiros recém-escritos ficavam em LF, um `git checkout`
+# normalizava-os para CRLF.
+#
+# Uso este ficheiro para o repositório ser determinístico, independentemente
+# da configuração de quem o clona: o working copy fica SEMPRE em LF, tal como
+# o ambiente de produção (Linux, `/opt/condofy`).
+#
+# SEGURANÇA DA MUDANÇA
+# O repositório JÁ guardava tudo em LF (verificado: nenhum blob no `HEAD`
+# contém CR). Este ficheiro NÃO altera nenhum conteúdo versionado — só muda a
+# forma como o Git escreve os ficheiros no disco.
+# ─────────────────────────────────────────────────────────────────────
+
+# Por omissão: detetar texto, normalizar para LF no repositório E no working copy.
+* text=auto eol=lf
+
+# ── Binários: nunca normalizar (nem detetar como texto) ──────────────
+# Sem isto, um binário que por acaso contenha byte 0x0A/0x0D podia ser
+# reescrito e corrompido.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.zip   binary
+*.gz    binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary
+*.mp4   binary
+*.webp  binary
+
+# ── Ficheiros que o Git deve tratar como texto com LF ────────────────
+# Explícito para ficar imune a uma futura alteração do `* text=auto`.
+*.js       text eol=lf
+*.cjs      text eol=lf
+*.mjs      text eol=lf
+*.json     text eol=lf
+*.handlebars text eol=lf
+*.css      text eol=lf
+*.sql      text eol=lf
+*.yml      text eol=lf
+*.yaml     text eol=lf
+*.md       text eol=lf
+
+# ── Scripts que TÊM de manter LF mesmo em Windows ────────────────────
+# Um shebang com CRLF (`#!/usr/bin/env node\r`) quebra a execução em Linux e
+# em ambientes tipo WSL/Git Bash.
+*.sh   text eol=lf
+
+# ── Exceções: forçar CRLF onde o formato o exige ─────────────────────
+# Ficheiros de batch do Windows não funcionam corretamente com LF.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf

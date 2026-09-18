@@ -358,6 +358,37 @@ const allowlistReal = require(path.join(RAIZ, 'helpers', 'suporte-allowlist'));
   feito(`coerência LISTA↔teste: ${modulosDaLista.length} módulos e todas as rotas coincidem`);
 }
 
+// ── A exceção do módulo `emails` tem de ser CONSCIENTE, não acidental ──
+// `/emails` é o único módulo admitido cujo router exige o papel `admin` do
+// condomínio (os outros exigem `gestor`), pelo que o nível `diagnostico`
+// alcança aqui algo que um gestor do próprio condomínio não alcança. A decisão
+// foi mantê-lo (ver a justificação em `helpers/suporte-allowlist.js`).
+//
+// Esta asserção NÃO afirma que o mínimo é `gestor` — seria falso para `emails`
+// e faria o teste mentir. Afirma o que interessa: que a lista de módulos que
+// exigem `admin` é EXATAMENTE a esperada. Se alguém admitir mais um módulo
+// `admin` sem o declarar aqui, isto falha e obriga a uma decisão explícita.
+{
+  const fs = require('fs');
+  const EXCECOES_ADMIN = ['emails'];
+  const deAdmin = [];
+  for (const modulo of allowlistReal.MODULOS) {
+    const fonte = fs.readFileSync(path.join(RAIZ, allowlistReal.routerDo(modulo)), 'utf8');
+    const guarda = fonte.match(/comPapelOuSuporteAdmitido\('([a-z]+)'\)/);
+    assert.ok(guarda, `routes/${modulo}: tem de montar a guarda condicional (comPapelOuSuporteAdmitido)`);
+    if (guarda[1] === 'admin') deAdmin.push(modulo);
+  }
+  assert.deepStrictEqual(
+    deAdmin.sort(),
+    EXCECOES_ADMIN.slice().sort(),
+    'os módulos admitidos que exigem `admin` do condomínio mudaram '
+    + `(${deAdmin.join(', ') || 'nenhum'}). Se for intencional, atualize EXCECOES_ADMIN `
+    + 'NESTE teste e justifique em `helpers/suporte-allowlist.js`; se não, o módulo '
+    + 'não devia ser admitido ao suporte (nível `diagnostico` acima do gestor).'
+  );
+  feito(`exceção de privilégio consciente: só ${EXCECOES_ADMIN.join(', ')} exige admin do condomínio`);
+}
+
 // A guarda GLOBAL de `/condomino` (espelha `app.js`): o suporte é recusado antes
 // de qualquer router do portal, e é reencaminhado para `/admin`. Usa a guarda
 // REAL do `tenant` — que lê a marca da SESSÃO, porque `req.suporte` só existe
