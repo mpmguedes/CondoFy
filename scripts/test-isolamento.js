@@ -123,6 +123,12 @@ const ISOLADOS = [
 ];
 
 // Módulos com gate de papel (gestor ou admin conforme a operação de gestão).
+//
+// NOTA — `admin.js` é o backoffice COMUM de `admin` e `gestor`: o mínimo do
+// router é `gestor` (é o destino que `tenant.destinoInicial()` dá a ambos).
+// As operações que exigem estritamente admin usam um guard SEPARADO
+// (`const apenasAdmin = tenant.comPapel('admin')`), aplicado rota a rota — ver
+// a verificação dedicada em `testarGuardaDoBackoffice()`.
 const COM_PAPEL = {
   'quotas-modulo.js': 'gestor',
   'documentos.js': 'gestor',
@@ -132,7 +138,7 @@ const COM_PAPEL = {
   'assembleias.js': 'gestor',
   'orcamento.js': 'gestor',
   'financeiro.js': 'gestor',
-  'admin.js': 'admin',
+  'admin.js': 'gestor',
   'configuracao.js': 'admin',
   'emails.js': 'admin',
   'fornecedores.js': 'gestor',
@@ -146,7 +152,15 @@ function testarRoutersIsolados() {
     assert.ok(!/getCondominio\(\)/.test(src), `${nome}: sem getCondominio() sem id`);
     assert.ok(!/resumoCondominio\(\)/.test(src), `${nome}: sem resumoCondominio() sem id`);
     if (COM_PAPEL[nome]) {
-      assert.ok(src.includes(`comPapel('${COM_PAPEL[nome]}')`), `${nome}: gate de papel ${COM_PAPEL[nome]}`);
+      // A guarda tem de ser um `router.use(tenant.comPapel('X'))` — a MONTAGEM do
+      // mínimo no router, não uma ocorrência qualquer no ficheiro. Procurar só
+      // `includes("comPapel('X')")` deixava passar um ficheiro cujo gate real
+      // fosse outro (era o caso de admin.js, onde o comentário e o value
+      // `apenasAdmin` satisfaziam a procura antiga).
+      const esperado = new RegExp(
+        `router\\.use\\(\\s*tenant\\.comPapel\\(\\s*'${COM_PAPEL[nome]}'\\s*\\)\\s*\\)`
+      );
+      assert.ok(esperado.test(src), `${nome}: o router monta tenant.comPapel('${COM_PAPEL[nome]}')`);
     }
     // Área do Condómino: toda a consulta filtra pelo condomínio ativo e pela
     // fração própria (IDs do browser nunca são suficientes) e o PDF de recibo
@@ -174,6 +188,47 @@ function testarRoutersIsolados() {
       }
     }
   }
+}
+
+// ── 3-bis. Guarda do backoffice comum (`routes/admin.js`) ───────────
+// `/admin` é o backoffice de `admin` E de `gestor` (é o destino que
+// `tenant.destinoInicial()` dá a ambos), por isso o mínimo do router é
+// `gestor`. O que exige estritamente admin fica num guard separado
+// (`apenasAdmin`), aplicado rota a rota — não no `router.use`.
+function testarGuardaDoBackoffice() {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'routes', 'admin.js'), 'utf8');
+  const semComentarios = src.replace(/\/\/.*$/gm, '');
+
+  // 1. O router monta o mínimo `gestor` (o gate efetivo corre em todos os pedidos).
+  assert.ok(
+    /router\.use\(\s*tenant\.comPapel\('gestor'\)\s*\)/.test(semComentarios),
+    'admin.js: router.use(tenant.comPapel(\'gestor\')) — backoffice comum'
+  );
+  // 2. O gate do router NÃO pode voltar a ser `admin` (era a inconsistência
+  //    que expulsava o gestor de `/admin` para `/`).
+  assert.ok(
+    !/router\.use\(\s*tenant\.comPapel\('admin'\)\s*\)/.test(semComentarios),
+    'admin.js: router.use não exige admin (gestor entra no backoffice)'
+  );
+  // 3. As operações de administrador continuam protegidas pelo guard separado,
+  //    definido UMA vez a partir de `comPapel('admin')`.
+  assert.ok(
+    /const\s+apenasAdmin\s*=\s*tenant\.comPapel\('admin'\)/.test(semComentarios),
+    'admin.js: apenasAdmin = tenant.comPapel(\'admin\') (guard separado)'
+  );
+  // 4. E está realmente aplicado: as rotas de gestão de utilizadores passam por ele.
+  const rotasUtilizadores = src.match(/router\.(get|post)\('\/utilizadores[^']*'\s*,\s*apenasAdmin/g) || [];
+  assert.ok(
+    rotasUtilizadores.length >= 10,
+    `admin.js: rotas /utilizadores protegidas por apenasAdmin (encontradas ${rotasUtilizadores.length}, esperadas ≥10)`
+  );
+  // 5. Confirmação negativa: nenhuma rota com apenasAdmin perdeu o guard.
+  const declaradas = (src.match(/router\.(get|post)\('\/utilizadores/g) || []).length;
+  assert.strictEqual(
+    declaradas,
+    rotasUtilizadores.length,
+    'admin.js: TODAS as rotas /utilizadores exigem apenasAdmin'
+  );
 }
 
 // ── 4. Invariantes de dados dos módulos recém-isolados ───────────────
@@ -290,6 +345,7 @@ async function main() {
   await testarComCondominioAtivo();
   testarPapeis();
   testarRoutersIsolados();
+  testarGuardaDoBackoffice();
   testarModelosComCondominio();
   await testarRegressoesDeIsolamento();
   testarRegraDeAutorizacaoDoCondomino();

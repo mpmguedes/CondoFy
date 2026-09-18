@@ -82,7 +82,10 @@ router.post('/condominios', eAutenticado, async (req, res) => {
     await UserCondominio.create({
       utilizador_id: req.user.id,
       condominio_id: condominio.id,
-      role: tenant.eSuperAdmin(req.user) ? 'admin' : 'admin',
+      // Quem cria um condomínio fica sempre como `admin` desse condomínio —
+      // independentemente de ser super_admin global. O super_admin não ganha
+      // aqui um papel acrescido: o eixo de condomínio é independente do global.
+      role: 'admin',
       estado: 'ativo',
     });
     req.session.condominio_ativo_id = condominio.id;

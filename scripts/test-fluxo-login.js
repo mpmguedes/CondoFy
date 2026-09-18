@@ -131,18 +131,42 @@ app.use(async (req, res, next) => {
   res.locals.success_msg = req.flash('success_msg');
   res.locals.error_msg = req.flash('error_msg');
   res.locals.user = req.user || null;
-  res.locals.isAdmin = !!(req.user && (req.user.role === 'admin' || req.user.role_global === 'super_admin'));
+  // `isAdmin` = «esta conta tem interface de GESTÃO no contexto atual?».
+  // Espelha app.js: começa a `false` e só sobe a `true` quando existe
+  // condomínio ESCOLHIDO (sessão validada) e o papel desse condomínio é
+  // admin/gestor. Nunca vem de `users.role` (legado). A asserção que prova
+  // esta regra no `app.js` real está em `testarContextoAdministrativo()`.
+  // NOTA: `res.locals.isSuperAdmin` / `res.locals.eSuperAdmin` foram removidos
+  // de `app.js` (não tinham consumidores). A réplica não os repõe — as vistas
+  // que precisam do eixo global usam `user.role_global` diretamente.
+  res.locals.isAdmin = false;
   res.locals.meusCondominios = [];
   res.locals.condominioAtivo = null;
-  let condominio = req.user ? await getCondominio() : null;
+  // `condominio` só é lido quando existe um condomínio ESCOLHIDO (ver app.js,
+  // fase P3): sem escolha não há consulta nem valor a expor.
+  let condominio = null;
   if (req.user) {
-    const meus = await tenant.listarCondominios(req.user.id);
-    res.locals.meusCondominios = meus;
+    let meus = await tenant.listarCondominios(req.user.id);
     const ativoId = tenant.ativo(req);
-    const escolhido = meus.find((c) => c.id === ativoId) || null;
-    if (!escolhido && ativoId) delete req.session.condominio_ativo_id;
+    let escolhido = meus.find((c) => c.id === ativoId) || null;
+    if (!escolhido && ativoId && !tenant.eSuperAdmin(req.user)) {
+      delete req.session.condominio_ativo_id;
+    }
+    // Super Admin em modo suporte: o condomínio ativo pode não ter associação.
+    if (!escolhido && tenant.eSuperAdmin(req.user) && ativoId) {
+      const suporte = await getCondominio({ id: ativoId });
+      if (suporte) {
+        escolhido = { id: suporte.id, designacao: suporte.designacao, morada: suporte.morada, localidade: suporte.localidade, role: 'admin' };
+        meus = [escolhido, ...meus];
+      } else {
+        delete req.session.condominio_ativo_id;
+      }
+    }
+    res.locals.meusCondominios = meus;
     res.locals.condominioAtivo = escolhido;
     if (escolhido) {
+      const papel = await tenant.papelNoAtivo(req).catch(() => null);
+      if (papel === 'admin' || papel === 'gestor') res.locals.isAdmin = true;
       req.session.condominio_ativo_id = escolhido.id;
       condominio = await getCondominio({ id: escolhido.id });
     }
@@ -499,9 +523,30 @@ function testarMecanismoIntacto() {
   assert.ok(auth.includes('if (!user || !user.two_fa_ativo)'), 'a verificação pendente exige um utilizador com 2FA ativo');
 
   // Contexto de condomínio só com sessão (a fuga original vinha daqui).
+  // A garantia deixou de ser «a expressão contém req.user ?» e passou a ser
+  // estrutural: `condominio` começa a `null` e a (única) leitura do condomínio
+  // está DENTRO do ramo `if (escolhido)`, que por sua vez vive dentro de
+  // `if (req.user)`. Sem sessão não há leitura nenhuma — nem do condomínio
+  // escolhido, nem do primeiro da base de dados.
+  const fonteApp = ler('app.js');
   assert.ok(
-    ler('app.js').includes('let condominio = req.user ? await getCondominio() : null;'),
-    'app.js não lê o condomínio em pedidos sem sessão'
+    /let condominio = null;/.test(fonteApp),
+    'app.js não parte do primeiro condomínio da base de dados (começa a null)'
+  );
+  assert.strictEqual(
+    (fonteApp.match(/await getCondominio\(/g) || []).length,
+    1,
+    'existe uma única leitura de condomínio no middleware de contexto'
+  );
+  const idxLeitura = fonteApp.indexOf('condominio = await getCondominio({ id: escolhido.id });');
+  const idxEscolhido = fonteApp.indexOf('if (escolhido) {', fonteApp.indexOf('res.locals.isAdmin = false;'));
+  assert.ok(
+    idxLeitura > -1 && idxEscolhido > -1 && idxLeitura > idxEscolhido,
+    'a leitura do condomínio acontece só dentro do ramo `if (escolhido)`'
+  );
+  assert.ok(
+    !/req\.user \? await getCondominio\(\)/.test(fonteApp),
+    'app.js não lê o primeiro condomínio da base de dados a troco de nada'
   );
   assert.ok(
     !ler('views/layouts/main.handlebars').includes('{{#if titulo}}{{titulo}} · {{/if}}{{condominio.designacao}}'),
@@ -515,6 +560,166 @@ function trechoDaRota(fonte, marca) {
   if (inicio === -1) return '';
   const seguinte = fonte.indexOf('router.get(', inicio + marca.length);
   return fonte.slice(inicio, seguinte > -1 ? seguinte : fonte.length);
+}
+
+// ── 8-bis. `isAdmin` no `app.js` REAL — comportamento, não cópia ───
+// A réplica do middleware acima (necessária para montar o fluxo com routers
+// reais) é uma CÓPIA: se o `app.js` mudasse e a cópia não, o teste continuaria
+// verde. Para não haver duas verdades, aqui extrai-se o middleware de contexto
+// do `app.js` tal como está no ficheiro, avalia-se esse código e executam-se só
+// as linhas que decidem `condominioAtivo`/`isAdmin` contra um `req`/`res` reais.
+// Assim o teste mede o `app.js` — não uma reimplementação.
+function extrairMiddlewareDeContexto() {
+  const fonte = ler('app.js');
+  // O bloco começa em «── Variáveis globais nas views» e acaba no `next();`.
+  const inicio = fonte.indexOf('// ── Variáveis globais nas views');
+  const fim = fonte.indexOf('// ── Ficheiros estáticos');
+  assert.ok(inicio > -1 && fim > inicio, 'app.js: middleware de contexto localizado');
+  const bloco = fonte.slice(inicio, fim);
+
+  // Só o miolo do `app.use(async (req, res, next) => { … });`
+  const abre = bloco.indexOf('app.use(async (req, res, next) => {');
+  assert.ok(abre > -1, 'app.js: middleware de contexto é async (req, res, next)');
+  const corpo = bloco.slice(bloco.indexOf('{', abre) + 1, bloco.lastIndexOf('});'));
+  // Devolve uma função que corre o código REAL do app.js com injeção de
+  // dependências (tenant/getCondominio/Aviso/storage/background/sessao).
+  const fabrica = new Function(
+    'req', 'res', 'next', 'tenant', 'getCondominio', 'Aviso', 'Op', 'storage', 'background', 'sessao',
+    `return (async () => { ${corpo} })();`
+  );
+  return fabrica;
+}
+
+async function testarContextoAdministrativo() {
+  const fabrica = extrairMiddlewareDeContexto();
+  const fonte = ler('app.js');
+
+  // Estrutura: as duas linhas que importam têm de estar no app.js real.
+  assert.ok(
+    /res\.locals\.isAdmin = false;/.test(fonte),
+    'app.js: isAdmin começa a false (não é promovido por users.role)'
+  );
+  assert.ok(
+    /const papel = await tenant\.papelNoAtivo\(req\)/.test(fonte),
+    'app.js: o papel vem de tenant.papelNoAtivo(req)'
+  );
+  assert.ok(
+    /if \(papel === 'admin' \|\| papel === 'gestor'\) res\.locals\.isAdmin = true;/.test(fonte),
+    'app.js: só admin/gestor promovem isAdmin'
+  );
+  assert.ok(
+    !/req\.user\.role\b(?!_global)/.test(fonte),
+    'app.js: users.role não decide isAdmin (nem nada na UI)'
+  );
+
+  // Comportamento: correr o middleware REAL por perfil. `papelNoAtivo` é o
+  // do app.js; só a fonte de dados (associações do utilizador) é injetada.
+  const estatico = {
+    rotuloPrincipal: () => null,
+    abrePastaNoFornecedor: () => false,
+    iconePrincipal: () => null,
+    resumo: () => ({ ativas: 0, emErro: 0 }),
+  };
+  const sessaoFalsa = { expiraEm: () => null, AVISO_MS: 0, IDLE_MS: 0 };
+
+  // Corre o middleware real com um utilizador, associações e ativo escolhidos.
+  async function correr({ user, meus, ativoId }) {
+    const req = {
+      user,
+      session: ativoId == null ? {} : { condominio_ativo_id: ativoId },
+      flash: () => [],
+      path: '/',
+    };
+    const res = { locals: {} };
+    const tenantInjetado = {
+      ...tenant,
+      listarCondominios: async () => meus,
+      ativo: (r) => (r.session && r.session.condominio_ativo_id ? Number(r.session.condominio_ativo_id) : null),
+      // O papel REAL: associação ativa do utilizador, com precedência; modo
+      // suporte do super admin só quando não há associação.
+      papelNoAtivo: async (r) => {
+        const id = r.session && r.session.condominio_ativo_id ? Number(r.session.condominio_ativo_id) : null;
+        if (!id) return null;
+        const assoc = meus.find((c) => Number(c.id) === id);
+        if (assoc) return assoc.role;
+        if (tenant.eSuperAdmin(r.user)) return 'admin';
+        return null;
+      },
+      Condominio: { findOne: async ({ where }) => meus.find((c) => Number(c.id) === Number(where.id)) || null },
+    };
+    const getCondFalso = async (o = {}) => {
+      if (!o.id) return null;
+      const c = meus.find((x) => Number(x.id) === Number(o.id));
+      return c ? { id: c.id, designacao: c.designacao, toJSON: () => ({ id: c.id, designacao: c.designacao }) } : null;
+    };
+    await fabrica(
+      req,
+      res,
+      () => {},
+      tenantInjetado,
+      getCondFalso,
+      { count: async () => 0 },
+      { gte: Symbol('gte') },
+      estatico,
+      estatico,
+      sessaoFalsa
+    );
+    return { isAdmin: res.locals.isAdmin, condominioAtivo: res.locals.condominioAtivo };
+  }
+
+  const cAdmin = { id: 5, designacao: 'Prédio A', role: 'admin' };
+  const cGestor = { id: 7, designacao: 'Prédio B', role: 'gestor' };
+  const cLeitura = { id: 3, designacao: 'Prédio C', role: 'leitura' };
+  const U = (o = {}) => ({ id: 42, role: 'condomino', role_global: null, ...o });
+
+  // admin com ativo → interface de gestão.
+  assert.strictEqual((await correr({ user: U(), meus: [cAdmin], ativoId: 5 })).isAdmin, true,
+    'admin com condomínio ativo → isAdmin');
+  // gestor com ativo → também entra no backoffice (guarda mínima = gestor).
+  assert.strictEqual((await correr({ user: U(), meus: [cGestor], ativoId: 7 })).isAdmin, true,
+    'gestor com condomínio ativo → isAdmin');
+  // leitura com ativo → nunca interface de gestão.
+  assert.strictEqual((await correr({ user: U({ role: 'admin' }), meus: [cLeitura], ativoId: 3 })).isAdmin, false,
+    'leitura com condomínio ativo → NÃO é isAdmin (mesmo com users.role=admin)');
+  // leitura SEM ativo → nunca interface de gestão, e sem condomínio ativo.
+  const semAtivo = await correr({ user: U({ role: 'admin' }), meus: [cLeitura], ativoId: null });
+  assert.strictEqual(semAtivo.isAdmin, false, 'sem condomínio ativo → NÃO é isAdmin');
+  assert.strictEqual(semAtivo.condominioAtivo, null, 'sem condomínio ativo → condominioAtivo null');
+  // ativo inválido (não é associação do utilizador) → nada é assumido.
+  const ativoInvalido = await correr({ user: U({ role: 'admin' }), meus: [cLeitura], ativoId: 99 });
+  assert.strictEqual(ativoInvalido.isAdmin, false, 'ativo inválido → NÃO é isAdmin');
+  assert.strictEqual(ativoInvalido.condominioAtivo, null, 'ativo inválido → condominioAtivo null');
+  // autenticado sem associação → nada.
+  const semAssoc = await correr({ user: U({ role: 'admin' }), meus: [], ativoId: null });
+  assert.strictEqual(semAssoc.isAdmin, false, 'sem associação → NÃO é isAdmin');
+  // associação inativa (não consta em `meus`) → não promove.
+  assert.strictEqual((await correr({ user: U({ role: 'admin' }), meus: [], ativoId: 9 })).isAdmin, false,
+    'associação inativa → NÃO é isAdmin');
+  // Vários condomínios: decide o ESCOLHIDO, não o primeiro.
+  assert.strictEqual(
+    (await correr({ user: U(), meus: [cLeitura, cAdmin, cGestor], ativoId: 5 })).isAdmin,
+    true,
+    'vários condomínios: manda o escolhido (admin), não o 1.º da lista'
+  );
+  assert.strictEqual(
+    (await correr({ user: U(), meus: [cAdmin, cLeitura, cGestor], ativoId: 3 })).isAdmin,
+    false,
+    'vários condomínios: manda o escolhido (leitura), não o 1.º da lista'
+  );
+  // Super Admin sem ativo → isAdmin false (o menu global lê `user.role_global`
+  // diretamente no layout; o `res.locals.isSuperAdmin` foi removido de app.js).
+  assert.strictEqual((await correr({ user: U({ role_global: 'super_admin' }), meus: [], ativoId: null })).isAdmin, false,
+    'super admin sem ativo → isAdmin false (menu global é por role_global)');
+
+  // `users.role` não muda nada: o mesmo par (meus, ativo) com roles legados
+  // opostos tem de dar o mesmo resultado.
+  for (const meus of [[cAdmin], [cGestor], [cLeitura]]) {
+    const ativoId = meus[0].id;
+    const a = await correr({ user: U({ role: 'admin' }), meus, ativoId });
+    const b = await correr({ user: U({ role: 'condomino' }), meus, ativoId });
+    assert.strictEqual(a.isAdmin, b.isAdmin,
+      `users.role é irrelevante para isAdmin (ativo ${ativoId})`);
+  }
 }
 
 // ── 8. Páginas de conta na mesma casca e fora do índice ────────────
@@ -591,6 +796,7 @@ function testarPaginasDeConta() {
   await testarCascaPartilhada();
   testarResponsiveEstrutural();
   testarMecanismoIntacto();
+  await testarContextoAdministrativo();
   testarPaginasDeConta();
   console.log('✓ Testes do fluxo de entrada (login → 2FA → condomínio) passaram, sem base de dados.');
 })().catch((err) => {

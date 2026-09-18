@@ -101,10 +101,6 @@ app.use(async (req, res, next) => {
   // condomínio ativo. Sem contexto de condomínio fica false: quem não tem
   // condomínio ativo só pode ver a escolha de condomínio.
   res.locals.isAdmin = false;
-  // `isSuperAdmin` (privilégio GLOBAL, só para o menu de administração global)
-  // é distinto de `isAdmin` (gestão de um condomínio): nunca se usa um como
-  // substituto do outro.
-  res.locals.isSuperAdmin = Boolean(req.user && tenant.eSuperAdmin(req.user));
   res.locals.meusCondominios = [];
   res.locals.condominioAtivo = null;
   // Contexto de condomínio: só existe para quem tem sessão. Num pedido sem
@@ -112,7 +108,11 @@ app.use(async (req, res, next) => {
   // palavra-passe, página de erro…) não se lê sequer o primeiro condomínio da
   // base de dados: as páginas públicas são neutras e nunca apresentam o nome de
   // um condomínio concreto — nem o workspace — antes de a sessão estar validada.
-  let condominio = req.user ? await getCondominio() : null;
+  //
+  // `condominio` é preenchido MAIS ABAIXO, e só quando existe um condomínio
+  // ESCOLHIDO na sessão: sem escolha não há contexto e a consulta ao primeiro
+  // condomínio da base de dados seria desperdiçada.
+  let condominio = null;
   if (req.user) {
     // Multi-condomínio: condomínios do utilizador + ativo (por sessão).
     try {
@@ -145,13 +145,11 @@ app.use(async (req, res, next) => {
       if (escolhido) {
         const papel = await tenant.papelNoAtivo(req).catch(() => null);
         if (papel === 'admin' || papel === 'gestor') res.locals.isAdmin = true;
-        res.locals.eSuperAdmin = tenant.eSuperAdmin(req.user);
-      }
-      if (escolhido) {
         req.session.condominio_ativo_id = escolhido.id;
-        if (!condominio || condominio.id !== escolhido.id) {
-          condominio = await getCondominio({ id: escolhido.id });
-        }
+        // Única leitura do condomínio: o ESCOLHIDO. Sem escolha, `condominio`
+        // fica `null` e não há consulta nenhuma (antes lia-se o primeiro
+        // condomínio da base de dados para o descartar de seguida).
+        condominio = await getCondominio({ id: escolhido.id });
       }
     } catch (err) {
       console.error('[multi-condominio]', err.message);
