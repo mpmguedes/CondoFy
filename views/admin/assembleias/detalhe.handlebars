@@ -131,7 +131,11 @@
               {{else if (eq deliberacao_estado 'rejeitada')}}<span class="badge text-bg-danger">Rejeitada</span>
               {{else}}<span class="badge text-bg-secondary">Pendente</span>{{/if}}
               {{#unless sujeito_votacao}}<span class="badge text-bg-light border">não sujeito a votação</span>{{/unless}}
-              {{#if (eq deliberacao_estado 'aprovada')}}
+              {{!-- Só uma deliberação COM valor autorizado é uma deliberação de FCR:
+                    um ponto como «Aprovação do orçamento anual» pode estar
+                    aprovado sem autorizar o fundo (valor_aprovado NULL) e não
+                    deve mostrar «FCR aprovado: 0,00 €». --}}
+              {{#if (and (eq deliberacao_estado 'aprovada') fcr.valorAprovado)}}
               <span class="small">FCR aprovado: <strong>{{eur fcr.valorAprovado}}</strong> · utilizado <strong>{{eur fcr.utilizado}}</strong> · disponível <strong>{{eur fcr.disponivel}}</strong></span>
               {{/if}}
             </div>

@@ -840,6 +840,40 @@ function verificarVistas() {
   assert.ok(detalhe.includes('Obras de substituição do elevador'), '24e. a finalidade é apresentada');
   assert.ok(detalhe.includes('/agenda/100/deliberacao'), '24f. a vista permite registar/editar a deliberação');
 
+  // Um ponto aprovado SEM valor autorizado não é uma deliberação de FCR: não
+  // pode mostrar «FCR aprovado: 0,00 €». É o caso real do seed («Aprovação do
+  // orçamento anual», `valor_aprovado` NULL) — a vista mostrava-lhe um bloco de
+  // FCR a zeros, apesar de o ponto não autorizar o fundo.
+  const contextoAssembleia = (item) => ({
+    assembleia: {
+      id: 1, numero: '2026/1', tipo: 'extraordinaria', estado: 'realizada', data: '2026-04-20', hora: '21:00',
+      local: 'Sala comum', agenda_itens: [item],
+    },
+    participantes: [], fracoes: [], pessoas: [], anexos: [], driveLigado: false,
+    tipos: { ordinaria: 'Ordinária' }, estadosLabel: { realizada: 'Realizada' }, deliberacaoPendente: false,
+    currentPath: '/admin/assembleias/1', user: { nome: 'Ana' },
+  });
+  const ponto = (extra) => Object.assign({
+    id: 101, ordem: 1, descricao: 'Aprovação do orçamento anual', sujeito_votacao: true,
+    deliberacao_estado: 'aprovada', deliberacao_nota: 'Orçamento aprovado por unanimidade', valor_aprovado: null,
+  }, extra);
+
+  // (a) aprovada SEM valor de FCR -> sem bloco.
+  const semFcr = render('admin/assembleias/detalhe.handlebars', contextoAssembleia(ponto({
+    fcr: { valorAprovadoC: 0, utilizadoC: 0, disponivelC: 0, valorAprovado: 0, utilizado: 0, disponivel: 0 },
+  })));
+  assert.ok(!semFcr.includes('FCR aprovado'), '24m. aprovada sem valor de FCR não mostra o bloco «FCR aprovado»');
+  assert.ok(semFcr.includes('Orçamento aprovado por unanimidade'), '24n. a finalidade continua a ser apresentada sem FCR');
+
+  // (b) aprovada COM valor de FCR -> bloco presente (regressão do caso válido).
+  const comFcr = render('admin/assembleias/detalhe.handlebars', contextoAssembleia(ponto({
+    descricao: 'FCR', deliberacao_nota: 'Elevador', valor_aprovado: '150.00',
+    fcr: { valorAprovadoC: 15000, utilizadoC: 0, disponivelC: 15000, valorAprovado: 150, utilizado: 0, disponivel: 150 },
+  })));
+  assert.ok(comFcr.includes('FCR aprovado'), '24o. aprovada com valor de FCR mostra o bloco');
+  assert.ok(comFcr.includes('150,00'), '24p. o valor de FCR aparece formatado');
+  console.log('OK — 24. vista da assembleia: bloco FCR só em deliberação aprovada com valor (24m–24p).');
+
   // Vista financeira: dois sentidos, deliberação e aviso de que não é despesa.
   const financeiro = render('admin/contas/transferir-fcr.handlebars', {
     contas: [{ id: 10, nome: 'Conta corrente', tipo: 'corrente', saldo: 310 }, { id: 11, nome: 'Fundo de Reserva', tipo: 'fundo_reserva', saldo: 275 }],
