@@ -41,6 +41,42 @@ function toArray(v) {
 // (só http/https), para ser a mesma na gravação, na listagem e nas vistas.
 const { urlExternaSegura } = require('../helpers/urls');
 
+// ── ⛔ Decisão de VISTA: ponto único, ciente do suporte ────────────
+// PORQUÊ ISTO EXISTE (ACHADO-01 da auditoria de suporte, 2026-09-18):
+//
+// A allow-list fecha o CAMINHO, não o RAMO DE RENDER. `GET /documentos` é um
+// caminho admitido — mas o handler tem VÁRIOS ramos, e dois deles
+// (`?pasta=recibos` → `recibos-anos`; `?pasta=recibos&ano=…` → `recibos`)
+// faziam `return res.render(<vista ADMINISTRATIVA>)` a partir de dentro do
+// ramo. Esses `return` nunca chegam à decisão final `req.suporte ? … : …`, e
+// como `req.path` (sem query string) não distingue os ramos, a verificação da
+// allow-list aprovava todos eles. Resultado: em modo suporte,
+// `/admin/documentos?pasta=recibos&ano=2026` renderizava a vista de gestão dos
+// recibos — com ligações «Ver PDF», «Abrir ficheiro», «Enviar por email» e o
+// `codigo_verificacao` (UID) de cada recibo — em vez da vista minimizada.
+//
+// A REGRA (a mesma que o resto do módulo já seguia em `:219`): a vista de
+// documentos é escolhida por ESTA função, a partir de `req.suporte`, e não
+// dentro de cada ramo. Qualquer ramo novo passa a ser minimizado por omissão
+// em vez de o ser por esquecimento.
+//
+// As `vistas` disponíveis são a `biblioteca` (cartões), a `listar` (tabela) e a
+// `recibos-anos` (navegação por ano). Os nomes correspondem, um a um, aos
+// ficheiros de `views/admin/documentos/` — `vistaDeDocumentos(req, 'x')` resolve
+// para `admin/documentos/x` fora de suporte. Em suporte convergem TODAS na vista
+// minimizada: o que se perde é a apresentação, nunca o isolamento (as consultas
+// continuam com `condominio_id`).
+//
+// Um valor fora desta lista é um erro de escrita e cai na vista `listar` (a mais
+// conservadora), nunca numa vista de gestão por omissão.
+const VISTAS_CONDOMINIO = ['biblioteca', 'listar', 'recibos-anos'];
+const VISTA_SUPORTE = 'admin/documentos/listar-suporte';
+
+function vistaDeDocumentos(req, vista) {
+  const alvo = VISTAS_CONDOMINIO.includes(vista) ? vista : 'listar';
+  return req.suporte ? VISTA_SUPORTE : `admin/documentos/${alvo}`;
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
@@ -111,7 +147,7 @@ router.get('/documentos', async (req, res) => {
         where,
         order: [['data', 'DESC'], ['id', 'DESC']],
       });
-      return res.render('admin/documentos/listar-suporte', {
+      return res.render(vistaDeDocumentos(req, 'listar'), {
         titulo: 'Documentos',
         documentos: todos,
         pasta: null,
@@ -122,7 +158,7 @@ router.get('/documentos', async (req, res) => {
         driveLigado: drive.isConfigured(req.condominioId),
       });
     }
-    return res.render('admin/documentos/biblioteca', {
+    return res.render(vistaDeDocumentos(req, 'biblioteca'), {
       titulo: 'Documentos',
       categorias,
       personalizadas,
@@ -140,6 +176,13 @@ router.get('/documentos', async (req, res) => {
       : null;
 
   // ── Recibos de Pagamento: navegação UX por anos (sem tabela técnica) ──
+  // ⛔ As DUAS vistas de gestão (`recibos-anos`, `recibos`) são do condomínio.
+  // Em modo suporte o ramo continua a correr (foi a escolha mínima: a query
+  // string não pode decidir o ISOLAMENTO), mas o que é RENDERIZADO passa pela
+  // decisão única — ver `vistaDeDocumentos`. Foi exatamente aqui que o
+  // ACHADO-01 vivia: os `return res.render(<vista de gestão>)` saltavam a
+  // decisão e serviam ao suporte a vista administrativa (com «Ver PDF»,
+  // «Abrir ficheiro», «Enviar por email» e o UID do recibo).
   if (rotulo === 'Recibos de Pagamento') {
     const anoRecibos = parseInt(req.query.ano, 10) || null;
     if (!anoRecibos) {
@@ -155,7 +198,7 @@ router.get('/documentos', async (req, res) => {
         porAno.set(ano, (porAno.get(ano) || 0) + 1);
       }
       const anos = [...porAno.entries()].map(([value, n]) => ({ ano: value, n })).sort((a, b) => b.ano - a.ano);
-      return res.render('admin/documentos/recibos-anos', {
+      return res.render(vistaDeDocumentos(req, 'recibos-anos'), {
         titulo: 'Recibos de Pagamento',
         anos,
         driveLigado: drive.isConfigured(req.condominioId),
@@ -168,6 +211,20 @@ router.get('/documentos', async (req, res) => {
       where: { condominio_id: req.condominioId, pasta: 'recibos', data: { [Op.between]: [inicio, fim] } },
       order: [['data', 'DESC'], ['id', 'DESC']],
     });
+    if (req.suporte) {
+      // O diagnóstico vê os METADADOS da pasta (estado de armazenamento), nunca
+      // a vista de gestão dos recibos.
+      return res.render(vistaDeDocumentos(req, 'listar'), {
+        titulo: 'Documentos',
+        documentos: docs,
+        pasta,
+        pastasMulti: pastasMulti || null,
+        rotulo,
+        nDocumentos: docs.length,
+        pastas: mapa,
+        driveLigado: drive.isConfigured(req.condominioId),
+      });
+    }
     const codigos = docs.map((d) => d.numero_documento).filter(Boolean);
     const recibos = codigos.length
       ? await Recibo.findAll({
@@ -203,7 +260,7 @@ router.get('/documentos', async (req, res) => {
         reciboPdf: rec && rec.id ? `/admin/quotas/recibos/${rec.id}/pdf` : null,
       };
     });
-    return res.render('admin/documentos/recibos', {
+    return res.render(vistaDeDocumentos(req, 'recibos'), {
       titulo: 'Recibos de Pagamento',
       ano: anoRecibos,
       linhas,
@@ -216,7 +273,7 @@ router.get('/documentos', async (req, res) => {
     include: [{ model: Categoria, as: 'categorias', through: { attributes: [] }, required: false }],
     order: [['data', 'DESC'], ['id', 'DESC']],
   });
-  res.render(req.suporte ? 'admin/documentos/listar-suporte' : 'admin/documentos/listar', {
+  res.render(vistaDeDocumentos(req, 'listar'), {
     titulo: rotulo ? `Documentos · ${rotulo}` : 'Documentos',
     documentos,
     pasta,

@@ -207,6 +207,56 @@ function mutacao({ nome, ficheiro, de, para, global = false, script, esperaFalha
     script: 'test-allow-list-suporte.js',
   });
 
+  // ── 10. A decisão única de vista deixa de consultar `req.suporte` ─
+  // É o defeito EXATO do ACHADO-01, na sua forma mínima e ALCANÇÁVEL: a função
+  // que decide a vista passa a devolver sempre a vista do condomínio. Os três
+  // ramos que hoje fazem `res.render(vistaDeDocumentos(req, …))` — incluindo os
+  // dois de recibos (`recibos-anos`, `recibos`) — deixam de minimizar em
+  // suporte. O T4.0 tem de detetar que o suporte passou a receber a vista
+  // administrativa.
+  //
+  // A mutação é feita na FUNÇÃO DE DECISÃO, não num `return` de ramo: repor um
+  // nome literal num ramo específico não bastaria para o teste morder, porque a
+  // decisão continuaria a minimizar. O risco que importa é a remoção do
+  // princípio (a vista depende de `req.suporte`), não a de uma ocorrência.
+  mutacao({
+    nome: '10. a decisão de vista deixa de consultar req.suporte (ACHADO-01)',
+    ficheiro: 'routes/documentos.js',
+    de: '  return req.suporte ? VISTA_SUPORTE : `admin/documentos/${alvo}`;',
+    para: '  return `admin/documentos/${alvo}`;',
+    script: 'test-t4-suporte-isolamento.js',
+  });
+
+  // ── 11. O ramo de recibos volta a RENDERIZAR SEM CONSULTAR o suporte ─
+  // A forma exata que o ACHADO-01 tinha: o ramo `?pasta=recibos` faz
+  // `return res.render(<vista de gestão>)` com o nome LITERAL, decidindo a
+  // vista por si ANTES da decisão única. É a mutação que repõe o defeito
+  // ORIGINAL, e o T4.0 tem de a apanhar.
+  //
+  // A asserção correspondente NÃO é «o handler tem de ter um `return`»: é «em
+  // suporte só a vista minimizada pode ser renderizada». Um ramo que renderize
+  // por si continua correto desde que renderize a vista minimizada.
+  mutacao({
+    nome: '11. ramo de recibos volta a renderizar sem consultar o suporte (ACHADO-01)',
+    ficheiro: 'routes/documentos.js',
+    de: "      return res.render(vistaDeDocumentos(req, 'recibos-anos'), {",
+    para: "      return res.render('admin/documentos/recibos-anos', {",
+    script: 'test-t4-suporte-isolamento.js',
+  });
+
+  // ── 12. A vista de gestão dos recibos perde a capacidade de gestão ─
+  // O T6.c fixa que `recibos.handlebars` é uma vista de GESTÃO (tem «Enviar por
+  // email»/«Eliminar» e imprime o UID). Se essa capacidade desaparecer, a
+  // justificação para a excluir do suporte muda — e a decisão tem de ser
+  // revista, não herdada. A mutação remove a ligação de eliminação.
+  mutacao({
+    nome: '12. vista de gestão dos recibos perde a ação de eliminar (base da exclusão)',
+    ficheiro: 'views/admin/documentos/recibos.handlebars',
+    de: '<form action="/admin/documentos/{{id}}/eliminar" method="POST"',
+    para: '<form action="/admin/documentos/{{id}}/inativo" method="POST"',
+    script: 'test-mascara-vistas.js',
+  });
+
   console.log(`\n✓ Testes de mutação passaram (${nTestes} mutações, todas detetadas e revertidas).`);
 })().catch((e) => {
   console.error('✗ FALHA:', e.message);

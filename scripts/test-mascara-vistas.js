@@ -54,6 +54,26 @@ const VISTAS = [
   },
 ];
 
+// ── (c) As vistas de GESTÃO dos recibos não podem ir para o suporte ──
+// ACHADO-01: estas duas vistas eram renderizadas em contexto de suporte (o ramo
+// `?pasta=recibos` fazia `return res.render(<vista de gestão>)`, saltando a
+// decisão). Exibem o `codigo_verificacao` (UID) de cada recibo e ligações de
+// AÇÃO — «Ver PDF», «Abrir ficheiro», «Abrir referência externa», «Enviar por
+// email» e «Eliminar».
+//
+// Esta é uma verificação de ESTRUTURA, complementar ao T4.0 (que prova por HTTP
+// qual a vista realmente devolvida): fixa que as vistas de gestão continuam a
+// ter exatamente estas capacidades. Se uma delas perder uma ação, o T4.0
+// continuaria a passar — mas a razão pela qual a vista é proibida ao suporte
+// teria deixado de existir, e a decisão precisaria de ser revista.
+const VISTAS_GESTAO_RECIBOS = [
+  { ficheiro: 'views/admin/documentos/recibos.handlebars',
+    exigido: [/\/admin\/documentos\/\{\{id\}\}\/email/, /\/admin\/documentos\/\{\{id\}\}\/eliminar/, /uid/] },
+  { ficheiro: 'views/admin/documentos/recibos-anos.handlebars',
+    exigido: [/\/admin\/documentos\?pasta=recibos&ano=/] },
+];
+
+
 // ── (a) Verificação estática ───────────────────────────────────────
 titulo('T6.a — as vistas de suporte usam máscaras e não imprimem PII crua');
 for (const v of VISTAS) {
@@ -68,6 +88,18 @@ for (const v of VISTAS) {
     assert.ok(!re.test(src), `${v.ficheiro}: NÃO pode imprimir o campo cru ${re}`);
   }
   feito(`${v.ficheiro}: máscaras presentes, campos crus ausentes`);
+}
+
+// As vistas de GESTÃO dos recibos — a razão pela qual não podem servir o suporte.
+titulo('T6.c — as vistas de gestão dos recibos mantêm as capacidades que as excluem do suporte');
+for (const v of VISTAS_GESTAO_RECIBOS) {
+  const p = path.join(RAIZ, v.ficheiro);
+  assert.ok(fs.existsSync(p), `a vista ${v.ficheiro} existe`);
+  const src = fs.readFileSync(p, 'utf8');
+  for (const re of v.exigido) {
+    assert.ok(re.test(src), `${v.ficheiro}: tem de conter ${re} (é uma vista de GESTÃO — ver ACHADO-01)`);
+  }
+  feito(`${v.ficheiro}: capacidades de gestão presentes (vista NÃO minimizada)`);
 }
 
 // ── (b) Verificação por RENDER ─────────────────────────────────────

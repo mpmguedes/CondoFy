@@ -98,7 +98,14 @@ const modelosDuplo = new Proxy(modelosAlvo, {
 // ── Acesso de suporte: âmbito no condomínio A ───────────────────────
 const ACESSO_A = { id: 501, condominio_id: CID_A, nivel: 'diagnostico', motivo: 'diagnóstico', session_id: null, expira_em: new Date(Date.now() + 3600e3) };
 const OPERADOR = { id: 9, nome: 'Sup', email: 'sup@plataforma.pt', role: null, role_global: 'super_admin', pessoa_id: null, ativo: true };
+const UTILIZADOR_GESTOR = { id: 42, nome: 'Ana', email: 'ana@exemplo.pt', role: null, role_global: null, pessoa_id: null, ativo: true };
 let SESSAO_SUPORTE = null;
+
+// Perfil do pedido: `suporte` (sem associação → a via do suporte) ou
+// `gestor` (utilizador normal, com associação real). O contexto NÃO é forjado
+// aqui: é o `comCondominioAtivo` REAL do router que o resolve a partir da
+// sessão — só assim se testa o encadeamento verdadeiro.
+let perfilAtivo = 'suporte';
 
 const suporteReal = require(path.join(RAIZ, 'helpers/suporte'));
 const suporteDuplo = {
@@ -106,6 +113,7 @@ const suporteDuplo = {
   vigente: async (req, condominioId) => {
     // Contrato real: só devolve o acesso se o âmbito COINCIDIR com o pedido.
     // É isto que impede o suporte de A de "saltar" para B.
+    if (perfilAtivo !== 'suporte') return null; // utilizador normal não é suporte
     if (Number(condominioId) !== ACESSO_A.condominio_id) return null;
     return ACESSO_A;
   },
@@ -123,7 +131,7 @@ const stubs = {
   'helpers/convites': { estadoDoConvite: () => 'enviado', marcarAceite: async () => ({}) },
   'helpers/background-jobs': { resumo: () => ({}), registar: () => {}, listarTarefas: () => [] },
   'helpers/titularidades': { fracoesDoUtilizador: async () => ({}), historicoDaPessoa: async () => [], estaAtiva: () => true },
-  'helpers/documentos-acesso': { verificarDocumento: async () => ({ ok: true }), autorizarAcessoDocumento: async () => ({ ok: true }), servirDocumento: async () => ({ ok: true }), responderRecusa: () => {} },
+  'helpers/documentos-acesso': { verificarDocumento: async () => ({ ok: true }), autorizarAcessoDocumento: async () => ({ ok: true }), servirDocumento: async () => ({ ok: true }), responderRecusa: () => {}, urlInterna: () => '/admin/documentos/0/ficheiro', urlParaEmail: () => '/admin/documentos/0/ficheiro' },
   // As pastas são PURAS — usam-se as REAIS (estender, não substituir, para não
   // perder exports como `pastasPersonalizadas` que o handler invoca).
   'helpers/documento-pastas': require(path.join(RAIZ, 'helpers/documento-pastas')),
@@ -139,9 +147,30 @@ for (const [rel, valor] of Object.entries(stubs)) {
   require.cache[p] = { id: p, filename: p, loaded: true, children: [], paths: [], exports: valor };
 }
 
-// Um utilizador de condomínio chamado `condominio_id` também nos modelos de
-// associação: o suporte não tem associação (é o que força a via do suporte).
-modelosDuplo.UserCondominio = { findOne: async () => null, findAll: async () => [], count: async () => 0 };
+// Associações reais: NENHUMA para o operador de suporte (é o que força a via do
+// suporte); UMA para o utilizador normal do perfil `gestor` (é o que exercita
+// o ramo de condomínio, para provar que a correção não o alterou).
+modelosDuplo.UserCondominio = {
+  findOne: async ({ where } = {}) => {
+    if (perfilAtivo === 'suporte') return null;
+    return where && where.utilizador_id === UTILIZADOR_GESTOR.id
+      ? { id: 1, utilizador_id: UTILIZADOR_GESTOR.id, condominio_id: CID_A, role: perfilAtivo, estado: 'ativo' }
+      : null;
+  },
+  findAll: async () => [],
+  count: async () => 0,
+};
+
+// ── Observação da VISTA RENDERIZADA ──────────────────────────────────
+// A decisão de vista é o que o ACHADO-01 contornava. `res.render` é envolvido
+// (no protótipo do Express) para REGISTAR cada vista renderizada. Não se
+// substitui a implementação: chama-se a original, para não alterar o render.
+const vistaRenderizada = [];
+const renderOriginal = express.response.render;
+express.response.render = function (vista, ...resto) {
+  vistaRenderizada.push(vista);
+  return renderOriginal.call(this, vista, ...resto);
+};
 
 // ── App de teste ────────────────────────────────────────────────────
 const { engine } = require('express-handlebars');
@@ -176,10 +205,14 @@ app.use((req, res, next) => {
 });
 
 app.use((req, res, next) => {
-  req.user = OPERADOR;
+  // O utilizador depende do PERFIL: o operador de suporte não tem associação;
+  // o gestor tem-na (é o que faz `comCondominioAtivo` escolher o ramo real).
+  req.user = perfilAtivo === 'suporte' ? OPERADOR : UTILIZADOR_GESTOR;
   req.isAuthenticated = () => true;
   req.session.condominio_ativo_id = CID_A;
-  req.session[CHAVE_SESSAO_SUPORTE] = ACESSO_A.id;
+  // A marca de suporte na SESSÃO só existe no perfil de suporte.
+  if (perfilAtivo === 'suporte') req.session[CHAVE_SESSAO_SUPORTE] = ACESSO_A.id;
+  else delete req.session[CHAVE_SESSAO_SUPORTE];
   res.locals.user = req.user;
   res.locals.suporte = null;
   next();
@@ -233,13 +266,105 @@ const ROTAS = [
   '/admin/relatorios/financeiro',
 ];
 
+// ── VISTAS: quem decide a vista, e porque é que isto é testado AQUI ──
+// ACHADO-03 da auditoria de 2026-09-18: as rotas admitidas eram exercitadas
+// apenas pelo CAMINHO (`/admin/documentos`), sem query string. Mas o isolamento
+// de um módulo com VÁRIOS ramos de render NÃO se esgota no caminho: a query
+// string escolhe o ramo, e o ramo pode escolher a vista.
+//
+// Foi assim que o ACHADO-01 passou: `rotulo === 'Recibos de Pagamento'` (ramo
+// aberto por `?pasta=recibos`) fazia `return res.render(<vista de gestão>)`
+// DENTRO do ramo, saltando a decisão `req.suporte ? … : …` que só existia no
+// caminho final. Com `req.path` — que **não tem query string** — a allow-list
+// aprovava todas as variantes, e o teste também.
+//
+// Aqui a vista é OBSERVADA (`vistaRenderizada`), não inferida. É a única forma
+// de o teste falhar quando a decisão de vista deixa de respeitar `req.suporte`,
+// seja em que ramo for.
+const VISTAS_SUPORTE_MINIMIZADAS = [
+  // Todos os nomes de vista que o suporte PODE receber no módulo documentos.
+  // A lista é fechada: uma vista nova fora dela faz falhar o teste, para que a
+  // decisão seja consciente e não um esquecimento.
+  'admin/documentos/listar-suporte',
+];
+
+// Todas as vistas de GESTÃO do módulo documentos. Em suporte, NENHUMA pode ser
+// renderizada — é exactamente esta asserção que morde no ACHADO-01.
+const VISTAS_GESTAO_DOCUMENTOS = [
+  'admin/documentos/biblioteca',
+  'admin/documentos/listar',
+  'admin/documentos/recibos',
+  'admin/documentos/recibos-anos',
+  'admin/documentos/form',
+  'admin/documentos/email',
+];
+
+// Rotas admitidas COM query string. Um caminho admitido pode ter várias vistas
+// conforme a query; aqui exercita-se cada uma das que o handler conhece.
+//
+// Requisito da auditoria: `/admin/documentos?pasta=recibos&ano=2026` tem de ser
+// testada EXPLICITAMENTE e tratada como a mesma rota `/admin/documentos`.
+const ROTAS_COM_QUERY = [
+  '/admin/documentos?pasta=recibos',
+  '/admin/documentos?pasta=recibos&ano=2026',
+  '/admin/documentos?pasta=atas',
+  '/admin/documentos?pastas=atas,contratos',
+];
+
 (async () => {
   console.log('T4 — isolamento multi-condomínio no acesso de suporte');
+
+  // ── 0. A vista devolvida ao suporte é a MINIMIZADA ──────────────
+  // Corre ANTES das provas de âmbito: se a vista de gestão for servida, o
+  // isolamento por consulta já não protege nada de relevante (a vista expõe
+  // ações e identificadores que a de suporte não pode mostrar). Ver ACHADO-01.
+  titulo('T4.0 — o suporte só recebe a vista MINIMIZADA (nenhuma vista de gestão)');
+  const ROTAS_DOCUMENTOS = ROTAS.filter((r) => r === '/admin/documentos').concat(ROTAS_COM_QUERY);
+  for (const rota of ROTAS_DOCUMENTOS) {
+    vistaRenderizada.length = 0;
+    const resp = await pedir(rota);
+    assert.notStrictEqual(resp.status, 500, `suporte: ${rota} não rebenta (${resp.status})`);
+    assert.ok(vistaRenderizada.length > 0,
+      `suporte: ${rota} não renderizou vista nenhuma — o teste deixou de observar a decisão`);
+
+    for (const v of vistaRenderizada) {
+      assert.ok(!VISTAS_GESTAO_DOCUMENTOS.includes(v),
+        `suporte: ${rota} renderizou a vista de GESTÃO «${v}» — o ramo saltou a decisão de vista (ACHADO-01)`);
+      assert.ok(VISTAS_SUPORTE_MINIMIZADAS.includes(v),
+        `suporte: ${rota} renderizou «${v}», fora da lista de vistas admitidas ao diagnóstico — ` +
+        'se a vista é nova, acrescente-a a VISTAS_SUPORTE_MINIMIZADAS de forma CONSCIENTE');
+    }
+    feito(`GET ${rota} → vista minimizada (${vistaRenderizada.join(', ')})`);
+  }
+
+  // ── 0-bis. A MESMA rota, fora de suporte, mantém a vista de gestão ─
+  // Prova que a correção não "achatou" a navegação: um gestor continua a ver a
+  // biblioteca, a tabela e a navegação de recibos. Sem isto, a forma mais
+  // fácil de fazer o T4.0 passar seria servir a vista de suporte a todos.
+  titulo('T4.0b — fora de suporte, a vista de gestão mantém-se (comportamento preservado)');
+  const PERFIL_ANTERIOR = perfilAtivo;
+  perfilAtivo = 'gestor';
+  const VISTAS_ESPERADAS = [
+    ['/admin/documentos', 'admin/documentos/biblioteca'],
+    ['/admin/documentos?pasta=recibos', 'admin/documentos/recibos-anos'],
+    ['/admin/documentos?pasta=recibos&ano=2026', 'admin/documentos/listar'],
+    ['/admin/documentos?pasta=atas', 'admin/documentos/listar'],
+  ];
+  for (const [rota, esperada] of VISTAS_ESPERADAS) {
+    vistaRenderizada.length = 0;
+    const resp = await pedir(rota);
+    assert.notStrictEqual(resp.status, 500, `gestor: ${rota} não rebenta (${resp.status})`);
+    assert.ok(vistaRenderizada.includes(esperada),
+      `gestor: ${rota} devia renderizar «${esperada}», renderizou «${vistaRenderizada.join(', ')}» ` +
+      '(a correção do suporte não pode alterar o comportamento normal)');
+    feito(`GET ${rota} → «${esperada}» (gestor)`);
+  }
+  perfilAtivo = PERFIL_ANTERIOR;
 
   // ── 1. Cada rota admitida filtra por `condominio_id = A` ─────────
   titulo('T4.1 — toda a consulta no contexto de A filtra por condominio_id = A');
   const semAmbito = [];
-  for (const rota of ROTAS) {
+  for (const rota of ROTAS.concat(ROTAS_COM_QUERY)) {
     diario.length = 0;
     const resp = await pedir(rota);
     assert.notStrictEqual(resp.status, 500, `suporte: ${rota} não rebenta (${resp.status})`);
