@@ -91,14 +91,14 @@
                 {{else if (eq deliberacao_estado 'rejeitada')}}<span class="badge text-bg-danger">Rejeitada</span>
                 {{else if deliberacao_estado}}<span class="badge text-bg-warning">{{deliberacao_estado}}</span>
                 {{else}}<span class="badge text-bg-light border">Pendente</span>{{/if}}
-                {{#if valor_aprovado}}<span class="ms-2">Valor aprovado: <strong>{{money valor_aprovado}}</strong></span>{{/if}}
+                {{#if valor_aprovado}}<span class="ms-2">Valor aprovado: <strong>{{eur valor_aprovado}}</strong></span>{{/if}}
               </div>
               {{#if fcr}}
               <div class="small mt-2 ps-2 border-start">
                 <div class="text-muted">Fundo de Reserva (FCR) deste ponto</div>
-                <div>Aprovado: <strong>{{money fcr.valorAprovado}}</strong></div>
-                <div>Utilizado: <strong>{{money fcr.utilizado}}</strong></div>
-                <div>Disponível: <strong>{{money fcr.disponivel}}</strong></div>
+                <div>Aprovado: <strong>{{eur fcr.valorAprovado}}</strong></div>
+                <div>Utilizado: <strong>{{eur fcr.utilizado}}</strong></div>
+                <div>Disponível: <strong>{{eur fcr.disponivel}}</strong></div>
               </div>
               {{/if}}
             </div>
