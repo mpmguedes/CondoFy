@@ -735,11 +735,13 @@ async function main() {
     ORDER BY t.condominio_id, n_membros DESC
   `);
 
-  // Totais dos grupos mistos — usados por V4e para reconciliar
-  // «frações em grupo misto» vs «quotas futuras pendentes congeladas».
+  // Totais dos grupos mistos — usados por V4e para reconciliar FRAÇÕES com
+  // FRAÇÕES (nunca frações com quotas: uma fração pode ter várias quotas).
   // n_membros é o nº de FRAÇÕES no grupo; n_com_pendente é quantas dessas
-  // frações têm pelo menos uma quota pendente futura. A diferença são frações
+  // FRAÇÕES têm pelo menos uma quota pendente futura. A diferença são frações
   // congeladas «por tabela» que não têm quota a recalcular.
+  //
+  // ⚠ Unidades: TUDO o que sai daqui é contagem de FRAÇÕES, não de quotas.
   const nGruposMistos = v2b.length;
   const nFracoesEmGruposMistos = v2b.reduce((a, r) => a + Number(r.n_membros || 0), 0);
   const nFracoesMistasComPendente = v2b.reduce((a, r) => a + Number(r.n_com_pendente || 0), 0);
@@ -758,10 +760,15 @@ async function main() {
     }
     console.log('');
     console.log(`  ${v2b.length} grupo(s) misto(s) — com D2, estes grupos ficam CONGELADOS no recálculo.`);
+    console.log('');
+    console.log('  ⚠ As três contagens abaixo são de FRAÇÕES (não de quotas). Uma fração pode');
+    console.log('   ter VÁRIAS quotas futuras pendentes, logo o nº de quotas congeladas (V4e)');
+    console.log('   é geralmente MAIOR do que o nº de frações congeladas aqui.');
     console.log(`  Frações nos grupos mistos            : ${nFracoesEmGruposMistos}`);
     console.log(`  Dessas, COM quota pendente futura    : ${nFracoesMistasComPendente}`);
     console.log(`  Dessas, SEM quota pendente futura    : ${nFracoesEmGruposMistos - nFracoesMistasComPendente}`);
-    console.log('  → só as que têm quota pendente futura podem aparecer em V4e como congeladas.');
+    console.log('  → todas as quotas futuras das frações «COM quota pendente futura»');
+    console.log('    ficam congeladas por D2 (não só uma por fração).');
   }
 
   // ══ V3 ══════════════════════════════════════════════════════════════
@@ -1087,23 +1094,103 @@ async function main() {
   console.log(`  − congeladas por D2 (grupo misto)             : ${congeladas.length}`);
   console.log(`  = recalculáveis                               : ${recalc.length}`);
   console.log('');
-  console.log('  ⚠ Os três números acima vêm da BD, não de constantes. Reconcilição:');
-  console.log(`     grupos mistos (V2b)                     : ${nGruposMistos}`);
-  console.log(`     frações nesses grupos (V2b)             : ${nFracoesEmGruposMistos}`);
-  console.log(`     dessas, COM quota pendente futura       : ${nFracoesMistasComPendente}`);
-  console.log(`     dessas, SEM quota pendente futura       : ${nFracoesEmGruposMistos - nFracoesMistasComPendente}`);
-  console.log(`     congeladas observadas em V4e            : ${congeladas.length}`);
-  if (nFracoesMistasComPendente !== congeladas.length) {
-    console.log('     ↳ DIVERGE. Uma fração de grupo misto tem quota pendente futura mas não');
-    console.log('       aparece em V4e — só pode ser por data_vencimento < CURDATE(),');
-    console.log('       valor_por_1000 NULL ou fcr_percentagem NULL/0. Ver as três');
-    console.log('       condições do WHERE de V4e antes de tirar conclusões.');
-  } else {
-    console.log('     ✓ consistente: cada fração mista com pendente futura é 1 quota congelada.');
-  }
-  console.log(`     total de futuras pendentes com v/1000 e FCR>0 : ${v4e.length}`);
-  console.log(`     recalculáveis (futuras − congeladas)          : ${recalc.length}`);
+
+  // ── Reconciliação: QUOTAS contra QUOTAS, frações contra frações ────
+  //
+  // ⛔ DEFEITO CORRIGIDO. A versão anterior comparava `nFracoesMistasComPendente`
+  // (contagem de FRAÇÕES, vinda de V2b) com `congeladas.length` (contagem de
+  // QUOTAS, vinda de V4e) e imprimia «DIVERGE» quando diferiam. São grandezas
+  // diferentes: uma fração pode ter VÁRIAS quotas futuras pendentes, logo
+  // 13 frações podem gerar 38 quotas congeladas. O aviso era um FALSO ALARME, e
+  // a explicação que sugeria (data_vencimento < CURDATE(), valor_por_1000 NULL,
+  // fcr_percentagem NULL/0) apontava para o WHERE de V4e quando a causa real era
+  // a incomensurabilidade das duas contagens.
+  //
+  // A reconciliação passa a comparar, lado a lado, cada grandeza com o seu
+  // equivalente. Todas as contagens de QUOTAS vêm de V4e (mesma query, mesma
+  // população); as de FRAÇÕES vêm de V2b e são identificadas como tal.
+  const fracoesCongeladas = new Set(congeladas.map((r) => `${r.condominio_id}:${r.fracao_id}`));
+  const chaveMista = (r) => `${r.condominio_id}:${r.fracao_id}`;
+
+  console.log('  RECONCILIAÇÃO — cada grandeza comparada com o seu equivalente');
   console.log('');
+  console.log('   FRAÇÕES (fonte: V2b, grupos de igualdade exata com ≥1 paga e ≥1 pendente futura)');
+  console.log(`     grupos mistos                                  : ${nGruposMistos}`);
+  console.log(`     frações nesses grupos                          : ${nFracoesEmGruposMistos}`);
+  console.log(`     dessas, COM quota pendente futura              : ${nFracoesMistasComPendente}`);
+  console.log(`     dessas, SEM quota pendente futura              : ${nFracoesEmGruposMistos - nFracoesMistasComPendente}`);
+  console.log('');
+  console.log('   QUOTAS (fonte: V4e, pendentes futuras com valor_por_1000 e FCR>0)');
+  console.log(`     futuras pendentes (total)                      : ${v4e.length}`);
+  console.log(`     congeladas por D2                              : ${congeladas.length}`);
+  console.log(`     recalculáveis                                  : ${recalc.length}`);
+  console.log(`     frações distintas com ≥1 quota congelada       : ${fracoesCongeladas.size}`);
+  console.log('');
+
+  // Dois lados comparáveis: frações congeladas (V4e, via quotas) vs frações
+  // mistas com pendente futura (V2b). Ambos contam FRAÇÕES.
+  if (fracoesCongeladas.size !== nFracoesMistasComPendente) {
+    console.log('     ✗ DIVERGE (frações): V4e congela quotas de ' + fracoesCongeladas.size +
+      ' frações distintas, mas V2b diz');
+    console.log('       que ' + nFracoesMistasComPendente + ' frações de grupo misto têm quota pendente futura.');
+    console.log('       Investigar: pode haver fração cuja quota futura cai fora do WHERE de V4e');
+    console.log('       (data_vencimento < CURDATE(), valor_por_1000 NULL, fcr_percentagem NULL/0).');
+  } else {
+    console.log(`     ✓ frações consistentes: ${fracoesCongeladas.size} frações congeladas (V4e) = ` +
+      `${nFracoesMistasComPendente} frações mistas com pendente futura (V2b).`);
+  }
+
+  // As quotas congeladas têm de bater certo com as quotas futuras dessas frações.
+  // 13 frações × 3 quotas de exemplo dariam 39; o nº real é o que a BD tem.
+  const quotasPorFrancao = new Map();
+  for (const r of congeladas) {
+    const k = chaveMista(r);
+    quotasPorFrancao.set(k, (quotasPorFrancao.get(k) || 0) + 1);
+  }
+  const maxPorFrancao = Math.max(0, ...quotasPorFrancao.values());
+  const minPorFrancao = Math.min(...(quotasPorFrancao.size ? quotasPorFrancao.values() : [0]));
+  console.log(`     ✓ quotas: ${congeladas.length} congeladas repartidas por ${fracoesCongeladas.size} ` +
+    `fração(ões) — entre ${minPorFrancao} e ${maxPorFrancao} quotas por fração.`);
+  if (minPorFrancao !== maxPorFrancao) {
+    console.log(`       (as frações não têm todas o mesmo nº de quotas futuras — é o que faz`);
+    console.log(`        ${fracoesCongeladas.size} frações ≠ ${congeladas.length} quotas. Não é divergência.)`);
+  }
+  const somaPotencial = fracoesCongeladas.size * maxPorFrancao;
+  if (somaPotencial !== congeladas.length) {
+    console.log(`       Perspetiva «n × máximo»: ${fracoesCongeladas.size} × ${maxPorFrancao} = ` +
+      `${somaPotencial}, mas observadas ${congeladas.length}`);
+    console.log(`       → ${somaPotencial - congeladas.length} quota(s) a menos, porque há frações com menos`);
+    console.log('         meses futuros pendentes. Confirma-se pelo detalhe abaixo.');
+  }
+  console.log('');
+
+  if (congeladas.length) {
+    console.log('   DETALHE das frações com quotas congeladas (1 linha por fração):');
+    console.log(
+      `   ${txt('cond', 6)}${txt('fração', 8)}${txt('perm‰', 9)}${txt('quotas cong.', 13)}` +
+        `${txt('meses', 26)}`
+    );
+    const porFracao = new Map();
+    for (const r of congeladas) {
+      const k = chaveMista(r);
+      if (!porFracao.has(k)) porFracao.set(k, []);
+      porFracao.get(k).push(r);
+    }
+    for (const [k, linhas] of porFracao) {
+      const [cond, fracao] = k.split(':');
+      const meses = linhas
+        .map((r) => `${r.ano}-${String(r.mes).padStart(2, '0')}`)
+        .sort()
+        .join(' ');
+      console.log(
+        `   ${txt(cond, 6)}${txt(fracao, 8)}${txt(linhas[0].permilagem_chave, 9)}` +
+          `${txt(linhas.length, 13)}${txt(meses, 26)}`
+      );
+    }
+    console.log('');
+    console.log(`   Σ quotas congeladas = ${congeladas.length} (soma da coluna «quotas cong.»)`);
+    console.log('');
+  }
 
   if (!recalc.length) {
     console.log('  (nenhuma quota recalculável)');
