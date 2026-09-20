@@ -291,6 +291,11 @@ app.use('/admin', require('./routes/fornecedores'));
 // Relatórios do condomínio (Relatório Financeiro / balancete) — ver
 // routes/relatorios.js. Montado antes dos placeholders.
 app.use('/admin', require('./routes/relatorios'));
+// Calendário do condomínio (agrega assembleias + avisos programados) — ver
+// routes/calendario.js. Tem de ser montado ANTES de `placeholders`: caso
+// contrário, a rota genérica `/:modulo` de placeholders capturaria
+// `/admin/calendario` e serviria o placeholder «em desenvolvimento».
+app.use('/admin', require('./routes/calendario'));
 app.use('/admin', require('./routes/placeholders'));
 // ── Defesa estrutural do portal do condómino ───────────────────────
 // O suporte diagnóstico NUNCA entra no portal do condómino. Esta guarda é

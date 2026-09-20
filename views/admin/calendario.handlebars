@@ -1,0 +1,186 @@
+{{!-- Calendário do condomínio (administração).
+
+     Vista de lista, não grelha mensal: a grelha não existe nesta aplicação e
+     não se inventa uma (a vista do portal do condómino documenta a mesma
+     decisão). A lista mostra primeiro o que vai acontecer — com destaque para
+     o próximo acontecimento relevante — e depois o histórico, que continua
+     consultável.
+
+     Os acontecimentos NÃO são criados aqui: vêm das Assembleias e das
+     Comunicações programadas, e esta página liga aos módulos de origem. --}}
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Calendário</h1>
+    <p class="subtitle">
+      Acontecimentos do condomínio — assembleias e comunicações programadas
+    </p>
+  </div>
+  <a href="/admin" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Painel</a>
+</div>
+
+{{!-- ── Criar acontecimentos (nos módulos de origem) ───────────────── --}}
+<div class="card mb-3">
+  <div class="card-body d-flex flex-wrap align-items-center gap-2">
+    <span class="text-muted small mb-0 me-auto">
+      Para marcar um acontecimento novo, use o módulo respetivo — aparece logo neste calendário.
+    </span>
+    <a href="/admin/assembleias/nova" class="btn btn-sm btn-primary">
+      <span class="material-symbols-outlined me-1">add</span>Nova assembleia
+    </a>
+    <a href="/admin/avisos/nova" class="btn btn-sm btn-outline-primary">
+      <span class="material-symbols-outlined me-1">campaign</span>Programar comunicação
+    </a>
+  </div>
+</div>
+
+{{!-- ── Filtros ─────────────────────────────────────────────────────── --}}
+<div class="card mb-3">
+  <div class="card-body">
+    <form action="/admin/calendario" method="GET" class="row g-2 align-items-end">
+      <div class="col-12 col-sm-6 col-lg-3">
+        <label class="form-label small mb-1" for="filtro-tipo">Tipo</label>
+        <select class="form-select form-select-sm" id="filtro-tipo" name="tipo">
+          <option value="">Todos os tipos</option>
+          <option value="assembleia" {{selected filtros.tipo 'assembleia'}}>Assembleias</option>
+          <option value="aviso" {{selected filtros.tipo 'aviso'}}>Comunicações programadas</option>
+        </select>
+      </div>
+      {{#if meses.length}}
+      <div class="col-12 col-sm-6 col-lg-3">
+        <label class="form-label small mb-1" for="filtro-mes">Mês</label>
+        <select class="form-select form-select-sm" id="filtro-mes" name="mes">
+          <option value="">Todos os meses</option>
+          {{#each meses}}
+          <option value="{{valor}}" {{selected ../filtros.mes valor}}>{{etiqueta}}</option>
+          {{/each}}
+        </select>
+      </div>
+      {{/if}}
+      <div class="col-12 col-lg-4 d-flex gap-2">
+        <button type="submit" class="btn btn-sm btn-primary">
+          <span class="material-symbols-outlined me-1">filter_alt</span>Aplicar
+        </button>
+        {{#if temFiltros}}
+        <a href="/admin/calendario" class="btn btn-sm btn-outline-secondary">Limpar</a>
+        {{/if}}
+      </div>
+    </form>
+  </div>
+</div>
+
+{{#if total}}
+{{#if temFiltros}}
+<p class="text-muted small">
+  {{total}} acontecimento(s) com os filtros aplicados
+  {{#if totalSemFiltros}}· {{totalSemFiltros}} no total{{/if}}
+</p>
+{{/if}}
+
+{{#if proximo}}
+{{!-- ── Próximo acontecimento (destaque) ───────────────────────────── --}}
+<h2 class="h6 text-uppercase text-muted mt-4 mb-2">Próximo</h2>
+<div class="card mb-4 {{#if proximo.relevante}}border-primary{{/if}}">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+      <div>
+        <span class="badge text-bg-light border">{{proximo.tipoRotulo}}</span>
+        {{#if proximo.relevante}}<span class="badge text-bg-primary ms-1">Relevante</span>{{/if}}
+        {{#if proximo.tituloDetalhe}}<span class="text-muted small ms-1">{{proximo.tituloDetalhe}}</span>{{/if}}
+      </div>
+      {{#if proximo.estadoRotulo}}<span class="badge {{proximo.estadoClasse}}">{{proximo.estadoRotulo}}</span>{{/if}}
+    </div>
+
+    <div class="mt-2">
+      <div class="h5 mb-0">{{proximo.titulo}}</div>
+      {{#if proximo.data}}<div class="text-muted">{{diaSemana proximo.data}}, {{formatDate proximo.data}}</div>{{/if}}
+    </div>
+
+    <div class="d-flex flex-wrap gap-3 mt-2 text-muted small">
+      {{#if proximo.hora}}<span><span class="material-symbols-outlined" aria-hidden="true" style="font-size:1rem;vertical-align:-3px">schedule</span> {{proximo.hora}}</span>{{/if}}
+      {{#if proximo.local}}<span><span class="material-symbols-outlined" aria-hidden="true" style="font-size:1rem;vertical-align:-3px">location_on</span> {{proximo.local}}</span>{{/if}}
+    </div>
+
+    {{#if proximo.link}}
+    <a class="btn btn-primary btn-sm mt-3" href="{{proximo.link}}">
+      <span class="material-symbols-outlined me-1">visibility</span>Ver detalhe
+    </a>
+    {{/if}}
+  </div>
+</div>
+{{/if}}
+
+{{!-- ── A seguir ────────────────────────────────────────────────────── --}}
+{{#if (gt proximos.length 1)}}
+<h2 class="h6 text-uppercase text-muted mb-2">A seguir</h2>
+<ul class="list-group mb-4">
+  {{#each proximos}}
+  {{#unless @first}}
+  <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div class="me-auto">
+      <div class="fw-semibold">
+        {{titulo}}
+        {{#if relevante}}<span class="badge text-bg-primary ms-1">Relevante</span>{{/if}}
+      </div>
+      <div class="text-muted small">
+        {{tipoRotulo}}{{#if data}} · {{diaSemana data}}, {{formatDate data}}{{/if}}{{#if hora}} · {{hora}}{{/if}}{{#if local}} · {{local}}{{/if}}
+      </div>
+    </div>
+    <div class="text-nowrap">
+      {{#if estadoRotulo}}<span class="badge {{estadoClasse}} me-2">{{estadoRotulo}}</span>{{/if}}
+      {{#if link}}<a href="{{link}}" class="btn btn-sm btn-outline-secondary" title="Ver detalhe"><span class="material-symbols-outlined">visibility</span></a>{{/if}}
+    </div>
+  </li>
+  {{/unless}}
+  {{/each}}
+</ul>
+{{/if}}
+
+{{#unless proximos.length}}
+<div class="card mb-4"><div class="card-body text-center text-muted py-4">
+  <span class="material-symbols-outlined" aria-hidden="true" style="font-size:2rem">event_busy</span>
+  <div class="fw-semibold mt-1">Sem acontecimentos futuros</div>
+  <div class="small">{{#if passados.length}}Os acontecimentos anteriores estão listados abaixo.{{else}}Não há nada agendado para os filtros escolhidos.{{/if}}</div>
+</div></div>
+{{/unless}}
+
+{{!-- ── Já aconteceu (histórico consultável) ───────────────────────── --}}
+{{#if passados.length}}
+<h2 class="h6 text-uppercase text-muted mb-2">Já aconteceu</h2>
+<ul class="list-group">
+  {{#each passados}}
+  <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div class="me-auto">
+      <div class="fw-semibold">
+        {{titulo}}
+        {{#if relevante}}<span class="badge text-bg-light border ms-1">Relevante</span>{{/if}}
+      </div>
+      <div class="text-muted small">
+        {{tipoRotulo}} · {{formatDate data}}{{#if hora}} · {{hora}}{{/if}}{{#if local}} · {{local}}{{/if}}
+      </div>
+    </div>
+    <div class="text-nowrap">
+      {{#if estadoRotulo}}<span class="badge {{estadoClasse}} me-2">{{estadoRotulo}}</span>{{/if}}
+      {{#if link}}<a href="{{link}}" class="btn btn-sm btn-outline-secondary" title="Ver detalhe"><span class="material-symbols-outlined">visibility</span></a>{{/if}}
+    </div>
+  </li>
+  {{/each}}
+</ul>
+{{/if}}
+
+{{else}}
+{{!-- ── Estado vazio ──────────────────────────────────────────────── --}}
+<div class="card"><div class="card-body text-center text-muted py-5">
+  <span class="material-symbols-outlined" aria-hidden="true" style="font-size:2.5rem">calendar_month</span>
+  {{#if temFiltros}}
+  <div class="fw-semibold mt-2">Sem acontecimentos para os filtros escolhidos</div>
+  <div class="small mb-3">Experimente outro tipo ou outro mês.</div>
+  <a href="/admin/calendario" class="btn btn-sm btn-outline-secondary">Limpar filtros</a>
+  {{else}}
+  <div class="fw-semibold mt-2">Ainda não há acontecimentos agendados</div>
+  <div class="small mb-3">As assembleias e as comunicações programadas aparecem aqui automaticamente.</div>
+  <a href="/admin/assembleias/nova" class="btn btn-sm btn-primary">
+    <span class="material-symbols-outlined me-1">add</span>Nova assembleia
+  </a>
+  {{/if}}
+</div></div>
+{{/if}}

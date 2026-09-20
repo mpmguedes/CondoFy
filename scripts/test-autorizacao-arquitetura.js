@@ -340,28 +340,58 @@ const escondidoAoGestor = (rota) => {
   if (pos === -1) return null;
   return condicoesAbertasAntesDe(pos).some((c) => /ne\s+condominioAtivo\.role\s+'gestor'/.test(c));
 };
-assert.strictEqual(escondidoAoGestor('/admin/calendario'), true, 'Calendário escondido ao gestor');
+// O calendário é uma área operacional (admin E gestor) — visível a ambos.
+// Tickets e Seguros continuam reservados ao admin.
+assert.strictEqual(escondidoAoGestor('/admin/calendario'), false, 'Calendário visível ao gestor');
 assert.strictEqual(escondidoAoGestor('/admin/tickets'), true, 'Tickets escondido ao gestor');
 assert.strictEqual(escondidoAoGestor('/admin/seguros'), true, 'Seguros escondido ao gestor');
 assert.strictEqual(escondidoAoGestor('/admin/assembleias'), false, 'Assembleias visível ao gestor');
-feito('Navegação: Calendário/Tickets/Seguros escondidos ao gestor; Assembleias visível');
+feito('Navegação: Calendário/Assembleias visíveis ao gestor; Tickets/Seguros escondidos');
 
 // A guarda guarda a mesma regra: esses módulos exigem admin; os outros gestor.
 const phPlaceholders = require(path.join(RAIZ, 'routes', 'placeholders.js'));
 const MODULOS = phPlaceholders.MODULOS;
 assert.ok(MODULOS, 'placeholders exporta MODULOS (para teste)');
-assert.strictEqual(MODULOS.calendario.minimo, 'admin', 'Calendário exige admin');
+// O CALENDÁRIO deixou de ser um placeholder: passou a router próprio
+// (`routes/calendario.js`, montado ANTES de `placeholders` — ver app.js), com
+// o MESMO mínimo das áreas operacionais (`gestor`), porque admin e gestor
+// devem ambos poder consultá-lo. Já não é «só para admin».
+// A verificação do placeholder de calendário (que exigia `minimo: 'admin'`)
+// foi substituída pela verificação do router real, mais abaixo.
+assert.ok(
+  !MODULOS.calendario,
+  'placeholders.js já não declara o módulo «calendario» (deixou de ser placeholder)'
+);
 assert.strictEqual(MODULOS.tickets.minimo, 'admin', 'Tickets exige admin');
 assert.strictEqual(MODULOS.seguros.minimo, 'admin', 'Seguros exige admin');
 assert.strictEqual(MODULOS.votacoes.minimo, 'gestor', 'Votações segue as Assembleias (gestor)');
 assert.strictEqual(MODULOS.amenidades.minimo, 'gestor', 'Amenidades segue as Comunicações (gestor)');
-feito('Guarda dos placeholders espelha a visibilidade na navegação');
 
-// Comportamento: a guarda de um módulo 'admin' recusa o gestor e aceita o admin.
+// A guarda do router do calendário coincide com a visibilidade na navegação:
+// `gestor` (admin e gestor), como as restantes áreas operacionais.
+const calendarioSrc = ler('routes/calendario.js');
+assert.ok(
+  /router\.use\(tenant\.comCondominioAtivo\)/.test(calendarioSrc),
+  'routes/calendario.js exige condomínio ativo'
+);
+assert.ok(
+  /router\.use\(tenant\.comPapel\('gestor'\)\)/.test(calendarioSrc) ||
+  /router\.use\(allowlistSuporte\.comPapelOuSuporteAdmitido\('gestor'\)\)/.test(calendarioSrc),
+  'routes/calendario.js tem comPapel(gestor) — o mesmo mínimo da navegação'
+);
+assert.ok(
+  !/router\.use\(tenant\.comPapel\('admin'\)\)/.test(calendarioSrc),
+  'routes/calendario.js NÃO exige admin'
+);
+feito('Guarda dos placeholders espelha a visibilidade na navegação (calendário agora é router)');
+
+// Comportamento: a guarda de um módulo 'admin' recusa o gestor e aceita o admin;
+// a do calendário (gestor) aceita ambos.
 const guardaDe = (minimo) =>
   minimo === 'admin' ? [tenant.comPapel('admin')] : [tenant.comPapel('gestor')];
-assert.strictEqual(correr(guardaDe(MODULOS.calendario.minimo), mockReq('admin')), 'next()', 'admin vê o Calendário');
-assert.strictEqual(correr(guardaDe(MODULOS.calendario.minimo), mockReq('gestor')), 'redirect:/', 'gestor não vê o Calendário');
+assert.strictEqual(correr(guardaDe('gestor'), mockReq('admin')), 'next()', 'admin vê o Calendário');
+assert.strictEqual(correr(guardaDe('gestor'), mockReq('gestor')), 'next()', 'gestor vê o Calendário');
+assert.strictEqual(correr(guardaDe('admin'), mockReq('gestor')), 'redirect:/', 'gestor não vê módulos só de admin');
 assert.strictEqual(correr(guardaDe(MODULOS.votacoes.minimo), mockReq('gestor')), 'next()', 'gestor vê as Votações');
 feito('Guarda dos placeholders: admin vs gestor comportam-se como na navegação');
 
@@ -780,7 +810,7 @@ async function provarGuardaReal() {
 
   // Os routers são carregados DEPOIS do stub. O cache de helpers/routes já foi
   // limpo acima, pelo que estas require reconstroem toda a cadeia contra o stub.
-  const caminhosRouters = ['admin', 'relatorios', 'placeholders'].map((r) =>
+  const caminhosRouters = ['admin', 'relatorios', 'calendario', 'placeholders'].map((r) =>
     require.resolve(path.join(raiz, 'routes', r))
   );
   const cacheRouters = caminhosRouters.map((c) => require.cache[c]);
@@ -838,9 +868,11 @@ async function provarGuardaReal() {
     assert.strictEqual(rr.local, '/', 'real: gestor /admin/utilizadores → /');
     feito('C (routers reais). Gestor bloqueado em /admin/utilizadores');
 
+    // O calendário é área operacional: o gestor ENTRA (não é expulso).
     rr = await pedirReal('/admin/calendario', 'gestor');
-    assert.strictEqual(rr.local, '/', 'real: gestor /admin/calendario → /');
-    feito('C (routers reais). Gestor bloqueado no Calendário (placeholder admin)');
+    assert.strictEqual(rr.status, 200, 'real: gestor /admin/calendario → 200');
+    assert.notStrictEqual(rr.local, '/', 'real: gestor não é expulso do Calendário');
+    feito('C (routers reais). Gestor servido no Calendário (área operacional)');
 
     // C-bis. admin continua a ter tudo.
     for (const rota of ['/admin/utilizadores', '/admin/calendario']) {
@@ -1194,17 +1226,22 @@ const pedir = (caminho, { papel = 'admin', global = false } = {}) =>
   }
   feito(`C. Módulos restritos mantêm comPapel('admin'): ${Object.keys(ROTAS_MODULOS_ADMIN).join(', ')}`);
 
-  // Os módulos de placeholder reservados ao admin (Calendário/Tickets/Seguros)
-  // continuam a exigir `admin` — provado na secção dos placeholders.
+  // Os módulos de placeholder reservados ao admin (Tickets/Seguros) continuam
+  // a exigir `admin` — provado na secção dos placeholders.
+  // O Calendário deixou de estar aqui: é router próprio com mínimo `gestor`.
   const placeholdersSrc = ler('routes/placeholders.js');
-  for (const modulo of ['calendario', 'tickets', 'seguros']) {
+  for (const modulo of ['tickets', 'seguros']) {
     const bloco = placeholdersSrc.slice(placeholdersSrc.indexOf(`${modulo}: {`));
     assert.ok(
       /minimo: 'admin'/.test(bloco.slice(0, 400)),
       `placeholder '${modulo}' continua reservado ao admin`
     );
   }
-  feito('C. Placeholders Calendário/Tickets/Seguros continuam só para admin');
+  assert.ok(
+    !/calendario: \{/.test(placeholdersSrc),
+    'placeholders.js já não declara «calendario»'
+  );
+  feito('C. Placeholders Tickets/Seguros continuam só para admin; Calendário é router próprio');
 
   // As rotas de gestão de utilizadores estão TODAS marcadas com `apenasAdmin`.
   const adminSrcSemComentarios = adminSrc.replace(/\/\/.*$/gm, '');

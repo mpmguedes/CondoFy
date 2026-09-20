@@ -124,12 +124,12 @@
             <span class="material-symbols-outlined">forum</span>
             <span class="sidebar-item-text">Assembleias</span>
           </a>
-          {{#if (ne condominioAtivo.role 'gestor')}}
+          {{!-- Calendário: visível a admin E gestor (a rota exige papel ≥ gestor).
+               Deixou de ser um placeholder reservado ao admin. --}}
           <a class="sidebar-item {{isActive currentPath '/admin/calendario'}}" href="/admin/calendario" title="Calendário">
             <span class="material-symbols-outlined">calendar_month</span>
             <span class="sidebar-item-text">Calendário</span>
           </a>
-          {{/if}}
         </div>
 
         <div class="sidebar-group">

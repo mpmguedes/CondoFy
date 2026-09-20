@@ -25,14 +25,6 @@ const MODULOS = {
     linkTexto: 'Ir para Assembleias',
     link: '/admin/assembleias',
   },
-  calendario: {
-    titulo: 'Calendário',
-    icono: 'calendar_month',
-    minimo: 'admin',
-    sugestao: 'Agende os acontecimentos do condomínio através das Assembleias.',
-    linkTexto: 'Ir para Assembleias',
-    link: '/admin/assembleias',
-  },
   amenidades: {
     titulo: 'Amenidades',
     icono: 'weekend',
