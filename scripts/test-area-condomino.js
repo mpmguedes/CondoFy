@@ -31,6 +31,36 @@ for (const entry of fs.readdirSync(partialsDir)) {
 }
 const render = (rel, ctx) => handlebars.compile(ler(rel))(ctx);
 
+// Procura, no CÓDIGO do projeto (routes/, helpers/, views/, scripts/ — nunca em
+// node_modules, docs/ ou .workbuddy-ai/), referências a um alvo. O alvo pode ser
+// uma string literal (`situacao.handlebars`) ou uma RegExp (nome nu da vista).
+// Serve para provar que não ficou nenhuma referência morta depois de remover
+// código — uma simples lista de vistas não deteta isto.
+function varrerReferencias(alvo) {
+  const re = alvo instanceof RegExp ? alvo : new RegExp(alvo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const raizes = ['routes', 'helpers', 'views', 'scripts'];
+  const encontradas = [];
+  const percorrer = (dir) => {
+    for (const entrada of fs.readdirSync(dir, { withFileTypes: true })) {
+      const caminho = path.join(dir, entrada.name);
+      if (entrada.isDirectory()) { percorrer(caminho); continue; }
+      if (!/\.(js|handlebars)$/.test(entrada.name)) continue;
+      const rel = path.relative(RAIZ, caminho).replace(/\\/g, '/');
+      // O próprio teste referencia o nome (é isso que o deteta): não conta.
+      if (rel === 'scripts/test-area-condomino.js') continue;
+      const linhas = fs.readFileSync(caminho, 'utf8').split(/\r?\n/);
+      linhas.forEach((linha, i) => {
+        if (re.test(linha)) encontradas.push(`${rel}:${i + 1}`);
+      });
+    }
+  };
+  for (const raiz of raizes) {
+    const p = path.join(RAIZ, raiz);
+    if (fs.existsSync(p)) percorrer(p);
+  }
+  return encontradas;
+}
+
 // ── 1. Navegação inferior ─────────────────────────────────────────
 function testeBarraInferior() {
   const src = ler('views/partials/_bottom-bar.handlebars');
@@ -869,11 +899,37 @@ function testeIntegridade() {
     assert.ok(new RegExp(`${modelo}\\.find`).test(rota), `portal: Início usa ${modelo} (dados reais)`);
   }
   assert.ok(/resumoFracao\(/.test(rota) && /resumoCondominio\(/.test(rota), 'portal: resumos existentes reutilizados');
-  // As vistas do portal continuam a existir todas.
+  // As vistas do portal continuam a existir todas — menos a antiga `situacao`,
+  // removida por ser código morto (nenhuma rota a renderizava e o contexto que
+  // ela esperava — `receitasAno`, `totalQuotas`, … no contexto raiz — não tinha
+  // fonte). A mera EXISTÊNCIA do ficheiro nunca foi prova de funcionalidade;
+  // uma vista pode existir, compilar e renderizar zeros silenciosos.
   for (const vista of ['dashboard', 'quotas', 'pagamentos', 'recibos', 'documentos', 'assembleias', 'assembleia', 'avisos',
-    'calendario', 'orcamento', 'situacao', 'saida-condominio', 'saida-condominio-confirmar']) {
+    'calendario', 'orcamento', 'saida-condominio', 'saida-condominio-confirmar']) {
     assert.ok(fs.existsSync(path.join(RAIZ, 'views', 'condomino', `${vista}.handlebars`)), `portal: vista preservada ${vista}`);
   }
+
+  // ── A vista órfã `situacao.handlebars` foi eliminada ──────────────
+  // 1) O ficheiro não existe (não pode voltar sem que este teste fique vermelho).
+  assert.ok(!fs.existsSync(path.join(RAIZ, 'views', 'condomino', 'situacao.handlebars')),
+    'portal: a vista órfã situacao.handlebars não existe (código morto removido)');
+  // 2) Nenhuma rota tenta renderizá-la. O padrão cobre `res.render('condomino/situacao'…)`
+  //    com aspas simples ou duplas e sem confundir com `condomino/situacao-financeira`
+  //    (o nome tem de terminar aí — daí a fronteira `["']`).
+  for (const ficheiro of ['routes/condomino.js', 'routes/condomino-conta.js', 'routes/condomino-recomendacoes.js',
+    'routes/saida-condominio.js', 'routes/documentos-link.js']) {
+    const fonte = ler(ficheiro);
+    assert.ok(!/render\(\s*['"]condomino\/situacao['"]/.test(fonte),
+      `${ficheiro}: nenhuma rota renderiza condomino/situacao (vista removida)`);
+  }
+  // 3) A página continua a ser a `situacao-financeira` — o endereço atual E o anterior.
+  assert.ok(rota.includes("return res.render('condomino/situacao-financeira'"),
+    'portal: /situacao-financeira continua a renderizar condomino/situacao-financeira');
+  // 4) Nenhuma referência morta ao nome nu da vista em views/ ou scripts/.
+  const referenciasOrfas = varrerReferencias('situacao.handlebars')
+    .concat(varrerReferencias(/['"]condomino\/situacao['"]/));
+  assert.deepStrictEqual(referenciasOrfas, [],
+    `portal: nenhuma referência morta a condomino/situacao — encontradas: ${referenciasOrfas.join(', ')}`);
   // Mockup da homepage coerente com a barra real.
   const mockup = ler('views/partials/_home-mock-mobile.handlebars');
   for (const item of ['Início', 'Quotas', 'Documentos', 'Avisos']) {
