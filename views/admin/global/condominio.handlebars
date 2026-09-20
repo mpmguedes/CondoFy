@@ -72,11 +72,21 @@
       <div class="card-body">
         <p class="small text-muted">Ciclo recomendado: <strong>Ativo → Desativado → Eliminação permanente</strong>. A eliminação remove os dados do condomínio e não pode ser anulada.</p>
         {{#unless (eq condominio.estado 'inativo')}}
-        <form action="/admin/global/condominios/{{condominio.id}}/estado" method="POST">
-          <button class="btn btn-outline-danger" data-ajuda="Desativa o condomínio: os utilizadores deixam de conseguir entrar e os acessos de suporte em vigor são encerrados. É necessário indicar o motivo." data-ajuda-titulo="Desativar condomínio">Desativar condomínio</button>
+        {{!--
+          Desativação: exige MOTIVO (o servidor recusa sem ele, e audita a
+          recusa) e INTENÇÃO explícita. O campo `acao` viaja no formulário —
+          sem ele o POST a `/:id/estado` é recusado, porque a rota deixou de
+          ser um toggle cego.
+        --}}
+        <form action="/admin/global/condominios/{{condominio.id}}/estado" method="POST" id="estado">
+          <input type="hidden" name="acao" value="desativar" />
+          <label class="form-label" for="motivo_desativacao">Motivo da desativação <span class="text-danger">*</span></label>
+          <input type="text" class="form-control mb-2" id="motivo_desativacao" name="motivo" required maxlength="255" autocomplete="off" placeholder="Ex: obras estruturais no edifício" />
+          <button class="btn btn-outline-danger" data-ajuda="Desativa o condomínio: os utilizadores deixam de conseguir entrar e os acessos de suporte em vigor são encerrados. O motivo é obrigatório e fica registado na auditoria." data-ajuda-titulo="Desativar condomínio">Desativar condomínio</button>
         </form>
         {{else}}
         <form action="/admin/global/condominios/{{condominio.id}}/estado" method="POST" class="mb-3">
+          <input type="hidden" name="acao" value="reativar" />
           <button class="btn btn-outline-success" data-ajuda="Reativa o condomínio e volta a permitir a entrada aos utilizadores associados. O histórico mantém-se." data-ajuda-titulo="Reativar condomínio">Reativar condomínio</button>
         </form>
         <form action="/admin/global/condominios/{{condominio.id}}/eliminar" method="POST">
