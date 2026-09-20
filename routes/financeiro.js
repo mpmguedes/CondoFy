@@ -1013,6 +1013,10 @@ router.post('/quotas/gerar', async (req, res) => {
           continue;
         }
         const numero = await proximoNumero('aviso_quota', { ano: anoNum, transaction: t });
+        // C3: cada mês tem o SEU valor. `porMes[m-1]` fecha exatamente
+        // `Σ meses === anual` (I-2); usar `v.total` (anual) repetido nos 12
+        // meses inflacionaria a quota em 12×.
+        const mV = (v.porMes && v.porMes[m - 1]) || v;
         const nova = await Quota.create(
           {
             condominio_id: req.condominioId,
@@ -1021,9 +1025,9 @@ router.post('/quotas/gerar', async (req, res) => {
             ano: anoNum,
             mes: m,
             periodo: new Date(anoNum, m - 1, 1),
-            valor: v.total,
-            valor_base: v.base,
-            valor_fcr: v.fcr,
+            valor: mV.total,
+            valor_base: mV.base,
+            valor_fcr: mV.fcr,
             valor_por_1000: v.valorPor1000,
             permilagem_aplicada: v.permilagem ?? f.permilagem,
             fcr_percentagem: v.fcrPercentagem,

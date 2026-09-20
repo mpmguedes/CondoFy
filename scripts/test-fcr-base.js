@@ -119,26 +119,33 @@ function testeMetodoOrcamento() {
   const DESPESAS = '12000.00';
   for (const pct of [10, 15, 20]) {
     const mapa = calcularQuotasOrcamento({ fracoes: FRACOES, totalAnual: DESPESAS, meses: 12, fcrPercentagem: pct });
-    let somaMensalC = 0;
+    let somaAnualC = 0;
     let somaFcrAnualC = 0;
+    let somaTodosOsMesesC = 0;
     for (const [, v] of mapa) {
-      assert.strictEqual(v.baseC + v.fcrC, v.totalC, `orçamento a ${pct}%: base + FCR = total`);
+      assert.strictEqual(v.baseC + v.fcrC, v.totalC, `orçamento a ${pct}%: base + FCR = total (ano)`);
       assert.ok(v.fcrC > 0, `orçamento a ${pct}%: o FCR é registado (não fica a zero)`);
       assert.strictEqual(v.fcrPercentagem, pct, `orçamento a ${pct}%: a percentagem fica na quota`);
-      somaMensalC += v.totalC;
-      somaFcrAnualC += v.fcrC * 12;
+      // C3: `totalC`/`baseC`/`fcrC` são valores ANUAIS; `porMes` tem os 12 meses.
+      somaAnualC += v.totalC;
+      somaFcrAnualC += v.fcrC;
+      for (const m of v.porMes) somaTodosOsMesesC += m.totalC;
+      assert.strictEqual(v.porMes.reduce((s, m) => s + m.totalC, 0), v.totalC,
+        `orçamento a ${pct}%: Σ meses = anual (fecho por fração)`);
     }
     // O total distribuído é despesas + FCR (arredondado ao cêntimo).
     const totalDistribuidoC = Math.round(toCents(DESPESAS) * (100 + pct) / 100);
-    assert.strictEqual(somaMensalC * 12, totalDistribuidoC,
-      `orçamento a ${pct}%: 12 × soma mensal = despesas + FCR`);
-    assert.ok(somaMensalC * 12 > toCents(DESPESAS),
+    assert.strictEqual(somaAnualC, totalDistribuidoC,
+      `orçamento a ${pct}%: Σ anual = despesas + FCR`);
+    assert.strictEqual(somaTodosOsMesesC, totalDistribuidoC,
+      `orçamento a ${pct}%: Σ de todos os meses = despesas + FCR (fecho anual exato)`);
+    assert.ok(somaAnualC > toCents(DESPESAS),
       `orçamento a ${pct}%: o total distribuído excede as despesas (FCR acrescentado)`);
-    // FCR devido no ano = base anual × pct/100 (tolerância de arredondamento).
-    const baseAnualC = totalDistribuidoC - somaFcrAnualC;
-    const esperadoC = Math.round((baseAnualC * pct) / 100);
-    assert.ok(Math.abs(somaFcrAnualC - esperadoC) <= 12,
-      `orçamento a ${pct}%: FCR anual coerente (${somaFcrAnualC} vs ${esperadoC})`);
+    // FCR devido no ano = total × pct/(100+pct) — D1, componente do total
+    // (já não `base × pct/100`: a semântica antiga inflacionava).
+    const fcrTeoricoC = Math.round((totalDistribuidoC * pct) / (100 + pct));
+    assert.strictEqual(somaFcrAnualC, fcrTeoricoC,
+      `orçamento a ${pct}%: FCR anual = total × pct/(100+pct) (componente, sem dupla aplicação)`);
   }
   // A percentagem NÃO pode ser perdida quando é passada como texto («12,5»).
   const comTexto = calcularQuotasOrcamento({ fracoes: FRACOES, totalAnual: DESPESAS, fcrPercentagem: '12,5' });
@@ -150,7 +157,7 @@ function testeMetodoOrcamento() {
   assert.ok([...semPct.values()].every((v) => v.fcrC === 0), 'sem percentagem: FCR a zero');
   let somaSem = 0;
   for (const [, v] of semPct) somaSem += v.totalC;
-  assert.strictEqual(somaSem * 12, toCents(DESPESAS), 'sem percentagem: o total distribuído = despesas');
+  assert.strictEqual(somaSem, toCents(DESPESAS), 'sem percentagem: o total ANUAL distribuído = despesas');
   console.log('  ✓ método orçamento: despesas + FCR distribuídas (10%, 15%, 20%, 12,5% e sem percentagem)');
 }
 
@@ -217,7 +224,7 @@ function testePrevisualizacaoUsaAMesmaRegra() {
   // orçamento (deixou de devolver `fcr: 0`).
   assert.ok(rota.includes('fcrSplitterJs'), 'a rota injeta a função de divisão na vista');
   assert.ok(/window\.__GESCONDU_DIVIDIR_FCR/.test(vista), 'a vista usa a função de divisão injetada');
-  assert.ok(/dividir\(anual \/ 12, pctFcr\(\)\)/.test(vista),
+  assert.ok(/dividir\(anualC \/ 12 \/ 100, pctFcr\(\)\)/.test(vista),
     'pré-visualização do método orçamento: usa o total com o FCR separado');
   // C2: no modo orçamento, a pré-visualização acrescenta o FCR ao valor das
   // DESPESAS antes de distribuir — espelhando `acrescentarFcrAoTotal` do servidor.
@@ -285,10 +292,10 @@ function testeRegraNegocioC2() {
   // 1000‰ em DUAS frações de 500‰ → o ANO distribui exatamente 5.500 €
   // (2.750 € por fração) e nenhuma dupla aplicação do FCR.
   //
-  // Nota: a soma `12 × totalC` por fração não é o invariante do ANO — a divisão
-  // por mês faz `floor` e atira o resto para a última FRAÇÃO (defeito de
-  // arredondamento pré-existente, fora do âmbito do FCR; pertence ao motor de
-  // residuais de C1). O invariante que C2 garante é o TOTAL DISTRIBUÍDO no ano.
+  // Nota: `v.totalC`/`v.baseC`/`v.fcrC` são valores ANUAIS (C3); os 12 meses
+  // estão em `v.porMes`, e `Σ meses === anual` por fração. A igualdade entre
+  // frações de permilagem igual é garantida ao ANO (a repartição mensal pode
+  // dar 1 cêntimo a mais num mês a uma delas, sem alterar o ano).
   const { distribuirPorPesos } = require('../helpers/distribuicao');
   const totalAnoC = acrescentarFcrAoTotal(toCents('5000.00'), 10);
   assert.strictEqual(totalAnoC, toCents('5500.00'), 'total anual a distribuir = despesas + FCR');
@@ -312,14 +319,22 @@ function testeRegraNegocioC2() {
     meses: 12,
     fcrPercentagem: 10,
   });
+  let somaMesesC = 0;
   for (const [, v] of mapa) {
-    assert.strictEqual(v.baseC + v.fcrC, v.totalC, 'orçamento: base + FCR = total por construção');
+    assert.strictEqual(v.baseC + v.fcrC, v.totalC, 'orçamento: base + FCR = total (ano)');
     assert.strictEqual(v.fcrC, Math.round((v.totalC * 10) / 110), 'orçamento: FCR como componente do total');
+    somaMesesC += v.porMes.reduce((s, m) => s + m.totalC, 0);
   }
-  // Igual permilagem → igual QUOTA ANUAL. (A divisão mensal faz `floor` e atira
-  // o resto para a última fração — defeito pré-existente, alheio ao FCR, que
-  // faz divergir em cêntimos as quotas MENSAIS de frações iguais; é matéria do
-  // motor de residuais (C1/C3), não do FCR. Aqui prova-se a igualdade anual.)
+  // C3: o fecho do ANO é exato — Σ de todos os meses de todas as frações é o
+  // total a distribuir (ao cêntimo).
+  assert.strictEqual(somaMesesC, totalAnoC,
+    'orçamento: Σ de todos os meses = despesas + FCR (fecho anual exato, C3)');
+  // Igual permilagem → igual QUOTA ANUAL.
+  for (const [, v] of mapa) {
+    assert.strictEqual(v.totalC, toCents('2750.00'), 'permilagem 500‰ → 2.750 €/ano');
+    assert.strictEqual(v.porMes.reduce((s, m) => s + m.totalC, 0), toCents('2750.00'),
+      'permilagem 500‰ → Σ meses = 2.750 € (fecho por fração)');
+  }
   assert.strictEqual(partes[0].valorC, partes[1].valorC,
     'permilagem igual → mesma quota ANUAL (2.750 € cada a 500‰)');
   // D1 é determinística: a mesma fração dá sempre o mesmo trio base/FCR/total.

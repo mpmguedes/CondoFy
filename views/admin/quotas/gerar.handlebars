@@ -180,8 +180,13 @@
       const totalAnual = totalComFcr(despesas, pctFcr());
       const totalPerm = FRACOES.reduce((s, f) => s + (parseFloat(f.permilagem) || 0), 0);
       const anual = totalPerm > 0 ? totalAnual * (parseFloat(perm) || 0) / totalPerm : totalAnual / FRACOES.length;
-      // O total mensal manda: o FCR é uma componente dele (tal como no servidor).
-      return { ...dividir(anual / 12, pctFcr()), orcamento: orc };
+      // C3: o ANUAL é a base de fecho (`Σ meses === anual`, por fração). O valor
+      // mostrado é o anual ÷ 12 arredondado ao cêntimo — a média dos meses, que
+      // difere de um mês concreto no máximo 1 cêntimo (o servidor grava o mês
+      // exato em `porMes`). O TOTAL do ano, esse, fecha exatamente com o
+      // orçamento — é `anual` × N frações, não a soma dos mensais arredondados.
+      const anualC = Math.round(anual * 100);
+      return { ...dividir(anualC / 12 / 100, pctFcr()), orcamento: orc, anual };
     }
     // (permilagem / 1000) × valor por 1000‰ — onde `valorPor1000` é o TOTAL por
     // 1000‰, JÁ COM FCR. Depois o FCR é apenas uma COMPONENTE desse total, pela
@@ -227,11 +232,13 @@
       const tbody = document.getElementById('previewBody');
       let html = '';
       let totalMes = 0;
+      let totalAno = 0;
       let novas = 0;
       let existentes = 0;
       for (const f of FRACOES) {
         const r = calc(f.permilagem);
         totalMes += r.total;
+        totalAno += r.anual === undefined ? r.total : r.anual;
         html += `<tr><td>${f.designacao}</td><td class="text-end">${f.permilagem} ‰</td><td class="text-end">${fmt(r.base)}</td><td class="text-end">${fmt(r.fcr)}</td><td class="text-end fw-semibold">${fmt(r.total)}</td></tr>`;
         for (let m = 1; m <= 12; m++) {
           if (!this.ehAno() && m !== mes) continue;
@@ -241,7 +248,10 @@
       }
       tbody.innerHTML = html;
       const possiveis = novas + existentes;
-      document.getElementById('previewTotal').textContent = fmt(this.ehAno() ? totalMes * 12 : totalMes);
+      // C3: no escopo anual mostra-se o TOTAL ANUAL exato (fecha com o
+      // orçamento), não a soma dos mensais arredondados — que divergiria por
+      // cêntimos. No escopo mensal mostra-se o mês.
+      document.getElementById('previewTotal').textContent = fmt(this.ehAno() ? totalAno : totalMes);
       document.getElementById('resumoGeracao').innerHTML =
         '<strong>' + FRACOES.length + ' frações</strong> × <strong>' + nMeses + ' meses</strong> = ' +
         '<strong>' + possiveis + ' quotas possíveis</strong><br>' +

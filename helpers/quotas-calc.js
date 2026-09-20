@@ -115,40 +115,99 @@ function calcularQuotasOrcamento({ fracoes, totalAnual, metodo = 'permilagem', m
   }));
   const distribuicao = distribuirPorPesos(totalC, pesos);
 
-  // Valor mensal de cada fração: `floor` do valor anual por mês, com o resto
-  // acumulado atirado para a ÚLTIMA FRAÇÃO.
+  // ── Divisão mensal EXATA (C3) ─────────────────────────────────────
   //
-  // ⚠ LIMITAÇÃO CONHECIDA (não introduzida por C2): `12 × totalC` de uma fração
-  // pode não fechar com o seu valor anual e frações de permilagem igual podem
-  // divergir em cêntimos nas quotas MENSAIS (o resto não é repartido por mês nem
-  // por grupo). É matéria do motor de residuais de C1 — `distribuirPorGrupos` /
-  // `limiteResidual` em `helpers/quotas-primitiva.js` — e será tratada ao ligar
-  // a primitiva a este motor (C3). O invariante que C2 garante é o TOTAL
-  // DISTRIBUÍDO no ano: `Σ partes === despesas + FCR` (exato, ver
-  // `distribuirPorPesos`).
-  const mensalC = distribuicao.map((d) => Math.floor(d.valorC / nMeses));
-  const restoC = totalC - mensalC.reduce((s, v) => s + v, 0) * nMeses;
-  if (restoC > 0 && mensalC.length) mensalC[mensalC.length - 1] += restoC;
+  // Dois níveis de fecho, ambos ao cêntimo:
+  //   ANO   Σ frações === despesas + FCR            (o que o condomínio cobra)
+  //   ANO(f) totalAnoC(f) === total que a distribuição por permilagem lhe deu
+  //   MÊS   Σ meses(f) === totalAnoC(f)              (I-2)
+  //   MÊS   Σ base + Σ FCR === Σ total, em cada mês  (I-4)
+  //
+  // O defeito corrigido: dividia-se o anual por `nMeses` com `Math.floor` POR
+  // FRAÇÃO e atirava-se a SOMA dos restos para o último mês da última fração.
+  // Como cada fração perde `anual(f) mod nMeses` e o resto somado é maior do que
+  // a perda de UMA só fração, o último mês ficava INFLACIONADO — `Σ nMeses ×
+  // mensal > totalC` (2×500‰ de 5.500 € davam 5.501,76 €; com mensalidades
+  // pequenas o desvio podia ser de ordem de grandeza).
+  //
+  // O FCR é repartido a partir do ANO (não arredondado mês a mês, que somaria
+  // erros de arredondamento e afastaria o FCR anual do seu valor exato).
+  //   fcrAnoC = round(totalAnoC × pct/(100+pct))   ← fecha ao ano
+  //   fcrMês  = repartição desse FCR anual pelos meses (maior resto)
+  //   baseMês = totalMês − fcrMês                  ← fecha por construção
+  //
+  // Invariantes garantidos (ver `scripts/test-quotas-mensal.js`):
+  //   I-1  Σ de todos os meses de todas as frações === totalC
+  //   I-2  Σ meses(f) === anual(f)  ·  Σ fcrMês === fcrAno(f)
+  //   I-3  frações de permilagem igual → mesma sequência de meses
+  //   I-4  base + FCR === total, em cada mês
+  //   I-5  meses consecutivos nunca diferem mais de 1 cêntimo
+  //   I-6  base + FCR === total, no ano da fração
+  const mensalC = [];
+  const fcrMensalC = [];
+  for (const d of distribuicao) {
+    const cotasMes = distribuirPorPesos(
+      d.valorC,
+      Array.from({ length: nMeses }, (_, i) => ({ fracaoId: i, peso: 1 }))
+    );
+    mensalC.push(cotasMes.map((p) => p.valorC));
+    // O FCR do ANO fecha no valor exato de D1; só depois se reparte pelos meses.
+    const fcrAnoC = dividirComponentesQuota(d.valorC, fcrP).fcrC;
+    const fcrMes = distribuirPorPesos(
+      fcrAnoC,
+      Array.from({ length: nMeses }, (_, i) => ({ fracaoId: i, peso: 1 }))
+    );
+    fcrMensalC.push(fcrMes.map((p) => p.valorC));
+  }
 
-  const totalPorMesC = mensalC.reduce((s, v) => s + v, 0);
+  // `valorPor1000` = TOTAL a cobrar por 1000‰, JÁ COM FCR. O total por mês do
+  // condomínio é a média dos meses — mas como cada mês pode diferir em 1 cêntimo
+  // (I-5), é o total ANUAL × 1000 / Σpesos que dá o valor estável a apresentar.
   const somaPesos = pesos.reduce((s, p) => s + p.peso, 0);
   const valorPor1000C = somaPesos > 0
-    ? Math.round((totalPorMesC * 1000) / somaPesos)
+    ? Math.round((totalC * 1000) / somaPesos)
     : 0;
 
   const resultado = new Map();
   distribuicao.forEach((d, idx) => {
-    // O total mensal da fração manda; as componentes são sempre derivadas dele
-    // (base + FCR = total, por construção). O FCR não é somado outra vez.
-    const partes = dividirComponentesQuota(mensalC[idx], fcrP);
+    // O total de CADA MÊS manda; a componente FCR do mês vem da repartição do
+    // FCR ANUAL (não de um novo arredondamento, que somaria desvios) e a BASE
+    // absorve a diferença — `base + FCR = total` mantém-se em cada mês (I-4).
+    const mesesC = mensalC[idx];
+    const fcrMesesC = fcrMensalC[idx];
+    const porMes = mesesC.map((mC, i) => {
+      const fcrMesC = fcrMesesC[i];
+      const baseMesC = mC - fcrMesC;
+      return {
+        baseC: baseMesC,
+        fcrC: fcrMesC,
+        totalC: mC,
+        base: fromCents(baseMesC),
+        fcr: fromCents(fcrMesC),
+        total: fromCents(mC),
+      };
+    });
+
+    // Totais anuais da fração = soma exata dos seus meses (I-2). A base fecha
+    // por construção: `Σ baseMês = Σ totalMês − Σ fcrMês = anual − fcrAno`.
+    const baseC = porMes.reduce((s, m) => s + m.baseC, 0);
+    const fcrC = porMes.reduce((s, m) => s + m.fcrC, 0);
+    const totalAnoC = porMes.reduce((s, m) => s + m.totalC, 0);
     const peso = (pesos.find((p) => p.fracaoId === d.fracaoId) || {}).peso || 0;
+
     resultado.set(d.fracaoId, {
-      baseC: partes.baseC,
-      fcrC: partes.fcrC,
-      totalC: partes.totalC,
-      base: fromCents(partes.baseC),
-      fcr: fromCents(partes.fcrC),
-      total: fromCents(partes.totalC),
+      baseC,
+      fcrC,
+      totalC: totalAnoC,
+      base: fromCents(baseC),
+      fcr: fromCents(fcrC),
+      total: fromCents(totalAnoC),
+      // Compatibilidade com os consumidores de C2: quando todos os meses são
+      // iguais (caso comum), `mensalC` é esse valor; quando diferem em 1 cêntimo
+      // (I-5), é o MENOR mês — o maior está em `porMes`. Para gravar/emitir,
+      // usar SEMPRE `porMes[c.mes - 1]`.
+      mensalC: Math.min(...mesesC),
+      porMes,
       valorPor1000: fromCents(valorPor1000C),
       permilagem: peso,
       fcrPercentagem: fcrP,

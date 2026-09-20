@@ -168,11 +168,20 @@ async function main() {
     meses: 12,
     fcrPercentagem: 10,
   });
-  let somaMensalC = 0;
-  for (const [, v] of qOrc) somaMensalC += v.totalC;
+  let somaAnualC = 0;
+  let somaTodosOsMesesC = 0;
+  for (const [, v] of qOrc) {
+    somaAnualC += v.totalC;
+    for (const m of v.porMes) somaTodosOsMesesC += m.totalC;
+    assert.strictEqual(v.porMes.reduce((s, m) => s + m.totalC, 0), v.totalC,
+      `método 2: Σ meses = anual da fração ${v.permilagem}‰`);
+  }
   // Despesas 12.000 € + FCR 10% (1.200 €) = 13.200 € distribuídos por ano.
+  // C3: `totalC` é o valor ANUAL da fração; o fecho do ano é `Σ anual` (não
+  // `Σ mensal × 12`, cuja soma de arredondamentos divergia do orçamento).
   const totalComFcrC = toCents('13200.00');
-  assert.strictEqual(somaMensalC * 12, totalComFcrC, 'orçamento: 12 × soma mensal = despesas + FCR');
+  assert.strictEqual(somaAnualC, totalComFcrC, 'orçamento: Σ anual = despesas + FCR');
+  assert.strictEqual(somaTodosOsMesesC, totalComFcrC, 'orçamento: Σ de todos os meses = despesas + FCR');
   assert.ok(qOrc.get(1).fcr > 0, 'método 2 separa o FCR pela percentagem configurada');
   for (const [, v] of qOrc) {
     assert.strictEqual(v.baseC + v.fcrC, v.totalC, `método 2: base + FCR = total (fração ${v.permilagem}‰)`);
@@ -186,7 +195,9 @@ async function main() {
     meses: 12,
   });
   assert.strictEqual(qOrcSemFcr.get(1).fcr, 0, 'método 2 sem percentagem: FCR a zero');
-  assert.strictEqual(qOrcSemFcr.get(1).total, 1000, 'método 2 sem percentagem: total = despesas (1000 €/mês)');
+  assert.strictEqual(qOrcSemFcr.get(1).totalC, toCents('12000.00'),
+    'método 2 sem percentagem: total ANUAL = despesas (12.000 €)');
+  assert.strictEqual(qOrcSemFcr.get(1).total, 12000, 'método 2 sem percentagem: valor anual em euros');
   assert.strictEqual(qOrcSemFcr.get(1).baseC + qOrcSemFcr.get(1).fcrC, qOrcSemFcr.get(1).totalC,
     'método 2 sem percentagem: base + FCR = total');
 
