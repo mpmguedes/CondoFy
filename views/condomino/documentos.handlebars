@@ -9,8 +9,8 @@
   <p class="subtitle">Documentos que a administração disponibilizou aos condóminos{{#if nDocumentos}} · {{nDocumentos}} documento(s){{/if}}</p>
 </div>
 
-{{#unless pessoa}}
-<div class="alert alert-warning">A sua conta ainda não está associada a um condómino neste condomínio. Contacte a administração.</div>
+{{#if acesso}}
+{{> _portal-estado-associacao}}
 {{else}}
 
 {{!-- ── Filtros: categoria (pasta) e ano ─────────────────────────────── --}}
@@ -34,6 +34,7 @@
 </div></div>
 
 {{!-- ── Documentos agrupados por categoria ───────────────────────────── --}}
+{{#if listaTruncada}}{{> _portal-lista-limitada}}{{/if}}
 {{#if agrupados.length}}
   {{#each agrupados}}
   <h2 class="h6 text-uppercase portal-titulo-seccao">{{rotulo}}</h2>
@@ -106,4 +107,4 @@
   </div></div>
   {{/if}}
 {{/if}}
-{{/unless}}
+{{/if}}

@@ -1,0 +1,18 @@
+{{!-- Estado de associação da conta ao condomínio ativo (D3).
+
+     Substitui a guarda genérica «A sua conta ainda não está associada a um
+     condómino neste condomínio» por uma mensagem que corresponde ao estado
+     REAL da conta. O contexto traz `acesso`, calculado em
+     routes/condomino.js a partir do `motivo` que já vem de
+     helpers/titularidades.js — que distingue os casos que antes se
+     confundiam num só.
+
+     Quando há frações (`acesso` = null) o parcial não escreve nada — a
+     página segue o seu caminho normal.
+
+     Uso:  {{> _portal-estado-associacao}}  dentro de {{#if acesso}} --}}
+<div class="card mb-4"><div class="card-body text-center py-4">
+  <span class="material-symbols-outlined" aria-hidden="true" style="font-size:2rem">link_off</span>
+  <div class="fw-semibold mt-1">{{acesso.curto}}</div>
+  <div class="small text-muted mt-1">{{acesso.detalhe}}</div>
+</div></div>

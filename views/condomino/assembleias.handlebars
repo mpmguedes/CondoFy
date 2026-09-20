@@ -8,9 +8,11 @@
   <p class="subtitle">Consulta das assembleias do condomínio</p>
 </div>
 
-{{#unless pessoa}}
-<div class="alert alert-warning">A sua conta ainda não está associada a um condómino neste condomínio. Contacte a administração.</div>
+{{#if acesso}}
+{{> _portal-estado-associacao}}
 {{else}}
+
+{{#if listaTruncada}}{{> _portal-lista-limitada}}{{/if}}
 
 {{#if proxima}}
 {{!-- ── Próxima assembleia (destaque) ──────────────────────────────── --}}
@@ -141,4 +143,4 @@
 </div></div>
 {{/unless}}{{/unless}}
 {{/if}}
-{{/unless}}
+{{/if}}

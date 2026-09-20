@@ -18,12 +18,22 @@
   </p>
 </div>
 
-{{#unless pessoa}}
+{{!-- Guarda de associação (D3) no Início. Aqui o aviso é ADITIVO, não
+     substitutivo: o Início é a porta da conta e há conteúdo que não depende de
+     ter frações (a recomendação de segurança 2FA, por exemplo). Esconder a
+     página inteira por falta de frações tiraria acesso a coisas que são da
+     CONTA, não do condomínio. As páginas de dados (quotas, recibos,
+     documentos…) sim, fecham — aí o conteúdo não existe sem associação.
+
+     `registroSemCondomino` é calculado na rota (um só ponto de decisão) e
+     cobre o estado discriminado (`acesso`) e o caso simples «conta sem
+     pessoa». A mensagem é a do estado quando existe; a histórica, quando não. --}}
+{{#if registroSemCondomino}}
 <div class="alert alert-warning">
   <i class="bi bi-info-circle me-1"></i>
-  A sua conta ainda não está associada a um condómino neste condomínio. Contacte a administração.
+  {{#if acesso}}{{acesso.curto}} {{acesso.detalhe}}{{else}}A sua conta ainda não está associada a um condómino neste condomínio. Contacte a administração.{{/if}}
 </div>
-{{else}}
+{{/if}}
 
 <div class="portal-conteudo">
 {{!-- Orientação contextual: no topo do conteúdo, discreta, e no máximo uma.
@@ -254,6 +264,5 @@
   </div>
 </div>
 {{/if}}
-{{/unless}}
 </div>
 {{/unless}}

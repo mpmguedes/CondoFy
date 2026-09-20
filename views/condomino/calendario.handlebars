@@ -10,11 +10,13 @@
   <p class="subtitle">Datas e acontecimentos do condomínio{{#if eventos.length}} · {{eventos.length}} evento(s){{/if}}</p>
 </div>
 
-{{#unless pessoa}}
-<div class="alert alert-warning">A sua conta ainda não está associada a um condómino neste condomínio. Contacte a administração.</div>
+{{#if acesso}}
+{{> _portal-estado-associacao}}
 {{else}}
 
 {{#if eventos.length}}
+
+{{#if listaTruncada}}{{> _portal-lista-limitada}}{{/if}}
 
 {{#if proximo}}
 {{!-- ── Próximo acontecimento (destaque) ───────────────────────────── --}}
@@ -115,4 +117,4 @@
   <div class="small">Assembleias e comunicações programadas aparecem aqui.</div>
 </div></div>
 {{/if}}
-{{/unless}}
+{{/if}}

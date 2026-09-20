@@ -63,6 +63,67 @@ router.use(tenant.semSuporte);
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
+// ── Política de limites do portal (C3) ─────────────────────────────
+//
+// O portal NÃO tem paginação (não há `offset`/`page` em nenhuma rota da
+// aplicação) e não se introduz agora uma framework para isso. A convenção já
+// estabelecida no projeto é um LIMITE FIXO por consulta — `/avisos` deste
+// router já usa `limit: 100`, e o backoffice usa 20/50/100/200/250/300.
+//
+// Cada lista que pode crescer sem fim fica portanto limitada ao mais recente,
+// por ordem descendente. O limite é generoso de propósito: é uma salvaguarda
+// contra listas ilimitadas, não um mecanismo de navegação. Quando a lista é
+// truncada, a vista é disso AVISADA (`listaTruncada` + `totalRegistados`) para
+// o dizer ao condómino — nunca se apresenta um subconjunto como se fosse o
+// total.
+const LIMITE_LISTA = 100; // quotas, pagamentos, recibos, assembleias, calendário
+const LIMITE_DOCUMENTOS = 200; // acervo documental: maior, ainda limitado
+
+// Descreve o acesso da conta ao condomínio ativo, distinguindo estados que
+// antes se confundiam num só. `titularidades.fracoesDoUtilizador` já devolve
+// `{ origem, motivo }`; o portal é que os descartava. Aqui conservam-se.
+//
+//   sem_condominio        — a conta não pertence a nenhum condómino aqui;
+//   conta_sem_condomino   — a conta não está ligada a uma pessoa/condómino;
+//   sem_relacao           — a pessoa não tem relação registada com frações;
+//   sem_ligacao_a_conta   — a pessoa tem frações, mas a CONTA não está ligada;
+//   titularidade_em_vigor — há frações válidas (o caso normal).
+//
+// `temFracoes` só é verdadeiro quando o acesso é REAL (titularidade em vigor ou
+// via legado ativo): é a fronteira entre «não tem nada» e «tem, mas não aqui».
+const MOTIVOS = {
+  sem_condominio: {
+    curto: 'Esta conta não está associada a nenhum condómino neste condomínio.',
+    detalhe: 'Se acha que é um engano, contacte a administração do condomínio.',
+    acao: 'contactar',
+  },
+  conta_sem_condomino: {
+    curto: 'A sua conta ainda não está associada a um condómino neste condomínio.',
+    detalhe: 'Contacte a administração do condomínio para associar a sua conta.',
+    acao: 'contactar',
+  },
+  sem_relacao: {
+    curto: 'Não tem frações associadas neste condomínio.',
+    detalhe: 'Se é proprietário, arrendatário ou usufrutuário de uma fração, peça à administração para registar a relação.',
+    acao: 'contactar',
+  },
+  sem_ligacao_a_conta: {
+    curto: 'Existem frações associadas a si, mas esta conta ainda não está ligada a elas.',
+    detalhe: 'Contacte a administração do condomínio para ligar a sua conta às suas frações.',
+    acao: 'contactar',
+  },
+};
+
+// Traduz `motivo` + `origem` numa mensagem apresentável. Devolve `null` quando
+// há de facto frações (nada a avisar).
+function estadoAcesso({ motivo, origem, temFracoes }) {
+  if (temFracoes) return null;
+  const base = MOTIVOS[motivo] || MOTIVOS.sem_condominio;
+  // A origem legada (dados anteriores às titularidades) é irrelevante para o
+  // condómino: a mensagem é a mesma. Regista-se apenas para diagnóstico interno.
+  return { motivo, origem, ...base };
+}
+
 // Pessoa do utilizador + frações a que tem acesso AGORA (só do condomínio
 // ativo). O acesso às frações é determinado pelas TITULARIDADES (relação
 // temporal pessoa/conta ↔ fração): uma relação encerrada deixa de dar acesso,
@@ -76,7 +137,7 @@ async function contextoFracoes(req) {
     ? await Pessoa.findOne({ where: { id: req.user.pessoa_id, condominio_id: req.condominioId } })
     : null;
 
-  const { fracoes } = await titularidades.fracoesDoUtilizador({
+  const { fracoes, origem, motivo } = await titularidades.fracoesDoUtilizador({
     condominioId: req.condominioId,
     utilizadorId: req.user.id,
     pessoaId: req.user.pessoa_id,
@@ -90,7 +151,14 @@ async function contextoFracoes(req) {
     return fracao;
   });
 
-  return { pessoa, fracoes: lista };
+  // As sete páginas que já tinham guarda de persona continuam a receber só
+  // `{ pessoa, fracoes }` — comportamento inalterado. O estado discriminado
+  // segue em `acesso`, usado pelas páginas que antes não distinguiam nada.
+  return {
+    pessoa,
+    fracoes: lista,
+    acesso: estadoAcesso({ motivo, origem, temFracoes: lista.length > 0 }),
+  };
 }
 
 function formatarPermilagem(valor) {
@@ -103,7 +171,7 @@ function formatarPermilagem(valor) {
 
 // ── Dashboard ───────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
-  const { pessoa, fracoes } = await contextoFracoes(req);
+  const { pessoa, fracoes, acesso } = await contextoFracoes(req);
   const ids = fracoes.map((f) => f.id);
   const hoje = new Date().toISOString().slice(0, 10);
 
@@ -276,6 +344,13 @@ router.get('/', async (req, res) => {
   res.render('condomino/dashboard', {
     titulo: 'Início',
     pessoa,
+    // O Início recebe o estado discriminado: as guardas próprias da vista
+    // (fracoesComResumo, titularidadesTerminadas) cobrem o caso normal, mas não
+    // separam «sem relação» de «relação registada sem ligação à conta».
+    acesso,
+    // Guarda única da vista: cobre o estado discriminado E o caso «conta sem
+    // pessoa». A decisão fica aqui (um só ponto), não espalhada na vista.
+    registroSemCondomino: Boolean(acesso) || !pessoa,
     fracoesComResumo,
     resumo,
     orcamento,
@@ -293,7 +368,7 @@ router.get('/', async (req, res) => {
 
 // ── As minhas quotas (leitura; filtros ano/estado) ─────────────────
 router.get('/quotas', async (req, res) => {
-  const { pessoa, fracoes } = await contextoFracoes(req);
+  const { pessoa, fracoes, acesso } = await contextoFracoes(req);
   const ids = fracoes.map((f) => f.id);
   // Data de hoje (AAAA-MM-DD), como nas restantes rotas do portal: é usada para
   // saber se uma quota já venceu ao derivar o estado apresentado.
@@ -310,6 +385,7 @@ router.get('/quotas', async (req, res) => {
     where: whereQ,
     include: [{ model: Fracao, as: 'fracao' }],
     order: [['ano', 'DESC'], ['mes', 'DESC'], ['fracao_id', 'ASC']],
+    limit: LIMITE_LISTA,
   });
 
   // Estados efetivos + pagamento aplicado por quota.
@@ -436,7 +512,9 @@ router.get('/quotas', async (req, res) => {
   res.render('condomino/quotas', {
     titulo: 'As minhas quotas',
     pessoa,
+    acesso,
     linhas,
+    listaTruncada: quotas.length >= LIMITE_LISTA,
     extras: extras.map((p) => {
       const extra = p.extra_quota || null;
       const base = p.toJSON();
@@ -475,7 +553,7 @@ router.get('/quotas', async (req, res) => {
 
 // ── Os meus pagamentos ──────────────────────────────────────────────
 router.get('/pagamentos', async (req, res) => {
-  const { pessoa, fracoes } = await contextoFracoes(req);
+  const { pessoa, fracoes, acesso } = await contextoFracoes(req);
   const ids = fracoes.map((f) => f.id);
   const pagamentos = await Pagamento.findAll({
     where: {
@@ -488,6 +566,7 @@ router.get('/pagamentos', async (req, res) => {
       { model: Quota, as: 'quotas', through: { attributes: ['valor_aplicado'] } },
     ],
     order: [['data_pagamento', 'DESC'], ['id', 'DESC']],
+    limit: LIMITE_LISTA,
   });
   const linhas = pagamentos.map((p) => {
     const json = p.toJSON();
@@ -496,12 +575,18 @@ router.get('/pagamentos', async (req, res) => {
     json.periodos = (p.quotas || []).map((q) => `${MESES[q.mes - 1]} ${q.ano}`).join(', ');
     return json;
   });
-  res.render('condomino/pagamentos', { titulo: 'Os meus pagamentos', pessoa, linhas });
+  res.render('condomino/pagamentos', {
+    titulo: 'Os meus pagamentos',
+    pessoa,
+    acesso,
+    linhas,
+    listaTruncada: linhas.length >= LIMITE_LISTA,
+  });
 });
 
 // ── Os meus recibos ─────────────────────────────────────────────────
 router.get('/recibos', async (req, res) => {
-  const { pessoa, fracoes } = await contextoFracoes(req);
+  const { pessoa, fracoes, acesso } = await contextoFracoes(req);
   const ids = fracoes.map((f) => f.id);
   const recibos = await Recibo.findAll({
     where: { condominio_id: req.condominioId, fracao_id: { [Op.in]: ids.length ? ids : [-1] } },
@@ -516,6 +601,7 @@ router.get('/recibos', async (req, res) => {
       },
     ],
     order: [['data_emissao', 'DESC'], ['id', 'DESC']],
+    limit: LIMITE_LISTA,
   });
   const linhas = recibos.map((r) => {
     const json = r.toJSON();
@@ -535,8 +621,10 @@ router.get('/recibos', async (req, res) => {
   res.render('condomino/recibos', {
     titulo: 'Os meus recibos',
     pessoa,
+    acesso,
     linhas,
     nRecibos: linhas.length,
+    listaTruncada: linhas.length >= LIMITE_LISTA,
     // A fração só é mostrada em cada recibo quando o utilizador tem mais do que
     // uma (com uma só seria repetir a mesma designação em todas as linhas).
     temVariasFracoes: fracoes.length > 1,
@@ -637,7 +725,7 @@ function assembleiaEncerrada(a) {
 }
 
 router.get('/assembleias', async (req, res) => {
-  const { pessoa } = await contextoFracoes(req);
+  const { pessoa, acesso } = await contextoFracoes(req);
   const hoje = new Date().toISOString().slice(0, 10);
   const assembleias = await Assembleia.findAll({
     where: { condominio_id: req.condominioId },
@@ -661,10 +749,12 @@ router.get('/assembleias', async (req, res) => {
   res.render('condomino/assembleias', {
     titulo: 'Assembleias',
     pessoa,
+    acesso,
     assembleias: comEtiquetas,
     proxima: futuras.length ? futuras[0] : null,
     outrasFuturas: futuras.slice(1),
     passadas,
+    listaTruncada: comEtiquetas.length >= LIMITE_LISTA,
   });
 });
 
@@ -700,7 +790,7 @@ router.get('/assembleias/:id', async (req, res) => {
 // NÃO existe estado de lido/não lido, urgência nem prioridade — nada disso é
 // apresentado, porque não existe no sistema.
 router.get('/avisos', async (req, res) => {
-  const { pessoa } = await contextoFracoes(req);
+  const { pessoa, acesso } = await contextoFracoes(req);
   const hoje = new Date().toISOString().slice(0, 10);
   const avisos = await Aviso.findAll({ where: { condominio_id: req.condominioId }, order: [['id', 'DESC']], limit: 100 });
   const dataISO = (v) => {
@@ -736,10 +826,12 @@ router.get('/avisos', async (req, res) => {
   res.render('condomino/avisos', {
     titulo: 'Avisos e comunicações',
     pessoa,
+    acesso,
     avisos: lista,
     nAvisos: comEtiquetas.length,
     nPorPublicar: comEtiquetas.filter((a) => a.porPublicar).length,
     filtroTipo,
+    listaTruncada: comEtiquetas.length >= LIMITE_LISTA,
   });
 });
 
@@ -748,15 +840,21 @@ router.get('/avisos', async (req, res) => {
 // programados), agora separados em próximos e passados para o telemóvel poder
 // mostrar primeiro o que ainda vai acontecer.
 router.get('/calendario', async (req, res) => {
-  const { pessoa } = await contextoFracoes(req);
+  const { pessoa, acesso } = await contextoFracoes(req);
   const hoje = new Date().toISOString().slice(0, 10);
+  // O calendário apresenta os eventos em ordem cronológica ASC, mas o LIMITE
+  // tem de cortar pelo lado do que é mais antigo: por isso ambas as consultas
+  // ordenam DESC (mais recente primeiro), aplicam o limite, e a lista é
+  // reordenada em memória logo abaixo.
   const assembleias = await Assembleia.findAll({
     where: { condominio_id: req.condominioId, estado: { [Op.notIn]: ['cancelada'] } },
-    order: [['data', 'ASC'], ['id', 'ASC']],
+    order: [['data', 'DESC'], ['id', 'DESC']],
+    limit: LIMITE_LISTA,
   });
   const avisos = await Aviso.findAll({
     where: { condominio_id: req.condominioId, data_programada: { [Op.ne]: null } },
-    order: [['data_programada', 'ASC']],
+    order: [['data_programada', 'DESC']],
+    limit: LIMITE_LISTA,
   });
   const eventos = [
     ...assembleias.map((a) => ({
@@ -781,17 +879,22 @@ router.get('/calendario', async (req, res) => {
       estadoRotulo: null,
       link: '/condomino/avisos',
     })),
-  ].sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')));
+  ];
+  // Reordenação cronológica (ASC): é como o calendário se lê. Feita em memória
+  // porque o limite foi já aplicado pelo lado do mais recente.
+  const eventosOrdenados = eventos.slice().sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')));
   // Passados que se mantêm consultáveis, do mais recente para o mais antigo.
-  const proximos = eventos.filter((e) => String(e.data || '') >= hoje);
-  const passados = eventos.filter((e) => String(e.data || '') < hoje).reverse();
+  const proximos = eventosOrdenados.filter((e) => String(e.data || '') >= hoje);
+  const passados = eventosOrdenados.filter((e) => String(e.data || '') < hoje).reverse();
   res.render('condomino/calendario', {
     titulo: 'Calendário',
     pessoa,
-    eventos,
+    acesso,
+    eventos: eventosOrdenados,
     proximos,
     passados,
     proximo: proximos.length ? proximos[0] : null,
+    listaTruncada: assembleias.length >= LIMITE_LISTA || avisos.length >= LIMITE_LISTA,
   });
 });
 
@@ -812,7 +915,7 @@ const TIPOS_DOCUMENTO = {
 };
 
 router.get('/documentos', async (req, res) => {
-  const { pessoa } = await contextoFracoes(req);
+  const { pessoa, acesso } = await contextoFracoes(req);
   const pasta = typeof req.query.pasta === 'string' ? req.query.pasta : null;
   const anoFiltro = /^\d{4}$/.test(String(req.query.ano || '')) ? String(req.query.ano) : null;
   const cond = await getCondominio({ id: req.condominioId });
@@ -823,9 +926,13 @@ router.get('/documentos', async (req, res) => {
   // SQL, mantendo a consulta única e o isolamento por condomínio.
   if (anoFiltro) where.data = { [Op.between]: [`${anoFiltro}-01-01`, `${anoFiltro}-12-31`] };
 
+  // O acervo documental é a lista que mais cresce no portal (não tem filtro
+  // obrigatório): fica limitada ao mais recente. O limite é mais alto do que o
+  // das listas pessoais porque aqui o filtro por pasta/ano já reduz o conjunto.
   const documentos = await Documento.findAll({
     where,
     order: [['data', 'DESC'], ['id', 'DESC']],
+    limit: LIMITE_DOCUMENTOS,
   });
 
   // Anos disponíveis: obtidos dos mesmos documentos, sem consulta adicional.
@@ -860,11 +967,13 @@ router.get('/documentos', async (req, res) => {
   res.render('condomino/documentos', {
     titulo: 'Documentos do condomínio',
     pessoa,
+    acesso,
     pasta,
     pastas: mapa,
     anos,
     anoFiltro,
     nDocumentos: comEtiquetas.length,
+    listaTruncada: documentos.length >= LIMITE_DOCUMENTOS,
     // Uma das duas listas vai sempre vazia (nunca nula), para a vista poder
     // distinguir «sem documentos» de «sem resultados com estes filtros».
     documentos: comPasta ? comEtiquetas : [],
@@ -898,7 +1007,7 @@ router.get('/documentos/:id/ficheiro', async (req, res) => {
 
 // ── Orçamento (consulta; agregação por rubrica/categoria) ──────────
 router.get('/orcamento', async (req, res) => {
-  const { pessoa } = await contextoFracoes(req);
+  const { pessoa, acesso } = await contextoFracoes(req);
   const anoAtual = new Date().getFullYear();
   const ano = parseInt(req.query.ano, 10) || anoAtual;
 
@@ -1006,6 +1115,7 @@ router.get('/orcamento', async (req, res) => {
   res.render('condomino/orcamento', {
     titulo: 'Orçamento',
     pessoa,
+    acesso,
     ano,
     anoAtual,
     orcamento: orcamento ? orcamento.toJSON() : null,
@@ -1025,7 +1135,7 @@ router.get('/orcamento', async (req, res) => {
 // despesas, contas bancárias e orçamento do condomínio ATIVO. Nenhuma métrica é
 // estimada — quando não há dados, a secção mostra um estado vazio.
 async function paginaSituacaoFinanceira(req, res) {
-  const { pessoa, fracoes } = await contextoFracoes(req);
+  const { pessoa, fracoes, acesso } = await contextoFracoes(req);
   const anoAtual = new Date().getFullYear();
   const mesCorrenteAtual = new Date().getMonth() + 1;
 
@@ -1033,6 +1143,24 @@ async function paginaSituacaoFinanceira(req, res) {
     resumoFinanceiro(anoAtual, req.condominioId),
     resumoOrcamento(anoAtual, req.condominioId),
   ]);
+
+  // Campos de APRESENTAÇÃO derivados do resumo (não alteram o domínio em
+  // helpers/saldos.js): distinguem «não há contas registadas» de «saldo zero».
+  // Sem isto, «Saldo das contas 0,00 €» aparecia tanto com um saldo real nulo
+  // como com um condomínio sem contas nenhumas — indistinguível para quem lê.
+  const resumoVista = {
+    ...resumo,
+    temContas: (resumo.contas || []).length > 0,
+  };
+  const temDadosFinanceiros = Boolean(
+    resumoVista.temContas
+    || resumo.receitasAno
+    || resumo.despesasAno
+    || resumo.totalQuotas
+    || resumo.fundoReserva
+    || orcamento.orcamentado
+    || orcamento.executado,
+  );
 
   // Evolução do ano: mesmos valores do resumo, organizados por mês.
   const evolucao = evolucaoMensal(resumo);
@@ -1063,8 +1191,10 @@ async function paginaSituacaoFinanceira(req, res) {
   return res.render('condomino/situacao-financeira', {
     titulo: 'Situação financeira',
     pessoa,
+    acesso,
     ano: anoAtual,
-    resumo,
+    resumo: resumoVista,
+    temDadosFinanceiros,
     orcamento,
     // Quanto do orçamento ainda não foi executado (negativo = acima do previsto).
     saldoOrcamento: orcamento.orcamentado - orcamento.executado,

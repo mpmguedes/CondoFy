@@ -9,8 +9,8 @@
   <p class="subtitle">Informação publicada pela administração{{#if nAvisos}} · {{nAvisos}} aviso(s){{/if}}</p>
 </div>
 
-{{#unless pessoa}}
-<div class="alert alert-warning">A sua conta ainda não está associada a um condómino neste condomínio. Contacte a administração.</div>
+{{#if acesso}}
+{{> _portal-estado-associacao}}
 {{else}}
 
 {{#if nAvisos}}
@@ -28,6 +28,7 @@
 {{/if}}
 
 {{#if avisos.length}}
+{{#if listaTruncada}}{{> _portal-lista-limitada}}{{/if}}
 <ul class="portal-doc-lista">
   {{#each avisos}}
   <li class="portal-doc">
@@ -59,4 +60,4 @@
   <div class="small">{{#if filtroTipo}}Veja todos os avisos.{{else}}Quando a administração publicar um aviso, aparece aqui.{{/if}}</div>
 </div></div>
 {{/if}}
-{{/unless}}
+{{/if}}

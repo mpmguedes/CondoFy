@@ -4,14 +4,15 @@
   <p class="subtitle">Consulta das quotas da sua fração — não pode ser alterada aqui</p>
 </div>
 
-{{#unless pessoa}}
-<div class="alert alert-warning">A sua conta ainda não está associada a um condómino neste condomínio. Contacte a administração.</div>
+{{#if acesso}}
+{{> _portal-estado-associacao}}
 {{else}}
 
 {{!-- ── Resumo por fração ──────────────────────────────────────────────
      Um bloco por fração (nunca um agregado): estado, próximo vencimento e o
      resumo do ano em curso, tudo calculado sobre as quotas já carregadas.
      Com várias frações, cada bloco mostra apenas a sua própria informação. --}}
+{{#if listaTruncada}}{{> _portal-lista-limitada}}{{/if}}
 {{#if resumoAno.length}}
 <h2 class="h6 text-uppercase portal-titulo-seccao">A minha situação</h2>
 <div class="portal-inicio">
@@ -202,4 +203,4 @@
   </table>
 </div></div>
 {{/if}}
-{{/unless}}
+{{/if}}

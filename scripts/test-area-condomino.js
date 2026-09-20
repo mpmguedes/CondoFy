@@ -223,7 +223,9 @@ function testeInicio() {
   assert.ok(classesAtalho.every((c) => c.includes('portal-atalho')), 'Início: atalhos com alvo de toque de 48px');
   assert.ok(/\.portal-atalho \{ min-height: 48px; \}/.test(ler('public/css/styles.css')),
     'CSS: 48px definidos só para os atalhos do portal (painel inalterado)');
-  const semPessoa = render('views/condomino/dashboard.handlebars', { ...CONTEXTO, pessoa: null });
+  // A vista decide pelo estado de associação (D3). Sem `acesso` nem pessoa, a
+  // mensagem é a histórica de «conta sem condómino».
+  const semPessoa = render('views/condomino/dashboard.handlebars', { ...CONTEXTO, pessoa: null, registroSemCondomino: true });
   assert.ok(/não está associada a um condómino/.test(semPessoa), 'Início: aviso de conta sem condómino associado');
 
   // Estrutura antiga substituída (sem listas soltas duplicadas).

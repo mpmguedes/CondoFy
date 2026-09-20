@@ -9,10 +9,12 @@
   <p class="subtitle">Recibos emitidos para a sua fração{{#if nRecibos}} · {{nRecibos}} recibo(s){{/if}}</p>
 </div>
 
-{{#unless pessoa}}
-<div class="alert alert-warning">A sua conta ainda não está associada a um condómino neste condomínio. Contacte a administração.</div>
+{{#if acesso}}
+{{> _portal-estado-associacao}}
 {{else}}
 {{#if linhas}}
+
+{{#if listaTruncada}}{{> _portal-lista-limitada}}{{/if}}
 
 {{!-- Telemóvel: um recibo por bloco, identificável sem abrir o PDF. --}}
 <ul class="portal-quota-lista">
@@ -75,4 +77,4 @@
   <div class="small">Quando o condomínio emitir um recibo para a sua fração, ele aparece aqui.</div>
 </div></div>
 {{/if}}
-{{/unless}}
+{{/if}}

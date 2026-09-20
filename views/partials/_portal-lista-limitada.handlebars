@@ -1,0 +1,12 @@
+{{!-- Aviso de lista limitada (C3).
+
+     As listas do portal são limitadas por consulta (ver LIMITE_LISTA /
+     LIMITE_DOCUMENTOS em routes/condomino.js). Quando o limite é atingido, a
+     vista recebe `listaTruncada` e mostra este aviso — nunca se apresenta um
+     subconjunto como se fosse o total.
+
+     Uso:  {{#if listaTruncada}}{{> _portal-lista-limitada}}{{/if}} --}}
+<div class="alert alert-light border small mb-3" role="status">
+  <span class="material-symbols-outlined" aria-hidden="true" style="font-size:1rem;vertical-align:-2px">filter_list</span>
+  A mostrar os registos mais recentes. Refine a pesquisa (ano ou categoria) para ver os restantes.
+</div>
