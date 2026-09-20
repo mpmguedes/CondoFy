@@ -56,7 +56,7 @@
             <div class="small text-muted fw-normal">{{#if mesesN}}{{mesesN}} mês/meses disponíveis{{#if nExtras}} · {{nExtras}} extra(s){{/if}}{{else}}{{nExtras}} extra(s){{/if}}</div>
           </td>
           <td class="text-center">
-            <button type="button" class="btn btn-sm btn-outline-primary btn-emitir" data-bs-toggle="modal" data-bs-target="#modalEmitir" data-fracao="{{fracaoId}}" data-designacao="{{designacao}}">
+            <button type="button" class="btn btn-sm btn-outline-primary btn-emitir" data-bs-toggle="modal" data-bs-target="#modalEmitir" data-fracao="{{fracaoId}}" data-designacao="{{designacao}}" data-ajuda="Emite os recibos dos meses que escolher para esta fração. Cada mês só pode ser coberto uma vez." data-ajuda-titulo="Emitir recibo">
               <span class="material-symbols-outlined me-1" style="font-size:1rem">receipt_long</span>Emitir recibo
             </button>
           </td>
@@ -112,14 +112,14 @@
             {{/if}}
           </td>
           <td class="text-center text-nowrap">
-            <a href="/admin/quotas/recibos/{{id}}/pdf" target="_blank" class="btn btn-sm btn-outline-primary px-1" title="Ver PDF"><span class="material-symbols-outlined" style="font-size:1rem">picture_as_pdf</span></a>
+            <a href="/admin/quotas/recibos/{{id}}/pdf" target="_blank" class="btn btn-sm btn-outline-primary px-1" title="Ver PDF" data-ajuda="Abre o recibo em PDF, numa nova aba." data-ajuda-titulo="Ver recibo (PDF)"><span class="material-symbols-outlined" style="font-size:1rem">picture_as_pdf</span></a>
             {{#if (eq estado 'emitido')}}
               {{#unless enviado_at}}
               <form action="/admin/quotas/recibos/{{id}}/enviar" method="POST" class="d-inline">
-                <button class="btn btn-sm btn-outline-success px-1" title="Enviar recibo por email"><span class="material-symbols-outlined" style="font-size:1rem">mail</span></button>
+                <button class="btn btn-sm btn-outline-success px-1" title="Enviar recibo por email" data-ajuda="Envia este recibo por email ao condómino, com o PDF anexado." data-ajuda-titulo="Enviar recibo por email"><span class="material-symbols-outlined" style="font-size:1rem">mail</span></button>
               </form>
               {{/unless}}
-              <button type="button" class="btn btn-sm btn-outline-danger px-1 btn-anular" data-bs-toggle="modal" data-bs-target="#modalAnular" data-id="{{id}}" data-codigo="{{codigo}}" title="Anular recibo"><span class="material-symbols-outlined" style="font-size:1rem">block</span></button>
+              <button type="button" class="btn btn-sm btn-outline-danger px-1 btn-anular" data-bs-toggle="modal" data-bs-target="#modalAnular" data-id="{{id}}" data-codigo="{{codigo}}" title="Anular recibo" data-ajuda="Anula este recibo. O registo mantém-se permanentemente marcado como anulado e os meses voltam a poder ser faturados." data-ajuda-titulo="Anular recibo"><span class="material-symbols-outlined" style="font-size:1rem">block</span></button>
             {{/if}}
           </td>
         </tr>
@@ -218,7 +218,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Emitir recibo</button>
+          <button type="submit" class="btn btn-primary" data-ajuda="Emite um recibo para cada mês selecionado. Os meses já cobertos por outro recibo não voltam a ser faturados." data-ajuda-titulo="Emitir recibo">Emitir recibo</button>
         </div>
       </form>
     </div>

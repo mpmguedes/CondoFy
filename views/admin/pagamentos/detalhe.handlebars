@@ -50,12 +50,12 @@
         <div class="d-flex flex-wrap gap-1 align-items-center">
           <a href="/admin/pagamentos/{{pagamento.id}}/comprovativo" target="_blank" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>Visualizar</a>
           <a href="/admin/pagamentos/{{pagamento.id}}/comprovativo?download=1" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download me-1"></i>Descarregar</a>
-          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalPgAnexar" data-id="{{pagamento.id}}" data-fracao="{{pagamento.fracao.designacao}}" data-substituir="1"><i class="bi bi-arrow-repeat me-1"></i>Substituir</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalPgAnexar" data-id="{{pagamento.id}}" data-fracao="{{pagamento.fracao.designacao}}" data-substituir="1" data-ajuda="Substitui o comprovativo atual. O ficheiro anterior é removido e o novo fica a aguardar validação." data-ajuda-titulo="Substituir comprovativo"><i class="bi bi-arrow-repeat me-1"></i>Substituir</button>
           {{#if (eq pagamento.comprovativo_estado 'pendente')}}
           <form action="/admin/pagamentos/{{pagamento.id}}/comprovativo/validar" method="POST" class="d-inline">
-            <button class="btn btn-sm btn-outline-success"><i class="bi bi-check-lg me-1"></i>Validar</button>
+            <button class="btn btn-sm btn-outline-success" data-ajuda="Dá o comprovativo por conferido. Não altera valores nem estados financeiros do pagamento." data-ajuda-titulo="Validar comprovativo"><i class="bi bi-check-lg me-1"></i>Validar</button>
           </form>
-          <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalPgRejeitar" data-id="{{pagamento.id}}" data-nome="{{pagamento.comprovativo_nome}}"><i class="bi bi-x-lg me-1"></i>Rejeitar</button>
+          <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalPgRejeitar" data-id="{{pagamento.id}}" data-nome="{{pagamento.comprovativo_nome}}" data-ajuda="Rejeita o comprovativo apresentado. O condómino pode anexar outro; o pagamento mantém-se." data-ajuda-titulo="Rejeitar comprovativo"><i class="bi bi-x-lg me-1"></i>Rejeitar</button>
           {{/if}}
         </div>
         {{else}}
@@ -64,7 +64,7 @@
         {{else}}
         <p class="text-muted mb-3">Sem comprovativo associado.</p>
         {{#if (eq pagamento.estado 'confirmado')}}
-        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalPgAnexar" data-id="{{pagamento.id}}" data-fracao="{{pagamento.fracao.designacao}}"><i class="bi bi-paperclip me-1"></i>Anexar comprovativo</button>
+        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalPgAnexar" data-id="{{pagamento.id}}" data-fracao="{{pagamento.fracao.designacao}}" data-ajuda="Anexa o comprovativo deste pagamento. Fica a aguardar validação até ser conferido." data-ajuda-titulo="Anexar comprovativo"><i class="bi bi-paperclip me-1"></i>Anexar comprovativo</button>
         {{else}}
         <p class="text-muted small mb-0">Pagamento anulado — sem ações sobre o comprovativo.</p>
         {{/if}}
@@ -92,7 +92,7 @@
           {{#if (eq pagamento.estado 'confirmado')}}
           <p class="text-muted small mb-3">Recibo ainda não emitido para este pagamento. A emissão cria um único RCP com a discriminação das quotas e Quotas Extra.</p>
           <form action="/admin/pagamentos/{{pagamento.id}}/recibo/emitir" method="POST" data-confirmar="Emitir um recibo único (RCP) para este pagamento?">
-            <button class="btn btn-primary"><i class="bi bi-receipt me-1"></i>Emitir recibo</button>
+            <button class="btn btn-primary" data-ajuda="Emite um único recibo para este pagamento, cobrindo todas as quotas e parcelas que ele liquidou. Cada quota ou parcela só é coberta uma vez." data-ajuda-titulo="Emitir recibo"><i class="bi bi-receipt me-1"></i>Emitir recibo</button>
           </form>
           {{else}}
           <p class="text-muted small mb-0">Pagamento anulado — sem recibo emitível.</p>
@@ -152,7 +152,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Carregar comprovativo</button>
+          <button type="submit" class="btn btn-primary" data-ajuda="Carrega o ficheiro do comprovativo. Fica a aguardar validação até ser conferido." data-ajuda-titulo="Carregar comprovativo">Carregar comprovativo</button>
         </div>
       </form>
     </div>
@@ -175,7 +175,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-danger">Rejeitar comprovativo</button>
+          <button type="submit" class="btn btn-danger" data-ajuda="Marca o comprovativo como rejeitado. O pagamento mantém-se e o condómino pode anexar outro." data-ajuda-titulo="Rejeitar comprovativo">Rejeitar comprovativo</button>
         </div>
       </form>
     </div>

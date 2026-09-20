@@ -29,7 +29,7 @@
             <input class="form-check-input" type="checkbox" id="confirmar" name="confirmar" value="1" />
             <label class="form-check-label text-danger" for="confirmar">Confirmo que quero <strong>desativar</strong> a verificação em duas etapas</label>
           </div>
-          <button class="btn btn-outline-danger">Desativar 2FA</button>
+          <button class="btn btn-outline-danger" data-ajuda="Desliga a verificação em duas etapas. A partir daí, a sua conta passa a ser protegida só pela palavra-passe." data-ajuda-titulo="Desativar 2FA">Desativar 2FA</button>
         </form>
       </div>
     </div>
@@ -49,7 +49,7 @@
             </div>
             <p class="text-muted small">Um código de 6 dígitos enviado para o seu email em cada início de sessão.</p>
             <form action="/conta/2fa/ativar" method="POST" class="mt-auto">
-              <button class="btn btn-primary w-100">Ativar com email</button>
+              <button class="btn btn-primary w-100" data-ajuda="Ativa a verificação em duas etapas por email. Será pedido um código em cada início de sessão." data-ajuda-titulo="Ativar com email">Ativar com email</button>
             </form>
           </div>
         </div>
@@ -63,7 +63,7 @@
             </div>
             <p class="text-muted small">Google Authenticator, Microsoft Authenticator ou outra aplicação TOTP — sem depender de email.</p>
             <form action="/conta/2fa/totp/iniciar" method="POST" class="mt-auto">
-              <button class="btn btn-outline-primary w-100">Ativar com aplicação</button>
+              <button class="btn btn-outline-primary w-100" data-ajuda="Ativa a verificação em duas etapas com uma aplicação autenticadora. Não depende do email." data-ajuda-titulo="Ativar com aplicação">Ativar com aplicação</button>
             </form>
           </div>
         </div>

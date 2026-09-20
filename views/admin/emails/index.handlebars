@@ -107,12 +107,12 @@
               <td class="text-end text-nowrap">
                 {{#if (or (eq estado 'pendente') (eq estado 'erro'))}}
                 <form action="/admin/emails/{{id}}/reenviar" method="POST" class="d-inline">
-                  <button class="btn btn-sm btn-outline-primary" title="Reenviar"><span class="material-symbols-outlined">refresh</span></button>
+                  <button class="btn btn-sm btn-outline-primary" title="Reenviar" aria-label="Reenviar email" data-ajuda="Volta a colocar este email na fila de envio. Úteis quando o envio anterior falhou." data-ajuda-titulo="Reenviar email"><span class="material-symbols-outlined">refresh</span></button>
                 </form>
                 {{/if}}
                 {{#if (and (ne estado 'enviado') (ne estado 'cancelado'))}}
                 <form action="/admin/emails/{{id}}/cancelar" method="POST" class="d-inline" data-confirmar="Cancelar este email?" data-confirmar-perigo="1">
-                  <button class="btn btn-sm btn-outline-danger" title="Cancelar"><span class="material-symbols-outlined">close</span></button>
+                  <button class="btn btn-sm btn-outline-danger" title="Cancelar" aria-label="Cancelar envio" data-ajuda="Cancela este email enquanto ainda está pendente. Um email já enviado não pode ser cancelado." data-ajuda-titulo="Cancelar envio"><span class="material-symbols-outlined">close</span></button>
                 </form>
                 {{/if}}
               </td>
@@ -146,7 +146,7 @@
         </dl>
 
         <form action="/admin/emails/smtp/testar" method="POST" class="mb-2">
-          <button type="submit" class="btn btn-outline-primary w-100"><i class="bi bi-plug me-1"></i>Testar ligação</button>
+          <button type="submit" class="btn btn-outline-primary w-100" data-ajuda="Confirma que o servidor SMTP responde com as credenciais atuais. Não envia nenhum email." data-ajuda-titulo="Testar ligação SMTP"><i class="bi bi-plug me-1"></i>Testar ligação</button>
         </form>
 
         <button class="btn btn-outline-secondary w-100 mb-2" type="button" data-bs-toggle="collapse" data-bs-target="#smtpFormulario" aria-expanded="false">
@@ -187,7 +187,7 @@
               <label class="form-label small">Nome do remetente</label>
               <input type="text" class="form-control form-control-sm" name="from_name" value="{{estadoSmtp.nomeRemetente}}" placeholder="Administração do Condomínio" />
             </div>
-            <button type="submit" class="btn btn-primary w-100">Guardar SMTP</button>
+            <button type="submit" class="btn btn-primary w-100" data-ajuda="Guarda as credenciais do servidor de email. Passam a ser usadas em todos os envios do condomínio." data-ajuda-titulo="Guardar SMTP">Guardar SMTP</button>
           </form>
         </div>
       </div>
@@ -210,7 +210,7 @@
             <label class="form-label small">Mensagem</label>
             <textarea class="form-control form-control-sm" name="mensagem" rows="2">Este é um email de teste do GesCondu.</textarea>
           </div>
-          <button type="submit" class="btn btn-success w-100" {{#unless estadoSmtp.configurado}}disabled{{/unless}}>
+          <button type="submit" class="btn btn-success w-100" {{#unless estadoSmtp.configurado}}disabled{{/unless}} data-ajuda="Envia um email de teste, imediatamente, para o endereço indicado. Serve para confirmar que o SMTP funciona." data-ajuda-titulo="Enviar email de teste">
             <i class="bi bi-send-check me-1"></i>Enviar email de teste
           </button>
           {{#unless estadoSmtp.configurado}}
@@ -265,7 +265,7 @@
         de quotas em atraso). O canal “Guardar no {{@root.armazenamentoRotulo}}” fica disponível para os fluxos automáticos
         futuros; nos restantes documentos a ação de guardar é manual em cada módulo.
       </div>
-      <button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i>Guardar notificações</button>
+      <button type="submit" class="btn btn-primary" data-ajuda="Guarda quais as notificações automáticas que o condomínio envia por email." data-ajuda-titulo="Guardar notificações"><i class="bi bi-check2 me-1"></i>Guardar notificações</button>
     </form>
   </div>
 </div>

@@ -35,11 +35,11 @@
     <div class="d-flex flex-wrap gap-2 align-items-center">
       <form action="/admin/documentos/pastas" method="POST" class="d-flex gap-2 align-items-center">
         <input type="text" class="form-control form-control-sm" name="nome" maxlength="40" required placeholder="Nova pasta…" style="max-width:220px" />
-        <button class="btn btn-sm btn-outline-primary" title="Criar pasta personalizada">+ Pasta</button>
+        <button class="btn btn-sm btn-outline-primary" title="Criar pasta personalizada" data-ajuda="Cria uma pasta para organizar documentos. As pastas do sistema mantêm-se intactas." data-ajuda-titulo="Criar pasta">+ Pasta</button>
       </form>
       {{#if pastaCustom}}
       <form action="/admin/documentos/pastas/{{pastaCustom}}/eliminar" method="POST" data-confirmar="Eliminar esta pasta personalizada? Só é possível se estiver vazia." data-confirmar-perigo="1">
-        <button class="btn btn-sm btn-outline-danger">Eliminar esta pasta</button>
+        <button class="btn btn-sm btn-outline-danger" data-ajuda="Remove a pasta personalizada. Se tiver documentos dentro, a operação é recusada: os documentos não são apagados." data-ajuda-titulo="Eliminar pasta">Eliminar esta pasta</button>
       </form>
       {{/if}}
     </div>
@@ -95,7 +95,7 @@
             {{#if disponivel_condominos}}<span class="badge text-bg-success">Sim</span>
             {{else}}<span class="badge text-bg-secondary">Não</span>{{/if}}
             <form action="/admin/documentos/{{id}}/disponivel" method="POST" class="d-inline">
-              <button class="btn btn-sm btn-outline-secondary px-1" title="{{#if disponivel_condominos}}Ocultar dos condóminos{{else}}Disponibilizar aos condóminos{{/if}}">
+              <button class="btn btn-sm btn-outline-secondary px-1" title="{{#if disponivel_condominos}}Ocultar dos condóminos{{else}}Disponibilizar aos condóminos{{/if}}" data-ajuda="{{#if disponivel_condominos}}Deixa de mostrar este documento no portal do condómino. O ficheiro mantém-se no armazenamento.{{else}}Passa a mostrar este documento no portal do condómino. O ficheiro não é movido.{{/if}}" data-ajuda-titulo="{{#if disponivel_condominos}}Ocultar dos condóminos{{else}}Disponibilizar aos condóminos{{/if}}">
                 {{#if disponivel_condominos}}Ocultar{{else}}Disponibilizar{{/if}}
               </button>
             </form>
@@ -105,7 +105,7 @@
             {{#if (urlDocumentoExterno this)}}<a href="{{urlDocumentoExterno this}}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary" title="Link externo indicado pela administração"><span class="material-symbols-outlined">link</span></a>{{/if}}
             <a href="/admin/documentos/{{id}}/email" class="btn btn-sm btn-outline-secondary" title="Enviar por email"><span class="material-symbols-outlined">mail</span></a>
             <form action="/admin/documentos/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Eliminar este documento?" data-confirmar-perigo="1">
-              <button class="btn btn-sm btn-outline-danger" title="Eliminar"><span class="material-symbols-outlined">delete</span></button>
+              <button class="btn btn-sm btn-outline-danger" title="Eliminar" aria-label="Eliminar documento" data-ajuda="Elimina o registo do documento na aplicação. O ficheiro fica no armazenamento (Drive/Dropbox/OneDrive) e tem de ser apagado lá. Não é possível desfazer." data-ajuda-titulo="Eliminar documento"><span class="material-symbols-outlined">delete</span></button>
             </form>
           </td>
         </tr>

@@ -30,7 +30,7 @@
           {{#if (ne pagamento.estado 'pago')}}
           <form action="/admin/fornecedores/{{fornecedorId}}/pagamentos/{{pagamento.id}}/estado" method="POST">
             <input type="hidden" name="estado" value="pago" />
-            <button class="btn btn-sm btn-outline-success">Marcar como pago</button>
+            <button class="btn btn-sm btn-outline-success" data-ajuda="Marca este pagamento ao fornecedor como pago. O estado fica registado no histórico." data-ajuda-titulo="Marcar como pago">Marcar como pago</button>
           </form>
           {{/if}}
         </div>
@@ -59,7 +59,7 @@
         <form action="/admin/fornecedores/{{fornecedorId}}/pagamentos/{{pagamento.id}}/comprovativo" method="POST" enctype="multipart/form-data">
           <label class="form-label small">Carregar comprovativo (PDF/JPG/PNG)</label>
           <input type="file" class="form-control mb-2" name="ficheiro" accept=".pdf,.jpg,.jpeg,.png,.webp" required />
-          <button class="btn btn-outline-primary w-100"><i class="bi bi-cloud-arrow-up me-1"></i>Guardar comprovativo no Google Drive</button>
+          <button class="btn btn-outline-primary w-100" data-ajuda="Carrega o comprovativo e guarda-o no serviço de armazenamento do condomínio, registando-o na biblioteca de documentos." data-ajuda-titulo="Guardar comprovativo"><i class="bi bi-cloud-arrow-up me-1"></i>Guardar comprovativo no Google Drive</button>
         </form>
         {{else}}
         <p class="text-muted small mb-0">Ligue o Google Drive (Configuração) para guardar o comprovativo.</p>

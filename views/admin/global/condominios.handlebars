@@ -41,9 +41,9 @@
             <a href="/admin/global/condominios/{{id}}/suporte" class="btn btn-sm btn-outline-primary" title="Acesso de suporte"><span class="material-symbols-outlined" style="font-size:1rem">support_agent</span></a>
             <form action="/admin/global/condominios/{{id}}/estado" method="POST" class="d-inline">
               {{#if (eq estado 'ativo')}}
-              <button class="btn btn-sm btn-outline-danger" title="Desativar"><span class="material-symbols-outlined" style="font-size:1rem">pause_circle</span></button>
+              <button class="btn btn-sm btn-outline-danger" title="Desativar" data-ajuda="Desativa o condomínio: os utilizadores deixam de conseguir entrar e os acessos de suporte em vigor são encerrados." data-ajuda-titulo="Desativar condomínio"><span class="material-symbols-outlined" style="font-size:1rem">pause_circle</span></button>
               {{else}}
-              <button class="btn btn-sm btn-outline-success" title="Reativar"><span class="material-symbols-outlined" style="font-size:1rem">play_circle</span></button>
+              <button class="btn btn-sm btn-outline-success" title="Reativar" data-ajuda="Reativa o condomínio. O histórico e os registos mantêm-se intactos." data-ajuda-titulo="Reativar condomínio"><span class="material-symbols-outlined" style="font-size:1rem">play_circle</span></button>
               {{/if}}
             </form>
           </td>

@@ -56,14 +56,14 @@
           {{/if}}
           <div class="d-flex gap-2 mt-auto">
             <form action="/admin/config/armazenamento/{{nome}}/testar{{#if contaPlataforma}}?ambito=plataforma{{/if}}" method="POST">
-              <button type="submit" class="btn btn-sm btn-outline-secondary" title="Testar ligação" aria-label="Testar ligação a {{rotulo}}">
+              <button type="submit" class="btn btn-sm btn-outline-secondary" title="Testar ligação" aria-label="Testar ligação a {{rotulo}}" data-ajuda="Verifica se as credenciais guardadas conseguem aceder ao serviço. Não altera nada." data-ajuda-titulo="Testar ligação">
                 <i class="bi bi-plug" aria-hidden="true"></i>
               </button>
             </form>
             {{#unless estado.viaEnv}}
             <form action="/admin/config/armazenamento/{{nome}}/desligar{{#if contaPlataforma}}?ambito=plataforma{{/if}}" method="POST" class="flex-fill"
                   data-confirmar="{{#if contaPlataforma}}Desligar {{rotulo}} da plataforma? Esta ligação é usada por todos os condomínios e pelos backups. Os ficheiros já guardados não são apagados.{{else}}Desligar {{rotulo}} deste condomínio? Os ficheiros já guardados não são apagados e a conta não é afetada.{{/if}}" data-confirmar-perigo="1">
-              <button type="submit" class="btn btn-sm btn-outline-danger w-100">Desligar</button>
+              <button type="submit" class="btn btn-sm btn-outline-danger w-100" data-ajuda="Remove esta ligação de armazenamento. Os ficheiros já guardados não são apagados, mas deixam de ficar acessíveis pela aplicação." data-ajuda-titulo="Desligar armazenamento">Desligar</button>
             </form>
             {{/unless}}
           </div>
@@ -138,7 +138,7 @@
         {{/if}}
         {{/each}}
       </div>
-      <button type="submit" class="btn btn-primary mt-3"><i class="bi bi-check2 me-1"></i>Guardar</button>
+      <button type="submit" class="btn btn-primary mt-3" data-ajuda="Define qual é o serviço de armazenamento principal. Os documentos novos passam a ser guardados lá." data-ajuda-titulo="Guardar armazenamento principal"><i class="bi bi-check2 me-1"></i>Guardar</button>
     </form>
     {{else}}
     <p class="mb-0 text-muted small">Ligue um serviço acima para escolher onde guardar os documentos.</p>
@@ -179,7 +179,7 @@
         {{/if}}
         {{/each}}
       </div>
-      <button type="submit" class="btn btn-primary mt-3"><i class="bi bi-check2 me-1"></i>Guardar destino</button>
+      <button type="submit" class="btn btn-primary mt-3" data-ajuda="Define onde são guardados os backups. Aplica-se ao próximo backup agendado." data-ajuda-titulo="Guardar destino de backups"><i class="bi bi-check2 me-1"></i>Guardar destino</button>
     </form>
 
     {{#if armazenamento.backup.avisoPartilhado}}
@@ -241,13 +241,13 @@
         </div>
       </div>
       <div class="col-12 col-lg-5">
-        <button type="submit" class="btn btn-outline-primary w-100"><i class="bi bi-check2 me-1"></i>Guardar pasta</button>
+        <button type="submit" class="btn btn-outline-primary w-100" data-ajuda="Guarda o nome da pasta raiz no armazenamento. Se a pasta já existir, é reutilizada em vez de duplicada." data-ajuda-titulo="Guardar pasta"><i class="bi bi-check2 me-1"></i>Guardar pasta</button>
       </div>
     </form>
     <hr />
     <div class="d-flex flex-wrap gap-2">
       <form action="/admin/config/drive/estrutura" method="POST">
-        <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-diagram-3 me-1"></i>Criar/verificar estrutura de pastas</button>
+        <button type="submit" class="btn btn-outline-secondary" data-ajuda="Cria as subpastas em falta e confirma as que já existem. Não apaga nem move pastas." data-ajuda-titulo="Criar/verificar estrutura"><i class="bi bi-diagram-3 me-1"></i>Criar/verificar estrutura de pastas</button>
       </form>
       <a href="/admin/documentos/drive/pasta" class="btn btn-outline-secondary"><i class="bi bi-folder2-open me-1"></i>Abrir pasta no Google Drive</a>
     </div>

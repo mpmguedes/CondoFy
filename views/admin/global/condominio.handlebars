@@ -19,7 +19,7 @@
           <div class="col-12 col-md-4"><label class="form-label">Papel</label>
             <select class="form-select" name="role"><option value="admin">Admin</option><option value="gestor">Gestor</option><option value="leitura">Leitura</option></select>
           </div>
-          <div class="col-12 col-md-3 d-grid"><button class="btn btn-primary">Associar</button></div>
+          <div class="col-12 col-md-3 d-grid"><button class="btn btn-primary" data-ajuda="Associa um utilizador já existente a este condomínio com o papel escolhido. Só com o acesso ativo é que o utilizador consegue entrar." data-ajuda-titulo="Associar utilizador">Associar</button></div>
           <div class="col-12">
             <div class="form-check">
               <input class="form-check-input" type="checkbox" id="reativar_acesso_global" name="reativar_acesso" value="1" />
@@ -53,10 +53,10 @@
               <option value="ativo" {{#if (eq estado 'ativo')}}selected{{/if}}>Ativo</option>
               <option value="inativo" {{#if (eq estado 'inativo')}}selected{{/if}}>Inativo</option>
             </select>
-            <button class="btn btn-sm btn-outline-secondary">Guardar</button>
+            <button class="btn btn-sm btn-outline-secondary" data-ajuda="Guarda o papel e o estado deste acesso. As permissões do utilizador neste condomínio mudam de imediato." data-ajuda-titulo="Guardar acesso">Guardar</button>
           </form>
           <form action="/admin/global/associacoes/{{id}}/eliminar" method="POST" data-confirmar="Remover esta associação?" data-confirmar-perigo="1">
-            <button class="btn btn-sm btn-outline-danger">Remover</button>
+            <button class="btn btn-sm btn-outline-danger" data-ajuda="Remove o acesso deste utilizador a este condomínio. Os registos que ele criou mantêm-se." data-ajuda-titulo="Remover associação">Remover</button>
           </form>
         </li>
         {{else}}
@@ -73,16 +73,16 @@
         <p class="small text-muted">Ciclo recomendado: <strong>Ativo → Desativado → Eliminação permanente</strong>. A eliminação remove os dados do condomínio e não pode ser anulada.</p>
         {{#unless (eq condominio.estado 'inativo')}}
         <form action="/admin/global/condominios/{{condominio.id}}/estado" method="POST">
-          <button class="btn btn-outline-danger">Desativar condomínio</button>
+          <button class="btn btn-outline-danger" data-ajuda="Desativa o condomínio: os utilizadores deixam de conseguir entrar e os acessos de suporte em vigor são encerrados. É necessário indicar o motivo." data-ajuda-titulo="Desativar condomínio">Desativar condomínio</button>
         </form>
         {{else}}
         <form action="/admin/global/condominios/{{condominio.id}}/estado" method="POST" class="mb-3">
-          <button class="btn btn-outline-success">Reativar condomínio</button>
+          <button class="btn btn-outline-success" data-ajuda="Reativa o condomínio e volta a permitir a entrada aos utilizadores associados. O histórico mantém-se." data-ajuda-titulo="Reativar condomínio">Reativar condomínio</button>
         </form>
         <form action="/admin/global/condominios/{{condominio.id}}/eliminar" method="POST">
           <label class="form-label">Para eliminar permanentemente escreva <strong>ELIMINAR</strong>:</label>
           <input type="text" class="form-control mb-2" name="confirmo" required placeholder="ELIMINAR" autocomplete="off" />
-          <button class="btn btn-danger">Eliminar permanentemente</button>
+          <button class="btn btn-danger" data-ajuda="Apaga permanentemente todos os dados deste condomínio: frações, quotas, pagamentos, documentos e histórico. Não pode ser anulado." data-ajuda-titulo="Eliminar condomínio">Eliminar permanentemente</button>
         </form>
         {{/unless}}
       </div>

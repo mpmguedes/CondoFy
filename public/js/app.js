@@ -257,3 +257,85 @@ document.querySelectorAll('.alert-dismissible').forEach((a) => {
     true
   );
 })();
+
+// ── Ajuda contextual (tooltips) ─────────────────────────────────────
+// Explica o que cada ação faz e, quando relevante, a sua consequência.
+// Marcação (não há lógica por página):
+//   data-ajuda="Texto."              → conteúdo obrigatório
+//   data-ajuda-titulo="Título curto" → opcional, em negrito
+//   data-ajuda-posicao="bottom"      → opcional (por omissão: top)
+//
+// Acessibilidade: aparece em hover E em focus (teclado). Nunca substitui o
+// texto visível do botão nem o aria-label — é informação adicional.
+//
+// Estratégia tátil: em ecrãs sem hover, um tooltip contextual obrigaria a um
+// segundo toque para a ação disparar. Por isso, nesses ecrãs:
+//   · alvos com texto visível → NÃO recebem tooltip (o texto já explica);
+//   · alvos só-ícone        → mantêm o title nativo (toque longo), que não
+//                             interfere com o clique nem com o toque.
+(function () {
+  var SELETOR = '[data-ajuda]';
+
+  function temHover() {
+    if (window.matchMedia) {
+      return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    }
+    return true; // sem matchMedia: assume ambiente de rato
+  }
+
+  // Um alvo "só-ícone" não tem texto legível próprio: só ícones e/ou espaços.
+  function soIcone(el) {
+    var texto = (el.textContent || '').replace(/\s+/g, '');
+    return texto === '';
+  }
+
+  // Título nativo como fallback tátil, para não deixar botões sem rótulo
+  // acessível. Usa o texto da ajuda, encurtado à primeira frase.
+  function titleFallback(el, conteudo) {
+    if (el.getAttribute('title')) return;
+    var titulo = el.getAttribute('data-ajuda-titulo');
+    el.setAttribute('title', titulo || conteudo);
+  }
+
+  function mostrarConteudo(el, conteudo, titulo) {
+    if (typeof bootstrap === 'undefined' || !bootstrap.Tooltip) return;
+    if (el.dataset.ajudaIniciada === '1') return;
+    var corpo = titulo
+      ? '<span class="gc-ajuda-titulo">' + titulo + '</span><span class="gc-ajuda-texto">' + conteudo + '</span>'
+      : '<span class="gc-ajuda-texto">' + conteudo + '</span>';
+    new bootstrap.Tooltip(el, {
+      title: corpo,
+      html: true,
+      placement: el.getAttribute('data-ajuda-posicao') || 'top',
+      trigger: 'hover focus',
+      delay: { show: 250, hide: 120 },
+      container: 'body',
+      customClass: 'gc-tooltip',
+    });
+    el.dataset.ajudaIniciada = '1';
+  }
+
+  function inicializar() {
+    var alvos = document.querySelectorAll(SELETOR);
+    if (!alvos.length) return;
+    var comHover = temHover();
+
+    Array.prototype.forEach.call(alvos, function (el) {
+      var conteudo = (el.getAttribute('data-ajuda') || '').trim();
+      if (!conteudo) return; // sem conteúdo não se cria tooltip
+
+      if (!comHover) {
+        // Tátil: só botões sem texto visível recebem o fallback nativo.
+        if (soIcone(el)) titleFallback(el, conteudo);
+        return;
+      }
+      mostrarConteudo(el, conteudo, el.getAttribute('data-ajuda-titulo'));
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', inicializar);
+  } else {
+    inicializar();
+  }
+})();

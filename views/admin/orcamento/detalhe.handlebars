@@ -34,26 +34,26 @@
     {{#if (eq orcamento.estado 'rascunho')}}
     <a href="/admin/orcamento/{{orcamento.id}}/editar" class="btn btn-outline-primary"><i class="bi bi-pencil me-1"></i>Editar</a>
     <form action="/admin/orcamento/{{orcamento.id}}/aprovar" method="POST">
-      <button class="btn btn-success"><i class="bi bi-check-lg me-1"></i>Aprovar orçamento</button>
+      <button class="btn btn-success" data-ajuda="Aprova o orçamento deste ano. Só depois de aprovado é possível gerar quotas a partir dele e os valores ficam bloqueados para edição." data-ajuda-titulo="Aprovar orçamento"><i class="bi bi-check-lg me-1"></i>Aprovar orçamento</button>
     </form>
     <form action="/admin/orcamento/{{orcamento.id}}/eliminar" method="POST" data-confirmar="Eliminar este rascunho? Esta ação não pode ser revertida." data-confirmar-perigo="1">
-      <button class="btn btn-outline-danger"><i class="bi bi-trash me-1"></i>Eliminar rascunho</button>
+      <button class="btn btn-outline-danger" data-ajuda="Elimina definitivamente este rascunho, com as rubricas e o plano de quotas associados. Só é possível enquanto não tiver quotas geradas." data-ajuda-titulo="Eliminar rascunho"><i class="bi bi-trash me-1"></i>Eliminar rascunho</button>
     </form>
     {{/if}}
     {{#if (eq orcamento.estado 'aprovado')}}
     <form action="/admin/orcamento/{{orcamento.id}}/anular" method="POST" data-confirmar="Anular este orçamento aprovado? Fica no histórico, sem poder ser editado nem emitido." data-confirmar-perigo="1">
-      <button class="btn btn-outline-danger"><i class="bi bi-x-circle me-1"></i>Anular orçamento</button>
+      <button class="btn btn-outline-danger" data-ajuda="Anula este orçamento aprovado. Fica no histórico, mas deixa de poder ser editado ou usado para emitir quotas." data-ajuda-titulo="Anular orçamento"><i class="bi bi-x-circle me-1"></i>Anular orçamento</button>
     </form>
     {{/if}}
     {{#if (or (eq orcamento.estado 'aprovado') (eq orcamento.estado 'em_execucao'))}}
     <form action="/admin/orcamento/{{orcamento.id}}/fechar" method="POST" data-confirmar="Fechar este orçamento?">
-      <button class="btn btn-outline-dark"><i class="bi bi-lock me-1"></i>Fechar orçamento</button>
+      <button class="btn btn-outline-dark" data-ajuda="Encerra o orçamento: deixa de ser possível gerar quotas a partir dele. Os valores aprovados e o histórico mantêm-se." data-ajuda-titulo="Fechar orçamento"><i class="bi bi-lock me-1"></i>Fechar orçamento</button>
     </form>
     {{/if}}
     {{#unless (eq orcamento.estado 'anulado')}}
     <a href="/admin/orcamento/{{orcamento.id}}/distribuicao" class="btn btn-outline-primary"><i class="bi bi-diagram-3 me-1"></i>Distribuição</a>
     <a href="/admin/orcamento/{{orcamento.id}}/plano" class="btn btn-outline-primary"><i class="bi bi-calendar3 me-1"></i>Plano de quotas</a>
-    <a href="/admin/orcamento/{{orcamento.id}}/emitir" class="btn btn-outline-primary"><i class="bi bi-send me-1"></i>Emitir quotas</a>
+    <a href="/admin/orcamento/{{orcamento.id}}/emitir" class="btn btn-outline-primary" data-ajuda="Gera as quotas deste orçamento para todas as frações e passa o orçamento a «em execução». A partir daí já não é possível anular nem editar o orçamento." data-ajuda-titulo="Emitir quotas"><i class="bi bi-send me-1"></i>Emitir quotas</a>
     {{/unless}}
     <a href="/admin/orcamento/{{orcamento.id}}/historico" class="btn btn-outline-secondary"><i class="bi bi-clock-history me-1"></i>Histórico</a>
     {{#if (eq orcamento.estado 'anulado')}}
@@ -90,7 +90,7 @@
             {{/unless}}
             {{#if (eq ../orcamento.estado 'rascunho')}}
             <form action="/admin/orcamento/{{../orcamento.id}}/rubricas/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Remover esta rubrica?" data-confirmar-perigo="1">
-              <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              <button class="btn btn-sm btn-outline-danger" data-ajuda="Remove esta rubrica do orçamento. O total do orçamento é recalculado sem ela." data-ajuda-titulo="Remover rubrica"><i class="bi bi-trash"></i></button>
             </form>
             {{/if}}
           </td>
@@ -107,7 +107,7 @@
                 <input type="text" class="form-control" name="justificacao" placeholder="Ex.: deliberação da assembleia de ..." />
               </div>
               <div class="col-md-3">
-                <button class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Guardar alteração</button>
+                <button class="btn btn-primary" data-ajuda="Guarda o novo valor da rubrica. Fora do rascunho é obrigatório justificar a alteração; a alteração fica registada no histórico." data-ajuda-titulo="Guardar alteração"><i class="bi bi-check-lg me-1"></i>Guardar alteração</button>
               </div>
             </form>
           </td>
@@ -156,7 +156,7 @@
         </select>
       </div>
       <div class="col-md-12 mt-2">
-        <button class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar rubrica</button>
+        <button class="btn btn-primary" data-ajuda="Adiciona a rubrica ao orçamento. As rubricas só podem ser alteradas enquanto o orçamento estiver em rascunho." data-ajuda-titulo="Adicionar rubrica"><i class="bi bi-plus-lg me-1"></i>Adicionar rubrica</button>
       </div>
     </form>
   </div>

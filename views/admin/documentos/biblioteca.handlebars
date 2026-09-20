@@ -5,7 +5,7 @@
   </div>
   <div class="d-flex gap-2">
     {{#if armazenamentoAbrePasta}}
-    <a href="/admin/documentos/drive/pasta" class="btn btn-outline-secondary" title="Abrir a pasta deste condomínio no {{@root.armazenamentoRotulo}} (a pasta é criada automaticamente no primeiro documento)">
+    <a href="/admin/documentos/drive/pasta" class="btn btn-outline-secondary" title="Abrir a pasta deste condomínio no {{@root.armazenamentoRotulo}} (a pasta é criada automaticamente no primeiro documento)" data-ajuda="Abre a pasta deste condomínio no serviço de armazenamento ligado. É criada automaticamente no primeiro documento." data-ajuda-titulo="Abrir pasta no armazenamento">
       <span class="material-symbols-outlined me-1">folder_open</span>Abrir pasta no {{@root.armazenamentoRotulo}}
     </a>
     {{/if}}

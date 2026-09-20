@@ -44,16 +44,16 @@
                  PDF (emite documento) nem de anular (escrita). --}}
             <a href="/admin/pagamentos/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver detalhe"><span class="material-symbols-outlined">visibility</span></a>
             {{else}}
-            <a href="/admin/pagamentos/{{id}}/recibo" target="_blank" class="btn btn-sm btn-outline-primary" title="Recibo PDF"><span class="material-symbols-outlined">picture_as_pdf</span></a>
+            <a href="/admin/pagamentos/{{id}}/recibo" target="_blank" class="btn btn-sm btn-outline-primary" title="Recibo PDF" data-ajuda="Abre o recibo deste pagamento em PDF, numa nova aba." data-ajuda-titulo="Recibo (PDF)"><span class="material-symbols-outlined">picture_as_pdf</span></a>
             {{#if ../driveLigado}}
             <form action="/admin/pagamentos/{{id}}/recibo/drive" method="POST" class="d-inline">
-              <button class="btn btn-sm btn-outline-secondary" title="Guardar recibo no Google Drive"><span class="material-symbols-outlined">cloud_upload</span></button>
+              <button class="btn btn-sm btn-outline-secondary" title="Guardar recibo no Google Drive" data-ajuda="Gera o recibo em PDF e guarda-o no serviço de armazenamento do condomínio." data-ajuda-titulo="Guardar recibo no armazenamento"><span class="material-symbols-outlined">cloud_upload</span></button>
             </form>
             {{/if}}
             <a href="/admin/pagamentos/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
             {{#if (eq estado 'confirmado')}}
             <form action="/admin/pagamentos/{{id}}/anular" method="POST" class="d-inline" data-confirmar="Anular este pagamento?" data-confirmar-perigo="1">
-              <button class="btn btn-sm btn-outline-danger" title="Anular"><span class="material-symbols-outlined">block</span></button>
+              <button class="btn btn-sm btn-outline-danger" title="Anular" data-ajuda="Anula este pagamento: o movimento bancário correspondente é também anulado e as quotas voltam ao estado anterior. O número do documento mantém-se." data-ajuda-titulo="Anular pagamento"><span class="material-symbols-outlined">block</span></button>
             </form>
             {{/if}}
             {{/if}}

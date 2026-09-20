@@ -46,10 +46,10 @@
           <td class="small text-nowrap">{{expira_em}}</td>
           <td class="text-end text-nowrap">
             <form action="/admin/suporte/{{id}}/autorizar" method="POST" class="d-inline">
-              <button class="btn btn-sm btn-primary">Autorizar</button>
+              <button class="btn btn-sm btn-primary" data-ajuda="Autoriza este pedido de acesso de suporte. A partir daí o operador pode consultar os dados deste condomínio, só para leitura, até expirar." data-ajuda-titulo="Autorizar acesso de suporte">Autorizar</button>
             </form>
             <form action="/admin/suporte/{{id}}/recusar" method="POST" class="d-inline">
-              <button class="btn btn-sm btn-outline-danger">Recusar</button>
+              <button class="btn btn-sm btn-outline-danger" data-ajuda="Recusa este pedido. O operador não passa a ter acesso aos dados do condomínio." data-ajuda-titulo="Recusar acesso de suporte">Recusar</button>
             </form>
           </td>
         </tr>
@@ -79,7 +79,7 @@
           <td class="small text-nowrap">{{expira_em}}</td>
           <td class="text-end">
             <form action="/admin/suporte/{{id}}/revogar" method="POST" class="d-inline">
-              <button class="btn btn-sm btn-outline-danger">Revogar</button>
+              <button class="btn btn-sm btn-outline-danger" data-ajuda="Termina este acesso de suporte imediatamente, mesmo antes de expirar. Não afeta os dados do condomínio." data-ajuda-titulo="Revogar acesso de suporte">Revogar</button>
             </form>
           </td>
         </tr>

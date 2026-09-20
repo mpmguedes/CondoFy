@@ -70,9 +70,9 @@
               {{#if comprovativo_ficheiro}}
                 {{#if (eq comprovativo_estado 'pendente')}}
                 <form action="/admin/pagamentos/{{id}}/comprovativo/validar" method="POST" class="d-inline">
-                  <button class="btn btn-sm btn-outline-success px-1" title="Validar comprovativo"><span class="material-symbols-outlined" style="font-size:1rem">check</span></button>
+                  <button class="btn btn-sm btn-outline-success px-1" title="Validar comprovativo" data-ajuda="Dá o comprovativo por conferido. Não altera valores nem estados financeiros do pagamento." data-ajuda-titulo="Validar comprovativo"><span class="material-symbols-outlined" style="font-size:1rem">check</span></button>
                 </form>
-                <button type="button" class="btn btn-sm btn-outline-danger px-1 btn-rejeitar" data-bs-toggle="modal" data-bs-target="#modalRejeitar" data-id="{{id}}" data-nome="{{comprovativo_nome}}" title="Rejeitar comprovativo"><span class="material-symbols-outlined" style="font-size:1rem">close</span></button>
+                <button type="button" class="btn btn-sm btn-outline-danger px-1 btn-rejeitar" data-bs-toggle="modal" data-bs-target="#modalRejeitar" data-id="{{id}}" data-nome="{{comprovativo_nome}}" title="Rejeitar comprovativo" data-ajuda="Rejeita o comprovativo apresentado. O condómino pode anexar outro; o pagamento mantém-se." data-ajuda-titulo="Rejeitar comprovativo"><span class="material-symbols-outlined" style="font-size:1rem">close</span></button>
                 {{/if}}
               {{/if}}
               <button type="button" class="btn btn-sm btn-outline-primary px-1 btn-anexar" data-bs-toggle="modal" data-bs-target="#modalAnexar" data-id="{{id}}" data-fracao="{{fracao}}" title="{{#if comprovativo_ficheiro}}Substituir comprovativo{{else}}Anexar comprovativo{{/if}}">
@@ -81,7 +81,7 @@
               <a href="/admin/quotas/recibos" class="btn btn-sm btn-outline-secondary px-1" title="Emitir recibo (Quotas → Recibos)"><span class="material-symbols-outlined" style="font-size:1rem">receipt_long</span></a>
               <a href="/admin/pagamentos/{{id}}" class="btn btn-sm btn-outline-secondary px-1" title="Ver detalhe"><span class="material-symbols-outlined" style="font-size:1rem">visibility</span></a>
               <form action="/admin/pagamentos/{{id}}/anular" method="POST" class="d-inline" data-confirmar="Anular este pagamento?" data-confirmar-perigo="1">
-                <button class="btn btn-sm btn-outline-danger px-1" title="Anular pagamento"><span class="material-symbols-outlined" style="font-size:1rem">block</span></button>
+                <button class="btn btn-sm btn-outline-danger px-1" title="Anular pagamento" data-ajuda="Anula este pagamento: o movimento bancário correspondente é também anulado e as quotas voltam ao estado anterior. O número do documento mantém-se." data-ajuda-titulo="Anular pagamento"><span class="material-symbols-outlined" style="font-size:1rem">block</span></button>
               </form>
             {{/if}}
           </td>

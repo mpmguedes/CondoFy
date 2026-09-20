@@ -2107,3 +2107,72 @@ hr { border-color: var(--c-border); opacity: 1; }
   line-height: 1.15;
 }
 .relatorio-financeiro .stat-label { min-height: 2.2em; }
+
+
+/* ── Ajuda contextual (tooltips) ──────────────────────────────────────
+   Aparecem em hover e em focus (ver public/js/app.js). São informação
+   adicional: nunca substituem o texto do botão nem o aria-label.         */
+.gc-tooltip .tooltip-inner {
+  max-width: 320px;
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+  line-height: 1.35;
+  font-size: var(--font-size-sm);
+  /* Fundo/tinta próprios: legível nos dois temas, independentemente do
+     tema do Bootstrap, sem depender de cor para transmitir sentido. */
+  background-color: var(--c-navy-950);
+  color: #F6FCFF;
+  box-shadow: 0 2px 10px rgba(6, 33, 63, 0.28);
+}
+.gc-tooltip.bs-tooltip-top .tooltip-arrow::before,
+.gc-tooltip.bs-tooltip-auto[data-popper-placement^="top"] .tooltip-arrow::before {
+  border-top-color: var(--c-navy-950);
+}
+.gc-tooltip.bs-tooltip-bottom .tooltip-arrow::before,
+.gc-tooltip.bs-tooltip-auto[data-popper-placement^="bottom"] .tooltip-arrow::before {
+  border-bottom-color: var(--c-navy-950);
+}
+.gc-tooltip.bs-tooltip-start .tooltip-arrow::before,
+.gc-tooltip.bs-tooltip-auto[data-popper-placement^="left"] .tooltip-arrow::before {
+  border-left-color: var(--c-navy-950);
+}
+.gc-tooltip.bs-tooltip-end .tooltip-arrow::before,
+.gc-tooltip.bs-tooltip-auto[data-popper-placement^="right"] .tooltip-arrow::before {
+  border-right-color: var(--c-navy-950);
+}
+
+/* Título opcional (data-ajuda-titulo), em bloco próprio. */
+.gc-tooltip .gc-ajuda-titulo {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+.gc-tooltip .gc-ajuda-texto { display: block; }
+
+/* Tema escuro: o texto claro sobre o navy-950 mantém-se legível, mas a
+   superfície é alinhada com o resto da interface escura. */
+[data-theme="dark"] .gc-tooltip .tooltip-inner {
+  background-color: var(--c-navy-800);
+}
+[data-theme="dark"] .gc-tooltip.bs-tooltip-top .tooltip-arrow::before,
+[data-theme="dark"] .gc-tooltip.bs-tooltip-auto[data-popper-placement^="top"] .tooltip-arrow::before {
+  border-top-color: var(--c-navy-800);
+}
+[data-theme="dark"] .gc-tooltip.bs-tooltip-bottom .tooltip-arrow::before,
+[data-theme="dark"] .gc-tooltip.bs-tooltip-auto[data-popper-placement^="bottom"] .tooltip-arrow::before {
+  border-bottom-color: var(--c-navy-800);
+}
+[data-theme="dark"] .gc-tooltip.bs-tooltip-start .tooltip-arrow::before,
+[data-theme="dark"] .gc-tooltip.bs-tooltip-auto[data-popper-placement^="left"] .tooltip-arrow::before {
+  border-left-color: var(--c-navy-800);
+}
+[data-theme="dark"] .gc-tooltip.bs-tooltip-end .tooltip-arrow::before,
+[data-theme="dark"] .gc-tooltip.bs-tooltip-auto[data-popper-placement^="right"] .tooltip-arrow::before {
+  border-right-color: var(--c-navy-800);
+}
+
+/* Ecrãs tácteis: não há tooltips contextuais (ver app.js). O title nativo
+   dos botões só-ícone continua a funcionar e não bloqueia o clique. */
+@media (hover: none) {
+  .gc-tooltip { display: none !important; }
+}

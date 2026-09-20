@@ -22,11 +22,11 @@
             <div class="d-flex gap-1 align-items-center">
               {{#unless principal}}
               <form action="/admin/condominos/contactos/{{id}}/principal" method="POST" class="d-inline">
-                <button class="btn btn-sm btn-outline-primary" title="Definir principal"><span class="material-symbols-outlined">star</span></button>
+                <button class="btn btn-sm btn-outline-primary" title="Definir principal" data-ajuda="Define este contacto como principal — é o usado por omissão nas comunicações e no envio de quotas." data-ajuda-titulo="Definir contacto principal"><span class="material-symbols-outlined">star</span></button>
               </form>
               {{/unless}}
               <form action="/admin/condominos/contactos/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Eliminar este contacto?" data-confirmar-perigo="1">
-                <button class="btn btn-sm btn-outline-danger"><span class="material-symbols-outlined">delete</span></button>
+                <button class="btn btn-sm btn-outline-danger" data-ajuda="Elimina este contacto do condómino. Se for o principal, escolha outro para o substituir." data-ajuda-titulo="Eliminar contacto"><span class="material-symbols-outlined">delete</span></button>
               </form>
             </div>
           </div>
@@ -40,7 +40,7 @@
           <input type="hidden" name="tipo" value="email" />
           <div class="col-md-5"><input type="email" class="form-control" name="valor" placeholder="email@exemplo.pt" required /></div>
           <div class="col-md-4"><input type="text" class="form-control" name="etiqueta" placeholder="Trabalho/Casa" /></div>
-          <div class="col-md-3"><button class="btn btn-outline-primary w-100">+ Adicionar email</button></div>
+          <div class="col-md-3"><button class="btn btn-outline-primary w-100" data-ajuda="Adiciona este email aos contactos do condómino. É usado nas comunicações e no envio de quotas." data-ajuda-titulo="Adicionar email">+ Adicionar email</button></div>
         </form>
       </div>
     </div>
@@ -61,11 +61,11 @@
             <div class="d-flex gap-1 align-items-center">
               {{#unless principal}}
               <form action="/admin/condominos/contactos/{{id}}/principal" method="POST" class="d-inline">
-                <button class="btn btn-sm btn-outline-primary" title="Definir principal"><span class="material-symbols-outlined">star</span></button>
+                <button class="btn btn-sm btn-outline-primary" title="Definir principal" data-ajuda="Define este contacto como principal — é o usado por omissão nas comunicações e no envio de quotas." data-ajuda-titulo="Definir contacto principal"><span class="material-symbols-outlined">star</span></button>
               </form>
               {{/unless}}
               <form action="/admin/condominos/contactos/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Eliminar este contacto?" data-confirmar-perigo="1">
-                <button class="btn btn-sm btn-outline-danger"><span class="material-symbols-outlined">delete</span></button>
+                <button class="btn btn-sm btn-outline-danger" data-ajuda="Elimina este contacto do condómino. Se for o principal, escolha outro para o substituir." data-ajuda-titulo="Eliminar contacto"><span class="material-symbols-outlined">delete</span></button>
               </form>
             </div>
           </div>

@@ -42,7 +42,7 @@
             <label class="form-label">Observações</label>
             <textarea class="form-control" name="observacoes" rows="2">{{fracao.observacoes}}</textarea>
           </div>
-          <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1">save</span>Guardar</button>
+          <button type="submit" class="btn btn-primary" data-ajuda="Guarda os dados da fração, incluindo a permilagem usada no cálculo das quotas." data-ajuda-titulo="Guardar fração"><span class="material-symbols-outlined me-1">save</span>Guardar</button>
         </form>
       </div>
     </div>
@@ -98,7 +98,7 @@
                 <input type="text" class="form-control form-control-sm" name="motivo" placeholder="Motivo (ex.: venda)" />
               </div>
               <div class="col-3">
-                <button class="btn btn-sm btn-outline-danger w-100" data-confirmar="Encerrar esta titularidade com a data indicada? O registo mantém-se no histórico.">
+                <button class="btn btn-sm btn-outline-danger w-100" data-confirmar="Encerrar esta titularidade com a data indicada? O registo mantém-se no histórico." data-ajuda="Encerra esta titularidade na data indicada. O registo mantém-se no histórico e a fração fica sem titular a partir dessa data." data-ajuda-titulo="Encerrar titularidade">
                   Encerrar
                 </button>
               </div>
@@ -141,7 +141,7 @@
             </div>
           </div>
           <div class="col-12">
-            <button class="btn btn-sm btn-primary"><span class="material-symbols-outlined me-1">add</span>Registar titular</button>
+            <button class="btn btn-sm btn-primary" data-ajuda="Regista esta pessoa como titular da fração a partir da data indicada. A titularidade anterior, se existir, é encerrada e mantém-se no histórico." data-ajuda-titulo="Registar titular"><span class="material-symbols-outlined me-1">add</span>Registar titular</button>
           </div>
         </form>
       </div>
@@ -201,7 +201,7 @@
             </select>
           </div>
           <div class="col-6">
-            <button type="submit" class="btn btn-outline-primary w-100"><span class="material-symbols-outlined me-1">add</span>Associar</button>
+            <button type="submit" class="btn btn-outline-primary w-100" data-ajuda="Associa esta pessoa à fração para efeitos de contactos e comunicações. A mudança de proprietário faz-se em Titularidade, que mantém o histórico." data-ajuda-titulo="Associar pessoa"><span class="material-symbols-outlined me-1">add</span>Associar</button>
           </div>
         </form>
 
@@ -213,7 +213,7 @@
               <span class="badge text-bg-light border ms-2">{{this.FracaoPessoa.vinculo}}</span>
             </div>
             <form action="/admin/fracoes/{{../fracao.id}}/pessoas/{{this.FracaoPessoa.id}}/eliminar" method="POST" data-confirmar="Remover esta associação? A titularidade correspondente será encerrada com a data de hoje e mantém-se no histórico." data-confirmar-perigo="1">
-              <button class="btn btn-sm btn-outline-danger"><span class="material-symbols-outlined">close</span></button>
+              <button class="btn btn-sm btn-outline-danger" data-ajuda="Remove esta associação. A titularidade correspondente é encerrada com a data de hoje e mantém-se no histórico." data-ajuda-titulo="Remover associação"><span class="material-symbols-outlined">close</span></button>
             </form>
           </li>
           {{else}}

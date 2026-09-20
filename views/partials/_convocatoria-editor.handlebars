@@ -121,10 +121,10 @@
 
 {{!-- ═══ Ações ═══ --}}
 <div class="cv-acoes d-flex flex-wrap gap-2 align-items-center">
-  <button type="submit" name="_acao" value="preview" class="btn btn-outline-primary btn-lg">
+  <button type="submit" name="_acao" value="preview" class="btn btn-outline-primary btn-lg" data-ajuda="Mostra o documento final sem o gerar. Nada é guardado enquanto não gerar o PDF." data-ajuda-titulo="Pré-visualizar convocatória">
     <span class="material-symbols-outlined me-1">visibility</span>Pré-visualizar
   </button>
-  <button type="submit" name="_acao" value="pdf" class="btn btn-success btn-lg">
+  <button type="submit" name="_acao" value="pdf" class="btn btn-success btn-lg" data-ajuda="Gera a convocatória em PDF e guarda-a nos Documentos. Fica associada a esta assembleia." data-ajuda-titulo="Gerar PDF">
     <span class="material-symbols-outlined me-1">picture_as_pdf</span>Gerar PDF
   </button>
   {{#if driveLigado}}

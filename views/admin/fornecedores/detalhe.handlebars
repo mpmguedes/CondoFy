@@ -75,7 +75,7 @@
               <td class="text-end fw-semibold">{{eur valor}}</td>
               <td class="text-end">
                 <form action="/admin/fornecedores/{{../fornecedor.id}}/saldos/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Remover este saldo inicial?" data-confirmar-perigo="1">
-                  <button class="btn btn-sm btn-outline-danger" title="Remover"><span class="material-symbols-outlined">delete</span></button>
+                  <button class="btn btn-sm btn-outline-danger" title="Remover" data-ajuda="Remove este saldo inicial do fornecedor. Deixa de contar para o saldo em dívida." data-ajuda-titulo="Remover saldo inicial"><span class="material-symbols-outlined">delete</span></button>
                 </form>
               </td>
             </tr>
@@ -106,7 +106,7 @@
             <input type="text" class="form-control form-control-sm" id="saldo_descricao" name="descricao" placeholder="ex.: dívida de 2025" />
           </div>
           <div class="col-12">
-            <button class="btn btn-sm btn-primary"><span class="material-symbols-outlined me-1">add</span>Registar saldo</button>
+            <button class="btn btn-sm btn-primary" data-ajuda="Cria um saldo inicial ou transitado no extrato deste fornecedor. Não movimenta contas bancárias." data-ajuda-titulo="Registar saldo"><span class="material-symbols-outlined me-1">add</span>Registar saldo</button>
           </div>
         </form>
       </div>

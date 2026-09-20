@@ -111,7 +111,7 @@
       <div class="d-flex gap-2">
         <button type="button" class="btn btn-outline-secondary d-none" id="btnVoltar" onclick="wizard.go(-1)">Voltar</button>
         <button type="button" class="btn btn-primary d-none" id="btnContinuar" onclick="wizard.go(1)">Continuar</button>
-        <button type="submit" class="btn btn-primary d-none" id="btnGerar"><span class="material-symbols-outlined me-1">auto_awesome</span>Gerar quotas</button>
+        <button type="submit" class="btn btn-primary d-none" id="btnGerar" data-ajuda="Cria as quotas do período indicado para todas as frações ativas. As quotas já existentes para as mesmas frações e meses são ignoradas." data-ajuda-titulo="Gerar quotas"><span class="material-symbols-outlined me-1">auto_awesome</span>Gerar quotas</button>
       </div>
     </div>
   </div>
@@ -121,12 +121,12 @@
   <div class="card-header bg-white"><i class="bi bi-file-earmark-plus me-1"></i>Documentos e comunicação</div>
   <div class="card-body">
     <div class="form-check form-switch mb-2">
-      <input class="form-check-input" type="checkbox" role="switch" id="guardarDrive" name="guardar_drive" value="on" {{#if autoQuotas.drive}}checked{{/if}} {{#unless driveLigado}}disabled{{/unless}} />
+      <input class="form-check-input" type="checkbox" role="switch" id="guardarDrive" name="guardar_drive" value="on" {{#if autoQuotas.drive}}checked{{/if}} {{#unless driveLigado}}disabled{{/unless}} data-ajuda="Guarda uma cópia do aviso de quota no serviço de armazenamento do condomínio, logo após a geração." data-ajuda-titulo="Guardar aviso no armazenamento" />
       <label class="form-check-label" for="guardarDrive"><i class="{{@root.armazenamentoIcone}} me-1"></i>Guardar automaticamente no {{@root.armazenamentoRotulo}}</label>
       {{#unless driveLigado}}<div class="form-text">Ligue um serviço de armazenamento em Configurações → Armazenamento e Backups para ativar esta opção.</div>{{/unless}}
     </div>
     <div class="form-check form-switch mb-2">
-      <input class="form-check-input" type="checkbox" role="switch" id="enviarEmail" name="enviar_email" value="on" {{#if autoQuotas.email}}checked{{/if}} />
+      <input class="form-check-input" type="checkbox" role="switch" id="enviarEmail" name="enviar_email" value="on" {{#if autoQuotas.email}}checked{{/if}} data-ajuda="Envia o aviso de quota por email a cada condómino logo após a geração. Sem esta opção, os avisos ficam apenas na aplicação." data-ajuda-titulo="Enviar quotas por email" />
       <label class="form-check-label" for="enviarEmail">Enviar quotas por email (imediatamente após gerar)</label>
     </div>
     <div class="form-check form-switch mb-1">

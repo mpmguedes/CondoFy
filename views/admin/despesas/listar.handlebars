@@ -58,7 +58,7 @@
             {{else}}
             <a href="/admin/despesas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
             <form action="/admin/despesas/{{id}}/anular" method="POST" class="d-inline" data-confirmar="Anular esta despesa?" data-confirmar-perigo="1">
-              <button class="btn btn-sm btn-outline-danger" title="Anular"><span class="material-symbols-outlined">block</span></button>
+              <button class="btn btn-sm btn-outline-danger" title="Anular" data-ajuda="Anula esta despesa: mantém-se no histórico e deixa de contar para os resultados do condomínio." data-ajuda-titulo="Anular despesa"><span class="material-symbols-outlined">block</span></button>
             </form>
             {{/if}}
           </td>

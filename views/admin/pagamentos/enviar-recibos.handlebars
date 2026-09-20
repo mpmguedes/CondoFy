@@ -46,7 +46,7 @@
               <a href="/admin/pagamentos/{{id}}/recibo" target="_blank" class="btn btn-sm btn-outline-primary" title="Recibo PDF"><span class="material-symbols-outlined">picture_as_pdf</span></a>
               {{#if ../driveLigado}}
               <form action="/admin/pagamentos/{{id}}/recibo/drive" method="POST" class="d-inline">
-                <button class="btn btn-sm btn-outline-secondary" title="Guardar recibo no Google Drive"><span class="material-symbols-outlined">cloud_upload</span></button>
+                <button class="btn btn-sm btn-outline-secondary" title="Guardar recibo no Google Drive" data-ajuda="Gera o recibo em PDF e guarda-o no serviço de armazenamento do condomínio." data-ajuda-titulo="Guardar recibo no armazenamento"><span class="material-symbols-outlined">cloud_upload</span></button>
               </form>
               {{/if}}
             </td>
@@ -67,11 +67,11 @@
       <button type="button" class="btn btn-sm btn-outline-secondary" id="btnTodos">Selecionar todos</button>
       <button type="button" class="btn btn-sm btn-outline-secondary" id="btnNenhum">Limpar</button>
       <div class="form-check ms-lg-auto">
-        <input class="form-check-input" type="checkbox" name="reenviar" value="on" id="reenviar" />
+        <input class="form-check-input" type="checkbox" name="reenviar" value="on" id="reenviar" data-ajuda="Autoriza o envio a quem já recebeu o recibo. Sem esta opção, só os que ainda não receberam são contactados." data-ajuda-titulo="Permitir reenviar já enviados" />
         <label class="form-check-label small" for="reenviar">Permitir reenviar já enviados</label>
       </div>
-      <button type="submit" name="modo" value="" class="btn btn-primary">Enviar selecionados</button>
-      <button type="submit" name="modo" value="pendentes" class="btn btn-success">Enviar todos os pendentes</button>
+      <button type="submit" name="modo" value="" class="btn btn-primary" data-ajuda="Envia o recibo por email apenas aos pagamentos selecionados na lista." data-ajuda-titulo="Enviar selecionados">Enviar selecionados</button>
+      <button type="submit" name="modo" value="pendentes" class="btn btn-success" data-ajuda="Envia o recibo a todos os pagamentos que ainda não o receberam, sem precisar de os selecionar um a um." data-ajuda-titulo="Enviar todos os pendentes">Enviar todos os pendentes</button>
     </div>
   </form>
 </div>

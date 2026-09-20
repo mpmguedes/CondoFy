@@ -71,7 +71,7 @@
             <td><a href="/admin/quotas/{{id}}/aviso" target="_blank" class="btn btn-sm btn-outline-primary" title="Aviso PDF"><span class="material-symbols-outlined">picture_as_pdf</span></a>
               {{#if ../driveLigado}}
               <form action="/admin/quotas/{{id}}/aviso/drive" method="POST" class="d-inline">
-                <button class="btn btn-sm btn-outline-secondary" title="Guardar aviso no Google Drive"><span class="material-symbols-outlined">cloud_upload</span></button>
+                <button class="btn btn-sm btn-outline-secondary" title="Guardar aviso no Google Drive" data-ajuda="Gera o aviso em PDF e guarda-o no serviço de armazenamento do condomínio." data-ajuda-titulo="Guardar aviso no armazenamento"><span class="material-symbols-outlined">cloud_upload</span></button>
               </form>
               {{/if}}
             </td>
@@ -94,11 +94,11 @@
       <button type="button" class="btn btn-sm btn-outline-secondary" id="btnTodos">Selecionar todos</button>
       <button type="button" class="btn btn-sm btn-outline-secondary" id="btnNenhum">Limpar</button>
       <div class="form-check ms-lg-auto">
-        <input class="form-check-input" type="checkbox" name="reenviar" value="on" id="reenviar" />
+        <input class="form-check-input" type="checkbox" name="reenviar" value="on" id="reenviar" data-ajuda="Autoriza o envio a frações que já receberam o aviso. Sem esta opção, só as que ainda não receberam são contactadas." data-ajuda-titulo="Permitir reenviar já enviadas" />
         <label class="form-check-label small" for="reenviar">Permitir reenviar já enviadas</label>
       </div>
-      <button type="submit" name="modo" value="" class="btn btn-primary">Enviar selecionados</button>
-      <button type="submit" name="modo" value="pendentes" class="btn btn-success">Enviar todos os pendentes</button>
+      <button type="submit" name="modo" value="" class="btn btn-primary" data-ajuda="Envia o aviso de quota por email apenas às frações selecionadas na lista." data-ajuda-titulo="Enviar selecionados">Enviar selecionados</button>
+      <button type="submit" name="modo" value="pendentes" class="btn btn-success" data-ajuda="Envia o aviso de quota a todas as frações que ainda não o receberam, sem precisar de as selecionar uma a uma." data-ajuda-titulo="Enviar todos os pendentes">Enviar todos os pendentes</button>
     </div>
   </form>
 </div>

@@ -29,12 +29,12 @@
             {{#if (eq role_global 'super_admin')}}
             <form action="/admin/global/utilizadores/{{id}}/global" method="POST" class="d-inline">
               <input type="hidden" name="role" value="" />
-              <button class="btn btn-sm btn-outline-danger" title="Remover Super Admin global">Remover SA</button>
+              <button class="btn btn-sm btn-outline-danger" title="Remover Super Admin global" data-ajuda="Retira a este utilizador o papel de super administrador da plataforma. Deixa de poder administrar condomínios." data-ajuda-titulo="Remover Super Admin">Remover SA</button>
             </form>
             {{else}}
             <form action="/admin/global/utilizadores/{{id}}/global" method="POST" class="d-inline">
               <input type="hidden" name="role" value="super_admin" />
-              <button class="btn btn-sm btn-outline-primary" title="Promover a Super Admin global">Promover a SA</button>
+              <button class="btn btn-sm btn-outline-primary" title="Promover a Super Admin global" data-ajuda="Dá a este utilizador o papel de super administrador da plataforma, com acesso a todos os condomínios." data-ajuda-titulo="Promover a Super Admin">Promover a SA</button>
             </form>
             {{/if}}
           </td>
