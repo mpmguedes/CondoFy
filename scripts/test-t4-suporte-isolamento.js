@@ -85,6 +85,21 @@ function modeloEspiao(nome) {
 }
 
 const modelosAlvo = {};
+
+// ── Auditoria: registo observável (ACHADO-02) ───────────────────────
+// `auditoriaRegistada` é preenchida no stub de `helpers/audit` (ver `stubs`
+// abaixo). O `AuditLog` fica com um duplo simples — o `create` real nunca é
+// alcançado em modo de teste, mas mantém-se definido para o Proxy não gerar um
+// `modeloEspiao` que registasse consultas espúrias no `diario`.
+const auditoriaRegistada = [];
+const eventosConsulta = () => auditoriaRegistada.filter((e) => e && e.acao === 'suporte_consulta');
+const rotaDoEvento = (e) => JSON.parse(e.detalhes).rota;
+
+// Duplo próprio do `AuditLog` (o Proxy geraria um `modeloEspiao`, cujo `create`
+// devolve os dados sem os guardar). O T4.5(i) muta o `create` daqui para provar
+// que uma falha de gravação não derruba o pedido.
+modelosAlvo.AuditLog = { create: async (dados) => dados };
+
 const modelosDuplo = new Proxy(modelosAlvo, {
   get: (t, k) => {
     if (k in t) return t[k];
@@ -137,7 +152,38 @@ const stubs = {
   'helpers/documento-pastas': require(path.join(RAIZ, 'helpers/documento-pastas')),
   'helpers/recibos': { pagoPorQuota: async () => new Map(), cobertoPorQuota: async () => new Map(), pagamentosDasQuotas: async () => [], periodoLabel: () => '', gerarReciboPDF: async () => Buffer.from('') },
   'helpers/pdf': { gerarReciboPDF: async () => Buffer.from('') },
-  'helpers/audit': { audit: async () => ({}), auditSafe: async () => ({}) },
+  'helpers/audit': {
+    // O stub de auditoria tem de ser OBSERVÁVEL (ACHADO-02): é por aqui que a
+    // telemetria de consulta passa. Um no-op faria o T4.5 medir sempre zero e
+    // «passar» sem provar nada — o falso verde clássico.
+    //
+    // ⚠️ O stub tem de replicar o CONTRATO REAL de `helpers/audit.js`, que
+    // grava uma LINHA (não o evento):
+    //   `{ user_id, acao, entidade, entidade_id, detalhes: JSON.stringify(...) }`
+    // Registar o objeto em bruto faria `JSON.parse(detalhes)` rebentar e
+    // `entidade_id` vir `undefined` — os asserts mediriam a forma errada e a
+    // telemetria pareceria avariada.
+    audit: async (evento) => {
+      auditoriaRegistada.push({
+        user_id: evento.userId || null,
+        acao: evento.acao,
+        entidade: evento.entidade || null,
+        entidade_id: evento.entidadeId || null,
+        detalhes: evento.detalhes ? JSON.stringify(evento.detalhes) : null,
+      });
+      return evento;
+    },
+    auditSafe: async (evento) => {
+      auditoriaRegistada.push({
+        user_id: evento.userId || null,
+        acao: evento.acao,
+        entidade: evento.entidade || null,
+        entidade_id: evento.entidadeId || null,
+        detalhes: evento.detalhes ? JSON.stringify(evento.detalhes) : null,
+      });
+      return evento;
+    },
+  },
   'helpers/email-fila': { ...require(path.join(RAIZ, 'helpers/email-fila')), contarFila: async () => ({ pendentes: 0, enviados: 0, erros: 0, cancelados: 0 }), filtroFilaPorCondominio: (cid) => ({ condominio_id: cid }) },
   'helpers/notificacoes': { listarPreferencias: async () => ({}), guardarPreferencias: async () => ({}) },
 };
@@ -480,6 +526,156 @@ const ROTAS_COM_QUERY = [
   // T4.2) são tabelas-filho filtradas pelo id de um pai já com âmbito, chaves de
   // configuração ou tabelas globais por desenho (`BackupLog`). A prova de que
   // nenhuma delas devolveu dados de B está em T4.1(a).
+
+  // ── T4.5 — auditoria da CONSULTA por HTTP (ACHADO-02) ────────────
+  // Prova, pelo router REAL, que a telemetria de consulta se comporta como
+  // especificado. Registra-se CADA consulta (sem agregação) e a rota NÃO inclui
+  // a query string — é aqui que isso é exercitado a sério, porque é o Express
+  // que entrega `req.path` sem query.
+  titulo('T4.5 — auditoria da consulta: uma por pedido, sem query string');
+
+  // A sonda do T4.0 deixou o perfil em `gestor`? Restaurar explicitamente.
+  perfilAtivo = 'suporte';
+
+  // Sondas de pré-condição: se a telemetria não existir, os asserts abaixo
+  // falhariam por «0 eventos» — o que seria indistinguível de uma avaria. Antes
+  // de medir, confirma-se que o servidor está realmente a servir suporte.
+  const sondaAdmissao = await pedir('/admin/documentos');
+  assert.strictEqual(sondaAdmissao.status, 200, 'pré-condição: o suporte chega a /admin/documentos (200)');
+
+  // (a) Um GET admitido deixa UM evento, com o envelope correto.
+  // O reset do registo vem DEPOIS da sonda de admissão: sem agregação, cada
+  // pedido deixa o seu evento, pelo que a sonda não pode ficar contada aqui.
+  auditoriaRegistada.length = 0;
+  const rDocs = await pedir('/admin/documentos');
+  assert.strictEqual(rDocs.status, 200, 'GET /admin/documentos em suporte → 200');
+  const evDocs = eventosConsulta();
+  assert.strictEqual(evDocs.length, 1, 'um GET admitido deixa exatamente 1 suporte_consulta');
+  const detDocs = JSON.parse(evDocs[0].detalhes);
+  assert.strictEqual(evDocs[0].entidade, 'Condominio', 'entidade = Condominio');
+  assert.strictEqual(evDocs[0].entidade_id, CID_A, 'entidade_id = condomínio do acesso');
+  assert.strictEqual(detDocs.acesso_suporte_id, ACESSO_A.id, 'detalhes.acesso_suporte_id correto');
+  assert.strictEqual(detDocs.condominio_id, CID_A, 'detalhes.condominio_id correto');
+  assert.strictEqual(detDocs.rota, '/documentos', 'detalhes.rota = req.path (sem /admin)');
+  feito('a. GET admitido por HTTP → 1 suporte_consulta com envelope correto');
+
+  // (b) A query string NÃO entra na rota nem nos detalhes.
+  auditoriaRegistada.length = 0;
+  const rQuery = await pedir('/admin/documentos?pasta=recibos&ano=2026');
+  assert.strictEqual(rQuery.status, 200, 'a variante com query é servida (200)');
+  const evQuery = eventosConsulta();
+  assert.strictEqual(evQuery.length, 1, 'a variante com query deixa 1 evento');
+  const serializado = JSON.stringify(JSON.parse(evQuery[0].detalhes));
+  assert.ok(!serializado.includes('recibos'), '«recibos» NÃO aparece no evento');
+  assert.ok(!serializado.includes('2026'), '«2026» NÃO aparece no evento');
+  assert.strictEqual(rotaDoEvento(evQuery[0]), '/documentos', 'rota registada é /documentos');
+  feito('b. query string eliminada (nem «recibos» nem «2026» no evento)');
+
+  // (c) SEM AGREGAÇÃO: cada pedido deixa o SEU evento, e todos são da MESMA
+  // rota — a query string não cria rotas distintas nem funde pedidos.
+  // `/documentos`, `?pasta=recibos`, `?ano=2026` e `?pasta=recibos&ano=2026`
+  // são 4 pedidos ⇒ 4 eventos, todos com `rota = '/documentos'`.
+  auditoriaRegistada.length = 0;
+  const VARIANTES = [
+    '/admin/documentos',
+    '/admin/documentos?pasta=recibos',
+    '/admin/documentos?ano=2026',
+    '/admin/documentos?pasta=recibos&ano=2026',
+  ];
+  for (const v of VARIANTES) {
+    const rr = await pedir(v);
+    assert.strictEqual(rr.status, 200, `variante servida: ${v}`);
+  }
+  const evVar = eventosConsulta();
+  assert.strictEqual(evVar.length, VARIANTES.length,
+    `${VARIANTES.length} pedidos → ${VARIANTES.length} eventos (obtidos: ${evVar.length})`);
+  assert.deepStrictEqual([...new Set(evVar.map(rotaDoEvento))], ['/documentos'],
+    'as 4 variantes ficam TODAS registadas como a mesma rota /documentos');
+  feito(`c. sem agregação: ${VARIANTES.length} variantes (com query) → ${VARIANTES.length} eventos, todos /documentos`);
+
+  // (d) Rotas diferentes → eventos diferentes.
+  auditoriaRegistada.length = 0;
+  for (const rota of ['/admin/documentos', '/admin/quotas', '/admin/fracoes']) {
+    const rr = await pedir(rota);
+    assert.strictEqual(rr.status, 200, `servida: ${rota}`);
+  }
+  const evRotas = eventosConsulta();
+  assert.strictEqual(evRotas.length, 3, 'três rotas diferentes → três eventos');
+  assert.deepStrictEqual(
+    evRotas.map(rotaDoEvento).sort(),
+    ['/documentos', '/fracoes', '/quotas'],
+    'cada rota fica registada individualmente'
+  );
+  feito('d. três rotas diferentes → três eventos distintos');
+
+  // (e) FORA de suporte (gestor real): nenhum evento de consulta.
+  // Sem isto, «registar para todos» passaria nos asserts anteriores.
+  auditoriaRegistada.length = 0;
+  perfilAtivo = 'gestor';
+  const rGestor = await pedir('/admin/documentos');
+  assert.strictEqual(rGestor.status, 200, 'o gestor continua a ser servido (200)');
+  assert.strictEqual(eventosConsulta().length, 0,
+    'contexto normal (associação real) NÃO gera suporte_consulta');
+  perfilAtivo = 'suporte';
+  feito('e. gestor com associação real → nenhum suporte_consulta');
+
+  // (f) Rota FORA da allow-list em suporte: não se audita (não foi admitida).
+  auditoriaRegistada.length = 0;
+  await pedir('/admin/condominos/nova');
+  assert.strictEqual(eventosConsulta().length, 0,
+    'rota não admitida (fora da allow-list) NÃO gera suporte_consulta');
+  feito('f. rota fora da allow-list → nenhum evento (só o admitido é auditado)');
+
+  // (g) Método de escrita em suporte: recusado e NÃO auditado.
+  // A allow-list é de LEITURA; um POST não chega a ser admitido, logo não pode
+  // aparecer na telemetria de consultas.
+  auditoriaRegistada.length = 0;
+  {
+    const antes = eventosConsulta().length;
+    const rPost = await new Promise((resolve, reject) => {
+      const srv = app.listen(0, '127.0.0.1', () => {
+        const rq = http.request(
+          { host: '127.0.0.1', port: srv.address().port, path: '/admin/documentos', method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+          (rs) => { let b = ''; rs.on('data', (d) => (b += d)); rs.on('end', () => { srv.close(); resolve({ status: rs.statusCode }); }); }
+        );
+        rq.on('error', (e) => { srv.close(); reject(e); });
+        rq.end('x=1');
+      });
+    });
+    assert.ok(rPost.status !== 200 || eventosConsulta().length === antes,
+      'um POST em suporte não produz suporte_consulta');
+    assert.strictEqual(eventosConsulta().length, 0, 'nenhum evento para um método de escrita');
+  }
+  feito('g. POST em suporte → recusado e não auditado');
+
+  // (h) O evento NÃO expõe dados de linha nem PII.
+  auditoriaRegistada.length = 0;
+  await pedir('/admin/condominos');
+  const evPii = eventosConsulta();
+  assert.strictEqual(evPii.length, 1, 'a lista de condóminos gera um evento de consulta');
+  const dPii = JSON.parse(evPii[0].detalhes);
+  assert.deepStrictEqual(Object.keys(dPii).sort(), ['acesso_suporte_id', 'condominio_id', 'rota'],
+    'o evento tem EXATAMENTE as três chaves do envelope (nenhum dado de linha)');
+  assert.ok(!JSON.stringify(dPii).includes('Ana'), 'nenhum nome de pessoa no evento');
+  assert.ok(!/email|nif|iban|telefone|nome|valor/i.test(JSON.stringify(dPii)),
+    'nenhum campo de PII/valores no evento');
+  feito('h. envelope mínimo: sem PII, sem dados de linha, sem valores');
+
+  // (i) Falha da auditoria não derruba o pedido (prova por HTTP).
+  // Força-se a falha no `AuditLog.create` (a camada que, em produção, fala com
+  // a BD) e deixa-se o `helpers/audit` real engolir o erro. O pedido tem de
+  // continuar a ser servido — nunca um 500.
+  auditoriaRegistada.length = 0;
+  {
+    const createOriginal = modelosAlvo.AuditLog.create;
+    modelosAlvo.AuditLog.create = async () => { throw new Error('BD em baixo (teste)'); };
+    const rFalha = await pedir('/admin/documentos');
+    modelosAlvo.AuditLog.create = createOriginal;
+    assert.strictEqual(rFalha.status, 200,
+      'com a gravação da auditoria a falhar, o GET continua a ser servido (200), não 500');
+    assert.ok(rFalha.html.length > 0, 'a resposta tem corpo (a página foi servida)');
+  }
+  feito('i. falha da auditoria não derruba o pedido (200, sem 500)');
 
   console.log('\n✓ Testes de isolamento T4 do suporte passaram (' + nTestes + ' verificações, sem BD).');
 })().catch((e) => {

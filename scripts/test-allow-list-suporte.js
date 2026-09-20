@@ -633,8 +633,17 @@ async function criarSessao(caminho = '/admin/') {
   const tenant = {
     comSuporte: () => (req, res, next) => next(), // isola o crivo de leitura
     somenteLeitura: tenantReal.somenteLeitura,
+    // ACHADO-02: o guard registra a consulta DEPOIS de admitir. Aqui o objetivo
+    // é isolar o crivo de LEITURA, pelo que a telemetria é um no-op — mas tem
+    // de existir, senão o corpo real do guard rebentaria no sandbox (a chamada
+    // existe no código REAL, que é o que este teste executa).
+    auditarConsulta: () => false,
   };
   const ADMITIDO_SUPORTE = Symbol('marca');
+  // ACHADO-02: o guard marca o pedido como JÁ AUDITADO (idempotência por pedido,
+  // não agregação) e o corpo REAL do guard referencia este símbolo — logo tem de
+  // existir no sandbox, com o MESMO nome da fonte real.
+  const AUDITADO_SUPORTE = Symbol('marca-auditado');
   const sandbox = {
     LISTA: require(path.join(RAIZ, 'helpers', 'suporte-allowlist')).LISTA,
     NIVEIS_ADMITIDOS,
@@ -643,6 +652,7 @@ async function criarSessao(caminho = '/admin/') {
     eSuporteDiagnostico,
     tenant,
     ADMITIDO_SUPORTE,
+    AUDITADO_SUPORTE,
     process, console,
     req: null, res: null, next: null,
   };

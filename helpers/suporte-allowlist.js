@@ -53,6 +53,17 @@ const tenant = require('./tenant');
 // porque um Symbol não é serializável nem aparece em `req.body`/`req.query`.
 const ADMITIDO_SUPORTE = Symbol.for('condofy.suporte.diagnostico.admitido');
 
+// Marca de «este PEDIDO já foi auditado». Distinta da anterior e também global.
+//
+// Porque é precisa: o router `admin` é montado primeiro sob `/admin` e o seu
+// guard admite qualquer caminho da lista de QUALQUER módulo; o mesmo pedido
+// volta a ser admitido pelo guard do módulo real. Sem esta marca, uma única
+// consulta deixaria dois eventos `suporte_consulta` iguais.
+//
+// ⛔ NÃO é agregação e não substitui nada: vive no objeto `req`, logo morre com
+// o pedido. Dois pedidos iguais continuam a produzir dois eventos.
+const AUDITADO_SUPORTE = Symbol.for('condofy.suporte.diagnostico.auditado');
+
 // Níveis que podem ver a allow-list. Espelha `helpers/suporte.js`
 // (`NIVEIS_CONCEDIVEIS`): nesta fase só `diagnostico`. `operacional` existe no
 // ENUM do modelo para evolução futura, mas não é concedível nem admitido aqui.
@@ -344,6 +355,36 @@ function soDiagnostico(modulo) {
       return tenant.somenteLeitura(req, res, (err2) => {
         if (err2) return next(err2);
         req[ADMITIDO_SUPORTE] = true;
+        // (5) AUDITORIA DA CONSULTA — ACHADO-02. PONTO ÚNICO pós-admissão:
+        // só chega aqui o pedido que passou as quatro condições acima, isto é,
+        // um GET/HEAD admitido, em contexto de suporte, de nível diagnóstico.
+        // Pedidos normais, negados, fora da lista ou de escrita NUNCA passam
+        // daqui — não são auditados, como deve ser.
+        //
+        // ⛔ UM PEDIDO PODE SER ADMITIDO POR DOIS GUARDS — audita-se UMA vez.
+        // O router `admin` monta este guard com `admitir` = «caminho admitido em
+        // ALGUM módulo» (ver acima), precisamente para não estrangular os
+        // routers montados a seguir; o pedido a `/documentos` é depois admitido
+        // OUTRA VEZ pelo guard do módulo `documentos`. Sem esta guarda, o MESMO
+        // pedido deixaria dois eventos `suporte_consulta` idênticos.
+        //
+        // A marca é por PEDIDO (o objeto `req`), não por par (acesso, rota): NÃO
+        // é agregação. Dois pedidos distintos à mesma rota continuam a deixar
+        // dois eventos — que é o contrato. Isto só impede que UM pedido seja
+        // contado duas vezes.
+        if (!req[AUDITADO_SUPORTE]) {
+          req[AUDITADO_SUPORTE] = true;
+          // Usa-se `req.path` e SÓ `req.path`: não tem query string, pelo que
+          // `/documentos?pasta=recibos&ano=2026` fica registado como
+          // `/documentos`. Nunca `req.originalUrl`/`req.url`/`req.query`.
+          //
+          // A tolerância a falhas vive em `registarConsulta`
+          // (`helpers/suporte.js`), que reutiliza o padrão `registarAuditoria`:
+          // engole qualquer erro, para que a telemetria jamais derrube o pedido.
+          // O registo é OBSERVACIONAL — não altera a decisão de admissão, que já
+          // está tomada nesta linha.
+          tenant.auditarConsulta(req);
+        }
         return next();
       });
     });

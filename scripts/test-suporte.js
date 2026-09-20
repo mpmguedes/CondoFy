@@ -868,6 +868,232 @@ function testarEstaticas() {
 }
 
 // ═════════════════════════════════════════════════════════════════════
+// 9. ACHADO-02 — auditoria da CONSULTA (`suporte_consulta`)
+//
+// O que se prova: um GET admitido em suporte deixa um evento `suporte_consulta`
+// com o envelope mínimo; fora de suporte não deixa nenhum; a query string NUNCA
+// entra; e a agregação é por (acesso, rota).
+//
+// ⚠️ O conjunto de deduplicação vive no MÓDULO, pelo que sobrevive entre
+// blocos. Cada bloco usa um `acessoId` PRÓPRIO (nunca reciclado) para que a
+// medição comece sempre do zero, sem tocar no estado interno.
+// ═════════════════════════════════════════════════════════════════════
+titulo('Auditoria da consulta de suporte (ACHADO-02)');
+
+async function testarAuditoriaConsulta() {
+  const eventos = () => stubs.auditoria.filter((e) => e.acao === 'suporte_consulta');
+  const detalhes = (e) => (e && e.detalhes ? JSON.parse(e.detalhes) : null);
+  const pedidoSuporte = (acessoId, condominioId, caminho, over = {}) =>
+    reqBase({
+      method: 'GET',
+      path: caminho,
+      suporte: { id: acessoId, condominioId, nivel: 'diagnostico', motivo: 'x', expiraEm: new Date() },
+      ...over,
+    });
+
+  // ── (A) consulta admitida gera evento ───────────────────────────
+  stubs.auditoria.length = 0;
+  tenant.auditarConsulta(pedidoSuporte(9001, 501, '/documentos'));
+  let ev = eventos();
+  assert.strictEqual(ev.length, 1, 'um GET admitido em suporte produz exatamente 1 suporte_consulta');
+  assert.strictEqual(ev[0].acao, 'suporte_consulta', 'acao = suporte_consulta');
+  assert.strictEqual(ev[0].entidade, 'Condominio', 'entidade = Condominio');
+  assert.strictEqual(ev[0].entidade_id, 501, 'entidade_id = condomínio do acesso');
+  const d = detalhes(ev[0]);
+  assert.strictEqual(d.acesso_suporte_id, 9001, 'detalhes.acesso_suporte_id correto');
+  assert.strictEqual(d.condominio_id, 501, 'detalhes.condominio_id correto');
+  assert.strictEqual(d.rota, '/documentos', 'detalhes.rota correta');
+  feito('A. consulta admitida → suporte_consulta com envelope mínimo');
+
+  // ── (C) a query string é ELIMINADA ──────────────────────────────
+  // O pedido REAL tem query string, mas `auditarConsulta` lê `req.path` (que a
+  // não tem). Aqui simula-se o que o Express entrega: `path` sem query.
+  stubs.auditoria.length = 0;
+  tenant.auditarConsulta(pedidoSuporte(9002, 501, '/documentos', {
+    url: '/documentos?pasta=recibos&ano=2026',
+    originalUrl: '/documentos?pasta=recibos&ano=2026',
+    query: { pasta: 'recibos', ano: '2026' },
+  }));
+  ev = eventos();
+  assert.strictEqual(ev.length, 1, 'a variante com query produz 1 evento');
+  const dq = detalhes(ev[0]);
+  assert.strictEqual(dq.rota, '/documentos', 'rota registada é /documentos (sem query string)');
+  const serializado = JSON.stringify(dq);
+  assert.ok(!serializado.includes('recibos'), '«recibos» NÃO aparece nos detalhes');
+  assert.ok(!serializado.includes('2026'), '«2026» NÃO aparece nos detalhes');
+  assert.deepStrictEqual(Object.keys(dq).sort(), ['acesso_suporte_id', 'condominio_id', 'rota'],
+    'os detalhes têm EXATAMENTE as três chaves do envelope');
+  feito('C. query string eliminada (rota sem parâmetros; detalhes sem «recibos»/«2026»)');
+
+  // ── (D) SEM AGREGAÇÃO: N pedidos à mesma rota → N eventos ───────
+  // Contrato decidido: registar CADA consulta admitida. A agregação por
+  // (acesso, rota) existiu numa primeira versão (conjunto em memória) e foi
+  // REMOVIDA — um evento em falta, por restart ou por vários processos, seria
+  // um falso negativo silencioso, indistinguível de «não houve consulta».
+  // Numa auditoria de segurança, repetir é benigno; perder não é.
+  stubs.auditoria.length = 0;
+  for (let i = 0; i < 4; i += 1) tenant.auditarConsulta(pedidoSuporte(9003, 501, '/documentos'));
+  assert.strictEqual(eventos().length, 4,
+    '4 pedidos à mesma rota (e mesmo acesso) → 4 eventos (sem agregação)');
+  assert.deepStrictEqual([...new Set(eventos().map((e) => detalhes(e).rota))], ['/documentos'],
+    'os 4 eventos são da mesma rota');
+  assert.deepStrictEqual([...new Set(eventos().map((e) => detalhes(e).acesso_suporte_id))], [9003],
+    'os 4 eventos são do mesmo acesso');
+  feito('D. sem agregação: 4 pedidos à mesma rota → 4 eventos');
+
+  // ── (D2) rotas diferentes → eventos diferentes ──────────────────
+  stubs.auditoria.length = 0;
+  tenant.auditarConsulta(pedidoSuporte(9004, 501, '/documentos'));
+  tenant.auditarConsulta(pedidoSuporte(9004, 501, '/quotas'));
+  tenant.auditarConsulta(pedidoSuporte(9004, 501, '/fracoes'));
+  assert.strictEqual(eventos().length, 3, 'três rotas diferentes → três eventos');
+  assert.deepStrictEqual(
+    eventos().map((e) => detalhes(e).rota).sort(),
+    ['/documentos', '/fracoes', '/quotas'],
+    'as três rotas ficam registadas'
+  );
+  feito('D2. rotas diferentes no mesmo acesso → eventos distintos');
+
+  // ── (E) acessos diferentes não colidem ─────────────────────────
+  stubs.auditoria.length = 0;
+  tenant.auditarConsulta(pedidoSuporte(10, 501, '/admin/documentos'));
+  tenant.auditarConsulta(pedidoSuporte(11, 501, '/admin/documentos'));
+  const eventosDocs = eventos().filter((e) => detalhes(e).rota === '/admin/documentos');
+  assert.strictEqual(eventosDocs.length, 2, 'o MESMO caminho em DOIS acessos → dois eventos');
+  assert.deepStrictEqual(
+    eventosDocs.map((e) => detalhes(e).acesso_suporte_id).sort((a, b) => a - b),
+    [10, 11],
+    'cada evento fica associado ao seu acesso'
+  );
+  feito('E. acesso 10 e acesso 11 não colidem (2 eventos distintos)');
+
+  // ── (B) contexto normal NÃO gera evento ────────────────────────
+  stubs.auditoria.length = 0;
+  tenant.auditarConsulta(reqBase({ method: 'GET', path: '/documentos' })); // sem req.suporte
+  tenant.auditarConsulta(reqBase({ method: 'GET', path: '/documentos', suporte: null }));
+  tenant.auditarConsulta({ method: 'GET', path: '/documentos' }); // sem contexto nenhum
+  assert.strictEqual(eventos().length, 0, 'sem contexto de suporte não há suporte_consulta');
+  feito('B. utilizador normal / sem suporte → nenhum evento');
+
+  // ── Envelope: nunca dados de linha nem query ───────────────────
+  stubs.auditoria.length = 0;
+  tenant.auditarConsulta(pedidoSuporte(9005, 501, '/quotas', { body: { nome: 'Ana Silva' }, params: { id: '7' } }));
+  const dLinha = detalhes(eventos()[0]);
+  assert.ok(!JSON.stringify(dLinha).includes('Ana'), 'nenhum nome de pessoa no evento');
+  assert.strictEqual(dLinha.rota, '/quotas', 'rota é o caminho, não o id do pedido');
+  assert.strictEqual(Object.keys(dLinha).length, 3, 'só o envelope mínimo (3 campos)');
+  feito('sem dados de linha, sem PII, sem ids de recurso nos detalhes');
+
+  // ── Sem acesso identificado ou sem rota: não se inventa evento ─
+  stubs.auditoria.length = 0;
+  assert.strictEqual(suporte.registarConsulta({ acessoId: null, condominioId: 501, rota: '/x' }), false,
+    'sem acesso_suporte_id → false, nada gravado');
+  assert.strictEqual(suporte.registarConsulta({ acessoId: 0, condominioId: 501, rota: '/x' }), false,
+    'acesso 0 é inválido → false');
+  assert.strictEqual(suporte.registarConsulta({ acessoId: 9006, condominioId: 501, rota: '' }), false,
+    'sem rota → false');
+  assert.strictEqual(suporte.registarConsulta({ acessoId: 9006, condominioId: 501 }), false,
+    'sem rota (undefined) → false');
+  assert.strictEqual(eventos().length, 0, 'nenhum evento inventado com campos nulos');
+  feito('falha fechada: sem acesso ou sem rota não se grava nada');
+
+  // ── (F) falha da auditoria NÃO derruba o pedido ────────────────
+  {
+    const createOriginal = stubs.AuditLog.create;
+    stubs.AuditLog.create = async () => { throw new Error('BD em baixo'); };
+    let rebentou = false;
+    try {
+      tenant.auditarConsulta(pedidoSuporte(9007, 501, '/documentos'));
+      // deixa o `catch` do registo correr
+      await new Promise((r) => setTimeout(r, 10));
+    } catch (e) {
+      rebentou = true;
+    }
+    stubs.AuditLog.create = createOriginal;
+    assert.strictEqual(rebentou, false, 'AuditLog.create a lançar NÃO propaga exceção');
+    feito('F. falha da auditoria é silenciosa (o pedido não é derrubado)');
+  }
+
+  // ── (G) sem agregação, o id reutilizado continua a registar ────
+  // A versão anterior tinha `esquecerConsultas(id)` para libertar o id no fim do
+  // acesso. Sem agregação esse mecanismo deixou de existir — e este teste fixa
+  // que a reutilização de um id NÃO suprime eventos (era o risco que a limpeza
+  // tentava evitar; deixou de ser possível).
+  stubs.auditoria.length = 0;
+  suporte.registarConsulta({ acessoId: 9008, condominioId: 501, rota: '/a' });
+  suporte.registarConsulta({ acessoId: 9008, condominioId: 501, rota: '/a' });
+  assert.strictEqual(eventos().length, 2, 'a mesma rota no mesmo acesso registada duas vezes → 2 eventos');
+  assert.strictEqual(typeof suporte.esquecerConsultas, 'undefined',
+    'o mecanismo de esquecimento (agregação) foi REMOVIDO — não deve existir');
+  feito('G. sem agregação: reutilizar um acesso nunca suprime eventos');
+
+  // ── O guard de admissão é o PONTO ÚNICO ────────────────────────
+  // A prova estática de que o registo vive no guard e não em 24 handlers.
+  const allowlistSrc = ler('helpers/suporte-allowlist.js');
+  assert.ok(/tenant\.auditarConsulta\(req\)/.test(allowlistSrc),
+    'soDiagnostico chama tenant.auditarConsulta(req) no ponto único pós-admissão');
+  assert.ok(!/require\(['"]\.\.\/models['"]\)/.test(allowlistSrc),
+    'o allow-list NÃO carrega modelos no topo (os testes offline injetam stubs)');
+  // o registo TEM de estar DEPOIS da marca de admissão
+  const posMarca = allowlistSrc.indexOf('req[ADMITIDO_SUPORTE] = true');
+  const posAudit = allowlistSrc.indexOf('tenant.auditarConsulta(req)');
+  assert.ok(posMarca >= 0 && posAudit > posMarca,
+    'o registo vem DEPOIS da admissão (só suporte realmente admitido é auditado)');
+  feito('ponto único no guard, após a admissão; allow-list sem modelos no topo');
+
+  // ── (G) as 8 ações de CICLO DE VIDA continuam a existir ────────
+  // A auditoria registou que os eventos de ciclo de vida «são escritos no
+  // código mas não há teste que os verifique afirmativamente» (coluna
+  // «Parcialmente coberto»). Aqui fixam-se as OITO, num inventário FECHADO:
+  // uma ação removida ou renomeada faz falhar o teste — a telemetria da
+  // consulta (esta secção) não pode ter substituído nada.
+  const ACOES_CICLO_VIDA = [
+    'suporte_iniciado',
+    'suporte_pendente_autorizacao',
+    'suporte_autorizado',
+    'suporte_recusado',
+    'suporte_terminado',
+    'suporte_revogado',
+    'suporte_revogado_pelo_condominio',
+    'suporte_expirado',
+  ];
+  const fontesAuditoria = ['helpers/suporte.js', 'routes/admin.js', 'routes/global-admin.js']
+    .map((f) => ler(f))
+    .join('\n');
+  for (const acao of ACOES_CICLO_VIDA) {
+    assert.ok(fontesAuditoria.includes(`'${acao}'`),
+      `a ação de ciclo de vida «${acao}» continua a ser escrita no código`);
+  }
+  // E o evento NOVO não colide com nenhum deles.
+  assert.ok(!ACOES_CICLO_VIDA.includes('suporte_consulta'),
+    'suporte_consulta é uma ação NOVA, distinta das oito de ciclo de vida');
+  feito(`G. as ${ACOES_CICLO_VIDA.length} ações de ciclo de vida continuam intactas`);
+
+  // ── As 8 ações são as ÚNICAS de ciclo de vida (inventário fechado) ──
+  // Colhe todas as ações `suporte_*` escritas no código e compara com a lista
+  // esperada + a nova ação de consulta. Uma ação nova (ou removida) obriga a
+  // uma decisão consciente aqui.
+  //
+  // `suporte_ativo_id` NÃO é uma ação de auditoria — é a chave da SESSÃO
+  // (`CHAVE_SESSAO`), que o padrão `'suporte_...'` apanha por coincidência.
+  // Exclui-se por NOME, explicitamente, em vez de afrouxar a asserção.
+  const NAO_E_ACAO = ['suporte_ativo_id'];
+  const acoesNoCodigo = new Set();
+  for (const f of ['helpers/suporte.js', 'routes/admin.js', 'routes/global-admin.js']) {
+    (ler(f).match(/'(suporte_[a-z_]+)'/g) || []).forEach((s) => {
+      const acao = s.replace(/'/g, '');
+      if (!NAO_E_ACAO.includes(acao)) acoesNoCodigo.add(acao);
+    });
+  }
+  assert.deepStrictEqual(
+    [...acoesNoCodigo].sort(),
+    [...ACOES_CICLO_VIDA, 'suporte_consulta'].sort(),
+    'o conjunto de ações suporte_* é exatamente: 8 de ciclo de vida + suporte_consulta'
+  );
+  feito('inventário fechado: 8 ações de ciclo de vida + suporte_consulta (nada mais)');
+}
+
+// ═════════════════════════════════════════════════════════════════════
 async function main() {
   await testarInicio();
   await testarHibrido();
@@ -876,6 +1102,7 @@ async function main() {
   await testarEncerramento();
   await testarLogout();
   await testarInvariante();
+  await testarAuditoriaConsulta();
   testarEstaticas();
   console.log(`\n✓ Testes do acesso de suporte passaram (${nTestes} verificações, sem base de dados).`);
 }

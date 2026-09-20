@@ -142,3 +142,56 @@ if (blocoHandler) {
   console.log('       vistaDeDocumentos consulta req.suporte   →', ok(/function vistaDeDocumentos\(req[\s\S]{0,400}?req\.suporte/.test(docSrc)));
   console.log(`       (${expressoesDeVista.length} render(s) no handler de /documentos)`);
 }
+
+// ── §26.13 (ACHADO-02) — a auditoria da consulta vive num só ponto ─
+// A telemetria de consulta tem de estar NO GUARD (ponto único pós-admissão),
+// nunca repetida nos handlers. Três invariantes estáticos, complementares ao
+// T4.5 (que prova por HTTP):
+//   (a) o guard chama `tenant.auditarConsulta(req)`;
+//   (b) a chamada vem DEPOIS da marca de admissão (só suporte admitido);
+//   (c) a identidade da consulta usa `req.path` e NÃO a query string.
+console.log('\n§26.13 (ACHADO-02) a auditoria da consulta vive num só ponto?');
+{
+  const p = require('path');
+  const srcAllow = fs.readFileSync(p.join(__dirname, '..', 'helpers', 'suporte-allowlist.js'), 'utf8');
+  const srcTenant = fs.readFileSync(p.join(__dirname, '..', 'helpers', 'tenant.js'), 'utf8');
+  const srcSuporte = fs.readFileSync(p.join(__dirname, '..', 'helpers', 'suporte.js'), 'utf8');
+  // Sem comentários: o comentário que EXPLICA porque não se usa `LIKE` cita a
+  // palavra, e faria o teste estático acusar o próprio código que o evita.
+  const semComentarios = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const codigoSuporte = semComentarios(srcSuporte);
+
+  // (a) O guard chama a auditoria.
+  console.log('       o guard chama auditarConsulta(req)       →', ok(/tenant\.auditarConsulta\(req\)/.test(srcAllow)));
+
+  // (b) A chamada vem depois da admissão.
+  const posMarca = srcAllow.indexOf('req[ADMITIDO_SUPORTE] = true');
+  const posAudit = srcAllow.indexOf('tenant.auditarConsulta(req)');
+  console.log('       o registo vem DEPOIS da admissão         →', ok(posMarca >= 0 && posAudit > posMarca));
+
+  // (c) A identidade da consulta usa `req.path`, nunca a query string.
+  const rotaPath = /rota:\s*req\.path/.test(srcTenant);
+  const rotaQuery = /rota:\s*req\.(originalUrl|url|query)/.test(srcTenant);
+  console.log('       a rota é req.path (sem query string)     →', ok(rotaPath && !rotaQuery));
+
+  // (d) SEM AGREGAÇÃO: o registo não pode voltar a deduplicar. Duas marcas de
+  //     agregação — o conjunto em memória e o mecanismo de esquecimento — não
+  //     podem reaparecer: reintroduzi-las faria a auditoria voltar a depender
+  //     de estado volátil, com falsos negativos silenciosos.
+  const temSet = /consultasRegistadas|chaveConsulta/.test(codigoSuporte);
+  const temEsquecer = /esquecerConsultas/.test(codigoSuporte);
+  console.log('       sem agregação em memória (Set/chave)      →', ok(!temSet));
+  console.log('       sem esquecerConsultas (id não é libertado) →', ok(!temEsquecer));
+
+  // (e) Detecta deduplicação frágil por pesquisa textual (LIKE sobre JSON).
+  const usaLike = /detalhes[\s\S]{0,60}LIKE/i.test(codigoSuporte) || /LIKE[\s\S]{0,60}detalhes/i.test(codigoSuporte);
+  console.log('       sem dedup por LIKE sobre "detalhes"       →', ok(!usaLike));
+
+  // (f) O allow-list não carrega modelos no topo (stubs dos testes offline).
+  console.log('       allow-list sem require("../models")      →', ok(!/require\(['"]\.\.\/models['"]\)/.test(srcAllow)));
+
+  // (g) O envelope tem apenas os três campos (sem PII/dados de linha).
+  console.log('       envelope mínimo (3 campos)               →', ok(
+    /detalhes:\s*\{[\s\S]{0,200}?acesso_suporte_id:[\s\S]{0,120}?condominio_id:[\s\S]{0,120}?rota,/.test(srcSuporte)
+  ));
+}

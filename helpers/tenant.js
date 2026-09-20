@@ -250,6 +250,25 @@ function somenteLeitura(req, res, next) {
   return next();
 }
 
+// ── Auditoria da consulta de suporte (ACHADO-02) ───────────────────
+// Ponte fina para `suporte.registarConsulta`. Existe para que o guard da
+// allow-list possa auditar a consulta SEM carregar modelos no topo de
+// `suporte-allowlist.js` — os testes offline substituem `/models` por stubs no
+// `require.cache`, e um `require('../models')` no topo desse ficheiro guardaria
+// a referência real antes da injeção (`suporte.js` já usa `require` diferido
+// precisamente por isso; aqui reutiliza-se essa disciplina em vez de a violar).
+//
+// Falha SEMPRE em silêncio: se faltar contexto (sem `req.suporte`), não se
+// registra nada; se a gravação falhar, `registarConsulta` engole o erro.
+function auditarConsulta(req) {
+  if (!req || !req.suporte) return false;
+  return suporte.registarConsulta({
+    acessoId: req.suporte.id,
+    condominioId: req.suporte.condominioId,
+    rota: req.path,
+  });
+}
+
 // Destinos canónicos do contexto autenticado.
 const DESTINO_PAINEL = '/admin'; // backoffice do condomínio (admin e gestor)
 const DESTINO_GLOBAL = '/admin/global'; // administração global (super admin)
@@ -328,6 +347,7 @@ module.exports = {
   semSuporte,
   bloqueioSuporteNaSessao,
   somenteLeitura,
+  auditarConsulta,
   pertenceAoAtivo,
   PAPEIS,
   UserCondominio,

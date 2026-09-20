@@ -31,14 +31,26 @@ const feito = (nome) => { nTestes += 1; console.log(`  ✓ ${nome}`); };
 const titulo = (t) => console.log(`\n── ${t}`);
 
 // Corre um script de teste num processo separado e devolve `true` se PASSOU.
-function testePassa(script) {
+//
+// ⚠️ Distingue-se «o teste FALHOU» de «o teste foi INTERROMPIDO». Uma execução
+// morta pelo `timeout` (SIGTERM) também é apanhada pelo `catch`, mas NÃO é uma
+// deteção: trata-se de um processo sem desfecho. Se for tomada por deteção, a
+// mutação dá-se por boa num estado em que pode não ter sido restaurada — foi
+// assim que uma execução interrompida deixou `routes/documentos.js` mutado no
+// working copy e a suíte a falhar no T4.0 com uma «regressão» fantasma.
+const RESULTADO = { PASSOU: 'passou', FALHOU: 'falhou', INTERROMPIDO: 'interrompido' };
+
+function resultadoDoTeste(script) {
   try {
     execFileSync(process.execPath, [path.join(RAIZ, 'scripts', script)], {
       cwd: RAIZ, stdio: 'pipe', timeout: 120000,
     });
-    return true;
+    return RESULTADO.PASSOU;
   } catch (e) {
-    return false;
+    // `execFileSync` reenvia SIGTERM ao filho quando o `timeout` expira e marca
+    // o erro com `signal`. Sem sinal, foi o próprio teste que terminou com um
+    // código diferente de zero — isso sim é uma deteção.
+    return e && e.signal ? RESULTADO.INTERROMPIDO : RESULTADO.FALHOU;
   }
 }
 
@@ -54,9 +66,15 @@ function mutacao({ nome, ficheiro, de, para, global = false, script, esperaFalha
   const original = fs.readFileSync(alvo, 'utf8');
   const hashOriginal = hash(original);
 
-  // Backup ao lado (nunca `git checkout`).
-  const backup = path.join(RAIZ, `.mutation-backup-${Date.now()}.tmp`);
+  // Backup ao lado (nunca `git checkout`). O nome guarda o CAMINHO do alvo,
+  // relativizado e sem barras, para que um órfão deixado por uma execução morta
+  // a meio possa ser REPOSTO pelo varrimento de arranque em vez de só apagado.
+  // Sem isto, uma interrupção entre a mutação e o `finally` deixava o ficheiro
+  // mutado para sempre e a suíte a acusar uma regressão que não existe.
+  const carimbo = `${Date.now()}-${process.pid}`;
+  const backup = path.join(RAIZ, `.mutation-backup-${carimbo}.tmp`);
   fs.writeFileSync(backup, original);
+  fs.writeFileSync(`${backup}.alvo`, ficheiro);
 
   try {
     assert.ok(original.includes(de),
@@ -67,14 +85,20 @@ function mutacao({ nome, ficheiro, de, para, global = false, script, esperaFalha
     assert.notStrictEqual(mutado, original, `mutação ${nome}: nada mudou`);
     fs.writeFileSync(alvo, mutado);
 
-    const passou = testePassa(script);
-    assert.ok(!passou,
+    const resultado = resultadoDoTeste(script);
+    // Uma execução interrompida não prova nada — e, sobretudo, não pode ser
+    // confundida com uma deteção. Aborta já (o `finally` repõe o ficheiro).
+    assert.notStrictEqual(resultado, RESULTADO.INTERROMPIDO,
+      `execução interrompida (timeout/SIGTERM) ao testar «${nome}»: inconclusivo, ` +
+      'a mutação não conta como detetada — voltar a correr');
+    assert.notStrictEqual(resultado, RESULTADO.PASSOU,
       `mutação NÃO detetada: ${script} continuou a passar com «${nome}» aplicada`);
     feito(`«${nome}» → ${script} FALHA (a mutação é detetada)`);
   } finally {
     // Restauro byte a byte + verificação por hash.
     fs.writeFileSync(alvo, fs.readFileSync(backup));
     fs.unlinkSync(backup);
+    if (fs.existsSync(`${backup}.alvo`)) fs.unlinkSync(`${backup}.alvo`);
     assert.strictEqual(hash(fs.readFileSync(alvo, 'utf8')), hashOriginal,
       `restauro de ${ficheiro} não ficou idêntico ao original`);
   }
@@ -83,15 +107,43 @@ function mutacao({ nome, ficheiro, de, para, global = false, script, esperaFalha
 (async () => {
   console.log('T8 — testes de mutação do suporte diagnóstico');
 
-  // Varrimento de arranque: se uma execução anterior foi morta a meio, pode ter
-  // ficado um backup órfão no diretório. Como cada backup guarda uma CÓPIA
-  // INTEGRAL do ficheiro original, o órfão é apenas lixo — remove-se aqui, para
-  // que `git status` no fim da fase fique limpo.
-  for (const f of fs.readdirSync(RAIZ)) {
-    if (/^\.mutation-backup-\d+\.tmp$/.test(f)) {
-      fs.unlinkSync(path.join(RAIZ, f));
-      console.log(`  · removido backup órfão de uma execução anterior: ${f}`);
+  // Varrimento de arranque: se uma execução anterior foi morta a meio (SIGTERM,
+  // timeout, Ctrl-C), ficou um backup órfão E — o que é pior — o ficheiro alvo
+  // ficou MUTADO no working copy. Apanhar o órfão e apagá-lo não bastava: o
+  // conteúdo mutado ficava para sempre e a suíte passava a acusar uma regressão
+  // que não existe (foi exatamente o que aconteceu com `routes/documentos.js`).
+  //
+  // Cada backup é uma CÓPIA INTEGRAL do original, pelo que o órfão se REPÕE. O
+  // `.alvo` diz em que ficheiro; sem ele não se adivinha o destino e o backup é
+  // conservado para inspeção (nunca se apaga prova).
+  const orfaos = fs.readdirSync(RAIZ)
+    .filter((f) => /^\.mutation-backup-\d+-\d+\.tmp$/.test(f))
+    .sort();
+  if (orfaos.length) {
+    // Se sobraram VÁRIOS órfãos de execuções diferentes, o mais recente é o que
+    // tem a mutação ativa; os anteriores já foram repostos e são só lixo.
+    const ultimo = orfaos[orfaos.length - 1];
+    const ficheiroAlvo = path.join(RAIZ, `${ultimo}.alvo`);
+    if (fs.existsSync(ficheiroAlvo)) {
+      const rel = fs.readFileSync(ficheiroAlvo, 'utf8').trim();
+      const destino = path.join(RAIZ, rel);
+      if (fs.existsSync(destino)) {
+        const conteudo = fs.readFileSync(path.join(RAIZ, ultimo), 'utf8');
+        if (fs.readFileSync(destino, 'utf8') !== conteudo) {
+          fs.writeFileSync(destino, conteudo);
+          console.log(`  ⚠ interrupção anterior detetada: ${rel} reposto a partir de ${ultimo}`);
+        }
+      }
+    } else {
+      console.log(`  · backup órfão sem «.alvo»: conservado para inspeção (${ultimo})`);
     }
+    for (const f of orfaos) {
+      fs.unlinkSync(path.join(RAIZ, f));
+      if (fs.existsSync(path.join(RAIZ, `${f}.alvo`))) {
+        fs.unlinkSync(path.join(RAIZ, `${f}.alvo`));
+      }
+    }
+    console.log(`  · ${orfaos.length} backup(s) órfão(s) de execução anterior limpo(s)`);
   }
 
   // ── 1. Remover o crivo de leitura do crivo de admissão ───────────
@@ -255,6 +307,59 @@ function mutacao({ nome, ficheiro, de, para, global = false, script, esperaFalha
     de: '<form action="/admin/documentos/{{id}}/eliminar" method="POST"',
     para: '<form action="/admin/documentos/{{id}}/inativo" method="POST"',
     script: 'test-mascara-vistas.js',
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // ACHADO-02 — auditoria da consulta
+  // ═══════════════════════════════════════════════════════════════════
+
+  // ── 13. A telemetria deixa de registar a rota REAL (passa nula) ────
+  // Muta a fonte do dado: `req.path` → `undefined`. O evento continua a ser
+  // criado (a ação existe), mas sem rota — e é isso que o T4.5(a) e o
+  // test-suporte medem. Prova que a asserção morde o CONTEÚDO, não a existência
+  // do evento.
+  mutacao({
+    nome: '13. o registo da consulta deixa de usar req.path (rota perdida)',
+    ficheiro: 'helpers/tenant.js',
+    de: '    rota: req.path,',
+    para: '    rota: undefined,',
+    script: 'test-t4-suporte-isolamento.js',
+  });
+
+  // ── 14. O registo passa a ser condicionado (deixa de registar TODOS) ─
+  // O contrato é «cada consulta admitida deixa o SEU evento». Aqui o registo
+  // passa a ser suprimido quando a rota é `/documentos` — o T4.5(a)/(c)/(d) e o
+  // test-suporte (D) contam eventos, pelo que a supressão tem de ser detetada.
+  // Prova que os testes medem a COMPLETUDE do registo, não só a sua existência.
+  mutacao({
+    nome: '14. o registo passa a ser condicionado (uma rota deixa de ser registada)',
+    ficheiro: 'helpers/suporte.js',
+    de: '  if (!Number.isFinite(id) || id <= 0) return false;',
+    para: "  if (!Number.isFinite(id) || id <= 0) return false;\n  if (rota === '/documentos') return false;",
+    script: 'test-t4-suporte-isolamento.js',
+  });
+
+  // ── 15. A rota registada passa a incluir a query string ───────────
+  // `req.path` → `req.originalUrl`. O evento continua a existir, mas a rota
+  // deixa de ser canónica: `/documentos?pasta=recibos` passa a ser gravado na
+  // íntegra. O T4.5(b) verifica que «recibos»/«2026» NÃO aparecem no evento.
+  mutacao({
+    nome: '15. a rota registada passa a incluir a query string (não canónica)',
+    ficheiro: 'helpers/tenant.js',
+    de: '    rota: req.path,',
+    para: '    rota: req.originalUrl,',
+    script: 'test-t4-suporte-isolamento.js',
+  });
+
+  // ── 16. O registo deixa de acontecer (telemetria removida) ────────
+  // Mutação de EXISTÊNCIA: sem a chamada no guard, nenhum evento é criado. É a
+  // base de tudo — se esta passasse, as restantes seriam irrelevantes.
+  mutacao({
+    nome: '16. o guard deixa de registar a consulta (telemetria removida)',
+    ficheiro: 'helpers/suporte-allowlist.js',
+    de: '        tenant.auditarConsulta(req);\n',
+    para: '',
+    script: 'test-suporte.js',
   });
 
   console.log(`\n✓ Testes de mutação passaram (${nTestes} mutações, todas detetadas e revertidas).`);

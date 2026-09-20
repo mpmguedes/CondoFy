@@ -42,6 +42,76 @@ function registarAuditoria(evento) {
   }
 }
 
+// ── Auditoria da CONSULTA (ACHADO-02) ─────────────────────────────
+// Regista que um acesso de suporte CONSULTOU uma rota admitida. É auditoria de
+// telemetria, não de autorização: corre DEPOIS da admissão e nunca a influencia
+// (o valor devolvido não é lido por nenhum guard).
+//
+// Porque é que isto não vive num handler: a allow-list fecha 24 caminhos em 9
+// routers. Registar em cada handler seriam 24 sítios para esquecer, e um módulo
+// novo só ficaria auditado por acidente. O único ponto por onde TODOS os
+// pedidos admitidos passam é o guard `soDiagnostico` — é lá que se chama isto.
+//
+// ── SEM AGREGAÇÃO (decisão de arquitetura) ────────────────────────
+// Regista CADA consulta admitida. Houve uma primeira versão que agregava por
+// (acesso, rota) com um conjunto em memória; foi recusada e removida. As razões
+// ficam escritas para que não se reintroduza:
+//
+//   1. Deduplicar exige saber o que já está gravado, e a única fonte de verdade
+//      é o `AuditLog`. Consultá-lo por consulta implicaria um `findOne` sem
+//      índice (a tabela só tem a PK) e uma comparação textual sobre `detalhes`
+//      (TEXT) — a mesma fragilidade de um `LIKE`, apenas disfarçada — ou então
+//      carregar todos os eventos para memória.
+//   2. A doutrina do projeto (migration `20260101000073`) é explícita:
+//      «`audit_logs` é um registo de eventos (append-only, para auditoria), NÃO
+//      um estado atual». Deduplicar por consulta usaria o log como estado.
+//   3. Estado em memória não serve uma funcionalidade de auditoria: um restart,
+//      um deploy ou N processos produzem falsos negativos SILENCIOSOS — e um
+//      evento em falta é indistinguível de «não houve consulta». Numa auditoria
+//      de segurança, perder um evento é pior do que repetir um.
+//
+// O argumento que decidiu: NÃO HÁ PROBLEMA DE VOLUME. O teto é o tamanho da
+// allow-list — 24 caminhos admitidos — e o registo só é escrito quando alguém
+// abre DELIBERADAMENTE um acesso de suporte, que é um evento raro. É ordens de
+// magnitude menos do que `inicio_sessao` ou `abrir_documento`, que já correm em
+// utilização normal. A agregação pouparia linhas que não fazem falta.
+//
+// Efeito secundário benéfico: a contagem de eventos por acesso passa a ser uma
+// MEDIDA REAL da utilização do suporte, em vez de uma aproximação volátil.
+
+// Registra UMA consulta admitida. Fire-and-forget e tolerante a falhas: nunca
+// lança e nunca é aguardado no caminho do pedido (`registarAuditoria` engole
+// qualquer erro), para que a telemetria jamais derrube a página.
+//
+// Devolve `true` quando o evento foi submetido e `false` quando não havia dados
+// suficientes. O valor é apenas informativo — nenhum guard o lê.
+function registarConsulta({ acessoId, condominioId, rota } = {}) {
+  const id = Number(acessoId);
+  // Sem acesso identificado ou sem rota não há consulta a registar. Falha
+  // fechada no sentido conservador: NÃO se inventa um evento com campos nulos
+  // (uma entrada sem `acesso_suporte_id` não serve a ninguém e polui o log).
+  if (!Number.isFinite(id) || id <= 0) return false;
+  if (typeof rota !== 'string' || rota === '') return false;
+
+  // Só o ENVELOPE mínimo, com exatamente três campos. Nunca a query string
+  // (`rota` já é `req.path`, que não a tem), nunca dados da página: nem nomes,
+  // nem emails, nem NIF/IBAN, nem valores, nem ids de linha consultados, nem
+  // urls de ficheiro, nem tokens, nem corpo de emails.
+  registarAuditoria({
+    userId: null,
+    acao: 'suporte_consulta',
+    entidade: 'Condominio',
+    entidadeId: condominioId,
+    detalhes: {
+      acesso_suporte_id: id,
+      condominio_id: condominioId,
+      rota,
+    },
+  });
+
+  return true;
+}
+
 // Associação do operador (quem pediu o acesso) — carregada nas listagens para o
 // administrador saber a QUEM está a autorizar. Só nome e email: o objetivo é
 // identificar, não expor o perfil.
@@ -465,6 +535,7 @@ module.exports = {
   paraContexto,
   vigente,
   marcarExpirado,
+  registarConsulta,
   temAdminAtivo,
   iniciar,
   autorizar,
