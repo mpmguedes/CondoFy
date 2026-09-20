@@ -85,6 +85,22 @@ function v0Schema() {
     confirmar(re.test(fracao), `models/Fracao.js não declara «${c}»`);
   }
 
+  // ⛔ A armadilha real que já custou um erro: `fracao_id` existe em QUOTA mas
+  // NÃO em FRACAO. Confirmar que a coluna existe no modelo certo não basta —
+  // é preciso confirmar que não é usada contra a tabela errada. Verificar
+  // explicitamente que fracoes NÃO tem fracao_id (a chave é `id`), e que a FK
+  // em quotas aponta para fracoes.id.
+  const fracaoTemFracaoId = /\bfracao_id\s*:/.test(fracao);
+  confirmar(
+    !fracaoTemFracaoId,
+    'models/Fracao.js declara fracao_id (a chave é `id`) — as queries que usam f.fracao_id estão erradas'
+  );
+  const fracaoTemId = /\bid\s*:\s*\{[^}]*primaryKey/.test(fracao);
+  confirmar(fracaoTemId, 'models/Fracao.js não declara `id` como primaryKey');
+  if (!fracaoTemFracaoId && fracaoTemId) {
+    console.log('  ✓ fracoes: a chave é `id` (NÃO tem `fracao_id`) — a FK é quotas.fracao_id = fracoes.id');
+  }
+
   // Os estados: extrair o ENUM do modelo e confirmar os que as queries usam.
   const mEnum = quota.match(/ENUM\(([^)]*)\)/);
   const estados = mEnum
@@ -128,6 +144,60 @@ function v0Schema() {
     for (const p of problemas) console.log(`      · ${p}`);
   } else {
     console.log('  ✓ Todas as colunas e estados usados pelo diagnóstico existem no schema.');
+  }
+
+  // ⛔ Validação estática de colunas qualificadas por alias (f.x, q.x).
+  // Foi esta a lacuna que deixou passar `f.fracao_id`: o V0 confirmava que
+  // `fracao_id` existe (em Quota) mas não que o ALIAS a que estava ligado era o
+  // correto. Aqui extraem-se os aliases de cada query e verifica-se cada
+  // `alias.coluna` contra o conjunto de colunas do modelo correspondente.
+  const colunasPorAlias = {
+    f: colunasFracao.concat(['id', 'andar', 'porta', 'transitado', 'observacoes']),
+    q: colunasQuota.concat(['id', 'orcamento_id', 'periodo', 'numero_documento', 'data_emissao']),
+  };
+  const modeloPorAliasTabela = { fracoes: 'f', quotas: 'q' };
+
+  const src = lerFicheiro('scripts/diagnostico-fase-a-preflight.js') || '';
+  const errosAlias = [];
+  // ⚠ Extrair as queries pelo ponto de chamada `S(\`...\`)`, NÃO por um par
+  // genérico de backticks: o ficheiro tem dezenas de backticks em comentários e
+  // em fragmentos como `id`, o que faz um pares genérico alinhar mal e nenhuma
+  // query chegar a ser analisada (falso verde silencioso — medido: 0 queries).
+  const reQuery = /\bS\(\s*`([\s\S]*?)`\s*\)/g;
+  let mq;
+  while ((mq = reQuery.exec(src)) !== null) {
+    const sql = mq[1];
+    if (!/\bFROM\s+(fracoes|quotas)\b/i.test(sql)) continue;
+    // Aliases efetivamente usados nesta query.
+    const usados = new Set();
+    for (const t of Object.keys(modeloPorAliasTabela)) {
+      const rx = new RegExp(`\\bFROM\\s+${t}\\s+(\\w+)`, 'i');
+      const m = sql.match(rx);
+      if (m) usados.add(m[1]);
+      const rxJ = new RegExp(`\\bJOIN\\s+${t}\\s+(\\w+)`, 'i');
+      const mj = sql.match(rxJ);
+      if (mj) usados.add(mj[1]);
+    }
+    // Cada alias.coluna referenciado tem de existir no modelo desse alias.
+    for (const al of usados) {
+      const cols = colunasPorAlias[al];
+      if (!cols) continue;
+      const rxUso = new RegExp(`\\b${al}\\.(\\w+)`, 'g');
+      let mu;
+      while ((mu = rxUso.exec(sql)) !== null) {
+        const col = mu[1];
+        if (!cols.includes(col)) {
+          errosAlias.push(`query usa «${al}.${col}» mas o alias «${al}» não tem essa coluna`);
+        }
+      }
+    }
+  }
+  console.log('');
+  if (errosAlias.length) {
+    console.log('  ✗ COLUNAS CONTRA O ALIAS ERRADO:');
+    for (const e of [...new Set(errosAlias)]) console.log(`      · ${e}`);
+  } else {
+    console.log('  ✓ Nenhuma coluna qualificada por alias está contra a tabela errada.');
   }
 }
 
@@ -226,6 +296,14 @@ function v5ScopeConfig() {
   }
 
   // A chamada problemática conhecida: é bloco morto (E3) ou rota ativa?
+  //
+  // ⚠ Lição aprendida: uma versão anterior desta verificação só procurava uma
+  // definição posterior do MESMO caminho DENTRO do mesmo ficheiro. Isso é
+  // insuficiente — o Express resolve por ORDEM DE MONTAGEM em app.js, e o
+  // sombreamento mais comum é ENTRE ficheiros. O veredicto tem de olhar para:
+  //   1) app.js: ordem de `app.use(prefixo, router)`;
+  //   2) todos os routers montados no MESMO prefixo;
+  //   3) quem declara o mesmo método+caminho, e em que ordem.
   const idx779 = linhas.findIndex((l) => /getQuotaConfig\(\s*\)/.test(l));
   if (idx779 >= 0) {
     let rotaMaisProxima = null;
@@ -236,23 +314,118 @@ function v5ScopeConfig() {
         break;
       }
     }
-    // Uma rota só é alcançável se não houver outra definição do mesmo caminho depois.
-    let sombreada = false;
+    // Sombreamento DENTRO do mesmo ficheiro (definição posterior idêntica).
+    let sombreadaMesmoFicheiro = false;
     if (rotaMaisProxima) {
-      const chave = `${rotaMaisProxima.metodo} '${rotaMaisProxima.rota}'`;
-      const maisTarde = linhas.some(
+      sombreadaMesmoFicheiro = linhas.some(
         (l, i) =>
           i > idx779 &&
-          new RegExp(`router\\.${rotaMaisProxima.metodo}\\(\\s*'${rotaMaisProxima.rota.replace(/[/:*]/g, '\\$&')}'`).test(l)
+          new RegExp(
+            `router\\.${rotaMaisProxima.metodo}\\(\\s*'${rotaMaisProxima.rota.replace(/[/:*]/g, '\\$&')}'`
+          ).test(l)
       );
-      sombreada = maisTarde;
     }
+
+    // Sombreamento ENTRE ficheiros, pela ordem de montagem do app.js.
+    const analiseMontagem = analisarMontagem(rotaMaisProxima, 'routes/financeiro.js');
+
     console.log('');
     console.log(`  Contexto da ocorrência sem âmbito (linha ${idx779 + 1}):`);
-    console.log(`    rota a montante : ${rotaMaisProxima ? `${rotaMaisProxima.metodo.toUpperCase()} ${rotaMaisProxima.rota} (linha ${rotaMaisProxima.n})` : 'não identificada'}`);
-    console.log(`    rota sombreada  : ${sombreada ? 'SIM — existe definição posterior do mesmo caminho' : 'NÃO / indeterminado'}`);
-    console.log(`    Veredicto       : ${sombreada ? 'código MORTO (E3) — sem efeito em runtime; a corrigir por higiene' : 'ALCANÇÁVEL — bug de âmbito com efeito em runtime'}`);
+    console.log(
+      `    rota a montante : ${
+        rotaMaisProxima
+          ? `${rotaMaisProxima.metodo.toUpperCase()} ${rotaMaisProxima.rota} (linha ${rotaMaisProxima.n})`
+          : 'não identificada'
+      }`
+    );
+    console.log(
+      `    sombra no próprio ficheiro : ${sombreadaMesmoFicheiro ? 'SIM' : 'não'}`
+    );
+
+    if (analiseMontagem.disponivel) {
+      console.log('    ordem de montagem em app.js (mesmo prefixo):');
+      for (const m of analiseMontagem.montagens) {
+        const marca = m.ficheiro === 'routes/financeiro.js' ? '  ← este ficheiro' : '';
+        const declara = m.declara
+          ? `declara ${rotaMaisProxima ? rotaMaisProxima.metodo.toUpperCase() + ' ' + rotaMaisProxima.rota : ''}`
+          : `${rotaMaisProxima ? 'não declara ' + rotaMaisProxima.metodo.toUpperCase() + ' ' + rotaMaisProxima.rota : 'não declara'}`;
+        console.log(`      ${String(m.ordem).padStart(2)}. ${m.ficheiro.padEnd(30)} ${declara}${marca}`);
+      }
+      console.log('');
+      if (analiseMontagem.primeiroQueServe) {
+        const primeiro = analiseMontagem.primeiroQueServe;
+        const ehOMesmo = primeiro.ficheiro === 'routes/financeiro.js';
+        console.log(
+          `    quem serve de facto : ${primeiro.ficheiro} (posição ${primeiro.ordem} na montagem)`
+        );
+        console.log(
+          `    Veredicto           : ${
+            ehOMesmo
+              ? 'ALCANÇÁVEL — bug de âmbito com efeito em runtime'
+              : `código MORTO por sombreamento ENTRE ficheiros — ${primeiro.ficheiro} é montado antes e serve a rota; sem efeito em runtime, a corrigir por higiene`
+          }`
+        );
+      } else {
+        console.log('    quem serve de facto : indeterminado (nenhum router montado declara a rota)');
+        console.log('    Veredicto           : INDETERMINADO');
+      }
+    } else {
+      console.log(
+        `    Veredicto : ${sombreadaMesmoFicheiro ? 'código MORTO (E3) — sem efeito em runtime' : 'ALCANÇÁVEL no próprio ficheiro — mas não foi possível ler app.js para confirmar sombreamento entre ficheiros'}`
+      );
+    }
   }
+}
+
+// ── Análise da ordem de montagem em app.js ──────────────────────────
+//
+// Deriva, do app.js real, a lista ordenada de `app.use(prefixo, router)` para o
+// prefixo da rota em estudo, e determina qual desses routers declara de facto a
+// rota. O Express serve o PRIMEIRO que casa.
+function analisarMontagem(rota, ficheiroAlvo) {
+  const app = lerFicheiro('app.js');
+  if (app === null || !rota) return { disponivel: false };
+
+  const prefixo = '/admin'; // o prefixo da rota em estudo (financeiro.js é montado em /admin)
+
+  // Extrair app.use('<prefixo>', <router>) por ordem, e resolver o caminho do router.
+  const montagens = [];
+  app.split(/\r?\n/).forEach((l, i) => {
+    const m = l.match(
+      /app\.use\(\s*'([^']+)'\s*,\s*(?:require\(\s*'([^']+)'\s*\)|(\w+))/
+    );
+    if (!m) return;
+    if (m[1] !== prefixo) return;
+
+    let ficheiro = m[2];
+    if (!ficheiro && m[3]) {
+      // Variável (ex.: rotasQuotasModulo): procurar o require correspondente no topo.
+      const varRe = new RegExp(
+        `(?:const|let|var)\\s+${m[3]}\\s*=\\s*require\\(\\s*'([^']+)'\\s*\\)`
+      );
+      const vm = app.match(varRe);
+      if (vm) ficheiro = vm[1];
+    }
+    if (!ficheiro) return;
+    if (!ficheiro.startsWith('.')) ficheiro = './' + ficheiro;
+    const rel = ficheiro.replace(/^\.\/?/, '');
+    const alvo = rel.endsWith('.js') ? rel : rel + '.js';
+
+    // Este router declara a rota?
+    const src = lerFicheiro(alvo);
+    let declara = false;
+    if (src) {
+      const rx = new RegExp(
+        `router\\.${rota.metodo}\\(\\s*'${rota.rota.replace(/[/:*]/g, '\\$&')}'`
+      );
+      declara = rx.test(src);
+    }
+    montagens.push({ ordem: montagens.length + 1, linha: i + 1, ficheiro: alvo, declara });
+  });
+
+  const primeiroQueServe = montagens.find((m) => m.declara) || null;
+  const disponivel = montagens.some((m) => m.ficheiro === ficheiroAlvo);
+  return { disponivel, montagens, primeiroQueServe };
 }
 
 // ── V6: testes/fixtures que fixam o comportamento antigo ─────────────
@@ -535,6 +708,12 @@ async function main() {
   console.log('  E ≥1 fração com quota parcialmente_paga ou paga.');
   console.log('');
 
+  // ⚠ Colunas reais (confirmadas em models/Fracao.js e models/Quota.js):
+  //   fracoes : id, condominio_id, designacao, permilagem DECIMAL(7,2), estado
+  //   quotas  : id, condominio_id, fracao_id, ano, mes, valor,
+  //             data_vencimento, estado ENUM(...)
+  // A tabela `fracoes` NÃO tem `fracao_id` — o erro anterior era f.fracao_id.
+  // A chave é fracoes.id, e a FK é quotas.fracao_id = fracoes.id.
   const v2b = await S(`
     SELECT t.condominio_id,
            t.permilagem,
@@ -543,13 +722,13 @@ async function main() {
            SUM(t.tem_paga_ou_parcial)     AS n_com_paga
     FROM (
       SELECT f.condominio_id,
-             f.fracao_id,
+             f.id AS fracao_id,
              CAST(f.permilagem AS CHAR) AS permilagem,
              MAX(CASE WHEN q.estado = 'pendente' AND q.data_vencimento >= CURDATE() THEN 1 ELSE 0 END) AS tem_pendente_futura,
              MAX(CASE WHEN q.estado IN ('parcialmente_paga','paga') THEN 1 ELSE 0 END)                 AS tem_paga_ou_parcial
       FROM fracoes f
-      JOIN quotas q ON q.fracao_id = f.fracao_id
-      GROUP BY f.condominio_id, f.fracao_id, CAST(f.permilagem AS CHAR)
+      JOIN quotas q ON q.fracao_id = f.id
+      GROUP BY f.condominio_id, f.id, CAST(f.permilagem AS CHAR)
     ) t
     GROUP BY t.condominio_id, t.permilagem
     HAVING n_com_pendente > 0 AND n_com_paga > 0
