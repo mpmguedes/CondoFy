@@ -6,25 +6,30 @@
      o próximo acontecimento relevante — e depois o histórico, que continua
      consultável.
 
-     Os acontecimentos NÃO são criados aqui: vêm das Assembleias e das
-     Comunicações programadas, e esta página liga aos módulos de origem. --}}
+     Três origens de acontecimentos: assembleias e comunicações programadas
+     (criadas nos módulos de origem, para onde esta página liga) e eventos
+     ad-hoc, os únicos com CRUD aqui dentro. Para os das outras duas origens
+     a página NÃO promete edição: só mostra o atalho «Ver detalhe». --}}
 <div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
     <h1>Calendário</h1>
     <p class="subtitle">
-      Acontecimentos do condomínio — assembleias e comunicações programadas
+      Acontecimentos do condomínio — assembleias, comunicações e eventos
     </p>
   </div>
   <a href="/admin" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Painel</a>
 </div>
 
-{{!-- ── Criar acontecimentos (nos módulos de origem) ───────────────── --}}
+{{!-- ── Criar acontecimentos ───────────────────────────────────────── --}}
 <div class="card mb-3">
   <div class="card-body d-flex flex-wrap align-items-center gap-2">
     <span class="text-muted small mb-0 me-auto">
-      Para marcar um acontecimento novo, use o módulo respetivo — aparece logo neste calendário.
+      Um evento é criado aqui; as assembleias e as comunicações, nos módulos respetivos — tudo aparece neste calendário.
     </span>
-    <a href="/admin/assembleias/nova" class="btn btn-sm btn-primary">
+    <a href="/admin/calendario/eventos/nova" class="btn btn-sm btn-primary">
+      <span class="material-symbols-outlined me-1">event</span>Novo evento
+    </a>
+    <a href="/admin/assembleias/nova" class="btn btn-sm btn-outline-primary">
       <span class="material-symbols-outlined me-1">add</span>Nova assembleia
     </a>
     <a href="/admin/avisos/nova" class="btn btn-sm btn-outline-primary">
@@ -43,6 +48,7 @@
           <option value="">Todos os tipos</option>
           <option value="assembleia" {{selected filtros.tipo 'assembleia'}}>Assembleias</option>
           <option value="aviso" {{selected filtros.tipo 'aviso'}}>Comunicações programadas</option>
+          <option value="evento" {{selected filtros.tipo 'evento'}}>Eventos</option>
         </select>
       </div>
       {{#if meses.length}}
@@ -102,7 +108,7 @@
 
     {{#if proximo.link}}
     <a class="btn btn-primary btn-sm mt-3" href="{{proximo.link}}">
-      <span class="material-symbols-outlined me-1">visibility</span>Ver detalhe
+      <span class="material-symbols-outlined me-1">{{#if proximo.editavel}}edit{{else}}visibility{{/if}}</span>{{#if proximo.editavel}}Editar{{else}}Ver detalhe{{/if}}
     </a>
     {{/if}}
   </div>
@@ -127,7 +133,7 @@
     </div>
     <div class="text-nowrap">
       {{#if estadoRotulo}}<span class="badge {{estadoClasse}} me-2">{{estadoRotulo}}</span>{{/if}}
-      {{#if link}}<a href="{{link}}" class="btn btn-sm btn-outline-secondary" title="Ver detalhe"><span class="material-symbols-outlined">visibility</span></a>{{/if}}
+      {{#if link}}<a href="{{link}}" class="btn btn-sm btn-outline-secondary" title="{{#if editavel}}Editar evento{{else}}Ver detalhe{{/if}}"><span class="material-symbols-outlined">{{#if editavel}}edit{{else}}visibility{{/if}}</span></a>{{/if}}
     </div>
   </li>
   {{/unless}}
@@ -160,7 +166,7 @@
     </div>
     <div class="text-nowrap">
       {{#if estadoRotulo}}<span class="badge {{estadoClasse}} me-2">{{estadoRotulo}}</span>{{/if}}
-      {{#if link}}<a href="{{link}}" class="btn btn-sm btn-outline-secondary" title="Ver detalhe"><span class="material-symbols-outlined">visibility</span></a>{{/if}}
+      {{#if link}}<a href="{{link}}" class="btn btn-sm btn-outline-secondary" title="{{#if editavel}}Editar evento{{else}}Ver detalhe{{/if}}"><span class="material-symbols-outlined">{{#if editavel}}edit{{else}}visibility{{/if}}</span></a>{{/if}}
     </div>
   </li>
   {{/each}}
@@ -177,10 +183,15 @@
   <a href="/admin/calendario" class="btn btn-sm btn-outline-secondary">Limpar filtros</a>
   {{else}}
   <div class="fw-semibold mt-2">Ainda não há acontecimentos agendados</div>
-  <div class="small mb-3">As assembleias e as comunicações programadas aparecem aqui automaticamente.</div>
-  <a href="/admin/assembleias/nova" class="btn btn-sm btn-primary">
-    <span class="material-symbols-outlined me-1">add</span>Nova assembleia
-  </a>
+  <div class="small mb-3">Os eventos, as assembleias e as comunicações programadas aparecem aqui automaticamente.</div>
+  <div class="d-flex flex-wrap gap-2 justify-content-center">
+    <a href="/admin/calendario/eventos/nova" class="btn btn-sm btn-primary">
+      <span class="material-symbols-outlined me-1">event</span>Novo evento
+    </a>
+    <a href="/admin/assembleias/nova" class="btn btn-sm btn-outline-primary">
+      <span class="material-symbols-outlined me-1">add</span>Nova assembleia
+    </a>
+  </div>
   {{/if}}
 </div></div>
 {{/if}}

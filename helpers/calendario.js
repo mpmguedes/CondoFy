@@ -1,9 +1,16 @@
 // Agregação dos acontecimentos do condomínio para o calendário.
 //
-// Fonte de verdade única: não existe (nem se cria) uma tabela de eventos
-// paralela. Os acontecimentos datados que a aplicação já produz são:
+// O calendário lê TRÊS origens:
 //   • Assembleias (data, hora, local, estado, tipo) — inclui a convocatória;
-//   • Avisos programados (data_programada) — comunicações com data marcada.
+//   • Avisos programados (data_programada) — comunicações com data marcada;
+//   • Eventos ad-hoc (`eventos`) — acontecimentos do condomínio sem módulo
+//     de origem próprio, criados e editados no próprio calendário.
+//
+// As duas primeiras são AGREGADAS a partir das tabelas que já existiam; a
+// terceira tem tabela própria (`eventos`, migration 20260101000078), porque
+// não há nenhum módulo onde um acontecimento avulso possa viver. Não se
+// reutiliza `agenda_items`: um item da ordem de trabalhos pertence sempre a
+// uma assembleia (`assembleia_id` NOT NULL) e transporta deliberação/FCR.
 //
 // Todas as consultas filtram OBRIGATORIAMENTE por `condominio_id`, para que
 // nenhum utilizador possa ver acontecimentos de outro condomínio.
@@ -14,7 +21,7 @@
 // adopção futura não exija reescrever a agregação.
 
 const { Op } = require('sequelize');
-const { Assembleia, Aviso } = require('../models');
+const { Assembleia, Aviso, Evento } = require('../models');
 
 // Rótulos de estado da assembleia (os mesmos da listagem de assembleias).
 const ESTADOS_ASSEMBLEIA = {
@@ -35,6 +42,7 @@ const TIPOS_ASSEMBLEIA = {
 const TIPOS_EVENTO = {
   assembleia: { rotulo: 'Assembleia', icone: 'forum' },
   aviso: { rotulo: 'Comunicação programada', icone: 'campaign' },
+  evento: { rotulo: 'Evento', icone: 'event' },
 };
 
 // Data local segura: `data` (DATEONLY) chega como 'YYYY-MM-DD'; comparar
@@ -119,6 +127,37 @@ function eventoDeAviso(aviso) {
   };
 }
 
+// Normaliza um evento ad-hoc no formato de evento do calendário.
+// A forma devolvida é IDÊNTICA à das outras origens: quem consome a
+// agregação (vista, filtros, ordenação) não precisa de saber de onde vem.
+function eventoDeEvento(evento) {
+  const e = typeof evento.toJSON === 'function' ? evento.toJSON() : evento;
+  return {
+    origem: 'evento',
+    id: e.id,
+    data: dataISO(e.data),
+    tipo: 'evento',
+    tipoRotulo: TIPOS_EVENTO.evento.rotulo,
+    icone: TIPOS_EVENTO.evento.icone,
+    titulo: e.titulo,
+    tituloDetalhe: null,
+    hora: e.hora || null,
+    horaFim: e.hora_fim || null,
+    local: e.local || null,
+    descricao: e.descricao || null,
+    estadoRotulo: null,
+    estadoClasse: null,
+    encerrado: false,
+    // Relevante: um evento ad-hoc é um acontecimento do condomínio (ao
+    // contrário de uma comunicação programada, que é informativa).
+    relevante: true,
+    // Editável no próprio calendário — ao contrário de assembleias e avisos,
+    // que se editam nos módulos de origem.
+    editavel: true,
+    link: `/admin/calendario/eventos/${e.id}`,
+  };
+}
+
 // Ordena por data (e, em empate, por hora e id) de forma estável.
 function compararEventos(a, b) {
   const da = a.data || '';
@@ -145,9 +184,15 @@ async function eventosDoCondominio(condominioId, opcoes = {}) {
     order: [['data_programada', 'ASC'], ['id', 'ASC']],
   });
 
+  const eventosAdHoc = await Evento.findAll({
+    where: { condominio_id: condominioId },
+    order: [['data', 'ASC'], ['id', 'ASC']],
+  });
+
   const eventos = [
     ...assembleias.filter(assembleiaVisivel).map(eventoDeAssembleia),
     ...avisos.map(eventoDeAviso),
+    ...eventosAdHoc.map(eventoDeEvento),
   ]
     .filter((e) => e.data)
     .sort(compararEventos);
@@ -181,6 +226,7 @@ module.exports = {
   compararEventos,
   eventoDeAssembleia,
   eventoDeAviso,
+  eventoDeEvento,
   ESTADOS_ASSEMBLEIA,
   TIPOS_ASSEMBLEIA,
   TIPOS_EVENTO,

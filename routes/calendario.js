@@ -1,11 +1,13 @@
 // ─────────────────────────────────────────────────────────────────────
 // Calendário do condomínio (administração).
 //
-// Não existe — nem se cria — uma tabela de eventos paralela: o calendário
-// AGREGA os acontecimentos datados que a aplicação já produz, através de
-// `helpers/calendario.js`:
+// Não existe — nem se cria — uma tabela de eventos paralela às assembleias
+// e às comunicações: o calendário AGREGA os acontecimentos datados, através
+// de `helpers/calendario.js`:
 //   • Assembleias (não canceladas) — data, hora, local, estado, tipo;
-//   • Avisos programados (`data_programada`) — comunicações com data marcada.
+//   • Avisos programados (`data_programada`) — comunicações com data marcada;
+//   • Eventos ad-hoc (`eventos`) — os únicos com CRUD no próprio calendário,
+//     porque não têm módulo de origem (ver routes/eventos.js).
 //
 // Isolamento multi-condomínio: o router usa o condomínio ativo da sessão
 // (`tenant.comCondominioAtivo`) e TODAS as leituras filtram por
@@ -34,7 +36,7 @@ router.use(tenant.comCondominioAtivo);
 router.use(tenant.comPapel('gestor'));
 
 // Filtros de tipo aceites. Qualquer outro valor é ignorado (mostra tudo).
-const FILTROS = ['assembleia', 'aviso'];
+const FILTROS = ['assembleia', 'aviso', 'evento'];
 
 function lerFiltros(query) {
   const tipo = FILTROS.includes(String(query.tipo || '')) ? String(query.tipo) : '';
@@ -73,9 +75,9 @@ function mesesDisponiveis(eventos) {
 }
 
 // ── Calendário do condomínio ────────────────────────────────────────
-// `?tipo=assembleia|aviso` e `?mes=YYYY-MM` filtram a lista.
-// `?novo=1` mostra, no topo, os atalhos de criação (a criação vive nos
-// módulos de origem).
+// `?tipo=assembleia|aviso|evento` e `?mes=YYYY-MM` filtram a lista.
+// A criação faz-se no topo da vista: evento ad-hoc no próprio calendário;
+// assembleias e comunicações nos módulos de origem.
 router.get('/calendario', async (req, res) => {
   const filtros = lerFiltros(req.query);
   try {

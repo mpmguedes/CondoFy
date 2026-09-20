@@ -810,7 +810,7 @@ async function provarGuardaReal() {
 
   // Os routers são carregados DEPOIS do stub. O cache de helpers/routes já foi
   // limpo acima, pelo que estas require reconstroem toda a cadeia contra o stub.
-  const caminhosRouters = ['admin', 'relatorios', 'calendario', 'placeholders'].map((r) =>
+  const caminhosRouters = ['admin', 'relatorios', 'calendario', 'eventos', 'placeholders'].map((r) =>
     require.resolve(path.join(raiz, 'routes', r))
   );
   const cacheRouters = caminhosRouters.map((c) => require.cache[c]);
@@ -1241,7 +1241,36 @@ const pedir = (caminho, { papel = 'admin', global = false } = {}) =>
     !/calendario: \{/.test(placeholdersSrc),
     'placeholders.js já não declara «calendario»'
   );
+  assert.ok(
+    !/eventos\s*:/.test(placeholdersSrc),
+    'placeholders.js não declara «eventos» (a rota real tem de vencer)'
+  );
   feito('C. Placeholders Tickets/Seguros continuam só para admin; Calendário é router próprio');
+
+  // O CRUD de eventos ad-hoc (Fase 2 do calendário) é um router próprio com o
+  // mesmo mínimo do calendário — `gestor` — e montado antes dos placeholders.
+  const eventosSrc = ler('routes/eventos.js');
+  assert.ok(
+    eventosSrc.includes('comCondominioAtivo') && eventosSrc.includes("comPapel('gestor')"),
+    'routes/eventos.js exige condomínio ativo e papel ≥ gestor'
+  );
+  const appSrcEventos = ler('app.js');
+  const posRouterEventos = appSrcEventos.indexOf("require('./routes/eventos')");
+  const posRouterPlaceholders = appSrcEventos.indexOf("require('./routes/placeholders')");
+  assert.ok(
+    posRouterEventos > -1 && posRouterEventos < posRouterPlaceholders,
+    'routes/eventos.js é montado ANTES de placeholders'
+  );
+  // A allow-list do suporte nasce fechada para rotas novas: os eventos não lá
+  // podem estar (não têm vista de diagnóstico minimizada).
+  const allowSrc = ler('helpers/suporte-allowlist.js');
+  const mapaRouters = /const ROUTERS = \{([\s\S]*?)\n\};/.exec(allowSrc);
+  assert.ok(mapaRouters, 'a allow-list expõe o mapa ROUTERS');
+  assert.ok(
+    !/eventos\s*:/.test(mapaRouters[1]),
+    'routes/eventos não é admitido ao suporte (rota nova nasce fechada)'
+  );
+  feito('C. Eventos ad-hoc: router próprio com mínimo gestor, antes dos placeholders e fora do suporte');
 
   // As rotas de gestão de utilizadores estão TODAS marcadas com `apenasAdmin`.
   const adminSrcSemComentarios = adminSrc.replace(/\/\/.*$/gm, '');

@@ -1,0 +1,111 @@
+{{!-- Formulário do evento ad-hoc do calendário (criar/editar).
+
+     É o único acontecimento do calendário com formulário próprio: as
+     assembleias e as comunicações editam-se nos módulos de origem.
+
+     Validação: o servidor é a autoridade (título e data obrigatórios; a hora
+     de fim tem de ser posterior à de início). O HTML só ajuda com `required`
+     e com `min` na hora de fim — nunca decide. --}}
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>{{titulo}}</h1>
+    <p class="subtitle">Acontecimento do condomínio, visível no calendário</p>
+  </div>
+  <a href="/admin/calendario" class="btn btn-outline-secondary">
+    <span class="material-symbols-outlined me-1">arrow_back</span>Calendário
+  </a>
+</div>
+
+{{#if erros.length}}
+<div class="alert alert-danger">
+  <div class="fw-semibold mb-1">
+    <span class="material-symbols-outlined me-1" aria-hidden="true" style="font-size:1rem;vertical-align:-3px">error</span>
+    Não foi possível guardar:
+  </div>
+  <ul class="mb-0 small">
+    {{#each erros}}
+    <li>{{this}}</li>
+    {{/each}}
+  </ul>
+</div>
+{{/if}}
+
+<form action="{{acao}}" method="POST" novalidate>
+  <div class="row g-4">
+    <div class="col-12 col-lg-7">
+      <div class="card">
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label" for="campo-titulo">Título *</label>
+            <input type="text" class="form-control" id="campo-titulo" name="titulo"
+                   value="{{evento.titulo}}" maxlength="255" required
+                   placeholder="Ex.: Limpeza geral das garagens" />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="campo-descricao">Descrição / notas</label>
+            <textarea class="form-control" id="campo-descricao" name="descricao" rows="4"
+                      placeholder="Detalhes úteis para quem consulta o calendário">{{evento.descricao}}</textarea>
+          </div>
+
+          <div class="mb-0">
+            <label class="form-label" for="campo-local">Local</label>
+            <input type="text" class="form-control" id="campo-local" name="local"
+                   value="{{evento.local}}" maxlength="255"
+                   placeholder="Ex.: Garagem do edifício A" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-5">
+      <div class="card">
+        <div class="card-header bg-white">
+          <span class="material-symbols-outlined me-1" aria-hidden="true" style="font-size:1rem;vertical-align:-3px">schedule</span>Quando
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label" for="campo-data">Data *</label>
+            <input type="date" class="form-control" id="campo-data" name="data"
+                   value="{{dateInput evento.data}}" required />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="campo-hora">Hora de início</label>
+            <input type="time" class="form-control" id="campo-hora" name="hora"
+                   value="{{evento.hora}}" />
+            <div class="form-text">Deixe em branco para um acontecimento de dia inteiro.</div>
+          </div>
+
+          <div class="mb-0">
+            <label class="form-label" for="campo-hora-fim">Hora de fim</label>
+            <input type="time" class="form-control" id="campo-hora-fim" name="hora_fim"
+                   value="{{evento.hora_fim}}" />
+            <div class="form-text">Opcional. Tem de ser posterior à hora de início.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex flex-wrap gap-2 mt-4">
+    <button type="submit" class="btn btn-primary">
+      <span class="material-symbols-outlined me-1">save</span>Guardar
+    </button>
+    <a href="/admin/calendario" class="btn btn-outline-secondary">Cancelar</a>
+
+    {{#if evento.id}}
+    <div class="ms-auto">
+      <form action="/admin/calendario/eventos/{{evento.id}}/eliminar" method="POST" class="d-inline"
+            data-confirmar="Eliminar este evento? Esta ação não pode ser desfeita."
+            data-confirmar-titulo="Eliminar evento"
+            data-confirmar-acao="Eliminar"
+            data-confirmar-perigo="1">
+        <button type="submit" class="btn btn-outline-danger">
+          <span class="material-symbols-outlined me-1">delete</span>Eliminar
+        </button>
+      </form>
+    </div>
+    {{/if}}
+  </div>
+</form>

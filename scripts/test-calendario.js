@@ -65,7 +65,7 @@ const caminhoPlaceholders = require.resolve(path.join(RAIZ, 'routes', 'placehold
 // isto, um teste de isolamento limitar-se-ia a acreditar no código.
 // ─────────────────────────────────────────────────────────────────────
 const registos = [];
-let RESPOSTAS = { Assembleia: [], Aviso: [] };
+let RESPOSTAS = { Assembleia: [], Aviso: [], Evento: [] };
 // Resolve o `where` sobre as linhas — implementado abaixo, junto das fixtures.
 // Ver o comentário «Resposta por defeito».
 let aplicarWhere = () => {
@@ -89,6 +89,11 @@ require.cache[caminhoModels] = {
     Op: Sequelize.Op,
     Assembleia: modeloFalso('Assembleia'),
     Aviso: modeloFalso('Aviso'),
+    // Terceira origem do calendário (Fase 2 — eventos ad-hoc). Este teste
+    // continua a cobrir a agregação das assembleias e dos avisos; os eventos
+    // ad-hoc têm teste próprio (`scripts/test-eventos.js`). O stub existe para
+    // que a consulta tenha onde correr, e devolve vazio nas fixtures antigas.
+    Evento: modeloFalso('Evento'),
   },
 };
 
@@ -174,15 +179,16 @@ titulo('Isolamento entre condomínios');
 
   const doUm = await cal.eventosDoCondominio(1);
 
-  // 2.1 Cada consulta filtrou pelo condomínio indicado.
-  assert.strictEqual(registos.length, 2, 'uma consulta a assembleias + uma a avisos');
+  // 2.1 Cada consulta filtrou pelo condomínio indicado. A partir da Fase 2 são
+  //     três: assembleias, avisos e eventos ad-hoc.
+  assert.strictEqual(registos.length, 3, 'uma consulta a assembleias + uma a avisos + uma a eventos');
   for (const r of registos) {
     assert.strictEqual(
       r.where && r.where.condominio_id, 1,
       `consulta a ${r.modelo} tem de filtrar condominio_id=1 (recebido: ${JSON.stringify(r.where)})`
     );
   }
-  feito('As duas consultas filtram por condominio_id (provado no where, não afirmado)');
+  feito('As três consultas filtram por condominio_id (provado no where, não afirmado)');
 
   // 2.2 O aviso é filtrado por data não nula NA PRÓPRIA consulta.
   const qAviso = registos.find((r) => r.modelo === 'Aviso');
@@ -382,8 +388,12 @@ titulo('Isolamento entre condomínios');
   // Os filtros são funções internas do router (não exportadas): exercita-se o
   // COMPORTAMENTO pela rota HTTP, mais abaixo. Aqui prova-se que a fonte os
   // define com lista fechada e formato validado — o que impede um `tipo`
-  // arbitrário de chegar à consulta.
-  assert.ok(/const FILTROS = \['assembleia', 'aviso'\]/.test(fonteRota), 'lista de tipos fechada');
+  // arbitrário de chegar à consulta. A lista fechada cresce com as origens:
+  // desde a Fase 2 inclui também 'evento'.
+  assert.ok(
+    /const FILTROS = \['assembleia', 'aviso', 'evento'\]/.test(fonteRota),
+    'lista de tipos fechada (com a origem «evento» da Fase 2)'
+  );
   assert.ok(/FILTROS\.includes\(String\(query\.tipo \|\| ''\)\)/.test(fonteRota), 'tipo validado contra a lista');
   assert.ok(/\^\\d\{4\}-\\d\{2\}\$/.test(fonteRota), 'mês validado no formato YYYY-MM');
   feito('Tipo e mês validados por lista fechada e formato');

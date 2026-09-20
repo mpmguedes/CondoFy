@@ -59,6 +59,7 @@ const {
   ExtraQuotaParcela,
   AgendaItem,
   AcessoSuporte,
+  Evento,
 } = db;
 
 // Utilizador ↔ Pessoa (relação explícita, nunca por nome)
@@ -96,6 +97,7 @@ const MODELOS_COM_CONDOMINIO = [
   Orcamento,
   ExtraQuota,
   Aviso,
+  Evento,
 ];
 for (const M of MODELOS_COM_CONDOMINIO) {
   M.belongsTo(Condominio, { foreignKey: 'condominio_id', as: 'condominio' });

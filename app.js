@@ -296,6 +296,11 @@ app.use('/admin', require('./routes/relatorios'));
 // contrário, a rota genérica `/:modulo` de placeholders capturaria
 // `/admin/calendario` e serviria o placeholder «em desenvolvimento».
 app.use('/admin', require('./routes/calendario'));
+// Eventos ad-hoc do calendário (CRUD em `/admin/calendario/eventos/*`) — ver
+// routes/eventos.js. Mesma razão de ordem que acima: a rota genérica
+// `/:modulo` de placeholders capturaria `/admin/calendario/...` se este
+// router viesse depois.
+app.use('/admin', require('./routes/eventos'));
 app.use('/admin', require('./routes/placeholders'));
 // ── Defesa estrutural do portal do condómino ───────────────────────
 // O suporte diagnóstico NUNCA entra no portal do condómino. Esta guarda é
