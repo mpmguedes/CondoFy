@@ -787,7 +787,8 @@ router.get('/quotas', async (req, res) => {
   // Validação da soma das permilagens (ideal: 1000‰)
   const permilagem = validarPermilagem(fracoes);
 
-  // Total mensal previsto das quotas (valor por 1000‰ + FCR)
+  // Total mensal previsto das quotas. `valorPor1000` é o TOTAL por 1000‰ (já
+  // inclui o FCR); D1 decompõe cada quota em base + FCR sem somar nada.
   const previstasMesC = fracoes.reduce((s, f) => {
     const { totalC } = calcularQuota(f.permilagem, quotaConfig.valorPor1000, quotaConfig.fcrPercentagem);
     return s + totalC;

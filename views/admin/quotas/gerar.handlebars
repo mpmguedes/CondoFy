@@ -162,24 +162,37 @@
 
   function ehOrcamento() { return document.getElementById('metodoOrcamento').checked; }
 
+  // Acrescenta o FCR a um valor de DESPESAS, obtendo o total a distribuir.
+  // Espelha `acrescentarFcrAoTotal` do servidor: o FCR entra ANTES da
+  // distribuição, pelo que o total a distribuir é despesas + FCR.
+  function totalComFcr(despesas, percentagem) {
+    const p = percentagem > 0 ? percentagem : 0;
+    if (p <= 0) return despesas;
+    return despesas * (100 + p) / 100;
+  }
+
   function calc(perm) {
     if (ehOrcamento()) {
       const orc = ORCAMENTOS.find((o) => String(o.id) === String(document.getElementById('wOrcamento').value));
-      const totalAnual = orc ? parseFloat(orc.total) : 0;
+      const despesas = orc ? parseFloat(orc.total) : 0;
+      // O orçamento define as DESPESAS; o total a distribuir é despesas + FCR.
+      // Só depois D1 decompõe cada quota (o FCR não é somado outra vez).
+      const totalAnual = totalComFcr(despesas, pctFcr());
       const totalPerm = FRACOES.reduce((s, f) => s + (parseFloat(f.permilagem) || 0), 0);
       const anual = totalPerm > 0 ? totalAnual * (parseFloat(perm) || 0) / totalPerm : totalAnual / FRACOES.length;
       // O total mensal manda: o FCR é uma componente dele (tal como no servidor).
       return { ...dividir(anual / 12, pctFcr()), orcamento: orc };
     }
-    // (permilagem / 1000) × valor por 1000‰ — e depois o FCR como COMPONENTE
-    // do total, pela MESMA função D1 do servidor (`dividir()` acima, que chama
+    // (permilagem / 1000) × valor por 1000‰ — onde `valorPor1000` é o TOTAL por
+    // 1000‰, JÁ COM FCR. Depois o FCR é apenas uma COMPONENTE desse total, pela
+    // MESMA função D1 do servidor (`dividir()` acima, que chama
     // `__GESCONDU_DIVIDIR_FCR` injetada a partir de `dividirComponentesQuota`).
     // NÃO voltar a somar o FCR à base: a fórmula antiga
     // (`fcr = round(base × pct / 100)`, `total = base + fcr`) foi removida —
     // inflava o total em vez de o repartir.
     const valorPor1000C = Math.round(parseFloat(CFG.valorPor1000) * 100);
-    const basePrecoC = Math.round((parseFloat(perm) || 0) / 1000 * valorPor1000C);
-    return dividir(basePrecoC / 100, pctFcr());
+    const totalPrecoC = Math.round((parseFloat(perm) || 0) / 1000 * valorPor1000C);
+    return dividir(totalPrecoC / 100, pctFcr());
   }
 
   const wizard = {

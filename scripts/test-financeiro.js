@@ -113,17 +113,19 @@ async function main() {
     assert.strictEqual(buf.slice(0, 5).toString(), '%PDF-', `${nome}: PDF válido`);
   }
 
-  // 5. Cálculo de quota: (permilagem/1000) × valor por 1000‰ + FCR
-  const q = calcularQuota('500', '100.0000', '10');
-  assert.strictEqual(q.base, 50, 'base = 500‰ / 1000 × 100 € = 50 €');
-  assert.strictEqual(q.fcr, 5, 'fcr = 10% de 50 € = 5 €');
-  assert.strictEqual(q.total, 55, 'total = 55 €');
+  // 5. Cálculo de quota (D1): `valorPor1000` é o TOTAL por 1000‰, já com FCR.
+  //    500‰ de 110 €/1000‰ a 10% → 55 € no total = 50 € base + 5 € FCR.
+  const q = calcularQuota('500', '110.0000', '10');
+  assert.strictEqual(q.base, 50, 'base = parte das despesas correntes = 50 €');
+  assert.strictEqual(q.fcr, 5, 'fcr = componente do total = 5 €');
+  assert.strictEqual(q.total, 55, 'total = 55 € (nunca inflacionado pelo FCR)');
+  assert.strictEqual(q.baseC + q.fcrC, q.totalC, 'base + FCR = total');
   assert.strictEqual(q.totalC, 5500, 'total em cêntimos');
-  assert.strictEqual(q.valorPor1000, 100, 'valor por 1000‰ devolvido');
+  assert.strictEqual(q.valorPor1000, 110, 'valor por 1000‰ (total) devolvido');
 
-  // 5b. Duas frações de 500‰ → 55 € + 55 € = 110 € (cenário da especificação)
-  const qA = calcularQuota('500', '100.0000', '10');
-  const qB = calcularQuota('500', '100.0000', '10');
+  // 5b. Duas frações de 500‰ → 55 € + 55 € = 110 €
+  const qA = calcularQuota('500', '110.0000', '10');
+  const qB = calcularQuota('500', '110.0000', '10');
   assert.strictEqual(qA.total + qB.total, 110, 'total mensal = 110 €');
 
   // 6. Parcelamento: soma exata e resto na última parcela
@@ -152,8 +154,9 @@ async function main() {
   assert.strictEqual(periodos[3].ano, 2026);
   assert.strictEqual(periodos[3].mes, 5);
 
-  // 9. Método 2 — orçamento define a receita (distribuição por permilagem ÷ 12),
-  // com o FCR separado pela percentagem configurada.
+  // 9. Método 2 — o orçamento define as DESPESAS; o FCR é acrescentado ANTES da
+  // distribuição (regra C2): total a distribuir = despesas + FCR, e cada quota
+  // é depois decomposta por D1 (o FCR não é somado outra vez).
   const qOrc = calcularQuotasOrcamento({
     fracoes: [
       { id: 1, permilagem: '500' },
@@ -167,13 +170,15 @@ async function main() {
   });
   let somaMensalC = 0;
   for (const [, v] of qOrc) somaMensalC += v.totalC;
-  assert.strictEqual(somaMensalC * 12, toCents('12000.00'), 'orçamento: 12 × soma mensal = total anual');
+  // Despesas 12.000 € + FCR 10% (1.200 €) = 13.200 € distribuídos por ano.
+  const totalComFcrC = toCents('13200.00');
+  assert.strictEqual(somaMensalC * 12, totalComFcrC, 'orçamento: 12 × soma mensal = despesas + FCR');
   assert.ok(qOrc.get(1).fcr > 0, 'método 2 separa o FCR pela percentagem configurada');
   for (const [, v] of qOrc) {
     assert.strictEqual(v.baseC + v.fcrC, v.totalC, `método 2: base + FCR = total (fração ${v.permilagem}‰)`);
   }
-  // Sem a percentagem, o FCR fica a zero E o total continua a ser a receita
-  // definida pelo orçamento (o valor a pagar nunca muda por causa do FCR).
+  // Sem a percentagem, não há FCR a acrescentar: o total distribuído são as
+  // despesas exatas (nunca um acréscimo inventado).
   const qOrcSemFcr = calcularQuotasOrcamento({
     fracoes: [{ id: 1, permilagem: '1000' }],
     totalAnual: '12000.00',
@@ -181,7 +186,7 @@ async function main() {
     meses: 12,
   });
   assert.strictEqual(qOrcSemFcr.get(1).fcr, 0, 'método 2 sem percentagem: FCR a zero');
-  assert.strictEqual(qOrcSemFcr.get(1).total, 1000, 'método 2 sem percentagem: total mantém-se (1000 €/mês)');
+  assert.strictEqual(qOrcSemFcr.get(1).total, 1000, 'método 2 sem percentagem: total = despesas (1000 €/mês)');
   assert.strictEqual(qOrcSemFcr.get(1).baseC + qOrcSemFcr.get(1).fcrC, qOrcSemFcr.get(1).totalC,
     'método 2 sem percentagem: base + FCR = total');
 

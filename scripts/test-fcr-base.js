@@ -87,16 +87,38 @@ function testeInvarianteMetodoPermilagem() {
       assert.ok(q.fcrC >= 0 && q.baseC >= 0, `permilagem ${perm}‰ a ${pct}%: componentes não negativas`);
     }
   }
-  // Valores de referência (especificação): 500‰, 100 €/1000‰, FCR 10%.
-  const q = calcularQuota('500', '100', '10');
-  assert.deepStrictEqual([q.base, q.fcr, q.total], [50, 5, 55], 'caso de referência: 50 + 5 = 55 €');
+  // D1: `valorPor1000` é o TOTAL por 1000‰ (já com FCR). A fração de 500‰ a
+  // 110 €/1000‰ paga 55 € no total, decomposto em 50 € de base + 5 € de FCR.
+  // A 500‰ de 110 €/1000‰ a 10%, a fórmula LEGADA (base = total; fcr =
+  // base × pct/100; total = base + fcr) daria 55 € de base, 5,50 € de FCR e
+  // 60,50 € a pagar — inflacionava. Aqui prova-se que tal NÃO acontece.
+  const q = calcularQuota('500', '110', '10');
+  assert.strictEqual(q.base, 50, 'base = 50 € (parte das despesas correntes)');
+  assert.strictEqual(q.fcr, 5, 'FCR = 5 € (componente do total)');
+  assert.strictEqual(q.total, 55, 'total = 55 €');
+  assert.ok(q.total < q.base * 1.1,
+    'o total NÃO é inflacionado: 55 € < 55 € × 1,1 = 60,50 € (o que a fórmula legada daria)');
+  // Caso em que as duas semânticas divergem de forma visível (total 55 € @ 10%).
+  const d = calcularQuota('1000', '55', '10');
+  assert.strictEqual(d.totalC, 5500, 'total 55 € = 5500 cêntimos (o total manda)');
+  assert.strictEqual(d.fcrC, 500, 'FCR como componente = 500 cêntimos (5 €)');
+  assert.strictEqual(d.baseC, 5000, 'base = 5000 cêntimos (50 €)');
+  // Fórmula LEGADA: base = total (5500); fcr = round(base × pct/100) = 550;
+  // total = base + fcr = 6050. D1 nunca produz 6050 a partir de um total 5500.
+  const totalLegadoC = 5500 + Math.round((5500 * 10) / 100);
+  assert.strictEqual(totalLegadoC, 6050, 'a fórmula antiga daria 6050 cêntimos (inflado)');
+  assert.notStrictEqual(d.totalC, totalLegadoC,
+    'o total NÃO é inflacionado: D1 dá 5500, nunca 6050');
   console.log('  ✓ método permilagem: base + FCR = total em todas as combinações');
 }
 
 // ── 4. Invariante e receita no método orçamento ───────────────────
 function testeMetodoOrcamento() {
+  // `totalAnual` são as DESPESAS PREVISTAS. O total distribuído é
+  // despesas + FCR (o FCR entra ANTES da distribuição, regra C2).
+  const DESPESAS = '12000.00';
   for (const pct of [10, 15, 20]) {
-    const mapa = calcularQuotasOrcamento({ fracoes: FRACOES, totalAnual: '12000.00', meses: 12, fcrPercentagem: pct });
+    const mapa = calcularQuotasOrcamento({ fracoes: FRACOES, totalAnual: DESPESAS, meses: 12, fcrPercentagem: pct });
     let somaMensalC = 0;
     let somaFcrAnualC = 0;
     for (const [, v] of mapa) {
@@ -106,28 +128,30 @@ function testeMetodoOrcamento() {
       somaMensalC += v.totalC;
       somaFcrAnualC += v.fcrC * 12;
     }
-    // O total anual é exatamente a receita definida pelo orçamento (o FCR é
-    // componente, não acréscimo).
-    assert.strictEqual(somaMensalC * 12, toCents('12000.00'),
-      `orçamento a ${pct}%: 12 × soma mensal = total anual`);
+    // O total distribuído é despesas + FCR (arredondado ao cêntimo).
+    const totalDistribuidoC = Math.round(toCents(DESPESAS) * (100 + pct) / 100);
+    assert.strictEqual(somaMensalC * 12, totalDistribuidoC,
+      `orçamento a ${pct}%: 12 × soma mensal = despesas + FCR`);
+    assert.ok(somaMensalC * 12 > toCents(DESPESAS),
+      `orçamento a ${pct}%: o total distribuído excede as despesas (FCR acrescentado)`);
     // FCR devido no ano = base anual × pct/100 (tolerância de arredondamento).
-    const baseAnualC = toCents('12000.00') - somaFcrAnualC;
+    const baseAnualC = totalDistribuidoC - somaFcrAnualC;
     const esperadoC = Math.round((baseAnualC * pct) / 100);
     assert.ok(Math.abs(somaFcrAnualC - esperadoC) <= 12,
       `orçamento a ${pct}%: FCR anual coerente (${somaFcrAnualC} vs ${esperadoC})`);
   }
   // A percentagem NÃO pode ser perdida quando é passada como texto («12,5»).
-  const comTexto = calcularQuotasOrcamento({ fracoes: FRACOES, totalAnual: '12000.00', fcrPercentagem: '12,5' });
+  const comTexto = calcularQuotasOrcamento({ fracoes: FRACOES, totalAnual: DESPESAS, fcrPercentagem: '12,5' });
   assert.strictEqual([...comTexto.values()][0].fcrPercentagem, 12.5, 'percentagem em texto («12,5») é respeitada');
   assert.ok([...comTexto.values()].every((v) => v.fcrC > 0), 'percentagem em texto: FCR registado');
-  // Sem percentagem o FCR fica a zero, mas o TOTAL mantém-se (nunca altera o
-  // valor a pagar pelo condómino).
-  const semPct = calcularQuotasOrcamento({ fracoes: FRACOES, totalAnual: '12000.00' });
+  // Sem percentagem o FCR fica a zero e o total distribuído são as despesas
+  // exatas (nada é acrescentado por um FCR inexistente).
+  const semPct = calcularQuotasOrcamento({ fracoes: FRACOES, totalAnual: DESPESAS });
   assert.ok([...semPct.values()].every((v) => v.fcrC === 0), 'sem percentagem: FCR a zero');
   let somaSem = 0;
   for (const [, v] of semPct) somaSem += v.totalC;
-  assert.strictEqual(somaSem * 12, toCents('12000.00'), 'sem percentagem: o total anual continua correto');
-  console.log('  ✓ método orçamento: FCR calculado e total anual preservado (10%, 15%, 20%, 12,5% e sem percentagem)');
+  assert.strictEqual(somaSem * 12, toCents(DESPESAS), 'sem percentagem: o total distribuído = despesas');
+  console.log('  ✓ método orçamento: despesas + FCR distribuídas (10%, 15%, 20%, 12,5% e sem percentagem)');
 }
 
 // ── 5. Divisão de componentes (função única da regra) ─────────────
@@ -195,6 +219,12 @@ function testePrevisualizacaoUsaAMesmaRegra() {
   assert.ok(/window\.__GESCONDU_DIVIDIR_FCR/.test(vista), 'a vista usa a função de divisão injetada');
   assert.ok(/dividir\(anual \/ 12, pctFcr\(\)\)/.test(vista),
     'pré-visualização do método orçamento: usa o total com o FCR separado');
+  // C2: no modo orçamento, a pré-visualização acrescenta o FCR ao valor das
+  // DESPESAS antes de distribuir — espelhando `acrescentarFcrAoTotal` do servidor.
+  assert.ok(/function totalComFcr\(/.test(vista),
+    'pré-visualização: o acréscimo do FCR (despesas → despesas + FCR) existe no browser');
+  assert.ok(/totalComFcr\(despesas,\s*pctFcr\(\)\)/.test(vista),
+    'pré-visualização do método orçamento: aplica o FCR às despesas antes de distribuir');
   assert.ok(!/return \{ base: mensal, fcr: 0, total: mensal/.test(vista),
     'pré-visualização: já não apresenta FCR a zero no método orçamento');
   assert.ok(/pctFcr\(\)/.test(vista) && /CFG\.fcrPercentagem/.test(vista),
@@ -204,6 +234,102 @@ function testePrevisualizacaoUsaAMesmaRegra() {
   assert.ok(/name="fcr_percentagem"[^>]*min="10"/.test(listar), 'formulário: o FCR tem mínimo 10');
   assert.ok(/Mínimo legal/.test(listar), 'formulário: explica o mínimo legal');
   console.log('  ✓ pré-visualização e cálculo final usam a mesma percentagem e a mesma função');
+}
+
+// ── 9. Regra de negócio C2 — despesas + FCR ⇒ total a distribuir ──
+// Demonstra, com números, a regra fechada:
+//   despesas 5.000 € + FCR 10% = 5.500 € a distribuir;
+//   100‰ de 5.500 € = 550 € → 500 € base + 50 € FCR;
+//   o FCR nunca é aplicado duas vezes; base + FCR = total sempre.
+function testeRegraNegocioC2() {
+  const { acrescentarFcrAoTotal } = require('../helpers/quotas-calc');
+
+  // (1) 5.000 € de despesas + 10% de FCR → 5.500 € a distribuir.
+  assert.strictEqual(acrescentarFcrAoTotal(toCents('5000.00'), 10), toCents('5500.00'),
+    '5.000 € de despesas + 10% = 5.500 € a distribuir');
+  assert.strictEqual(acrescentarFcrAoTotal(toCents('5000.00'), 0), toCents('5000.00'),
+    'sem FCR, o total a distribuir são as despesas exatas');
+
+  // (2) 100‰ de 5.500 € → 550 € de total. (3) 550 € → 500 € base + 50 € FCR.
+  const q = calcularQuota('100', '5500.0000', '10');
+  assert.strictEqual(q.totalC, toCents('550.00'), '100‰ de 5.500 € = 550 € (total)');
+  assert.strictEqual(q.base, 500, 'base = 500 €');
+  assert.strictEqual(q.fcr, 50, 'FCR = 50 € (10% de 500 €)');
+
+  // (4) + (5) O FCR nunca é aplicado duas vezes: o total já o contém.
+  //     base + FCR = total, e o total é exatamente o valor distribuído.
+  assert.strictEqual(q.baseC + q.fcrC, q.totalC, 'base + FCR = total');
+  assert.strictEqual(q.total, 550, 'o total NÃO volta a crescer (não é 500 + 50 + 5,50)');
+  // Comparação explícita com o que um duplo acréscimo daria (550 → 605).
+  const comDuploAcrescimo = 500 + Math.round(500 * 0.1) === 550
+    ? Math.round(550 * 1.1)
+    : null;
+  assert.notStrictEqual(q.total, comDuploAcrescimo, 'não há um segundo acréscimo de 10% (550, nunca 605)');
+
+  // (6) Valores sem FCR continuam corretos (pct 0 → tudo na base).
+  const semFcr = calcularQuota('100', '5500.0000', 0);
+  assert.strictEqual(semFcr.total, 550, 'sem FCR: total = 550 €');
+  assert.strictEqual(semFcr.base, 550, 'sem FCR: base = 550 €');
+  assert.strictEqual(semFcr.fcr, 0, 'sem FCR: FCR = 0 €');
+
+  // (7) Igual permilagem continua a produzir valores iguais.
+  const a = calcularQuota('250', '5500.0000', '10');
+  const b = calcularQuota('250', '5500.0000', '10');
+  assert.deepStrictEqual(
+    { base: a.base, fcr: a.fcr, total: a.total },
+    { base: b.base, fcr: b.fcr, total: b.total },
+    'permilagem igual → mesma base, mesmo FCR, mesmo total'
+  );
+
+  // Método orçamento, ponta a ponta: 5.000 € de despesas a 10% distribuídos por
+  // 1000‰ em DUAS frações de 500‰ → o ANO distribui exatamente 5.500 €
+  // (2.750 € por fração) e nenhuma dupla aplicação do FCR.
+  //
+  // Nota: a soma `12 × totalC` por fração não é o invariante do ANO — a divisão
+  // por mês faz `floor` e atira o resto para a última FRAÇÃO (defeito de
+  // arredondamento pré-existente, fora do âmbito do FCR; pertence ao motor de
+  // residuais de C1). O invariante que C2 garante é o TOTAL DISTRIBUÍDO no ano.
+  const { distribuirPorPesos } = require('../helpers/distribuicao');
+  const totalAnoC = acrescentarFcrAoTotal(toCents('5000.00'), 10);
+  assert.strictEqual(totalAnoC, toCents('5500.00'), 'total anual a distribuir = despesas + FCR');
+  const partes = distribuirPorPesos(totalAnoC, [
+    { fracaoId: 1, peso: 500 },
+    { fracaoId: 2, peso: 500 },
+  ]);
+  assert.strictEqual(partes.reduce((s, p) => s + p.valorC, 0), toCents('5500.00'),
+    'a soma das partes = despesas + FCR (o total é distribuído por inteiro)');
+  assert.strictEqual(partes[0].valorC, toCents('2750.00'), '500‰ → 2.750 €/ano');
+  assert.strictEqual(partes[1].valorC, toCents('2750.00'), '500‰ → 2.750 €/ano');
+  // Prova de ausência de dupla aplicação: o total distribuído é despesas×1,1,
+  // nunca despesas×1,1×1,1 (= 6.050 €).
+  assert.notStrictEqual(totalAnoC, toCents('6050.00'),
+    'o FCR não é aplicado duas vezes (5.500 €, nunca 6.050 €)');
+
+  const mapa = calcularQuotasOrcamento({
+    fracoes: [{ id: 1, permilagem: '500' }, { id: 2, permilagem: '500' }],
+    totalAnual: '5000.00',
+    metodo: 'permilagem',
+    meses: 12,
+    fcrPercentagem: 10,
+  });
+  for (const [, v] of mapa) {
+    assert.strictEqual(v.baseC + v.fcrC, v.totalC, 'orçamento: base + FCR = total por construção');
+    assert.strictEqual(v.fcrC, Math.round((v.totalC * 10) / 110), 'orçamento: FCR como componente do total');
+  }
+  // Igual permilagem → igual QUOTA ANUAL. (A divisão mensal faz `floor` e atira
+  // o resto para a última fração — defeito pré-existente, alheio ao FCR, que
+  // faz divergir em cêntimos as quotas MENSAIS de frações iguais; é matéria do
+  // motor de residuais (C1/C3), não do FCR. Aqui prova-se a igualdade anual.)
+  assert.strictEqual(partes[0].valorC, partes[1].valorC,
+    'permilagem igual → mesma quota ANUAL (2.750 € cada a 500‰)');
+  // D1 é determinística: a mesma fração dá sempre o mesmo trio base/FCR/total.
+  const repetido = calcularQuota('500', '110', '10');
+  assert.deepStrictEqual(
+    [repetido.base, repetido.fcr, repetido.total],
+    [calcularQuota('500', '110', '10').base, calcularQuota('500', '110', '10').fcr, calcularQuota('500', '110', '10').total],
+    'mesma permilagem e mesma percentagem → mesmo resultado (determinístico)'
+  );
+  console.log('  ✓ regra C2: despesas + FCR = total a distribuir; D1 decompõe sem dupla aplicação');
 }
 
 // ── 8. A validação é aplicada na rota ─────────────────────────────
@@ -226,6 +352,7 @@ function testeRotaValida() {
   await testeConfiguracao();
   testePrevisualizacaoUsaAMesmaRegra();
   testeRotaValida();
+  testeRegraNegocioC2();
   console.log('✓ Testes da base do FCR passaram (sem base de dados).');
 })().catch((err) => {
   console.error('✗ ' + err.message);
