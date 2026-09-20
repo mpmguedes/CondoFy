@@ -518,6 +518,98 @@ router.post('/global/suporte/:id/revogar', async (req, res) => {
   return res.redirect(destino);
 });
 
+// ── Edição dos dados do condomínio (Super Admin) ───────────────────
+//
+// PORQUE EXISTE, se já há `/admin/config` para editar os mesmos campos:
+//
+//   `/admin/config` está atrás de `tenant.comCondominioAtivo` +
+//   `tenant.comPapel('admin')`. Isso deixa DOIS buracos que só o Super Admin
+//   pode tapar:
+//
+//    1. Um erro na DESIGNACAO (ou na morada, no NIF…) cometido na criação só
+//       era corrigível por um admin do condomínio — e se ainda não existir
+//       nenhum associado, ninguém o pode corrigir. A única saída era eliminar
+//       o condomínio e recriá-lo, perdendo tudo o que já lá estivesse.
+//    2. Um condomínio DESATIVADO é ineditável por completo: o middleware
+//       `comCondominioAtivo` recusa o contexto, pelo que nem o admin nem o
+//       suporte lá entram. Sem esta rota, o operador era empurrado para a
+//       eliminação definitiva só para corrigir um nome.
+//
+// A validação é a MESMA de `/admin/config` (NIF e IBAN pelo `validacao-fiscal`,
+// no servidor, nunca confiando no browser) para não haver duas verdades sobre o
+// que é um NIF válido. O que NÃO se copia: os campos de apresentação e de
+// ficheiros que `/admin/config` também trata (logótipo, identidade visual,
+// IBAN, meios de pagamento) — pertencem ao condomínio e ao seu admin, não à
+// administração da plataforma.
+const CAMPOS_EDITAVEIS = ['designacao', 'morada', 'codigo_postal', 'localidade', 'nif'];
+
+router.post('/global/condominios/:id/dados', async (req, res) => {
+  const condominio = await Condominio.findByPk(req.params.id);
+  if (!condominio) {
+    req.flash('error_msg', 'Condomínio não encontrado.');
+    return res.redirect(urlGlobal(req, '/condominios'));
+  }
+
+  const designacao = String(req.body.designacao || '').trim();
+  if (!designacao) {
+    await auditarRecusa({
+      req,
+      acao: 'condominio_edicao_recusada',
+      entidadeId: condominio.id,
+      motivoSistema: 'designacao_obrigatoria',
+    });
+    req.flash('error_msg', 'Indique o nome do condomínio.');
+    return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
+  }
+
+  const nifValidado = validarNif(req.body.nif);
+  if (!nifValidado.ok) {
+    await auditarRecusa({
+      req,
+      acao: 'condominio_edicao_recusada',
+      entidadeId: condominio.id,
+      motivoSistema: 'nif_invalido',
+    });
+    req.flash('error_msg', nifValidado.mensagem);
+    return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
+  }
+
+  const antes = {};
+  for (const campo of CAMPOS_EDITAVEIS) antes[campo] = condominio[campo] === undefined ? null : condominio[campo];
+
+  const depois = {
+    designacao,
+    morada: String(req.body.morada || '').trim() || null,
+    codigo_postal: String(req.body.codigo_postal || '').trim() || null,
+    localidade: String(req.body.localidade || '').trim() || null,
+    nif: nifValidado.valor || null,
+  };
+
+  // Só se escreve o que MUDOU. Um POST sem alterações não gera um evento de
+  // auditoria que não corresponde a nada — mesma disciplina das transições de
+  // estado, onde reativar um ativo é recusado em vez de reescrever o mesmo.
+  const alterados = CAMPOS_EDITAVEIS.filter((c) => antes[c] !== depois[c]);
+  if (alterados.length === 0) {
+    req.flash('success_msg', 'Sem alterações a guardar.');
+    return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
+  }
+
+  await condominio.update(depois);
+
+  const detalhes = {};
+  for (const c of alterados) detalhes[c] = { de: antes[c], para: depois[c] };
+  await audit({
+    userId: req.user.id,
+    acao: 'condominio_editado',
+    entidade: 'Condominio',
+    entidadeId: condominio.id,
+    detalhes,
+  });
+
+  req.flash('success_msg', 'Dados do condomínio atualizados.');
+  return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
+});
+
 // ── Detalhe do condomínio (membros/associações) ────────────────────
 router.get('/global/condominios/:id', async (req, res) => {
   const condominio = await Condominio.findByPk(req.params.id);
