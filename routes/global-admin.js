@@ -25,6 +25,8 @@ const { eAutenticado } = require('../helpers/eAdmin');
 const { audit } = require('../helpers/audit');
 const tenant = require('../helpers/tenant');
 const suporte = require('../helpers/suporte');
+// Eliminação de condomínio: descoberta de dependências a partir do schema real.
+const eliminacaoCondominio = require('../helpers/eliminacao-condominio');
 const { validarNif } = require('../public/js/validacao-fiscal');
 
 // Prefixo do namespace global nos URLs gerados pelo router. Mantém-se
@@ -51,8 +53,6 @@ router.use((req, res, next) => {
 function urlGlobal(req, resto = '') {
   return (req && req.baseUrl ? req.baseUrl : PREFIXO_GLOBAL) + resto;
 }
-
-const TABELAS_ELIMINAR = ['fracoes', 'pessoas', 'contactos_pessoa', 'quotas', 'pagamentos', 'recibos', 'documentos', 'assembleias', 'despesas', 'contas_bancarias', 'orcamentos', 'extra_quotas', 'avisos'];
 
 // ── Painel global ───────────────────────────────────────────────────
 router.get('/global', async (req, res) => {
@@ -140,6 +140,13 @@ router.post('/global/condominios/:id/estado', async (req, res) => {
 });
 
 // Eliminação permanente — requer condomínio DESATIVADO + confirmação forte.
+//
+// A lista de tabelas NÃO é escrita à mão (foi essa a origem do defeito: uma
+// lista de 13 tabelas contra um schema com mais, e `movimentos_bancarios`
+// nunca apagada enquanto `contas_bancarias` era — FK RESTRICT ⇒ rollback
+// garantido em qualquer condomínio com contas bancárias). `eliminacaoCondominio`
+// DESCOBRE as tabelas a partir do catálogo da BD, calcula a ordem pelas FKs
+// reais e ABORTA (sem apagar nada) se encontrar uma tabela que não saiba tratar.
 router.post('/global/condominios/:id/eliminar', async (req, res) => {
   const condominio = await Condominio.findByPk(req.params.id);
   if (!condominio) {
@@ -154,38 +161,57 @@ router.post('/global/condominios/:id/eliminar', async (req, res) => {
     req.flash('error_msg', 'Para eliminar definitivamente, o condomínio tem de estar desativado primeiro.');
     return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
   }
+
   const sequelize = require('../config/database');
   const t = await sequelize.transaction();
+  let resumo;
   try {
+    // 1. Associações utilizador ↔ condomínio: só as deste condomínio. O
+    //    utilizador é global e NUNCA é apagado por perder uma associação.
+    //    (Está fora da descoberta por ser uma tabela de associação ao
+    //    próprio condomínio; o `eliminacaoCondominio` também a trataria.)
     await UserCondominio.destroy({ where: { condominio_id: condominio.id }, transaction: t });
-    // Remoção das entidades do condomínio (dados financeiros incluídos).
-    const MOD = {
-      fracoes: require('../models').Fracao,
-      pessoas: require('../models').Pessoa,
-      contactos_pessoa: require('../models').ContactoPessoa,
-      quotas: require('../models').Quota,
-      pagamentos: require('../models').Pagamento,
-      recibos: require('../models').Recibo,
-      documentos: require('../models').Documento,
-      assembleias: require('../models').Assembleia,
-      despesas: require('../models').Despesa,
-      contas_bancarias: require('../models').ContaBancaria,
-      orcamentos: require('../models').Orcamento,
-      extra_quotas: require('../models').ExtraQuota,
-      avisos: require('../models').Aviso,
-    };
-    for (const tabela of TABELAS_ELIMINAR) {
-      await MOD[tabela].destroy({ where: { condominio_id: condominio.id }, transaction: t });
-    }
-    await condominio.destroy({ transaction: t });
+
+    // 2. Dados do condomínio — ordem calculada pelas FKs reais, cada DELETE
+    //    limitado ao condomínio alvo. Fail-closed: qualquer incógnita lança.
+    resumo = await eliminacaoCondominio.eliminarDadosDoCondominio({
+      sequelize,
+      condominioId: condominio.id,
+      transaction: t,
+    });
+
+    // 3. A raiz.
+    await eliminacaoCondominio.eliminarCondominio({
+      sequelize,
+      condominioId: condominio.id,
+      transaction: t,
+    });
+
     await t.commit();
   } catch (err) {
     await t.rollback();
     console.error('[global-eliminar]', err);
-    req.flash('error_msg', 'Erro ao eliminar o condomínio.');
+    // Mensagem explícita quando a recusa é de segurança (schema não tratado),
+    // para o operador saber que NADA foi apagado e porquê.
+    if (err && err.name === 'ErroEliminacao') {
+      req.flash('error_msg', `Eliminação recusada — nada foi apagado. ${err.message}`);
+    } else {
+      req.flash('error_msg', 'Erro ao eliminar o condomínio. Nada foi apagado.');
+    }
     return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
   }
-  await audit({ userId: req.user.id, acao: 'condominio_eliminado', entidade: 'Condominio', entidadeId: req.params.id });
+
+  // 4. Auditoria FORA da transação: o commit já aconteceu. Se a auditoria
+  //    falhar (ou se a transação tivesse revertido), o registo não é
+  //    destruído pelo rollback e a tentativa continua rastreável.
+  await audit({
+    userId: req.user.id,
+    acao: 'condominio_eliminado',
+    entidade: 'Condominio',
+    entidadeId: req.params.id,
+    detalhes: { designacao: condominio.designacao, totalLinhas: resumo.total, porTabela: resumo.porTabela },
+  }).catch((e) => console.error('[global-eliminar][auditoria]', e));
+
   req.flash('success_msg', 'Condomínio eliminado permanentemente.');
   return res.redirect(urlGlobal(req, '/condominios'));
 });
