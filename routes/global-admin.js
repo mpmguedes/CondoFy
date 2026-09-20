@@ -120,23 +120,179 @@ router.post('/global/condominios', async (req, res) => {
   }
 });
 
-// Estado: desativar / reativar (ciclo Ativo → Desativado).
-router.post('/global/condominios/:id/estado', async (req, res) => {
+// ── Estado do condomínio: DESATIVAR / REATIVAR ──────────────────────
+//
+// O ciclo de vida é Ativo → Desativado → Eliminação permanente, e cada passo é
+// uma DECISÃO, não um interruptor. A implementação anterior era um toggle cego
+// (`estado === 'ativo' ? 'inativo' : 'ativo'`), com três defeitos:
+//
+//   1. Sem intenção. O botão que o operador via não determinava o efeito: o
+//      SERVIDOR decidia a partir do estado em BD. Um duplo-submit (ou um F5
+//      depois do POST) revertia silenciosamente a transição — o operador
+//      desativava e ficava ativo, sem erro nenhum.
+//   2. Sem motivo. Desativar um condomínio é uma interrupção de serviço para
+//      toda a gente que lá trabalha, e não deixava rasto do PORQUÊ.
+//   3. Sem pré-condição. Reativar um condomínio já ativo «passava» e reescrevia
+//      o mesmo estado, produzindo um evento de auditoria que não correspondia a
+//      transição nenhuma.
+//
+// Agora há DUAS rotas explícitas, e cada uma sabe o que está a fazer:
+//   POST /global/condominios/:id/desativar  → exige motivo + estado ativo
+//   POST /global/condominios/:id/reativar   → exige estado inativo
+//
+// A rota antiga `/:id/estado` mantém-se por compatibilidade, mas deixou de ser
+// um toggle: deriva a INTENÇÃO a partir de um campo `acao` do formulário
+// (`desativar`/`reativar`) e delega nas mesmas duas rotas. Sem `acao` explícita,
+// recusa — nunca adivinha. Assim não existe um caminho cego paralelo.
+const ACOES_ESTADO = ['desativar', 'reativar'];
+
+// Lê o motivo de um formulário, já normalizado. `null` quando vazio.
+function motivoDoPedido(req) {
+  const texto = String((req.body && req.body.motivo) || '').trim();
+  return texto || null;
+}
+
+// Registo de uma tentativa RECUSADA. Existe porque uma recusa é informação de
+// segurança: uma série de tentativas de desativar sem motivo, ou de eliminar
+// sem a confirmação correta, é exatamente o que se quer ver num log de
+// auditoria. A implementação anterior não registava nada nestes casos.
+async function auditarRecusa({ req, acao, entidadeId, motivoSistema, detalhes = {} }) {
+  await audit({
+    userId: req.user ? req.user.id : null,
+    acao,
+    entidade: 'Condominio',
+    entidadeId,
+    detalhes: { resultado: 'recusado', motivo: motivoSistema, ...detalhes },
+  }).catch(() => {});
+}
+
+// Desativação: exige motivo e um condomínio ATIVO. Termina os acessos de
+// suporte vigentes e audita cada um (ver `terminarVigentesDoCondominio`).
+async function desativarCondominio(req, res) {
   const condominio = await Condominio.findByPk(req.params.id);
   if (!condominio) {
     req.flash('error_msg', 'Condomínio não encontrado.');
     return res.redirect(urlGlobal(req, '/condominios'));
   }
-  const proximo = condominio.estado === 'ativo' ? 'inativo' : 'ativo';
-  await condominio.update({ estado: proximo });
+
+  const motivo = motivoDoPedido(req);
+  if (!motivo) {
+    await auditarRecusa({
+      req,
+      acao: 'condominio_desativacao_recusada',
+      entidadeId: condominio.id,
+      motivoSistema: 'motivo_obrigatorio',
+    });
+    req.flash('error_msg', 'Indique o motivo da desativação.');
+    return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
+  }
+
+  // Pré-condição: só se desativa o que está ativo. Recusar aqui é o que impede
+  // um duplo-submit de reverter a operação — a segunda tentativa encontra o
+  // estado já mudado e é recusada, em vez de o reverter.
+  if (condominio.estado !== 'ativo') {
+    await auditarRecusa({
+      req,
+      acao: 'condominio_desativacao_recusada',
+      entidadeId: condominio.id,
+      motivoSistema: 'estado_invalido',
+      detalhes: { estado_atual: condominio.estado },
+    });
+    req.flash('error_msg', 'Só é possível desativar um condomínio ativo.');
+    return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
+  }
+
+  await condominio.update({ estado: 'inativo' });
+
+  // Encerrar os acessos de suporte vigentes DESTE condomínio. Cada término tem
+  // o seu próprio evento (`suporte_terminado`, origem `condominio_desativado`),
+  // pelo que não se audita a soma — audita-se o que o operador fez, e o número
+  // fica no evento da desativação para leitura rápida.
+  const suporteEncerrado = await suporte.terminarVigentesDoCondominio({
+    condominioId: condominio.id,
+    atorId: req.user ? req.user.id : null,
+  });
+
   await audit({
     userId: req.user.id,
-    acao: proximo === 'inativo' ? 'condominio_desativado' : 'condominio_reativado',
+    acao: 'condominio_desativado',
     entidade: 'Condominio',
     entidadeId: condominio.id,
+    detalhes: {
+      designacao: condominio.designacao,
+      motivo,
+      acessos_suporte_terminados: suporteEncerrado.terminados,
+    },
   });
-  req.flash('success_msg', proximo === 'inativo' ? 'Condomínio desativado.' : 'Condomínio reativado.');
-  return res.redirect(urlGlobal(req, '/condominios'));
+
+  const extra = suporteEncerrado.terminados > 0
+    ? ` ${suporteEncerrado.terminados} acesso(s) de suporte encerrado(s).`
+    : '';
+  req.flash('success_msg', `Condomínio desativado.${extra}`);
+  return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
+}
+
+// Reativação: NÃO exige motivo (decisão de produto — o motivo do episódio está
+// no evento da desativação, e o histórico mantém-se intacto). Exige apenas que
+// o condomínio esteja desativado, para não registrar uma transição inexistente.
+async function reativarCondominio(req, res) {
+  const condominio = await Condominio.findByPk(req.params.id);
+  if (!condominio) {
+    req.flash('error_msg', 'Condomínio não encontrado.');
+    return res.redirect(urlGlobal(req, '/condominios'));
+  }
+
+  if (condominio.estado !== 'inativo') {
+    await auditarRecusa({
+      req,
+      acao: 'condominio_reativacao_recusada',
+      entidadeId: condominio.id,
+      motivoSistema: 'estado_invalido',
+      detalhes: { estado_atual: condominio.estado },
+    });
+    req.flash('error_msg', 'Só é possível reativar um condomínio desativado.');
+    return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
+  }
+
+  await condominio.update({ estado: 'ativo' });
+
+  await audit({
+    userId: req.user.id,
+    acao: 'condominio_reativado',
+    entidade: 'Condominio',
+    entidadeId: condominio.id,
+    detalhes: { designacao: condominio.designacao },
+  });
+
+  req.flash('success_msg', 'Condomínio reativado.');
+  return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
+}
+
+// Rotas explícitas — a intenção está no CAMINHO, não no estado da BD.
+router.post('/global/condominios/:id/desativar', desativarCondominio);
+router.post('/global/condominios/:id/reativar', reativarCondominio);
+
+// Rota de compatibilidade. Já não é um toggle: exige `acao` explícita e delega.
+// Um cliente antigo que só enviem o formulário sem `acao` é recusado, em vez de
+// lhe ser adivinhado o efeito pretendido — falhar fechado é preferível a fazer
+// a operação errada.
+router.post('/global/condominios/:id/estado', async (req, res) => {
+  const acao = String((req.body && req.body.acao) || '').trim();
+  if (!ACOES_ESTADO.includes(acao)) {
+    const condominio = await Condominio.findByPk(req.params.id, { attributes: ['id'] });
+    if (condominio) {
+      await auditarRecusa({
+        req,
+        acao: 'condominio_estado_recusado',
+        entidadeId: condominio.id,
+        motivoSistema: 'acao_ausente_ou_invalida',
+        detalhes: { acao_recebida: acao || null },
+      });
+    }
+    req.flash('error_msg', 'Operação inválida: indique se pretende desativar ou reativar.');
+    return res.redirect(urlGlobal(req, '/condominios'));
+  }
+  return acao === 'desativar' ? desativarCondominio(req, res) : reativarCondominio(req, res);
 });
 
 // Eliminação permanente — requer condomínio DESATIVADO + confirmação forte.
@@ -153,14 +309,42 @@ router.post('/global/condominios/:id/eliminar', async (req, res) => {
     req.flash('error_msg', 'Condomínio não encontrado.');
     return res.redirect(urlGlobal(req, '/condominios'));
   }
+  // As duas pré-condições são auditadas quando falham. A eliminação é a
+  // operação mais destrutiva do sistema: uma tentativa recusada (confirmação
+  // errada, condomínio ainda ativo) é precisamente o que se quer ver no log,
+  // e antes não deixava rasto nenhum.
   if (String(req.body.confirmo || '').trim() !== 'ELIMINAR') {
+    await auditarRecusa({
+      req,
+      acao: 'condominio_eliminacao_recusada',
+      entidadeId: condominio.id,
+      motivoSistema: 'confirmacao_invalida',
+    });
     req.flash('error_msg', 'Confirmação inválida. Escreva ELIMINAR para confirmar a eliminação permanente.');
     return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
   }
   if (condominio.estado !== 'inativo') {
+    await auditarRecusa({
+      req,
+      acao: 'condominio_eliminacao_recusada',
+      entidadeId: condominio.id,
+      motivoSistema: 'nao_esta_desativado',
+      detalhes: { estado_atual: condominio.estado },
+    });
     req.flash('error_msg', 'Para eliminar definitivamente, o condomínio tem de estar desativado primeiro.');
     return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
   }
+
+  // Acessos de suporte ANTES de eliminar. São apagados pela FK CASCADE, mas
+  // por ARRASTO — não por decisão. Contá-los e registá-los torna a eliminação
+  // reconstituível: sem isto, um acesso que existia no momento da eliminação
+  // desaparecia sem que nada na auditoria o mencionasse.
+  //
+  // Faz-se a leitura FORA da transação de propósito: é um número para o
+  // relatório, e não deve influenciar (nem falhar) a eliminação em si.
+  const acessosSuporte = await suporte
+    .contagemAcessosDoCondominio(condominio.id)
+    .catch(() => ({ total: null, vigentes: null }));
 
   const sequelize = require('../config/database');
   const t = await sequelize.transaction();
@@ -209,7 +393,13 @@ router.post('/global/condominios/:id/eliminar', async (req, res) => {
     acao: 'condominio_eliminado',
     entidade: 'Condominio',
     entidadeId: req.params.id,
-    detalhes: { designacao: condominio.designacao, totalLinhas: resumo.total, porTabela: resumo.porTabela },
+    detalhes: {
+      designacao: condominio.designacao,
+      totalLinhas: resumo.total,
+      porTabela: resumo.porTabela,
+      acessos_suporte_total: acessosSuporte.total,
+      acessos_suporte_vigentes: acessosSuporte.vigentes,
+    },
   }).catch((e) => console.error('[global-eliminar][auditoria]', e));
 
   req.flash('success_msg', 'Condomínio eliminado permanentemente.');
@@ -268,6 +458,7 @@ router.post('/global/condominios/:id/suporte', async (req, res) => {
       motivo_obrigatorio: 'Indique o motivo do acesso de suporte.',
       nivel_nao_concedivel: 'O nível pedido não pode ser concedido.',
       duracao_invalida: 'Escolha uma duração da lista.',
+      condominio_inativo: 'Este condomínio está desativado — não é possível abrir um acesso de suporte.',
     };
     req.flash('error_msg', MENSAGENS[r.erro] || 'Não foi possível iniciar o acesso de suporte.');
     return res.redirect(urlGlobal(req, `/condominios/${condominio.id}/suporte`));

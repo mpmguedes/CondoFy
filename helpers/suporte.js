@@ -29,6 +29,23 @@ function modelos() {
 const AcessoSuporte = () => modelos().AcessoSuporte;
 const UserCondominio = () => modelos().UserCondominio;
 
+// O condomínio é lido do mesmo modo diferido. Só se pede o `estado`: é a única
+// coluna que interessa a este módulo, e manter a leitura estreita deixa claro
+// que não há aqui dependência de dados do condomínio.
+//
+// Devolve o condomínio quando ATIVO, ou `null` em qualquer outro caso —
+// incluindo «não encontrado». Uma função com nome positivo («ativo») que devolve
+// null é deliberada: quem a lê não tem de repetir a comparação de estado, e não
+// há forma de a usar e esquecer a comparação.
+async function condominioAtivo(condominioId) {
+  const id = Number(condominioId);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  const { Condominio } = modelos();
+  const cond = await Condominio.findByPk(id, { attributes: ['id', 'estado'] }).catch(() => null);
+  if (!cond || cond.estado !== 'ativo') return null;
+  return cond;
+}
+
 // A auditoria é lida em DIFERIDO pela mesma razão que os modelos: `helpers/
 // audit.js` faz `require('../models')` no topo, pelo que um `require('./audit')`
 // no topo deste ficheiro (importado por `tenant.js`) capturaria a referência aos
@@ -147,6 +164,7 @@ const ORIGEM = {
   LOGOUT: 'logout', // sessão encerrada pelo próprio utilizador
   INATIVIDADE: 'inatividade', // sessão encerrada por inatividade
   CONTA_DESATIVADA: 'conta_desativada', // conta deixou de estar utilizável
+  CONDOMINIO_DESATIVADO: 'condominio_desativado', // o CONDOMÍNIO foi desativado
 };
 
 const CHAVE_SESSAO = 'suporte_ativo_id';
@@ -190,6 +208,8 @@ function paraContexto(acesso) {
 //   · o acesso tem de estar VINCULADO à SESSÃO para que foi iniciado/autorizado
 //     (`session_id` === req.sessionID) — um id sozinho não serve de prova;
 //   · o condomínio é OBRIGATÓRIO e tem de coincidir com o do acesso (âmbito fixo);
+//   · o CONDOMÍNIO tem de estar ATIVO — um condomínio desativado não tem
+//     contexto para ninguém, nem sequer para o suporte;
 //   · `pendente_autorizacao` NÃO autoriza nada (não há ativação automática);
 //   · `agora >= expira_em` ⇒ expira, audita e deixa de autorizar, no mesmo pedido.
 //
@@ -241,6 +261,27 @@ async function vigente(req, condominioId) {
   // Pedido ainda à espera do administrador do condomínio: não autoriza.
   // Não existe ativação automática — só `autorizar()` o promove.
   if (acesso.estado === 'pendente_autorizacao') {
+    return null;
+  }
+
+  // O CONDOMÍNIO tem de estar ATIVO.
+  //
+  // Sem isto, um acesso concedido antes da desativação continuava a autorizar
+  // depois dela — e como o `vigente` é o ÚNICO ponto que materializa o contexto
+  // de suporte, a desativação não tinha qualquer efeito sobre quem já estava a
+  // diagnosticar o condomínio.
+  //
+  // É a SEGUNDA camada: a primeira é a desativação terminar explicitamente os
+  // acessos vigentes (`terminarVigentesDoCondominio`). Esta camada existe para o
+  // caso de o término não ter corrido (falha parcial, acesso criado no intervalo
+  // entre a leitura e a desativação) — e é barata: uma leitura por pedido, no
+  // mesmo ponto onde já se lê o acesso.
+  //
+  // Falha FECHADA: se o condomínio não for encontrado, recusa. Um acesso órfão
+  // («condomínio desapareceu») nunca pode autorizar.
+  const condominio = await condominioAtivo(alvo);
+  if (!condominio) {
+    limparSessao(req);
     return null;
   }
 
@@ -312,6 +353,14 @@ async function temAdminAtivo(condominioId) {
 async function iniciar({ req, condominioId, motivo, nivel, duracaoMinutos } = {}) {
   const texto = String(motivo || '').trim();
   if (!texto) return { ok: false, erro: 'motivo_obrigatorio' };
+
+  // Não se abre uma janela de diagnóstico a um condomínio desativado. Seria
+  // conceder acesso a um contexto que já não está em serviço — e o acesso
+  // nasceria a autorizar algo que `vigente()` recusa. Recusar AQUI é o que
+  // impede criar um registo inútil e contraditório.
+  if (!(await condominioAtivo(condominioId))) {
+    return { ok: false, erro: 'condominio_inativo' };
+  }
 
   const nivelPedido = nivel || NIVEL_PADRAO;
   if (!nivelConcedivel(nivelPedido)) return { ok: false, erro: 'nivel_nao_concedivel' };
@@ -422,6 +471,65 @@ async function revogar({ acessoId, revogadoPor, req } = {}) {
   return { ok: true, acesso };
 }
 
+// Termina TODOS os acessos de suporte vigentes de UM condomínio.
+//
+// Chamado quando o condomínio é DESATIVADO. Um acesso de diagnóstico a um
+// condomínio desativado não tem razão de existir: o contexto deixou de fazer
+// sentido no momento em que o condomínio saiu de serviço.
+//
+// Duas garantias, ambas estruturais:
+//
+//   1. ÂMBITO POR CONDOMÍNIO. O `where` filtra por `condominio_id` e por
+//      `estado: 'ativo'`. Os acessos de OUTROS condomínios não são tocados —
+//      nem sequer são lidos. É a mesma disciplina de âmbito de `vigente()`.
+//
+//   2. UMA AUDITORIA POR ACESSO. Cada término produz o seu próprio
+//      `suporte_terminado`, com `origem: 'condominio_desativado'`. Não se
+//      agregam: um evento por acesso é o que torna o histórico reconstituível
+//      («quantos acessos morreram nesta desativação, e quais»). Agregar
+//      perderia precisamente o detalhe que um auditor quer.
+//
+// Devolve `{ total, terminados, ids }` para o chamador poder registar o número
+// na auditoria da desativação e mostrar ao operador o que aconteceu.
+//
+// NUNCA lança: uma falha aqui não pode impedir a desativação (a segunda camada
+// de defesa — `vigente()` a recusar condomínios inativos — continua a valer).
+async function terminarVigentesDoCondominio({ condominioId, atorId = null } = {}) {
+  const alvo = Number(condominioId);
+  if (!Number.isFinite(alvo) || alvo <= 0) return { total: 0, terminados: 0, ids: [] };
+
+  let vigentes = [];
+  try {
+    vigentes = await AcessoSuporte().findAll({
+      where: { condominio_id: alvo, estado: 'ativo' },
+      order: [['id', 'ASC']],
+    });
+  } catch (err) {
+    console.error('[suporte/desativacao] erro a listar acessos vigentes:', err.message);
+    return { total: 0, terminados: 0, ids: [] };
+  }
+
+  const ids = [];
+  for (const acesso of vigentes) {
+    // `terminar` já atualiza o estado e AUDITA com a origem. Não se reimplementa
+    // a transição aqui: duplicar a lógica criaria duas verdades sobre o que
+    // significa «terminado». Passa-se `req: null` porque não há sessão para
+    // limpar — o acesso pertence à sessão de OUTRO utilizador, e `limparSessao`
+    // com um `req` ausente é um no-op seguro.
+    const r = await terminar({
+      acessoId: acesso.id,
+      req: null,
+      origem: ORIGEM.CONDOMINIO_DESATIVADO,
+      utilizadorId: atorId,
+    }).catch((err) => {
+      console.error('[suporte/desativacao] erro a terminar acesso:', err.message);
+      return { ok: false };
+    });
+    if (r && r.ok) ids.push(acesso.id);
+  }
+
+  return { total: vigentes.length, terminados: ids.length, ids };
+}
 // Recusa de um pedido PENDENTE pelo administrador do condomínio.
 //
 // Distinto de `revogar`: aqui não havia autorização nenhuma para retirar — o
@@ -471,6 +579,27 @@ async function contagemPendentes(condominioId) {
   });
 }
 
+// Contagem de acessos de suporte de UM condomínio, para o relatório de
+// eliminação. Devolve `{ total, vigentes }` — quantos existiram em qualquer
+// estado e quantos estavam a autorizar no momento.
+//
+// Existe porque a eliminação apaga `acessos_suporte` por CASCADE: o registo
+// desaparece sem deixar rasto, a menos que o número seja capturado ANTES e
+// gravado na auditoria da eliminação. Não é uma decisão de negócio; é o que
+// torna a operação reconstituível depois do facto.
+//
+// Falha em ABERTO (devolve nulls) porque é informação de relatório: não pode
+// impedir a eliminação. O chamador distingue `null` de `0` — «não sei» não é
+// «nenhum».
+async function contagemAcessosDoCondominio(condominioId) {
+  const alvo = Number(condominioId);
+  if (!Number.isFinite(alvo) || alvo <= 0) return { total: null, vigentes: null };
+  const [total, vigentes] = await Promise.all([
+    AcessoSuporte().count({ where: { condominio_id: alvo } }),
+    AcessoSuporte().count({ where: { condominio_id: alvo, estado: 'ativo' } }),
+  ]);
+  return { total, vigentes };
+}
 // Pedidos à espera de autorização de um condomínio (para a página do admin).
 async function pendentesDe(condominioId) {
   if (!condominioId) return [];
@@ -543,8 +672,11 @@ module.exports = {
   revogar,
   recusar,
   terminarPorSessao,
+  terminarVigentesDoCondominio,
+  condominioAtivo,
   vigentesDe,
   contagemPendentes,
+  contagemAcessosDoCondominio,
   pendentesDe,
   ativosDe,
   historicoDe,

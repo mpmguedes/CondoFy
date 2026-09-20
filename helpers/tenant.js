@@ -22,10 +22,28 @@ function ativo(req) {
 }
 
 // Associação ATIVA do utilizador ao condomínio (null quando não existe).
+//
+// Exige DUAS condições, e é deliberado que venham juntas:
+//   1. a associação está ativa (`utilizador_condominios.estado = 'ativo'`);
+//   2. o CONDOMÍNIO está ativo (`condominios.estado = 'ativo'`).
+//
+// A condição (2) faltava, e isso tornava a desativação de um condomínio
+// puramente cosmética: a lista de escolha escondia-o (`listarCondominios`
+// filtra o estado), mas quem JÁ estava dentro continuava a trabalhar — porque
+// este `findOne` só olhava para o estado da associação. O resultado é que
+// desativar um condomínio não cortava nada a ninguém que nele estivesse.
+//
+// Com a condição (2), a desativação passa a valer para toda a gente, incluindo
+// sessões já abertas, sem depender de destruir sessões: a verificação é feita a
+// CADA pedido, a partir do estado em BD. Nota importante sobre o isolamento:
+// isto só afeta a sessão cujo `condominio_ativo_id` aponta para este
+// condomínio. Um utilizador com associação a A e a B continua a trabalhar em B
+// — a recusa é por PAR (utilizador, condomínio), nunca por utilizador.
 async function associacaoAtiva(utilizadorId, condominioId) {
   if (!utilizadorId || !condominioId) return null;
   return UserCondominio.findOne({
     where: { utilizador_id: utilizadorId, condominio_id: condominioId, estado: 'ativo' },
+    include: [{ model: Condominio, as: 'condominio', where: { estado: 'ativo' }, required: true }],
   });
 }
 
@@ -53,6 +71,11 @@ async function listarCondominios(utilizadorId) {
 // (`helpers/suporte.js`), explícito, temporário e auditado. Antes, este ramo
 // aceitava qualquer condomínio ativo para um super_admin e gravava o ativo na
 // sessão sem associação nenhuma — um bypass permanente de `req.condominioId`.
+//
+// Depende de `associacaoAtiva`, que agora exige também `condominios.estado =
+// 'ativo'`. Logo um condomínio desativado não pode ser ESCOLHIDO — fechar a
+// porta de entrada além de fechar o contexto é o que impede o ciclo
+// «desativa → entro outra vez».
 async function entrarCondominio(req, condominioId) {
   const utilizador = req.user;
   if (!utilizador) return false;
@@ -153,7 +176,25 @@ function comCondominioAtivo(req, res, next) {
       return next();
     }
 
-    // (2) Sem associação: a única via é um acesso de suporte vigente.
+    // (2) Sem associação ATIVA: distinguir «condomínio desativado» de «sem
+    //     acesso». A diferença importa para o utilizador (a mensagem) e para o
+    //     operador (um condomínio desativado tem de ser explicado, não
+    //     parecer um problema de permissões).
+    //
+    //     Aqui `associacaoAtiva` já falhou, pelo que a associação pode existir
+    //     mas estar inativa, ou o condomínio estar desativado. Só se o
+    //     condomínio não estiver ativo é que a mensagem muda.
+    const condominio = await Condominio.findByPk(id, { attributes: ['id', 'estado'] });
+    if (condominio && condominio.estado !== 'ativo') {
+      // Cortar o contexto, para não ficar a repetir a mesma tentativa em cada
+      // pedido. A SESSÃO em si permanece válida: o utilizador continua
+      // autenticado e continua a poder escolher outro condomínio.
+      delete req.session.condominio_ativo_id;
+      req.flash('error_msg', 'Este condomínio está desativado.');
+      return res.redirect('/condominios');
+    }
+
+    // (3) Sem associação: a única via é um acesso de suporte vigente.
     const acesso = await suporte.vigente(req, id);
     if (acesso) {
       req.contexto = 'suporte';
@@ -163,7 +204,7 @@ function comCondominioAtivo(req, res, next) {
       return next();
     }
 
-    // (3) Nada válido.
+    // (4) Nada válido.
     delete req.session.condominio_ativo_id;
     req.flash('error_msg', 'Não tem acesso a este condomínio.');
     return res.redirect('/condominios');

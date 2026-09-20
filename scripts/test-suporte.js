@@ -170,7 +170,15 @@ require.cache[modelosReais] = {
     AcessoSuporte: stubs.AcessoSuporte,
     UserCondominio: stubs.UserCondominio,
     AuditLog: stubs.AuditLog,
-    Condominio: { findOne: async () => null, findByPk: async () => null },
+    // O condomínio tem de estar ATIVO: `suporte.iniciar` recusa abrir um acesso
+    // a um condomínio desativado (Fase 2), e as validações de entrada que este
+    // teste mede (motivo, nível, duração) só são alcançadas depois dessa. Um
+    // stub com `null` faria a validação de estado disparar primeiro e o teste
+    // mediria a coisa errada.
+    Condominio: {
+      findOne: async () => null,
+      findByPk: async () => ({ id: 1, estado: 'ativo' }),
+    },
     User: { findByPk: async () => null },
   },
 };
