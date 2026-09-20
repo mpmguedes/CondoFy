@@ -912,25 +912,52 @@ router.get('/orcamento', async (req, res) => {
   let linhas = [];
   let totais = { orcamentado: 0, executado: 0 };
   if (orcamento) {
-    const inicio = `${ano}-01-01`;
-    const fim = `${ano}-12-31`;
+    // ── Execução orçamental: UMA agregação, sem fallback para `data` ──
+    //
+    // A competência (`competencia_ano`) é a referência canónica do exercício,
+    // exatamente como em `resumoOrcamento` (helpers/saldos.js) — que alimenta a
+    // Situação financeira. `data` NÃO é usada para decidir o ano: uma despesa com
+    // `data` em 2027 mas `competencia_ano = 2026` pertence à execução de 2026, e
+    // uma despesa sem competência (`NULL`) não entra no executado de exercício
+    // nenhum. (O recuo para `data` existe no Relatório Financeiro, mas é uma
+    // regra desse consumidor — não se replica aqui.)
+    //
+    // Uma só consulta (era N+1: um `findAll` por rubrica) e cada despesa é
+    // contabilizada UMA única vez, agrupada por `categoria_id`.
+    const porCategoria = await Despesa.findAll({
+      where: {
+        condominio_id: req.condominioId,
+        competencia_ano: ano,
+        estado: { [Op.ne]: 'anulada' },
+      },
+      attributes: ['categoria_id', [require('sequelize').fn('SUM', require('sequelize').col('valor')), 'total']],
+      group: ['categoria_id'],
+      raw: true,
+    });
+    const executadoPorCategoria = new Map();
+    for (const d of porCategoria) {
+      // `categoria_id` NULL (despesas sem categoria) agrupa-se sob a chave null.
+      const chave = d.categoria_id === null || d.categoria_id === undefined ? null : Number(d.categoria_id);
+      executadoPorCategoria.set(chave, (executadoPorCategoria.get(chave) || 0) + (Number(d.total) || 0));
+    }
+
     linhas = [];
     let orcC = 0;
     let execC = 0;
+    // Rubricas com categoria: cada uma leva o executado da SUA categoria, uma só
+    // vez. Uma rubrica sem categoria (`categoria_id` NULL) mantém o orçamento mas
+    // fica com `executado = 0` — as despesas sem categoria têm linha própria.
+    const categoriasComRubrica = new Set();
     for (const rubrica of orcamento.rubricas || []) {
       if (!rubrica.ativo) continue;
       const orcamentado = Number(rubrica.valor_anual) || 0;
-      const despesas = await Despesa.findAll({
-        where: {
-          condominio_id: req.condominioId,
-          categoria_id: rubrica.categoria_id || null,
-          data: { [Op.between]: [inicio, fim] },
-          estado: { [Op.ne]: 'anulada' },
-        },
-        attributes: ['valor'],
-        raw: true,
-      });
-      const executado = despesas.reduce((s, d) => s + (Number(d.valor) || 0), 0);
+      const catId = rubrica.categoria_id === null || rubrica.categoria_id === undefined
+        ? null : Number(rubrica.categoria_id);
+      let executado = 0;
+      if (catId !== null) {
+        executado = executadoPorCategoria.get(catId) || 0;
+        categoriasComRubrica.add(catId);
+      }
       orcC += orcamentado;
       execC += executado;
       linhas.push({
@@ -940,6 +967,37 @@ router.get('/orcamento', async (req, res) => {
         percentagem: orcamentado > 0 ? Math.round((executado / orcamentado) * 100) : 0,
       });
     }
+
+    // Despesas sem categoria (`categoria_id` NULL): UMA só linha virtual, para
+    // que o total executado feche com o do condomínio sem duplicar seja o que for.
+    const semCategoria = executadoPorCategoria.get(null) || 0;
+    if (semCategoria > 0) {
+      execC += semCategoria;
+      linhas.push({
+        nome: 'Sem categoria',
+        orcamentado: 0,
+        executado: semCategoria,
+        percentagem: 0,
+      });
+    }
+
+    // Despesas de categorias que NÃO têm rubrica no orçamento: entram na
+    // execução (o total tem de fechar), sem rubrica onde as imputar.
+    let semRubrica = 0;
+    for (const [catId, valor] of executadoPorCategoria) {
+      if (catId === null || categoriasComRubrica.has(catId)) continue;
+      semRubrica += valor;
+    }
+    if (semRubrica > 0) {
+      execC += semRubrica;
+      linhas.push({
+        nome: 'Outras categorias',
+        orcamentado: 0,
+        executado: semRubrica,
+        percentagem: 0,
+      });
+    }
+
     totais = { orcamentado: orcC, executado: execC };
   }
   totais.percentagem = totais.orcamentado > 0 ? Math.round((totais.executado / totais.orcamentado) * 100) : 0;
