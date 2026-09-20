@@ -486,21 +486,23 @@ function testeInvariantesDeCodigo() {
     assert.ok(!/setQuotaConfig\(\{/.test(ler(ficheiro)), `${ficheiro}: sem setQuotaConfig({...}) sem âmbito`);
   }
 
-  // `routes/financeiro.js` tem 4 chamadas ATIVAS com âmbito. Há ainda um bloco
-  // de código morto (E3, rotas sombreadas) que mantém uma chamada sem âmbito e
-  // que NÃO foi reativado nem alterado nesta correção.
+  // `routes/financeiro.js` tem 4 chamadas ATIVAS com âmbito. A antiga chamada
+  // sem âmbito da rota sombreada (`GET /quotas` em financeiro.js, servida na
+  // verdade por quotas-modulo.js) foi ELIMINADA: mesmo sendo código morto por
+  // sombreamento, ficava à espera de que uma reordenação da montagem a
+  // reativasse com o default global em vez do condomínio ativo.
   const financeiro = ler('routes/financeiro.js');
   assert.strictEqual(
-    (financeiro.match(/getQuotaConfig\(req\.condominioId\)/g) || []).length, 3,
-    'financeiro: 3 leituras ativas com condomínio ativo'
+    (financeiro.match(/getQuotaConfig\(req\.condominioId\)/g) || []).length, 4,
+    'financeiro: 4 leituras ativas com condomínio ativo'
   );
   assert.strictEqual(
     (financeiro.match(/setQuotaConfig\(req\.condominioId,/g) || []).length, 1,
     'financeiro: gravação com condomínio ativo'
   );
   assert.strictEqual(
-    (financeiro.match(/getQuotaConfig\(\)/g) || []).length, 1,
-    'financeiro: permanece exatamente 1 chamada sem âmbito — a do código morto E3, não reativada'
+    (financeiro.match(/getQuotaConfig\(\)/g) || []).length, 0,
+    'financeiro: NENHUMA chamada sem âmbito — a do código morto E3 foi corrigida, não reativada'
   );
 
   // O job nunca aplica uma configuração global nem consulta frações sem âmbito.
@@ -513,7 +515,7 @@ function testeInvariantesDeCodigo() {
   // A geração continua idempotente (chave fração+ano+mês+condomínio).
   assert.ok(/where: \{ fracao_id: f\.id, ano, mes, condominio_id: condominioId \}/.test(job),
     'job: a verificação de duplicados inclui o condomínio');
-  console.log('  ✓ invariantes: nenhum consumidor ativo chama a configuração sem âmbito (código morto E3 intacto)');
+  console.log('  ✓ invariantes: nenhum consumidor chama a configuração sem âmbito (incl. o código morto E3, agora corrigido)');
 }
 
 (async () => {

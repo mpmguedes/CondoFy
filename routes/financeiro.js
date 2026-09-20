@@ -776,7 +776,11 @@ router.get('/quotas', async (req, res) => {
       order: [['ano', 'DESC']],
       raw: true,
     }),
-    getQuotaConfig(),
+    // ⚠ Âmbito OBRIGATÓRIO. Sem `req.condominioId` a configuração cairia no
+    // default global e a vista mostraria valores de quota de outro condomínio
+    // (ou de nenhum). «Código morto» não é desculpa: se a ordem de montagem
+    // mudar, esta rota passa a servir `GET /quotas` e o defeito ficaria vivo.
+    getQuotaConfig(req.condominioId),
     Fracao.findAll({ where: ondeCondominio(req, { estado: 'ativo' }) }),
   ]);
 

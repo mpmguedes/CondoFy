@@ -171,11 +171,15 @@
       // O total mensal manda: o FCR é uma componente dele (tal como no servidor).
       return { ...dividir(anual / 12, pctFcr()), orcamento: orc };
     }
-    // (permilagem / 1000) × valor por 1000‰ + FCR
+    // (permilagem / 1000) × valor por 1000‰ — e depois o FCR como COMPONENTE
+    // do total, pela MESMA função D1 do servidor (`dividir()` acima, que chama
+    // `__GESCONDU_DIVIDIR_FCR` injetada a partir de `dividirComponentesQuota`).
+    // NÃO voltar a somar o FCR à base: a fórmula antiga
+    // (`fcr = round(base × pct / 100)`, `total = base + fcr`) foi removida —
+    // inflava o total em vez de o repartir.
     const valorPor1000C = Math.round(parseFloat(CFG.valorPor1000) * 100);
-    const baseC = Math.round((parseFloat(perm) || 0) / 1000 * valorPor1000C);
-    const fcrC = Math.round(baseC * pctFcr() / 100);
-    return { base: baseC / 100, fcr: fcrC / 100, total: (baseC + fcrC) / 100 };
+    const basePrecoC = Math.round((parseFloat(perm) || 0) / 1000 * valorPor1000C);
+    return dividir(basePrecoC / 100, pctFcr());
   }
 
   const wizard = {
