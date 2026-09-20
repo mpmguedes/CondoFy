@@ -97,6 +97,27 @@ async function main() {
   // de iniciar sessão: nas páginas públicas não aparecem.
   assert.ok(!r.corpo.includes('data-tema-toggle') && !r.corpo.includes('data-fonte-opcao'), 'páginas públicas sem controlos de aparência');
 
+  // ── 1.1 SEO/partilha e acessibilidade das páginas legais ───────────
+  // As páginas legais são públicas e indexáveis: têm os mesmos elementos
+  // técnicos da homepage e do pedido de acesso, em vez de ficarem sem
+  // metadados. Verificado nas duas páginas para não divergirem entre si.
+  const SEO_LEGAIS = [
+    ['meta description', /<meta name="description" content="[^"]{40,}" \/>/],
+    ['ligação canónica', /<link rel="canonical" href="[^"]+" \/>/],
+    ['Open Graph: título', /<meta property="og:title" content="[^"]+" \/>/],
+    ['Open Graph: url', /<meta property="og:url" content="[^"]+" \/>/],
+    ['Open Graph: tipo', /<meta property="og:type" content="website" \/>/],
+    ['Open Graph: site', /<meta property="og:site_name" content="GesCondu" \/>/],
+    ['Open Graph: idioma', /<meta property="og:locale" content="pt_PT" \/>/],
+    ['tema da barra', /<meta name="theme-color" content="#06213F" \/>/],
+    ['cartão de partilha', /<meta name="twitter:card" content="summary_large_image" \/>/],
+    ['ligação de salto', /<a class="legal-skip" href="#conteudo">/],
+    ['marca principal', /<main id="conteudo"/],
+  ];
+  // O ano do copyright é dinâmico (não fixo): acompanha o ano corrente, tal
+  // como o rodapé da homepage.
+  const anoAtual = new Date().getFullYear();
+
   // Conteúdo essencial servido no HTML (sem depender de JavaScript).
   const conteudoPolitica = [
     ['identificação da aplicação', 'GesCondu'],
@@ -139,12 +160,48 @@ async function main() {
   assert.ok(r.corpo.includes('LEGAL_EMAIL'), 'política: indica a variável a definir');
   assert.ok(!/NIF\s+\d/.test(r.corpo), 'política: nenhum NIF inventado');
 
+  // SEO/partilha, acessibilidade e copyright dinâmico (política).
+  for (const [nome, regex] of SEO_LEGAIS) {
+    assert.ok(regex.test(r.corpo), `política: ${nome} presente`);
+  }
+  assert.ok(r.corpo.includes(`© ${anoAtual} GesCondu`), 'política: copyright com o ano corrente');
+
   // ── 2. Termos de Utilização ────────────────────────────────────────
   let t = await pedir('/termos');
   assert.strictEqual(t.status, 200, 'GET /termos responde 200 sem sessão');
   assert.strictEqual(t.cabecalhos.location, undefined, 'termos: não redireciona (sem Location)');
   assert.ok(t.corpo.includes('<title>Termos de Utilização · GesCondu</title>'), 'termos: título correto');
   assert.ok(t.corpo.includes('class="auth-page pagina-legal"'), 'termos: mantém a casca das páginas legais');
+  // As duas páginas legais partilham a casca: os mesmos elementos técnicos têm
+  // de estar presentes nas duas, para não divergirem com o tempo.
+  for (const [nome, regex] of SEO_LEGAIS) {
+    assert.ok(regex.test(t.corpo), `termos: ${nome} presente`);
+  }
+  assert.ok(t.corpo.includes(`© ${anoAtual} GesCondu`), 'termos: copyright com o ano corrente');
+  // A descrição e a canónica são próprias de cada página (não repetidas).
+  const descPolitica = (r.corpo.match(/<meta name="description" content="([^"]+)"/) || [])[1];
+  const descTermos = (t.corpo.match(/<meta name="description" content="([^"]+)"/) || [])[1];
+  assert.ok(descPolitica && descTermos && descPolitica !== descTermos, 'política e termos: descrições distintas');
+  const canPolitica = (r.corpo.match(/<link rel="canonical" href="([^"]+)"/) || [])[1];
+  const canTermos = (t.corpo.match(/<link rel="canonical" href="([^"]+)"/) || [])[1];
+  assert.ok(canPolitica && canTermos && canPolitica !== canTermos, 'política e termos: canónicas distintas');
+  assert.ok(/\/politica-privacidade$/.test(canPolitica), 'política: canónica aponta para o seu próprio caminho');
+  assert.ok(/\/termos$/.test(canTermos), 'termos: canónica aponta para o seu próprio caminho');
+
+  // O rodapé legal tem de usar o ano dinâmico, não um ano escrito à mão.
+  // Verificar só o HTML não chega: hoje «2026» coincide com o ano corrente e a
+  // asserção passaria mesmo com o valor fixo. O que se fixa é a fonte — a
+  // casca tem de usar o helper `currentYear`, como o rodapé da homepage.
+  const cascaLegal = ler('views/partials/_pagina-legal.handlebars');
+  assert.ok(
+    /©\s*\{\{currentYear\}\}\s*GesCondu/.test(cascaLegal),
+    'casca legal: copyright com o helper currentYear (ano dinâmico)'
+  );
+  assert.ok(
+    !/©\s*20\d\d\s*GesCondu/.test(cascaLegal),
+    'casca legal: sem ano escrito à mão no copyright'
+  );
+
   const conteudoTermos = [
     ['objeto', 'Objeto'],
     ['aceitação', 'Aceitação e âmbito'],
@@ -174,7 +231,7 @@ async function main() {
     const rodape = html.slice(html.indexOf('class="auth-foot'));
     assert.ok(rodape.includes('href="/politica-privacidade"'), `${nome}: rodapé liga à Política de Privacidade`);
     assert.ok(rodape.includes('href="/termos"'), `${nome}: rodapé liga aos Termos de Utilização`);
-    assert.ok(rodape.includes('© 2026 GesCondu'), `${nome}: rodapé mantém a nota de copyright`);
+    assert.ok(rodape.includes(`© ${new Date().getFullYear()} GesCondu`), `${nome}: rodapé mantém a nota de copyright com o ano corrente`);
     assert.ok(html.includes('Voltar ao GesCondu'), `${nome}: ligação de regresso à aplicação`);
   }
   // As outras páginas públicas (entrada e escolha de condomínio) têm as mesmas ligações.

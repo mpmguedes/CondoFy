@@ -38,6 +38,17 @@ const router = express.Router();
 const VERSAO = '1.0';
 const ATUALIZADO = '2026-09-10';
 
+// Descrição própria de cada página legal, usada na meta description e na
+// partilha (Open Graph). São páginas indexáveis como as restantes públicas,
+// pelo que têm a mesma informação técnica de SEO da homepage e do pedido de
+// acesso, em vez de ficarem sem metadados.
+const DESCRICOES = {
+  '/politica-privacidade':
+    'Política de Privacidade do GesCondu: que dados pessoais são tratados na plataforma de gestão de condomínios, para que finalidades, durante quanto tempo e que direitos podem ser exercidos.',
+  '/termos':
+    'Termos de Utilização do GesCondu: condições de acesso e utilização da plataforma de gestão de condomínios, responsabilidades de cada parte e direitos do utilizador.',
+};
+
 // Elementos que a página legal exige e que só a configuração da instalação pode
 // fornecer (nunca preenchidos com dados inventados).
 const ELEMENTOS = [
@@ -77,11 +88,30 @@ function dadosLegais(req) {
   return legal;
 }
 
+// Locals de SEO/partilha das páginas legais. Seguem o mesmo contrato que
+// `helpers/home-publica.dadosHome`/`dadosPedidoAcesso` — os campos que o layout
+// `blank` já sabe consumir — para que as páginas legais fiquem ao nível das
+// restantes páginas públicas (título próprio, descrição, canónica e Open Graph).
+function dadosSeoLegais(req, caminho, titulo) {
+  const base = homePublica.urlBase(req);
+  const descricao = DESCRICOES[caminho];
+  return {
+    titulo,
+    descricao,
+    urlCanonica: base ? `${base}${caminho}` : null,
+    ogTitulo: `${titulo} · GesCondu`,
+    ogTipo: 'website',
+    ogSite: 'GesCondu',
+    ogLocale: 'pt_PT',
+    temaCor: '#06213F',
+  };
+}
+
 // Política de Privacidade (pública).
 router.get('/politica-privacidade', (req, res) => {
   res.render('publicas/politica-privacidade', {
     layout: 'blank',
-    titulo: 'Política de Privacidade',
+    ...dadosSeoLegais(req, '/politica-privacidade', 'Política de Privacidade'),
     legal: dadosLegais(req),
   });
 });
@@ -90,7 +120,7 @@ router.get('/politica-privacidade', (req, res) => {
 router.get('/termos', (req, res) => {
   res.render('publicas/termos', {
     layout: 'blank',
-    titulo: 'Termos de Utilização',
+    ...dadosSeoLegais(req, '/termos', 'Termos de Utilização'),
     legal: dadosLegais(req),
   });
 });

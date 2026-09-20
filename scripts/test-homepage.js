@@ -12,7 +12,7 @@
 //  · as secções e os mockups exigidos existem;
 //  · TODAS as ligações internas resolvem (rota conhecida ou âncora existente);
 //  · TODOS os recursos referidos (css/js/img) existem em public/;
-//  · o acesso é apresentado como sendo por convite, no hero, no CTA e no rodapé;
+//  · o acesso é apresentado como sendo por convite, no hero e no CTA final;
 //  · NÃO há preços, testemunhos, estatísticas, promessas absolutas nem
 //    funcionalidades por implementar (módulos que são apenas placeholders);
 //  · a página funciona sem JavaScript (conteúdo no HTML, menu em <details>);
@@ -360,8 +360,15 @@ async function main() {
 
   // ── Exemplos visuais identificados honestamente ───────────────────
   // A nota tem de existir e dizer, de forma clara, o que são estes elementos.
+  //
+  // A nota aparece uma única vez, no rodapé (`_home-rodape`, partilhado com a
+  // página de pedido de acesso), onde cobre a página inteira. As cópias que
+  // existiam junto de cada secção com exemplos foram removidas de propósito
+  // (commit b3e5723), pelo que a contagem esperada é 1. O que importa verificar
+  // é que a nota continua presente e que o seu texto é o correto — não quantas
+  // vezes aparece.
   const ocorrenciasNota = (html.match(/hp-nota-exemplos/g) || []).length;
-  assert.ok(ocorrenciasNota >= 3, `a nota dos exemplos visuais aparece nas secções com exemplos (${ocorrenciasNota})`);
+  assert.ok(ocorrenciasNota >= 1, `a nota dos exemplos visuais continua presente na homepage (${ocorrenciasNota})`);
   for (const frase of NOTA_EXEMPLOS) {
     assert.ok(semAcentos(html).toLowerCase().includes(semAcentos(frase).toLowerCase()),
       `nota dos exemplos: «${frase}» presente`);
