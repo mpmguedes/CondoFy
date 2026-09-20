@@ -735,6 +735,15 @@ async function main() {
     ORDER BY t.condominio_id, n_membros DESC
   `);
 
+  // Totais dos grupos mistos — usados por V4e para reconciliar
+  // «frações em grupo misto» vs «quotas futuras pendentes congeladas».
+  // n_membros é o nº de FRAÇÕES no grupo; n_com_pendente é quantas dessas
+  // frações têm pelo menos uma quota pendente futura. A diferença são frações
+  // congeladas «por tabela» que não têm quota a recalcular.
+  const nGruposMistos = v2b.length;
+  const nFracoesEmGruposMistos = v2b.reduce((a, r) => a + Number(r.n_membros || 0), 0);
+  const nFracoesMistasComPendente = v2b.reduce((a, r) => a + Number(r.n_com_pendente || 0), 0);
+
   if (!v2b.length) {
     console.log('  (nenhum grupo misto — a regra D2 não terá efeito prático hoje)');
   } else {
@@ -749,6 +758,10 @@ async function main() {
     }
     console.log('');
     console.log(`  ${v2b.length} grupo(s) misto(s) — com D2, estes grupos ficam CONGELADOS no recálculo.`);
+    console.log(`  Frações nos grupos mistos            : ${nFracoesEmGruposMistos}`);
+    console.log(`  Dessas, COM quota pendente futura    : ${nFracoesMistasComPendente}`);
+    console.log(`  Dessas, SEM quota pendente futura    : ${nFracoesEmGruposMistos - nFracoesMistasComPendente}`);
+    console.log('  → só as que têm quota pendente futura podem aparecer em V4e como congeladas.');
   }
 
   // ══ V3 ══════════════════════════════════════════════════════════════
@@ -880,57 +893,272 @@ async function main() {
   }
 
   // Diferença mensurável que a Fase A vai introduzir (D1), por condomínio.
+  //
+  // ⛔ DEFEITO CORRIGIDO (V4c). A versão anterior imprimia +743 c / +7439 c
+  // como «Δ/quota», o que é falso. A função tinha TRÊS erros que se somavam:
+  //
+  //   1) o argumento já vinha PRÉ-DIVIDIDO: chamava-se dq(round(1000*100/110))
+  //      em vez de dq(1000) — ou seja, passava-se 909 c (9,09 €) onde se queria
+  //      o total de 10 €;
+  //   2) o ramo «velho» NÃO usava a fórmula antiga. Aplicava `total*100/(100+p)`
+  //      outra vez, isto é, D1 segunda vez, com o total já reduzido. A semântica
+  //      antiga é base = total, fcr = round(total*pct/100), valor = base+fcr;
+  //   3) o ramo «novo» somava o MESMO termo duas vezes (`x + x`), quando em D1 o
+  //      total novo é simplesmente o total de entrada.
+  //
+  // Álgebra do valor errado, com T = 1000, p = 10:
+  //   a = round(T*100/(100+p)) = 909
+  //   b = round(a*100/(100+p)) = 826
+  //   velho = b + round(b*p/100) = 826 + 83 = 909   (D1 aplicada a 909, não a antiga)
+  //   novo  = b + b              = 1652             (dobro do termo)
+  //   delta = novo − a           = 743              ← os «+743 c» que saíam
+  // Para T = 10000: a = 9091, b = 8265, novo = 16530, delta = 16530 − 9091 = 7439.
+  // Ambos reproduzidos exatamente. O valor não media nada de real.
+  //
+  // A métrica correta tem TRÊS camadas que NÃO se podem misturar:
+  //   Camada 1 — impacte de D1 num TOTAL TEÓRICO (independente da permilagem);
+  //   Camada 2 — impacte numa QUOTA INDIVIDUAL (total da fração já com a
+  //              permilagem aplicada);
+  //   Camada 3 — impacte AGREGADO nas quotas futuras pendentes (soma).
   console.log('');
-  console.log('  Impacto medido de D1 (FCR como componente do total vs. FCR somado à base):');
+  console.log('  Impacto de D1 (FCR como componente do total vs. FCR somado à base):');
+  console.log('');
+
+  // ── Camada 1: funções canónicas, com as duas semânticas explícitas ──
+  //
+  // ANTIGA: base = total, fcr = round(total × pct/100), valor = base + fcr.
+  // NOVA  (D1): fcr = round(total × pct/(100+pct)), base = total − fcr, valor = total.
+  //
+  // Devolve os dois lados por inteiro para que o output possa mostrar a
+  // decomposição e não um delta órfão.
+  const semanticaD1 = (totalC, pctF) => {
+    const fcrNovoC = Math.round((totalC * pctF) / (100 + pctF));
+    const baseNovoC = totalC - fcrNovoC;
+    const fcrAntigoC = Math.round((totalC * pctF) / 100);
+    const baseAntigoC = totalC;
+    const totalNovoC = baseNovoC + fcrNovoC; // === totalC, por construção
+    const totalAntigoC = baseAntigoC + fcrAntigoC;
+    return {
+      totalC,
+      novo: { baseC: baseNovoC, fcrC: fcrNovoC, totalC: totalNovoC },
+      antigo: { baseC: baseAntigoC, fcrC: fcrAntigoC, totalC: totalAntigoC },
+      // ⚠ Δ = quanto o total ANTIGO excedia o NOVO. Positivo = a mudança REDUZ
+      // o valor em relação ao que a fórmula antiga produziria.
+      deltaC: totalAntigoC - totalNovoC,
+    };
+  };
+
+  // Tabela de referência da camada 1 (independente de qualquer condomínio).
+  // Serve de âncora: 10 € → 100 c, 100 € → 1000 c, para qualquer pct.
+  console.log('  CAMADA 1 — impacto de D1 num TOTAL TEÓRICO (sem permilagem envolvida):');
+  console.log('');
+  console.log(
+    `  ${txt('total', 12)}${txt('pct', 6)}${txt('novo base', 12)}${txt('novo fcr', 11)}` +
+      `${txt('novo total', 13)}${txt('antigo total', 14)}${txt('Δ (antigo−novo)', 18)}`
+  );
+  for (const totalC of [1000, 10000]) {
+    for (const pctF of [10]) {
+      const r = semanticaD1(totalC, pctF);
+      console.log(
+        `  ${txt(`${(totalC / 100).toFixed(2)} €`, 12)}${txt(`${pctF}%`, 6)}` +
+          `${txt(r.novo.baseC, 12)}${txt(r.novo.fcrC, 11)}${txt(r.novo.totalC, 13)}` +
+          `${txt(r.antigo.totalC, 14)}${txt(`+${r.deltaC} c`, 18)}`
+      );
+    }
+  }
+  console.log('');
+  console.log('  (Δ é independente da permilagem: é a diferença entre as duas SEMÂNTICAS');
+  console.log('   aplicadas ao mesmo total. D1 não redistribui por permilagem — isso é a');
+  console.log('   camada seguinte.)');
   console.log('');
 
   const v4c = await S(`
     SELECT q.condominio_id,
            q.fcr_percentagem,
+           q.valor_por_1000,
            COUNT(DISTINCT q.fracao_id) AS n_fracoes,
            SUM(CASE WHEN q.data_vencimento >= CURDATE() AND q.estado = 'pendente' THEN 1 ELSE 0 END) AS n_futuras_pend
     FROM quotas q
     WHERE q.fcr_percentagem IS NOT NULL AND q.fcr_percentagem > 0
-    GROUP BY q.condominio_id, q.fcr_percentagem
+    GROUP BY q.condominio_id, q.fcr_percentagem, q.valor_por_1000
     ORDER BY q.condominio_id
   `);
 
   if (!v4c.length) {
     console.log('    (nenhuma quota com FCR > 0 — a mudança de fórmula não altera valores hoje)');
   } else {
+    // ── Camadas 2 e 3, por condomínio (só se houver valor_por_1000) ──
+    console.log('  CAMADA 2 — impacto numa QUOTA INDIVIDUAL (total da fração = valor_por_1000 × permilagem/1000):');
+    console.log('  CAMADA 3 — impacto AGREGADO nas quotas futuras pendentes.');
+    console.log('');
     console.log(
-      `  ${txt('cond', 6)}${txt('fcr_%', 10)}${txt('frações', 9)}${txt('fut.pend', 10)}` +
-        `${txt('Δ/quota (10 €)', 16)}${txt('Δ/quota (100 €)', 18)}`
+      `  ${txt('cond', 6)}${txt('pct', 6)}${txt('v/1000', 12)}${txt('frações', 9)}` +
+        `${txt('fut.pend', 10)}${txt('quota típica', 14)}${txt('Δ/quota', 10)}` +
+        `${txt('Δ agregado (28 recalc.)', 26)}`
     );
     for (const r of v4c) {
       const pct = Number(r.fcr_percentagem) || 0;
-      // Comparação da semântica: FCR sobre a base vs FCR componente do total.
-      const dq = (totalC) => {
-        const velho = (() => {
-          const baseC = Math.round((totalC * 100) / (100 + pct));
-          const fcrC = Math.round((baseC * pct) / 100);
-          return baseC + fcrC;
-        })();
-        const novo = Math.round((totalC * 100) / (100 + pct)) +
-          Math.round((totalC * 100) / (100 + pct));
-        return novo - totalC;
-      };
-      const t10 = Math.round((1000 * 100) / (100 + pct));
-      const t100 = Math.round((10000 * 100) / (100 + pct));
+      const v1000 = r.valor_por_1000 === null ? null : Number(r.valor_por_1000);
+
+      if (v1000 === null || !(v1000 > 0)) {
+        console.log(
+          `  ${txt(r.condominio_id, 6)}${txt(`${pct}%`, 6)}${txt('(NULL)', 12)}` +
+            `${txt(r.n_fracoes, 9)}${txt(r.n_futuras_pend, 10)}` +
+            `  sem valor_por_1000 — não é possível medir por fração (só a camada 1 se aplica)`
+        );
+        continue;
+      }
+
+      // Quota «típica»: 1‰ de permilagem corresponde a valor_por_1000/1000.
+      // Mostrar o valor de uma fração de 1‰ dá um número pouco intuitivo; o mais
+      // informativo é a quota de uma fração de 100‰ (10% do total), que é a
+      // ordem de grandeza real. Mostra-se essa, explicitamente rotulada.
+      const permilagemRef = 100;
+      const v1000C = Math.round(v1000 * 100);
+      const escRef = Math.round(permilagemRef * 100);
+      const totalFracaoC = Math.round((v1000C * escRef) / (1000 * 100));
+      const rq = semanticaD1(totalFracaoC, pct);
+
+      // Agregado: para as futuras pendentes recalculáveis aplica-se o mesmo
+      // delta por quota (a permilagem varia, logo isto é uma ESTIMATIVA que
+      // assume permilagem de referência — dito em voz alta no rodapé).
+      const nRecalc = Number(r.n_futuras_pend) || 0;
+      const deltaAgregadoC = rq.deltaC * nRecalc;
+
       console.log(
-        `  ${txt(r.condominio_id, 6)}${txt(pct, 10)}${txt(r.n_fracoes, 9)}${txt(r.n_futuras_pend, 10)}` +
-          `${txt(`${dq(t10) >= 0 ? '+' : ''}${dq(t10)} c`, 16)}` +
-          `${txt(`${dq(t100) >= 0 ? '+' : ''}${dq(t100)} c`, 18)}`
+        `  ${txt(r.condominio_id, 6)}${txt(`${pct}%`, 6)}${txt(v1000.toFixed(4), 12)}` +
+          `${txt(r.n_fracoes, 9)}${txt(nRecalc, 10)}` +
+          `${txt(`${permilagemRef}‰: ${rq.novo.totalC} c`, 14)}` +
+          `${txt(`+${rq.deltaC} c`, 10)}${txt(`≈ +${deltaAgregadoC} c/ano`, 26)}`
       );
     }
     console.log('');
-    console.log('  (Δ = cêntimos por quota entre a semântica antiga e a nova, para um total base de');
-    console.log('   10 € e 100 € respetivamente. Valores pequenos são esperados — o efeito real está');
-    console.log('   na SOMA anual, não na quota individual.)');
+    console.log('  ⚠ A camada 3 é uma ESTIMATIVA: multiplica o Δ de uma quota de 100‰ pelo');
+    console.log('   número de futuras pendentes. A permilagem real varia por fração, logo o');
+    console.log('   agregado verdadeiro só sai por fração (ver V4e). Não usar como valor final.');
+  }
+
+  // ── V4e: detalhe por fração das quotas futuras RECALCULÁVEIS ────────
+  //
+  // Reconcilia: futuras pendentes − congeladas por D2 = recalculáveis.
+  // Uma quota fica CONGELADA por D2 se a SUA fração pertence a um grupo de
+  // permilagem exata onde alguma fração já tem quota parcialmente_paga ou paga.
+  // Aqui mostram-se só as recalculáveis, com o valor atual, o que D1 daria, e o
+  // delta — tudo calculado em memória a partir de SELECT (a BD não é tocada).
+  linha('V4e. Futuras pendentes recalculáveis — detalhe por fração');
+  console.log('  Recalculável = pendente futura cuja fração NÃO está num grupo misto (D2).');
+  console.log('');
+
+  const v4e = await S(`
+    SELECT q.condominio_id,
+           q.fracao_id,
+           f.designacao,
+           q.ano,
+           q.mes,
+           q.valor,
+           q.valor_base,
+           q.valor_fcr,
+           q.valor_por_1000,
+           q.fcr_percentagem,
+           q.permilagem_aplicada,
+           f.permilagem AS permilagem_fracao,
+           CAST(f.permilagem AS CHAR) AS permilagem_chave,
+           (SELECT COUNT(*) FROM quotas q2
+             WHERE q2.fracao_id = q.fracao_id
+               AND q2.estado IN ('parcialmente_paga','paga')) AS n_pagas_na_fracao,
+           (SELECT COUNT(*) FROM quotas q3
+              JOIN fracoes f3 ON f3.id = q3.fracao_id
+             WHERE f3.condominio_id = q.condominio_id
+               AND CAST(f3.permilagem AS CHAR) = CAST(f.permilagem AS CHAR)
+               AND q3.estado IN ('parcialmente_paga','paga')) AS n_pagas_no_grupo
+    FROM quotas q
+    JOIN fracoes f ON f.id = q.fracao_id
+    WHERE q.estado = 'pendente'
+      AND q.data_vencimento >= CURDATE()
+      AND q.valor_por_1000 IS NOT NULL
+      AND q.fcr_percentagem IS NOT NULL AND q.fcr_percentagem > 0
+    ORDER BY q.condominio_id, q.fracao_id, q.ano, q.mes
+  `);
+
+  const recalc = v4e.filter((r) => Number(r.n_pagas_no_grupo) === 0);
+  const congeladas = v4e.filter((r) => Number(r.n_pagas_no_grupo) > 0);
+
+  console.log(`  futuras pendentes (com valor_por_1000 e FCR>0) : ${v4e.length}`);
+  console.log(`  − congeladas por D2 (grupo misto)             : ${congeladas.length}`);
+  console.log(`  = recalculáveis                               : ${recalc.length}`);
+  console.log('');
+  console.log('  ⚠ Os três números acima vêm da BD, não de constantes. Reconcilição:');
+  console.log(`     grupos mistos (V2b)                     : ${nGruposMistos}`);
+  console.log(`     frações nesses grupos (V2b)             : ${nFracoesEmGruposMistos}`);
+  console.log(`     dessas, COM quota pendente futura       : ${nFracoesMistasComPendente}`);
+  console.log(`     dessas, SEM quota pendente futura       : ${nFracoesEmGruposMistos - nFracoesMistasComPendente}`);
+  console.log(`     congeladas observadas em V4e            : ${congeladas.length}`);
+  if (nFracoesMistasComPendente !== congeladas.length) {
+    console.log('     ↳ DIVERGE. Uma fração de grupo misto tem quota pendente futura mas não');
+    console.log('       aparece em V4e — só pode ser por data_vencimento < CURDATE(),');
+    console.log('       valor_por_1000 NULL ou fcr_percentagem NULL/0. Ver as três');
+    console.log('       condições do WHERE de V4e antes de tirar conclusões.');
+  } else {
+    console.log('     ✓ consistente: cada fração mista com pendente futura é 1 quota congelada.');
+  }
+  console.log(`     total de futuras pendentes com v/1000 e FCR>0 : ${v4e.length}`);
+  console.log(`     recalculáveis (futuras − congeladas)          : ${recalc.length}`);
+  console.log('');
+
+  if (!recalc.length) {
+    console.log('  (nenhuma quota recalculável)');
+  } else {
+    console.log(
+      `  ${txt('cond', 6)}${txt('fração', 8)}${txt('mês', 9)}${txt('perm‰', 9)}` +
+        `${txt('atual', 10)}${txt('D1', 10)}${txt('Δ', 9)}`
+    );
+    let sAtual = 0;
+    let sD1 = 0;
+    let sDelta = 0;
+    for (const r of recalc) {
+      const pct = Number(r.fcr_percentagem) || 0;
+      // Total da quota: usa o valor gravado em cêntimos (é o que está na BD).
+      const atualC = Math.round(Number(r.valor) * 100);
+      // O que D1 daria: o TOTAL não muda de grandeza, muda a COMPOSIÇÃO.
+      // Em D1, `valor` = total, `valor_fcr` = componente. Portanto o valor D1 é
+      // o próprio total atual (o total já era o total). O que muda é a divisão.
+      const fl = semanticaD1(atualC, pct);
+      sAtual += atualC;
+      sD1 += fl.novo.totalC;
+      sDelta += fl.deltaC;
+      console.log(
+        `  ${txt(r.condominio_id, 6)}${txt(r.fracao_id, 8)}${txt(`${r.ano}-${String(r.mes).padStart(2, '0')}`, 9)}` +
+          `${txt(String(r.permilagem_chave), 9)}${txt(atualC, 10)}${txt(fl.novo.totalC, 10)}` +
+          `${txt(`+${fl.deltaC}`, 9)}`
+      );
+    }
+    console.log('');
+    console.log(`  Σ atual (cêntimos) : ${sAtual}`);
+    console.log(`  Σ D1    (cêntimos) : ${sD1}`);
+    console.log(`  Σ delta (cêntimos) : +${sDelta}`);
+    console.log('');
+    console.log('  ⚠ Nota de semântica: por D1, o TOTAL de uma quota não se altera — o que');
+    console.log('   muda é a COMPOSIÇÃO (fcr = componente do total, em vez de acrescentado).');
+    console.log('   O Δ mostrado é o que a fórmula ANTIGA produziria A MAIS que D1 para o');
+    console.log('   MESMO total. Como o total gravado já é o total em vigor, o Δ é o');
+    console.log('   acréscimo que se evita ao NÃO voltar a somar o FCR.');
+  }
+
+  if (congeladas.length) {
+    console.log('');
+    console.log(`  Congeladas por D2 (${congeladas.length}) — não serão recalculadas:`);
+    for (const r of congeladas) {
+      console.log(
+        `    cond ${r.condominio_id} · fração ${r.fracao_id} (${r.designacao || '—'}) · ` +
+          `${r.ano}-${String(r.mes).padStart(2, '0')} · perm ${r.permilagem_chave}‰ · ` +
+          `valor ${(Number(r.valor)).toFixed(2)} €`
+      );
+    }
   }
 
   // Coerência dos valores gravados: valor = valor_base + valor_fcr?
   linha('V4d. Coerência dos valores já gravados (valor = base + FCR?)');
+
   const v4d = await S(`
     SELECT q.condominio_id,
            COUNT(*) AS n_incoerentes,
