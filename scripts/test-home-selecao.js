@@ -33,7 +33,7 @@ function testar() {
   //    (Antes ia para /condominios; com o namespace global separado, a área
   //    natural de quem tem privilégio global é o painel global.)
   d = destinoAposLogin({ meus: [], ativo: null, user: { role: 'condomino', role_global: 'super_admin' } });
-  assert.strictEqual(d.redirecionar, '/admin/global', 'super admin sem ativo → painel global');
+  assert.strictEqual(d.redirecionar, '/global', 'super admin sem ativo → painel global');
 
   // 5. INVARIANTE CENTRAL — SUPER-ADMIN ≠ ADMIN DE CONDOMÍNIO.
   //    Um super admin com um id de condomínio na sessão mas SEM associação NÃO
@@ -43,7 +43,7 @@ function testar() {
   //    suporte é agora uma concessão própria (`acessos_suporte`), com motivo e
   //    prazo, resolvida em `comCondominioAtivo` e nunca pelo destino pós-login.
   d = destinoAposLogin({ meus: [], ativo: 7, user: { role: 'condomino', role_global: 'super_admin' } });
-  assert.strictEqual(d.redirecionar, '/admin/global', 'super admin sem associação → painel global (nunca /admin)');
+  assert.strictEqual(d.redirecionar, '/global', 'super admin sem associação → painel global (nunca /admin)');
   assert.notStrictEqual(d.redirecionar, '/admin', 'um id na sessão NÃO dá contexto de condomínio');
   assert.strictEqual(d.modoSuporte, false, 'não existe modo suporte implícito');
   assert.strictEqual(d.limparAtivo, true, 'o ativo órfão é limpo');

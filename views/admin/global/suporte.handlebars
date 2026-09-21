@@ -3,7 +3,7 @@
     <h1>Acesso de suporte</h1>
     <p class="subtitle">{{condominio.designacao}} · Administração global</p>
   </div>
-  <a href="/admin/global/condominios/{{condominio.id}}" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1" style="font-size:1rem">arrow_back</span>Condomínio</a>
+  <a href="/global/condominios/{{condominio.id}}" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1" style="font-size:1rem">arrow_back</span>Condomínio</a>
 </div>
 
 {{!--
@@ -29,7 +29,7 @@
 <div class="card mb-4">
   <div class="card-body">
     <h2 class="h6 mb-3">Novo acesso</h2>
-    <form action="/admin/global/condominios/{{condominio.id}}/suporte" method="POST" class="row g-3 align-items-end">
+    <form action="/global/condominios/{{condominio.id}}/suporte" method="POST" class="row g-3 align-items-end">
       <div class="col-12 col-md-5">
         <label class="form-label" for="motivo">Motivo *</label>
         <input type="text" class="form-control" id="motivo" name="motivo" required maxlength="255"
@@ -101,7 +101,7 @@
           <td><span class="badge text-bg-secondary">{{nivel}}</span></td>
           <td class="small text-nowrap">{{expira_em}}</td>
           <td class="text-end">
-            <form action="/admin/global/suporte/{{id}}/terminar" method="POST" class="d-inline">
+            <form action="/global/suporte/{{id}}/terminar" method="POST" class="d-inline">
               <button class="btn btn-sm btn-outline-danger">Terminar</button>
             </form>
           </td>

@@ -230,11 +230,31 @@ const pedir = (base, caminho, corpo) => new Promise((resolve) => {
   req.end(dados);
 });
 
-// O router declara os seus caminhos já com o prefixo `/global` e está montado
-// em `/global` (app.js) — pelo que o URL REAL tem o prefixo duas vezes. Este
-// helper existe para que a duplicação seja explícita e não um erro de digitação
-// repetido 18 vezes.
-const rota = (resto) => `/global/global${resto}`;
+// Convenção ÚNICA da área global: `/global/...`. O router declara caminhos
+// RELATIVOS à montagem (`/condominios`, `/utilizadores`…) e está montado em
+// `/global` (app.js), pelo que o URL real é `/global` + o caminho declarado.
+//
+// Este helper deriva o prefixo da MONTAGEM real em vez de o escrever à mão:
+// antes escrevia `/global/global`, o que codificava o defeito do prefixo
+// duplicado e fazia o teste passar com a área global inalcançável. Ver a
+// verificação «o router não volta a duplicar o prefixo», mais abaixo.
+const PREFIXO_MONTAGEM = '/global';
+const rota = (resto) => `${PREFIXO_MONTAGEM}${resto}`;
+
+// Guarda de regressão: nenhum caminho declarado no router pode começar por
+// `/global`, senão o prefixo duplica-se outra vez (é somado ao da montagem).
+{
+  const router = require(path.join(RAIZ, 'routes', 'global-admin.js'));
+  const duplicados = router.stack
+    .filter((l) => l.route)
+    .map((l) => l.route.path)
+    .filter((p) => p === '/global' || p.startsWith('/global/'));
+  assert.strictEqual(
+    duplicados.length,
+    0,
+    `routes/global-admin.js volta a declarar caminhos com o prefixo /global (duplica com a montagem em ${PREFIXO_MONTAGEM}): ${duplicados.join(', ')}`
+  );
+}
 
 // ── Auxiliares ──────────────────────────────────────────────────────
 const estadoDe = (bd, id) => (bd.condominios.find((c) => Number(c.id) === Number(id)) || {}).estado;

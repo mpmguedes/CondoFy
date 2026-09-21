@@ -146,8 +146,8 @@ function camposEditaveisDoHandler() {
 // corpo do handler, para não contaminar com os `req.body` das outras rotas).
 function handlerDeEdicao() {
   const src = ler(HANDLER);
-  const inicio = src.indexOf("router.post('/global/condominios/:id/dados'");
-  assert.ok(inicio !== -1, 'a rota POST /global/condominios/:id/dados tem de existir');
+  const inicio = src.indexOf("router.post('/condominios/:id/dados'");
+  assert.ok(inicio !== -1, 'a rota POST /condominios/:id/dados tem de existir (relativa à montagem em /global)');
   const seguinte = src.indexOf('\nrouter.', inicio + 10);
   return src.slice(inicio, seguinte === -1 ? src.length : seguinte);
 }
@@ -214,9 +214,11 @@ async function exercerHandler({ corpo, condominio, inexistente = false }) {
     res.redirect = (url) => { capturado.redirect = url; return redirectOriginal(url); };
     next();
   });
-  // O router declara `/global/…`; aqui monta-se na raiz para o pedido ser
-  // direto (`/global/condominios/:id/dados`), sem o prefixo duplicado do shim.
-  app.use(router);
+  // Montagem IGUAL à do app.js: o router declara caminhos relativos e vive em
+  // `/global`, pelo que o pedido é `/global/condominios/:id/dados`. Montar na
+  // raiz faria o teste passar com um prefixo que a aplicação não serve — era
+  // exatamente esse desalinhamento que o teste tem de apanhar.
+  app.use('/global', router);
   app.use((err, req, res, _next) => { capturado.erro = err && err.message; res.status(500).json({ erro: capturado.erro }); });
 
   const servidor = await new Promise((resolve) => {
@@ -428,8 +430,8 @@ async function main() {
   titulo('13. A rota declara-se no handler e não colide com a criação');
   {
     const src = ler(HANDLER);
-    assert.ok(src.includes("router.post('/global/condominios/:id/dados'"), 'a rota de edição tem de estar declarada');
-    assert.ok(src.includes("router.post('/global/condominios'"), 'a criação tem de continuar a existir');
+    assert.ok(src.includes("router.post('/condominios/:id/dados'"), 'a rota de edição tem de estar declarada (relativa à montagem)');
+    assert.ok(src.includes("router.post('/condominios'"), 'a criação tem de continuar a existir');
     ok('rota de edição declarada, criação intacta');
   }
 

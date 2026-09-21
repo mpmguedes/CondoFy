@@ -428,9 +428,9 @@ assert.ok(!html.includes('/admin/documentos/6/ficheiro'), 'email doc: sem rota i
 const globalIndex = handlebars.compile(ler('admin/global/index.handlebars'));
 html = globalIndex({ titulo: 'Administração global', resumo: { condominios: 3, ativos: 2, inativos: 1, utilizadores: 9, superAdmins: 1, auditoria: 42 } });
 assert.ok(html.includes('Administração global'), 'global: título do painel');
-assert.ok(html.includes('/admin/global/condominios'), 'global: link condomínios');
-assert.ok(html.includes('/admin/global/utilizadores'), 'global: link utilizadores');
-assert.ok(html.includes('/admin/global/auditoria'), 'global: link auditoria');
+assert.ok(html.includes('/global/condominios'), 'global: link condomínios');
+assert.ok(html.includes('/global/utilizadores'), 'global: link utilizadores');
+assert.ok(html.includes('/global/auditoria'), 'global: link auditoria');
 
 const globalCondominios = handlebars.compile(ler('admin/global/condominios.handlebars'));
 html = globalCondominios({ titulo: 'Condomínios · Global', lista: [{ id: 1, designacao: 'Condomínio Jardim', morada: 'Rua A', estado: 'ativo', fracoes: 4, membros: 2 }, { id: 2, designacao: 'Condomínio Mar', morada: null, estado: 'inativo', fracoes: 0, membros: 0 }] });
@@ -456,7 +456,7 @@ const globalUtilizadores = handlebars.compile(ler('admin/global/utilizadores.han
 html = globalUtilizadores({ titulo: 'Utilizadores · Global', utilizadores: [{ id: 1, nome: 'Ana', email: 'ana@exemplo.pt', ativo: true, email_confirmado: true, role_global: 'super_admin', associacoes: 3 }, { id: 2, nome: 'Bruno', email: 'bruno@exemplo.pt', ativo: true, email_confirmado: false, role_global: null, associacoes: 1 }] });
 assert.ok(html.includes('Super Admin'), 'global users: badge super admin');
 assert.ok(html.includes('Email por confirmar'), 'global users: badge email por confirmar');
-assert.ok(html.includes('/admin/global/utilizadores/1/global'), 'global users: ação papel global');
+assert.ok(html.includes('/global/utilizadores/1/global'), 'global users: ação papel global');
 
 const globalAuditoria = handlebars.compile(ler('admin/global/auditoria.handlebars'));
 html = globalAuditoria({
@@ -469,9 +469,20 @@ assert.ok(html.includes('condominio_criado'), 'global auditoria: ação listada'
 assert.ok(html.includes('ana@exemplo.pt'), 'global auditoria: utilizador do registo');
 assert.ok(html.includes('name="acao"'), 'global auditoria: filtro por ação');
 
+// Convenção ÚNICA da área global: `/global/...`. Nenhuma vista desta área pode
+// voltar a gerar `/admin/global` — foi esse desalinhamento (vistas a gerar
+// `/admin/global`, router a servir `/global/global`) que deixou toda a
+// Administração Global inalcançável pela interface. O `/admin/global` continua
+// a existir APENAS como shim de compatibilidade em app.js.
+for (const f of ['index', 'condominios', 'condominio', 'utilizadores', 'auditoria', 'suporte']) {
+  const fonte = ler(`admin/global/${f}.handlebars`);
+  assert.ok(!fonte.includes('/admin/global'),
+    `global/${f}.handlebars: a vista ainda gera URLs /admin/global (a convenção é /global)`);
+}
+
 // 12. Sidebar — ligação à administração global só para Super Admin
-html = layout({ body: 'ok', user: { nome: 'Ana', role: 'condomino', role_global: 'super_admin' }, isAdmin: true, condominio: contexto.condominio, currentPath: '/admin/global' });
-assert.ok(html.includes('href="/admin/global"'), 'sidebar: link Global visível para super_admin');
+html = layout({ body: 'ok', user: { nome: 'Ana', role: 'condomino', role_global: 'super_admin' }, isAdmin: true, condominio: contexto.condominio, currentPath: '/global' });
+assert.ok(html.includes('href="/global"'), 'sidebar: link Global visível para super_admin');
 html = layout({ body: 'ok', user: { nome: 'Bruno', role: 'admin' }, isAdmin: true, condominio: contexto.condominio, currentPath: '/admin/quotas' });
 assert.ok(!html.includes('Administração global'), 'sidebar: grupo Global oculto sem super_admin');
 

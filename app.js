@@ -254,20 +254,25 @@ app.use('/', require('./routes/auth'));
 // sem sessão, sem condomínio ativo e sem permissões — ver routes/publicas.js.
 app.use('/', require('./routes/publicas'));
 // ── Administração GLOBAL (GesCondu) — namespace PRÓPRIO: /global ────
-// Antes estava montado em `/admin`, o que colidia com o backoffice do
-// condomínio: o router global declara a sua guarda com `router.use`, que corre
-// em TODOS os pedidos que entram no router (mesmo sem correspondência de rota),
-// pelo que `GET /admin` de um admin/gestor de condomínio era interceptado e
-// devolvia `302 /` — e `routes/admin.js`, montado depois, nunca era alcançado.
-// Causa do ciclo `/ → /admin → / → …`.
+// Convenção ÚNICA: os URLs desta área são `/global/...`. O router declara
+// caminhos RELATIVOS à montagem (`/`, `/condominios`…), pelo que o prefixo
+// `/global` NÃO pode voltar a aparecer lá dentro — foi isso que produziu
+// `/global/global/...` e deixou a área inalcançável pela interface.
+//
+// Porque não em `/admin`: antes estava montado em `/admin`, o que colidia com o
+// backoffice do condomínio: o router global declara a sua guarda com
+// `router.use`, que corre em TODOS os pedidos que entram no router (mesmo sem
+// correspondência de rota), pelo que `GET /admin` de um admin/gestor de
+// condomínio era interceptado e devolvia `302 /` — e `routes/admin.js`, montado
+// depois, nunca era alcançado. Causa do ciclo `/ → /admin → / → …`.
 // Agora `/admin` é EXCLUSIVAMENTE o backoffice do condomínio.
 app.use('/global', require('./routes/global-admin'));
 // Compatibilidade: os URLs antigos `/admin/global*` continuam a responder,
 // redirecionados (302, para não ser cacheado como permanente por browsers ou
-// pelo proxy) para o equivalente em `/global*`. Preserva o resto do caminho e
-// a query string. Fica ANTES dos routers de `/admin` e é montado por prefixo
-// exato de subárvore (`/admin/global`), pelo que não captura `/admin` nem
-// `/admin/global-outra-coisa`.
+// pelo proxy) para o equivalente canónico em `/global*`. Preserva o resto do
+// caminho e a query string. Fica ANTES dos routers de `/admin` e é montado por
+// prefixo exato de subárvore (`/admin/global`), pelo que não captura `/admin`
+// nem `/admin/global-outra-coisa`.
 app.use('/admin/global', (req, res) => {
   const resto = req.originalUrl.slice('/admin/global'.length);
   return res.redirect(302, '/global' + resto);

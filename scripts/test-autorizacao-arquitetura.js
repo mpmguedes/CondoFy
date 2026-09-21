@@ -79,13 +79,13 @@ feito('C. condómino (leitura) → /condomino (mesmo com users.role=admin)');
 
 // ── D. Super Admin sem condomínio ativo → painel global ─────────────
 d = destinoAposLogin({ meus: [], ativo: null, user: USER({ role: 'condomino', role_global: 'super_admin' }) });
-assert.strictEqual(d.redirecionar, '/admin/global', 'D: super admin sem ativo → /admin/global');
-feito('D. super admin sem ativo → /admin/global');
+assert.strictEqual(d.redirecionar, '/global', 'D: super admin sem ativo → /global');
+feito('D. super admin sem ativo → /global');
 
 // O privilégio global não depende de `users.role` (aqui contradiz de propósito).
 d = destinoAposLogin({ meus: [], ativo: null, user: USER({ role: 'admin', role_global: 'super_admin' }) });
-assert.strictEqual(d.redirecionar, '/admin/global', 'D: role_global decide, users.role é irrelevante');
-feito('D. super admin com users.role=admin → /admin/global (mesmo destino)');
+assert.strictEqual(d.redirecionar, '/global', 'D: role_global decide, users.role é irrelevante');
+feito('D. super admin com users.role=admin → /global (mesmo destino)');
 
 // ── D2. Super Admin com id de condomínio na sessão SEM associação ────
 // INVARIANTE CENTRAL: SUPER-ADMIN ≠ ADMIN DE CONDOMÍNIO.
@@ -98,9 +98,9 @@ feito('D. super admin com users.role=admin → /admin/global (mesmo destino)');
 // o acesso de suporte (`acessos_suporte`), resolvido em `comCondominioAtivo`
 // via `req.suporte`, e que nunca produz `req.papelCondominio` de admin/gestor.
 d = destinoAposLogin({ meus: [], ativo: 5, user: USER({ role: 'condomino', role_global: 'super_admin' }) });
-assert.strictEqual(d.redirecionar, '/admin/global', 'D2: super admin sem associação → /admin/global (nunca /admin)');
+assert.strictEqual(d.redirecionar, '/global', 'D2: super admin sem associação → /global (nunca /admin)');
 assert.notStrictEqual(d.redirecionar, '/admin', 'D2: um id na sessão NÃO dá contexto de condomínio');
-feito('D2. super admin sem associação (ativo na sessão) → /admin/global');
+feito('D2. super admin sem associação (ativo na sessão) → /global');
 
 // Já não existe "modo suporte" derivado do eixo global: o contexto de suporte é
 // uma concessão própria e vive em `req.suporte`, não no destino pós-login.
@@ -120,8 +120,8 @@ feito('D2b. super admin com associação real → /admin (associação tem prece
 
 // E o inverso: sem associação, mesmo com o id na sessão, NUNCA /admin.
 d = destinoAposLogin({ meus: [COND(9, 'admin')], ativo: 5, user: USER({ role: 'condomino', role_global: 'super_admin' }) });
-assert.strictEqual(d.redirecionar, '/admin/global', 'D2c: ativo que não é meu → /admin/global');
-feito('D2c. super admin com ativo de OUTRO condomínio → /admin/global');
+assert.strictEqual(d.redirecionar, '/global', 'D2c: ativo que não é meu → /global');
+feito('D2c. super admin com ativo de OUTRO condomínio → /global');
 
 // ── E. Vários condomínios com papéis diferentes ─────────────────────
 const VARIOS = [COND(3, 'leitura'), COND(5, 'admin'), COND(7, 'gestor')];
@@ -182,7 +182,7 @@ for (const papel of PAPEIS_UC) {
           // (que é quem toma a decisão). Nunca um destino que reentre no
           // próprio painel por outra via.
           assert.ok(
-            ['/admin', '/condomino', '/condominios', '/admin/global'].includes(r.redirecionar),
+            ['/admin', '/condomino', '/condominios', '/global'].includes(r.redirecionar),
             `destino inesperado: ${r.redirecionar}`
           );
         }
@@ -192,8 +192,8 @@ for (const papel of PAPEIS_UC) {
 }
 feito(`Invariante anti-ciclo verificado em ${combinacoes} combinações (destinos: ${[...destinos].sort().join(', ')})`);
 
-// Um destino só pode ser `/admin/global` quando NÃO há condomínio ativo —
-// é a condição que impede `/admin → / → /admin/global` com ativo definido.
+// Um destino só pode ser `/global` quando NÃO há condomínio ativo —
+// é a condição que impede `/admin → / → /global` com ativo definido.
 for (const legado of LEGADOS) {
   for (const papel of PAPEIS_UC) {
     const comAtivo = destinoAposLogin({
@@ -203,12 +203,12 @@ for (const legado of LEGADOS) {
     });
     assert.notStrictEqual(
       comAtivo.redirecionar,
-      '/admin/global',
+      '/global',
       'com condomínio ativo, um super admin nunca vai para o painel global (ciclo)'
     );
   }
 }
-feito('Com condomínio ativo, o destino global nunca é /admin/global');
+feito('Com condomínio ativo, o destino global nunca é /global');
 
 // ─────────────────────────────────────────────────────────────────────
 // 3. `users.role` JÁ NÃO APARECE COMO FONTE DE DECISÃO

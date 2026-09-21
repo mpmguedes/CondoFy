@@ -323,9 +323,8 @@ function preverFluxo({ user, cond, assoc, listarCondominios, associacaoAtiva, gl
 
   // GET / (sem condomínio ativo na sessão) — decide destinoInicial().
   if (eGlobal) {
-    evento.push({ de: 'GET /', para: 'GET /admin/global', razao: "privilegio global sem condominio ativo → painel global (helpers/tenant.js: destinoInicial)" });
-    evento.push({ de: 'GET /admin/global', para: 'GET /global', razao: 'shim 302 (app.js): namespace global separado do backoffice' });
-    evento.push({ de: 'GET /global', para: 'HTTP 200', razao: 'guarda eSuperAdmin passa (routes/global-admin.js)' });
+    evento.push({ de: 'GET /', para: 'GET /global', razao: "privilegio global sem condominio ativo → painel global (helpers/tenant.js: destinoInicial)" });
+    evento.push({ de: 'GET /global', para: 'HTTP 200', razao: 'guarda eSuperAdmin passa (routes/global-admin.js); /global é o namespace canónico' });
     return { ciclo: null, evento };
   }
 

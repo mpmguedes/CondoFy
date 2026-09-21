@@ -142,6 +142,33 @@ function acoesAceitas() {
   return m[1].split(',').map((s) => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
 }
 
+// ── A verdade vem do app.js: a MONTAGEM real do router global ────────
+// O prefixo é LIDO do `app.use('<prefixo>', require('./routes/global-admin'))`.
+// Escrevê-lo à mão neste teste permitia a concordância errada que originou o
+// defeito: a vista gerava `/admin/global/...`, o router declarava `/global/...`
+// e a montagem era `/global`, produzindo `/global/global/...`. Nenhum teste
+// comparava as TRÊS coisas ao mesmo tempo; agora este deriva-as do servidor.
+function montagemGlobal() {
+  const src = ler('app.js');
+  const m = src.match(/app\.use\(\s*'([^']+)'\s*,\s*require\(\s*'\.\/routes\/global-admin'\s*\)\s*\)/);
+  assert.ok(m, "não foi encontrada em app.js a montagem app.use('<prefixo>', require('./routes/global-admin'))");
+  return m[1];
+}
+
+// Caminhos DECLARADOS no router — relativos à montagem (é o contrato do Express:
+// a URL real é montagem + caminho declarado).
+function caminhosDeclarados() {
+  const router = require(path.join(RAIZ, HANDLER));
+  return router.stack.filter((l) => l.route).map((l) => l.route.path);
+}
+
+// A URL COMPLETA e canónica de um recurso da área global, tal como o servidor a
+// serve: montagem real + caminho declarado (com `:id` substituído).
+function urlCanonica(prefixo, caminhoDeclarado, id) {
+  const caminho = id === undefined ? caminhoDeclarado : caminhoDeclarado.replace(':id', String(id));
+  return prefixo + caminho;
+}
+
 async function main() {
   console.log('═══ Interface do ciclo de estado do condomínio — testes offline ═══');
 
@@ -261,29 +288,62 @@ async function main() {
     ok('todos os campos enviados são lidos pelo handler');
   }
 
-  // ── 7. O POST continua a ir para a rota que o handler serve ────────
-  titulo('7. O destino do POST é uma rota declarada no handler');
+  // ── 7. O destino do POST é a URL COMPLETA que o servidor serve ─────
+  // O teste antigo só olhava para o SUFIXO do `action` (`/\/condominios\/\d+\/estado$/`):
+  // passava com `/admin/global/...`, com `/global/global/...` e com qualquer
+  // prefixo errado. Aqui o destino é comparado com a URL canónica completa,
+  // derivada da montagem REAL (app.js) + do caminho DECLARADO no router.
+  titulo('7. O destino do POST é a URL COMPLETA (montagem + caminho declarado)');
   {
-    const src = ler(HANDLER);
-    for (const html of [htmlLista, htmlAtivo, htmlInativo]) {
+    const prefixo = montagemGlobal();
+    const declarados = caminhosDeclarados();
+
+    // Guarda 1 — o prefixo da montagem não pode reaparecer dentro dos caminhos
+    // declarados. É exatamente o defeito `/global` + `/global/...` = `/global/global/...`.
+    const duplicados = declarados.filter((p) => p === prefixo || p.startsWith(prefixo + '/'));
+    assert.strictEqual(duplicados.length, 0,
+      `routes/global-admin.js declara caminhos que já incluem o prefixo da montagem `
+      + `(${prefixo}) — o prefixo duplicar-se-ia: ${duplicados.join(', ')}`);
+
+    // A rota destino tem de existir, declarada RELATIVA à montagem.
+    assert.ok(declarados.includes('/condominios/:id/estado'),
+      'a rota POST /condominios/:id/estado tem de estar declarada no router (relativa à montagem)');
+
+    // Cada formulário de estado publica para a URL completa e correta.
+    const casos = [[htmlLista, 8], [htmlAtivo, 7], [htmlInativo, 7]];
+    for (const [html, id] of casos) {
       for (const f of formsDeEstado(html)) {
-        assert.ok(/\/condominios\/\d+\/estado$/.test(f.action),
-          `destino inesperado: ${f.action}`);
-        assert.ok(src.includes(`'/global/condominios/:id/estado'`),
-          'a rota destino tem de estar declarada no handler');
+        const esperado = urlCanonica(prefixo, '/condominios/:id/estado', id);
+        assert.strictEqual(f.action, esperado,
+          `o formulário publica para "${f.action}", mas a URL real é "${esperado}" `
+          + `(montagem "${prefixo}" + caminho declarado "/condominios/:id/estado")`);
       }
     }
-    ok('o destino POST /global/condominios/:id/estado existe no handler');
+
+    // Guarda 2 — nenhuma ação pode começar pelo prefixo DUPLICADO.
+    for (const html of [htmlLista, htmlAtivo, htmlInativo]) {
+      for (const f of formularios(html)) {
+        if (!f.action) continue;
+        assert.ok(!f.action.slice(prefixo.length).startsWith(prefixo),
+          `ação com prefixo duplicado: "${f.action}" (o prefixo "${prefixo}" aparece duas vezes)`);
+      }
+    }
+    ok(`destino POST = ${prefixo}/condominios/:id/estado (URL completa, sem prefixo duplicado)`);
   }
 
   // ── 8. A eliminação definitiva mantém a sua proteção ───────────────
   titulo('8. Eliminação definitiva — proteção preservada (fora do âmbito, mas não pode regredir)');
   {
+    const prefixo = montagemGlobal();
     const fElim = formularios(htmlInativo).find((f) => /\/eliminar$/.test(f.action));
     assert.ok(fElim, 'a vista de um condomínio desativado tem o formulário de eliminação');
     assert.ok(fElim.campos.has('confirmo'), 'a eliminação tem de enviar `confirmo`');
     assert.ok(fElim.obrigatorio, '`confirmo` tem de ser required');
-    ok('eliminação mantém o campo `confirmo` obrigatório');
+    // A proteção é a mesma, mas o destino também tem de ser a URL COMPLETA correta.
+    assert.strictEqual(fElim.action, urlCanonica(prefixo, '/condominios/:id/eliminar', 7),
+      `a eliminação publica para "${fElim.action}", mas a URL real é `
+      + `"${urlCanonica(prefixo, '/condominios/:id/eliminar', 7)}"`);
+    ok('eliminação: `confirmo` obrigatório e destino na URL completa correta');
   }
 
   console.log(`\n${'─'.repeat(60)}`);

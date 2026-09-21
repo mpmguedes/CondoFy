@@ -312,7 +312,7 @@ function auditarConsulta(req) {
 
 // Destinos canónicos do contexto autenticado.
 const DESTINO_PAINEL = '/admin'; // backoffice do condomínio (admin e gestor)
-const DESTINO_GLOBAL = '/admin/global'; // administração global (super admin)
+const DESTINO_GLOBAL = '/global'; // administração global (super admin)
 const DESTINO_PORTAL = '/condomino'; // área do condómino
 
 // ── Destino inicial (pós-login / entrada na raiz) ──────────────────

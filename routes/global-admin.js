@@ -3,12 +3,21 @@
 // associações, auditoria e suporte. Apenas utilizadores role_global =
 // 'super_admin' têm acesso a estas rotas.
 //
-// Namespace: este router está montado em `/global` (app.js). Os URLs
-// `/admin/global*` continuam a responder através de um shim de compatibilidade
-// que redireciona para `/global*`. Por isso, e enquanto as vistas mantiverem
-// os links antigos `/admin/global…`, os redirects internos usam `urlGlobal()`
-// — devolvem o caminho LEGADO, que é o que o browser acabou de pedir, evitando
-// um salto extra via shim em cada POST→GET.
+// Namespace: `/global` — a convenção ÚNICA desta área. O router está montado em
+// `/global` (app.js) e os caminhos aqui declarados são RELATIVOS à montagem
+// (`/`, `/condominios`, `/utilizadores`…), pelo que a URL final é sempre
+// `/global/...`. Os caminhos NÃO devem voltar a incluir `/global`: foi
+// exatamente isso que produziu `/global/global/...` e deixou toda esta área
+// inalcançável pela interface.
+//
+// Porque não `/admin/global`: montar em `/admin` faria a guarda `router.use`
+// correr em TODOS os pedidos de `/admin/*` — mesmo sem correspondência de rota
+// — e interceptar o backoffice do condomínio (o ciclo `/ → /admin → /`).
+// `/global` é um namespace próprio, sem colisão.
+//
+// Os URLs antigos `/admin/global*` continuam a responder por um shim de
+// compatibilidade em `app.js`, que redireciona (302) para o equivalente
+// canónico em `/global*`. O shim não serve conteúdo: é só um redirect.
 // ─────────────────────────────────────────────────────────────────────
 const express = require('express');
 const { Op } = require('sequelize');
@@ -29,10 +38,10 @@ const suporte = require('../helpers/suporte');
 const eliminacaoCondominio = require('../helpers/eliminacao-condominio');
 const { validarNif } = require('../public/js/validacao-fiscal');
 
-// Prefixo do namespace global nos URLs gerados pelo router. Mantém-se
-// `/admin/global` por compatibilidade com as vistas e com os marcadores e
-// links já existentes; o shim do app.js garante que continua a funcionar.
-const PREFIXO_GLOBAL = '/admin/global';
+// Prefixo canónico do namespace global. Usado apenas como FALLBACK quando não
+// há pedido (chamadas directas em testes): em contexto de pedido, o prefixo
+// vem sempre de `req.baseUrl`, que é a montagem real — uma só verdade.
+const PREFIXO_GLOBAL = '/global';
 
 const router = express.Router();
 router.use(eAutenticado);
@@ -55,7 +64,7 @@ function urlGlobal(req, resto = '') {
 }
 
 // ── Painel global ───────────────────────────────────────────────────
-router.get('/global', async (req, res) => {
+router.get('/', async (req, res) => {
   const [condominios, ativos, utilizadores, superAdmins, auditoria] = await Promise.all([
     Condominio.count(),
     Condominio.count({ where: { estado: 'ativo' } }),
@@ -70,7 +79,7 @@ router.get('/global', async (req, res) => {
 });
 
 // ── Condomínios (lista + criar) ─────────────────────────────────────
-router.get('/global/condominios', async (req, res) => {
+router.get('/condominios', async (req, res) => {
   const [condominios, porMembro, porFracao] = await Promise.all([
     Condominio.findAll({ order: [['designacao', 'ASC']] }),
     UserCondominio.findAll({
@@ -90,7 +99,7 @@ router.get('/global/condominios', async (req, res) => {
   res.render('admin/global/condominios', { titulo: 'Condomínios · Global', lista });
 });
 
-router.post('/global/condominios', async (req, res) => {
+router.post('/condominios', async (req, res) => {
   const designacao = String(req.body.designacao || '').trim();
   if (!designacao) {
     req.flash('error_msg', 'Indique o nome do condomínio.');
@@ -269,14 +278,14 @@ async function reativarCondominio(req, res) {
 }
 
 // Rotas explícitas — a intenção está no CAMINHO, não no estado da BD.
-router.post('/global/condominios/:id/desativar', desativarCondominio);
-router.post('/global/condominios/:id/reativar', reativarCondominio);
+router.post('/condominios/:id/desativar', desativarCondominio);
+router.post('/condominios/:id/reativar', reativarCondominio);
 
 // Rota de compatibilidade. Já não é um toggle: exige `acao` explícita e delega.
 // Um cliente antigo que só enviem o formulário sem `acao` é recusado, em vez de
 // lhe ser adivinhado o efeito pretendido — falhar fechado é preferível a fazer
 // a operação errada.
-router.post('/global/condominios/:id/estado', async (req, res) => {
+router.post('/condominios/:id/estado', async (req, res) => {
   const acao = String((req.body && req.body.acao) || '').trim();
   if (!ACOES_ESTADO.includes(acao)) {
     const condominio = await Condominio.findByPk(req.params.id, { attributes: ['id'] });
@@ -303,7 +312,7 @@ router.post('/global/condominios/:id/estado', async (req, res) => {
 // garantido em qualquer condomínio com contas bancárias). `eliminacaoCondominio`
 // DESCOBRE as tabelas a partir do catálogo da BD, calcula a ordem pelas FKs
 // reais e ABORTA (sem apagar nada) se encontrar uma tabela que não saiba tratar.
-router.post('/global/condominios/:id/eliminar', async (req, res) => {
+router.post('/condominios/:id/eliminar', async (req, res) => {
   const condominio = await Condominio.findByPk(req.params.id);
   if (!condominio) {
     req.flash('error_msg', 'Condomínio não encontrado.');
@@ -416,7 +425,7 @@ router.post('/global/condominios/:id/eliminar', async (req, res) => {
 // Estas rotas apenas CRIAM/GEREM a concessão. O contexto em si é materializado
 // por `tenant.comCondominioAtivo` (via `req.suporte`), que nunca produz
 // `req.papelCondominio = 'admin'|'gestor'`.
-router.get('/global/condominios/:id/suporte', async (req, res) => {
+router.get('/condominios/:id/suporte', async (req, res) => {
   const condominio = await Condominio.findByPk(req.params.id);
   if (!condominio) {
     req.flash('error_msg', 'Condomínio não encontrado.');
@@ -440,7 +449,7 @@ router.get('/global/condominios/:id/suporte', async (req, res) => {
   });
 });
 
-router.post('/global/condominios/:id/suporte', async (req, res) => {
+router.post('/condominios/:id/suporte', async (req, res) => {
   const condominio = await Condominio.findByPk(req.params.id);
   if (!condominio) {
     req.flash('error_msg', 'Condomínio não encontrado.');
@@ -486,7 +495,7 @@ router.post('/global/condominios/:id/suporte', async (req, res) => {
   return res.redirect('/admin');
 });
 
-router.post('/global/suporte/:id/terminar', async (req, res) => {
+router.post('/suporte/:id/terminar', async (req, res) => {
   const acesso = await suporte.terminar({ acessoId: req.params.id, req });
   const destino = acesso && acesso.acesso
     ? urlGlobal(req, `/condominios/${acesso.acesso.condominio_id}/suporte`)
@@ -502,7 +511,7 @@ router.post('/global/suporte/:id/terminar', async (req, res) => {
   return res.redirect(destino);
 });
 
-router.post('/global/suporte/:id/revogar', async (req, res) => {
+router.post('/suporte/:id/revogar', async (req, res) => {
   const r = await suporte.revogar({ acessoId: req.params.id, revogadoPor: req.user.id, req });
   await audit({
     userId: req.user.id,
@@ -543,7 +552,7 @@ router.post('/global/suporte/:id/revogar', async (req, res) => {
 // administração da plataforma.
 const CAMPOS_EDITAVEIS = ['designacao', 'morada', 'codigo_postal', 'localidade', 'nif'];
 
-router.post('/global/condominios/:id/dados', async (req, res) => {
+router.post('/condominios/:id/dados', async (req, res) => {
   const condominio = await Condominio.findByPk(req.params.id);
   if (!condominio) {
     req.flash('error_msg', 'Condomínio não encontrado.');
@@ -611,7 +620,7 @@ router.post('/global/condominios/:id/dados', async (req, res) => {
 });
 
 // ── Detalhe do condomínio (membros/associações) ────────────────────
-router.get('/global/condominios/:id', async (req, res) => {
+router.get('/condominios/:id', async (req, res) => {
   const condominio = await Condominio.findByPk(req.params.id);
   if (!condominio) {
     req.flash('error_msg', 'Condomínio não encontrado.');
@@ -631,7 +640,7 @@ router.get('/global/condominios/:id', async (req, res) => {
   });
 });
 
-router.post('/global/condominios/:id/associacoes', async (req, res) => {
+router.post('/condominios/:id/associacoes', async (req, res) => {
   const condominio = await Condominio.findByPk(req.params.id);
   if (!condominio) {
     req.flash('error_msg', 'Condomínio não encontrado.');
@@ -683,7 +692,7 @@ router.post('/global/condominios/:id/associacoes', async (req, res) => {
   return res.redirect(urlGlobal(req, `/condominios/${condominio.id}`));
 });
 
-router.post('/global/associacoes/:id/estado', async (req, res) => {
+router.post('/associacoes/:id/estado', async (req, res) => {
   const assoc = await UserCondominio.findByPk(req.params.id);
   if (!assoc) {
     req.flash('error_msg', 'Associação não encontrada.');
@@ -697,7 +706,7 @@ router.post('/global/associacoes/:id/estado', async (req, res) => {
   return res.redirect(urlGlobal(req, `/condominios/${assoc.condominio_id}`));
 });
 
-router.post('/global/associacoes/:id/eliminar', async (req, res) => {
+router.post('/associacoes/:id/eliminar', async (req, res) => {
   const assoc = await UserCondominio.findByPk(req.params.id);
   if (!assoc) {
     req.flash('error_msg', 'Associação não encontrada.');
@@ -711,7 +720,7 @@ router.post('/global/associacoes/:id/eliminar', async (req, res) => {
 });
 
 // ── Utilizadores (global) ───────────────────────────────────────────
-router.get('/global/utilizadores', async (req, res) => {
+router.get('/utilizadores', async (req, res) => {
   const utilizadores = await User.findAll({
     attributes: ['id', 'nome', 'email', 'telefone', 'role', 'role_global', 'email_confirmado', 'ativo', 'convite_estado', 'created_at'],
     order: [['nome', 'ASC']],
@@ -728,7 +737,7 @@ router.get('/global/utilizadores', async (req, res) => {
   });
 });
 
-router.post('/global/utilizadores/:id/global', async (req, res) => {
+router.post('/utilizadores/:id/global', async (req, res) => {
   const utilizador = await User.findByPk(req.params.id);
   if (!utilizador) {
     req.flash('error_msg', 'Utilizador não encontrado.');
@@ -746,7 +755,7 @@ router.post('/global/utilizadores/:id/global', async (req, res) => {
 });
 
 // ── Auditoria global ────────────────────────────────────────────────
-router.get('/global/auditoria', async (req, res) => {
+router.get('/auditoria', async (req, res) => {
   const { acao, entidade } = req.query;
   const where = {};
   if (acao) where.acao = acao;
