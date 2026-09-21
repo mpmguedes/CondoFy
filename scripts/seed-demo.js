@@ -494,11 +494,15 @@ async function apagarCondominioDemo(condominio, { dryRun }) {
     // a tabela — isso destruiria a sequência de documentos de outros
     // condomínios. Como não existe `condominio_id` em `numeracoes`, recua-se a
     // sequência dos recibos demo em vez de apagar registos.
+    // ⛔ A série dos RECIBOS é `recibo_mensal` (códigos `RCP-{ano}-{sequência}`).
+    // `recibo` é a série dos PAGAMENTOS (`{ano}/{sequência}`) e não pode ser
+    // tocada aqui — escrevê-la recuava a numeração dos pagamentos e fazia o
+    // registo de pagamentos colidir para sempre com o número já gravado.
     const recibosDemo = await Recibo.count({ where: { condominio_id: cid }, transaction: t });
     if (recibosDemo > 0) {
       await Numeracao.update(
         { sequencia: 0 },
-        { where: { tipo_documento: 'recibo', sequencia: { [Op.lte]: recibosDemo } }, transaction: t }
+        { where: { tipo_documento: 'recibo_mensal', sequencia: { [Op.lte]: recibosDemo } }, transaction: t }
       );
     }
 
@@ -1319,11 +1323,18 @@ async function criarDemo() {
 
   // Numeração coerente com os documentos já criados: sem isto, o primeiro
   // recibo criado pela aplicação colidiria com os códigos de demonstração.
+  // ⛔ A série dos recibos é `recibo_mensal` (o código é `RCP-{ano}-{sequência}`).
+  // Escrever `recibo` (a série dos PAGAMENTOS) recuava-a para o número de
+  // recibos do demo e bloqueava o registo de pagamentos com `Duplicate entry`.
+  // A sequência só avança (`sequencia < nRecibos`) — nunca recua.
   await Numeracao.findOrCreate({
-    where: { tipo_documento: 'recibo', ano: anoAtual },
-    defaults: { tipo_documento: 'recibo', ano: anoAtual, sequencia: nRecibos, formato: '{ano}/{sequencia}' },
+    where: { tipo_documento: 'recibo_mensal', ano: anoAtual },
+    defaults: { tipo_documento: 'recibo_mensal', ano: anoAtual, sequencia: nRecibos, formato: 'RCP-{ano}-{sequencia}' },
   });
-  await Numeracao.update({ sequencia: nRecibos }, { where: { tipo_documento: 'recibo', ano: anoAtual } });
+  await Numeracao.update(
+    { sequencia: nRecibos },
+    { where: { tipo_documento: 'recibo_mensal', ano: anoAtual, sequencia: { [Op.lt]: nRecibos } } }
+  );
   passo(`Numeração de recibo ${anoAtual} alinhada em ${nRecibos}`);
 
   // ── Resumo final ───────────────────────────────────────────────────

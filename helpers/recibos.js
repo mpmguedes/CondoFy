@@ -20,6 +20,7 @@ const sequelize = require('../config/database');
 const { Op } = require('sequelize');
 const { Quota, Recibo, ReciboQuota, ReciboExtraParcela, ExtraQuota, ExtraQuotaParcela, PagamentoExtraParcela, Pagamento, PagamentoQuota, Numeracao, MetodoPagamento, Fracao } = require('../models');
 const { toCents, fromCents } = require('./money');
+const { MAX_SALTOS } = require('./numeracao');
 
 const EPS = 1; // 1 cêntimo
 
@@ -120,6 +121,19 @@ function alocarMeses({ modo, meses, valorGlobalC = 0 }) {
 // Incrementa a sequência do ano (linha numeracoes tipo 'recibo_mensal') e
 // devolve { codigo, numero }. Padrão idêntico ao helpers/numeracao.js
 // (row lock FOR UPDATE + criação quando a linha do ano não existe).
+//
+// `recibos.codigo` é UNIQUE e o código NUNCA é reutilizado (anular um recibo
+// conserva-o). A série pode ficar ATRASADA em relação aos códigos já gravados
+// (importação, restauro de backup, alinhamento manual da sequência); sem a
+// verificação de código livre o gerador devolveria indefinidamente um código já
+// ocupado e a emissão de recibos ficava permanentemente bloqueada — exatamente
+// o que aconteceu à série dos PAGAMENTOS (`helpers/numeracao.js`).
+// A verificação corre DENTRO da transação: é o `FOR UPDATE` sobre a linha de
+// `numeracoes` que impede dois pedidos concorrentes de ficarem com o mesmo código.
+function codigoDeReciboJaUsado(transaction) {
+  return async (codigo) => Boolean(await Recibo.findOne({ where: { codigo }, transaction }));
+}
+
 async function proximoReciboNumero({ ano, transaction } = {}) {
   const anoNum = ano || new Date().getFullYear();
   const t = transaction || (await sequelize.transaction());
@@ -139,10 +153,24 @@ async function proximoReciboNumero({ ano, transaction } = {}) {
         { transaction: t }
       );
     }
-    const sequencia = numeracao.sequencia + 1;
+    let sequencia = numeracao.sequencia + 1;
+    let codigo = formatarCodigo(anoNum, sequencia);
+    const jaUsado = codigoDeReciboJaUsado(t);
+    let saltos = 0;
+    while (await jaUsado(codigo)) {
+      saltos += 1;
+      if (saltos > MAX_SALTOS) {
+        throw new Error(
+          `Não há código livre para o recibo de ${anoNum}: ${codigo} e os ${MAX_SALTOS} ` +
+          'seguintes já estão usados. A sequência precisa de ser reconciliada.'
+        );
+      }
+      sequencia += 1;
+      codigo = formatarCodigo(anoNum, sequencia);
+    }
     await numeracao.update({ sequencia }, { transaction: t });
     if (own) await t.commit();
-    return { ano: anoNum, numero: formatarNumero(sequencia), codigo: formatarCodigo(anoNum, sequencia) };
+    return { ano: anoNum, numero: formatarNumero(sequencia), codigo };
   } catch (err) {
     if (own) await t.rollback();
     throw err;

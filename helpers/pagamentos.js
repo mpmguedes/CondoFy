@@ -5,6 +5,23 @@ const { toCents, fromCents } = require('./money');
 const { proximoNumero } = require('./numeracao');
 const { criarMovimento } = require('./movimentos');
 
+// ── Numeração do documento de pagamento ────────────────────────────
+// `pagamentos.numero_documento` é UNIQUE e o número NUNCA é reutilizado (um
+// pagamento anulado conserva o seu número — ver `anularPagamento`). A série
+// (`numeracoes`, tipo 'recibo') pode, no entanto, ficar ATRASADA em relação aos
+// documentos já gravados (importação, restauro de backup, alinhamento manual da
+// sequência): sem esta verificação o gerador devolveria para sempre o mesmo
+// número já ocupado e o registo de pagamentos ficava permanentemente bloqueado.
+// A verificação corre DENTRO da transação do pagamento — é o `FOR UPDATE` sobre
+// a linha de `numeracoes` que garante que dois registos simultâneos não ficam
+// com o mesmo número.
+function numeroDePagamentoJaUsado(transaction) {
+  return async (numero) => {
+    const existente = await Pagamento.findOne({ where: { numero_documento: numero }, transaction });
+    return Boolean(existente);
+  };
+}
+
 // Recalcula o estado de uma quota a partir dos pagamentos confirmados.
 async function recalcularEstadoQuota(quotaId, transaction) {
   const quota = await Quota.findByPk(quotaId, { transaction });
@@ -81,7 +98,7 @@ async function registarPagamento({
   const t = await sequelize.transaction();
   try {
     const valorC = toCents(valor);
-    const numero = await proximoNumero('recibo', { transaction: t });
+    const numero = await proximoNumero('recibo', { transaction: t, jaUsado: numeroDePagamentoJaUsado(t) });
 
     // Multi-condomínio: o pagamento herda o condomínio do contexto ativo da
     // rota; em fluxos legados cai para o condomínio da fração.
@@ -310,7 +327,7 @@ async function registarPagamentoExtraParcela({
       throw new Error('Quota extra ainda não está processada (pronta para cobrança).');
     }
 
-    const numero = await proximoNumero('recibo', { transaction: t });
+    const numero = await proximoNumero('recibo', { transaction: t, jaUsado: numeroDePagamentoJaUsado(t) });
     const estadoAnterior = parcela.estado; // 'pendente' | 'cobrada'
     const pagamento = await Pagamento.create(
       {
@@ -408,7 +425,7 @@ async function registarPagamentoComItens({
   const t = await sequelize.transaction();
   try {
     const valorC = toCents(valor);
-    const numero = await proximoNumero('recibo', { transaction: t });
+    const numero = await proximoNumero('recibo', { transaction: t, jaUsado: numeroDePagamentoJaUsado(t) });
 
     let cidFinal = cid;
     if (!cidFinal) {
