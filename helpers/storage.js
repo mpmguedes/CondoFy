@@ -166,6 +166,9 @@ async function estadoDoCondominio(condominioId) {
 
   const destinoBackup = await ligacoes.lerDestinoBackup().catch(() => null);
   const pBackup = destinoBackup ? REGISTO[destinoBackup] : null;
+  // Ligação que o job de backups vai usar para este destino (de plataforma
+  // quando existe, senão a do condomínio que tem esse serviço ligado).
+  const ligacaoBackup = destinoBackup ? ligacoes.ligacaoParaBackup(destinoBackup) : null;
 
   return {
     principal: REGISTO[principal] ? principal : locator.PROVEDOR_PADRAO,
@@ -182,11 +185,16 @@ async function estadoDoCondominio(condominioId) {
       icone: pBackup && typeof pBackup.icone === 'function' ? pBackup.icone() : null,
       // Conta que vai receber os backups (a mesma ligação usada pelos
       // documentos, quando o serviço só tem uma ligação).
-      conta: destinoBackup ? ligacoes.ligacaoParaBackup(destinoBackup).conta : null,
-      origem: destinoBackup ? ligacoes.ligacaoParaBackup(destinoBackup).origem : null,
+      conta: ligacaoBackup ? ligacaoBackup.conta : null,
+      origem: ligacaoBackup ? ligacaoBackup.origem : null,
+      // O job só consegue usar este destino quando existe uma ligação
+      // (de plataforma ou de um condomínio). Um destino configurado sem
+      // ligação utilizável é ignorado pelo job — a interface não pode
+      // apresentá-lo como ativo.
+      usavel: Boolean(ligacaoBackup && ligacaoBackup.origem),
       // Os backups contêm dados de TODOS os condomínios: quando a conta é a de
       // um condomínio, a interface avisa.
-      avisoPartilhado: Boolean(destinoBackup && ligacoes.ligacaoParaBackup(destinoBackup).origem === 'condominio'),
+      avisoPartilhado: Boolean(ligacaoBackup && ligacaoBackup.origem === 'condominio'),
     },
     // Serviços com ligação de plataforma (podem servir de destino de backups).
     // Inclui a conta autorizada e o ícone, para a interface os identificar

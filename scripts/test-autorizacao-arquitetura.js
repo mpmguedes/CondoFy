@@ -552,13 +552,15 @@ const DADOS_SINAIS = {
   orcamentoId: 12,
   proximasAssembleias: [{ id: 30, numero: '2/2026', data: '12/11/2026' }],
   filaErros: 3,
-  driveLigado: false,
+  // Armazenamento dos DOCUMENTOS do condomínio + estado do último backup.
+  documentosLigado: false,
+  backupEstado: 'erro',
   smtp: false,
 };
 const idsDe = (extra) => dashHelper.sinaisDeAtencao({ ...DADOS_SINAIS, ...extra }).map((s) => s.id);
 const idsAdmin = idsDe({ podeAdmin: true });
 const idsGestor = idsDe({ podeAdmin: false });
-const SO_ADMIN = ['email_erros', 'drive', 'smtp'];
+const SO_ADMIN = ['email_erros', 'backup', 'drive', 'smtp'];
 
 // gestor: nenhum sinal admin-only.
 for (const id of SO_ADMIN) {

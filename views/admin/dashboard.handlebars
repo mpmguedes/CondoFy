@@ -51,11 +51,12 @@
       <div class="card-body">
         {{#if orcamentoAno}}
         <dl class="row mb-2">
-          <dt class="col-7 small text-muted">Receitas previstas</dt><dd class="col-5 text-end">{{eur orcamentoAno.receitasPrevistas}}</dd>
+          <dt class="col-7 small text-muted">Receitas previstas (c/ FCR)</dt><dd class="col-5 text-end">{{eur orcamentoAno.receitasPrevistas}}</dd>
           <dt class="col-7 small text-muted">Despesas previstas</dt><dd class="col-5 text-end">{{eur orcamentoAno.despesasPrevistas}}</dd>
           <dt class="col-7 small text-muted">Saldo previsto</dt>
           <dd class="col-5 text-end fw-semibold {{#if (gt orcamentoAno.saldoPrevisto 0)}}text-success{{else if (lt orcamentoAno.saldoPrevisto 0)}}text-danger{{/if}}">{{eur orcamentoAno.saldoPrevisto}}</dd>
         </dl>
+        <p class="text-muted small mb-2">Receitas previstas = total a cobrar aos condóminos (despesas do orçamento + FCR). O saldo previsto é a diferença para as despesas.</p>
         <span class="badge {{#if (eq orcamentoAno.estado 'rascunho')}}text-bg-secondary{{else if (eq orcamentoAno.estado 'encerrado')}}text-bg-dark{{else if (eq orcamentoAno.estado 'anulado')}}text-bg-danger{{else}}text-bg-success{{/if}}">Estado: {{#if (eq orcamentoAno.estado 'rascunho')}}Rascunho{{else if (eq orcamentoAno.estado 'encerrado')}}Fechado{{else if (eq orcamentoAno.estado 'anulado')}}Anulado{{else}}Ativo{{/if}}</span>
         {{else}}
         <p class="text-muted small mb-0">Não existe orçamento para {{anoAtual}}. <a href="/admin/orcamento/nova">Criar orçamento →</a></p>
@@ -74,10 +75,16 @@
           <div class="text-muted">{{nPendentes}} pendentes · <span class="text-danger">{{nVencidas}} vencidas</span></div>
         </div>
         <hr class="my-2" />
+        {{!-- Serviços: DOCUMENTOS (serviço principal deste condomínio) e
+             CÓPIAS DE SEGURANÇA (a local existe sempre; a cloud é opcional e
+             independente do serviço dos documentos) são linhas separadas —
+             misturá-las fazia um condomínio com o Drive ligado aparecer como
+             «Desligado» só porque a ligação da plataforma não existia. --}}
         <div class="small d-flex flex-column gap-1">
-          <div><i class="{{@root.armazenamentoIcone}} me-1"></i>{{@root.armazenamentoRotulo}}: {{#if sistema.driveLigado}}<span class="text-success">● Ligado</span>{{else}}<span class="text-muted">○ Desligado</span>{{/if}}</div>
+          <div><i class="{{@root.armazenamentoIcone}} me-1"></i>Documentos: {{#if sistema.documentos.ligado}}<span class="text-success">● {{@root.armazenamentoRotulo}}</span>{{else}}<span class="text-muted">○ Sem serviço ligado</span>{{/if}}</div>
+          <div>Cópias de segurança: {{#if sistema.backups.cloud}}<i class="{{sistema.backups.cloud.icone}} me-1"></i><span class="text-success">● {{sistema.backups.cloud.rotulo}}</span>{{else}}<span class="text-muted">○ Apenas local</span>{{/if}}</div>
+          <div>Último backup: {{#if sistema.ultimoBackup.data}}<span class="text-{{sistema.ultimoBackup.cor}}">● {{sistema.ultimoBackup.rotulo}}</span> · {{formatDate sistema.ultimoBackup.data}}{{#if sistema.ultimoBackup.detalhe}} <span class="text-muted">({{sistema.ultimoBackup.detalhe}})</span>{{/if}}{{else}}<span class="text-muted">○ {{sistema.ultimoBackup.rotulo}}</span>{{/if}}</div>
           <div>Email/SMTP: {{#if sistema.smtp}}<span class="text-success">● Configurado</span>{{else}}<span class="text-muted">○ Não configurado</span>{{/if}}</div>
-          <div>Backup: {{#if sistema.ultimoBackup}}{{#if (eq sistema.ultimoBackup.estado 'concluido')}}<span class="text-success">● Concluído</span>{{else if (eq sistema.ultimoBackup.estado 'erro')}}<span class="text-danger">● Erro</span>{{else}}<span class="text-warning">● Em curso</span>{{/if}}{{else}}<span class="text-muted">○ Sem backups</span>{{/if}}</div>
         </div>
       </div>
     </div>

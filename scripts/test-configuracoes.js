@@ -61,6 +61,19 @@ const GRUPOS = [{
 }];
 automacoes.listarAutomacoes = async () => GRUPOS;
 
+// Destino de backups: a interface tem de aceitar exatamente o que o job de
+// backups consegue usar (`ligacaoDeBackup`) — nem mais, nem menos. A ligação e a
+// gravação são substituídas para o teste controlar os dois casos.
+const storage = require('../helpers/storage');
+const ligacoesBackup = {
+  dropbox: { condominioId: null, conta: 'backups@exemplo.pt', origem: 'plataforma' },
+  onedrive: { condominioId: null, conta: null, origem: null },
+  google_drive: { condominioId: null, conta: null, origem: null },
+};
+const destinosGravados = [];
+storage.ligacaoDeBackup = (provedor) => ligacoesBackup[provedor] || { condominioId: null, conta: null, origem: null };
+storage.definirDestinoDeBackup = async (nome) => { destinosGravados.push(nome === undefined ? null : nome); return nome; };
+
 const router = require('../routes/configuracao');
 
 // ── App de teste com o mesmo motor de vistas do app.js ─────────────
@@ -91,6 +104,7 @@ app.use((req, res, next) => {
   res.locals.tarefas = null;
   next();
 });
+app.use(express.urlencoded({ extended: true }));
 app.use('/admin', router);
 
 const pedir = (url) => new Promise((resolve, reject) => {
@@ -103,6 +117,26 @@ const pedir = (url) => new Promise((resolve, reject) => {
         resolve({ status: res.statusCode, corpo, location: res.headers.location });
       });
     }).on('error', (e) => { servidor.close(); reject(e); });
+  });
+});
+
+// Pedido POST (form-urlencoded), para as rotas de gravação.
+const enviar = (url, corpo) => new Promise((resolve, reject) => {
+  const dados = new URLSearchParams(corpo).toString();
+  const servidor = app.listen(0, '127.0.0.1', () => {
+    const req = http.request({
+      host: '127.0.0.1',
+      port: servidor.address().port,
+      path: url,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(dados) },
+    }, (res) => {
+      let resposta = '';
+      res.on('data', (d) => { resposta += d; });
+      res.on('end', () => { servidor.close(); resolve({ status: res.statusCode, corpo: resposta, location: res.headers.location }); });
+    });
+    req.on('error', (e) => { servidor.close(); reject(e); });
+    req.end(dados);
   });
 });
 
@@ -228,7 +262,48 @@ const TAB4 = 'href="/admin/config/auditoria"';
     assert.ok(x.corpo.includes('class="config-tab active"'), `navegação: um ativo em ${url}`);
   }
 
-  // 6. Rotas de gravação existentes mantêm-se
+  // 6. Destino de backups: a interface só aceita o que o job consegue usar.
+  // Um destino com ligação utilizável é gravado…
+  destinosGravados.length = 0;
+  let post = await enviar('/admin/config/armazenamento/backups', { provedor: 'dropbox' });
+  assert.strictEqual(post.status, 302, 'backups: gravação responde 302');
+  assert.strictEqual(post.location, '/admin/config/armazenamento', 'backups: volta para a página');
+  assert.deepStrictEqual(destinosGravados, ['dropbox'], 'backups: destino utilizável é gravado');
+  // …um destino sem ligação utilizável NÃO é gravado (o job ignorá-lo-ia e os
+  // backups ficariam no servidor enquanto a página anunciava uma cópia cloud).
+  post = await enviar('/admin/config/armazenamento/backups', { provedor: 'onedrive' });
+  assert.strictEqual(post.status, 302, 'backups: destino inutilizável responde 302 (com erro)');
+  assert.deepStrictEqual(destinosGravados, ['dropbox'], 'backups: destino sem ligação utilizável não é gravado');
+  // …e "só neste servidor" continua a poder ser escolhido em qualquer altura.
+  post = await enviar('/admin/config/armazenamento/backups', { provedor: 'nenhum' });
+  assert.deepStrictEqual(destinosGravados, ['dropbox', null], 'backups: «só neste servidor» é gravado');
+
+  // 7. Desligar um serviço só liberta o destino dos backups quando não resta
+  // NENHUMA ligação utilizável para ele (de plataforma ou de um condomínio).
+  // Sem esta regra, desligar a ligação da plataforma apagava um destino que
+  // continuava a funcionar.
+  const registo = require('../helpers/armazenamento/provedores');
+  const desligarOriginal = registo.dropbox.desligar;
+  const desligados = [];
+  registo.dropbox.desligar = async (condominioId, opcoes) => { desligados.push({ condominioId, opcoes }); };
+  storage.inicializar = async () => {};
+  storage.destinoDeBackup = async () => 'dropbox';
+  destinosGravados.length = 0;
+
+  ligacoesBackup.dropbox = { condominioId: 7, conta: 'gestao@exemplo.pt', origem: 'condominio' };
+  await enviar('/admin/config/armazenamento/dropbox/desligar?ambito=plataforma', {});
+  assert.deepStrictEqual(desligados, [{ condominioId: null, opcoes: { plataforma: true } }],
+    'desligar: âmbito de plataforma passado ao adaptador');
+  assert.deepStrictEqual(destinosGravados, [],
+    'desligar: mantém o destino dos backups enquanto restar uma ligação utilizável');
+
+  ligacoesBackup.dropbox = { condominioId: null, conta: null, origem: null };
+  await enviar('/admin/config/armazenamento/dropbox/desligar', {});
+  assert.deepStrictEqual(destinosGravados, [null],
+    'desligar: liberta o destino dos backups quando não resta nenhuma ligação utilizável');
+  registo.dropbox.desligar = desligarOriginal;
+
+  // 8. Rotas de gravação existentes mantêm-se
   const rotas = router.stack.filter((l) => l.route)
     .map((l) => Object.keys(l.route.methods).join(',').toUpperCase() + ' ' + l.route.path);
   for (const esperada of ['GET /config', 'POST /config', 'GET /config/armazenamento', 'GET /config/automacoes', 'POST /config/automacoes', 'GET /config/auditoria', 'GET /auditoria', 'POST /config/armazenamento/provedor', 'GET /config/armazenamento/:provedor/ligar', 'GET /config/armazenamento/:provedor/callback', 'POST /config/armazenamento/:provedor/desligar', 'POST /config/armazenamento/:provedor/testar', 'POST /config/drive/opcoes', 'POST /config/drive/testar', 'POST /config/drive/estrutura', 'POST /config/drive/desligar', 'GET /config/drive/ligar', 'GET /config/drive/callback']) {

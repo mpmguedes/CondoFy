@@ -12,6 +12,8 @@ const { listarAutomacoes, guardarAutomacoes } = require('../helpers/automacoes')
 const drive = require('../helpers/drive');
 // Fachada de armazenamento multi-provedor (Google Drive | Dropbox | OneDrive).
 const storage = require('../helpers/storage');
+// Interpretação pura do estado do último backup (cópia local vs. cloud).
+const backupEstado = require('../helpers/backup-estado');
 const { contarPorServico, documentosDoServico } = require('../helpers/documentos-por-servico');
 const { validarNif, validarIban } = require('../public/js/validacao-fiscal');
 
@@ -86,11 +88,20 @@ async function dadosArmazenamento(condominioId) {
     documentos: documentosDoServico(documentosPorServico, p.nome),
   }));
 
+  // Estado do último backup interpretado (cópia local vs. cópia cloud). As
+  // colunas de `backup_logs` chegam para o distinguir — sem migration.
+  const rotulosProvedor = {};
+  for (const nome of storage.provedores()) {
+    const p = storage.obterProvedor(nome);
+    if (p) rotulosProvedor[nome] = p.rotulo();
+  }
+
   return {
     driveLigado: driveEstado.ligado,
     driveEstado,
     driveOpcoes: { pastaRaiz: raizEfetiva, backupsDrive: String(backupsDb) !== '0' },
     ultimoBackup: ultimoBackup ? ultimoBackup.toJSON() : null,
+    ultimoBackupEstado: backupEstado.interpretar(ultimoBackup, { rotulos: rotulosProvedor }),
     armazenamento: { ...estados, provedores },
   };
 }
@@ -218,9 +229,13 @@ router.post('/config/armazenamento/:provedor/desligar', async (req, res) => {
     // não fazia nada e o serviço continuava a aparecer ligado.
     await p.desligar(plataforma ? null : req.condominioId, { plataforma });
     await storage.inicializar();
-    // Desligar o serviço de backup liberta o destino configurado.
-    if (plataforma && (await storage.destinoDeBackup()) === provedor) {
-      await storage.definirDestinoDeBackup(null);
+    // Desligar o serviço de backup liberta o destino configurado — mas só se
+    // deixar de existir QUALQUER ligação utilizável para ele (de plataforma ou
+    // de outro condomínio). Sem esta verificação, desligar a ligação da
+    // plataforma apagava um destino de backups que continuava a funcionar.
+    if ((await storage.destinoDeBackup()) === provedor) {
+      const restante = storage.ligacaoDeBackup(provedor);
+      if (!restante || !restante.origem) await storage.definirDestinoDeBackup(null);
     }
     await audit({
       userId: req.user.id,
@@ -308,9 +323,14 @@ router.post('/config/armazenamento/backups', async (req, res) => {
     } else {
       const p = storage.obterProvedor(escolha);
       if (!p) throw new Error('Serviço de armazenamento desconhecido.');
+      // Mesma condição que o job de backups usa (`ligacaoParaBackup`): só se
+      // aceita um destino que o job consiga MESMO usar. Antes bastava haver
+      // uma configuração (ligação de plataforma OU do condomínio), e um destino
+      // só com ligação de condomínio era aceite pela página mas ignorado pelo
+      // job — os backups ficavam no servidor e a página dizia «Dropbox».
       const ligacao = storage.ligacaoDeBackup(escolha);
-      if (!p.isConfigured(req.condominioId) && !p.isConfigured(null)) {
-        throw new Error(`${p.rotulo()} não está ligado. Ligue o serviço antes de o escolher para backups.`);
+      if (!ligacao || !ligacao.origem) {
+        throw new Error(`${p.rotulo()} não tem nenhuma ligação utilizável. Ligue o serviço antes de o escolher para backups.`);
       }
       await storage.definirDestinoDeBackup(escolha);
       req.flash(

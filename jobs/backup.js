@@ -5,9 +5,19 @@ const path = require('path');
 const { Op } = require('sequelize');
 const { BackupLog } = require('../models');
 // Backups são da INSTALAÇÃO (o dump contém dados de todos os condomínios):
-// usam o destino configurado em Configurações → Armazenamento e Backups, com a
-// ligação de PLATAFORMA do serviço escolhido — nunca a conta de um condomínio.
+// a cópia na cloud usa o destino configurado em Configurações → Armazenamento e
+// Backups, com a ligação de PLATAFORMA do serviço escolhido — nunca a conta
+// principal de documentos de um condomínio.
 const storage = require('../helpers/storage');
+
+// Pasta da cópia LOCAL dos backups. É o backup a sério e existe SEMPRE, mesmo
+// sem nenhum serviço de cloud ligado. Configurável apenas para os testes
+// poderem escrever num diretório temporário (em produção é a pasta
+// `backups/local` do projeto, ignorada pelo git).
+function pastaLocal() {
+  const configurada = String(process.env.BACKUP_LOCAL_DIR || '').trim();
+  return configurada || path.join(__dirname, '..', 'backups', 'local');
+}
 
 function executarMysqldump() {
   return new Promise((resolve, reject) => {
@@ -66,48 +76,94 @@ async function limparBackupsAntigos(tipo) {
   return antigos.length;
 }
 
-// Executa um backup: dump → gzip → destino configurado (ou cópia local quando
-// ainda não há nenhum serviço ligado à plataforma).
+// Destino cloud dos backups: a configuração GLOBAL da instalação + uma ligação
+// que este job consiga MESMO usar (de plataforma quando existe, senão a do
+// condomínio que tem esse serviço ligado). O fornecedor dos backups nunca é
+// deduzido do fornecedor principal dos documentos de um condomínio — são dois
+// conceitos independentes.
+async function destinoCloud() {
+  try {
+    const destino = await storage.destinoDeBackup();
+    if (!destino) return { destino: null, provedor: null, ligacao: null };
+    const provedor = storage.obterProvedor(destino);
+    if (!provedor) return { destino, provedor: null, ligacao: null };
+    const ligacao = storage.ligacaoDeBackup(destino);
+    if (!ligacao || !ligacao.origem) return { destino, provedor, ligacao: null };
+    return { destino, provedor, ligacao };
+  } catch (err) {
+    console.error('[backup] não foi possível ler o destino dos backups:', err.message);
+    return { destino: null, provedor: null, ligacao: null };
+  }
+}
+
+// Executa um backup:
+//   1. cópia LOCAL — sempre (é o backup a sério);
+//   2. cópia CLOUD — só quando existe um destino configurado E uma ligação
+//      utilizável para esse destino.
+// Uma falha na cópia cloud NUNCA remove nem invalida a cópia local.
 async function executarBackup(tipo = 'diario') {
   const log = await BackupLog.create({ tipo, estado: 'em_curso' });
+  let localFeito = false;
   try {
     const dump = await executarMysqldump();
     const gz = zlib.gzipSync(dump);
     const nome = `backup_${tipo}_${new Date().toISOString().slice(0, 10)}_${Date.now()}.sql.gz`;
 
-    // Destino de backups: escolha do administrador (pode ser diferente do
-    // armazenamento principal dos documentos).
-    const destino = await storage.destinoDeBackup();
-    const provedor = destino ? storage.obterProvedor(destino) : null;
-    const ligado = Boolean(provedor && provedor.isConfigured(null));
+    // 1) Cópia local: obrigatória. Escrita antes de qualquer tentativa de
+    //    upload — se a cloud falhar, o backup já existe no servidor.
+    const dir = pastaLocal();
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, nome), gz);
+    localFeito = true;
+    // `tamanho` fica registado logo aqui: é a prova de que a cópia local existe
+    // (ver helpers/backup-estado.js).
+    await log.update({ tamanho: gz.length });
 
-    if (provedor && ligado) {
-      // Ligação a usar: de plataforma quando existe, senão a do condomínio que
-      // tem esse serviço ligado (uma ligação por serviço, sem contas duplicadas).
-      const ligacao = storage.ligacaoDeBackup(destino);
-      const pastaId = await storage.pastaDeBackups(destino, ligacao.condominioId);
-      const up = await storage.uploadComProvedor(destino, {
-        nome,
-        mimeType: 'application/gzip',
-        buffer: gz,
-        parentFolderId: pastaId,
-        condominioId: ligacao.condominioId,
-      });
-      const referencia = up.localizador || up.provedorFileId || up.driveFileId || null;
-      await log.update({ estado: 'concluido', ficheiro_drive_id: referencia, tamanho: gz.length });
+    // 2) Cópia cloud: opcional e independente do serviço dos documentos.
+    const { destino, provedor, ligacao } = await destinoCloud();
+    let referencia = null;
+    let erroCloud = null;
+    if (provedor && ligacao) {
+      try {
+        const pastaId = await storage.pastaDeBackups(destino, ligacao.condominioId);
+        const up = await storage.uploadComProvedor(destino, {
+          nome,
+          mimeType: 'application/gzip',
+          buffer: gz,
+          parentFolderId: pastaId,
+          condominioId: ligacao.condominioId,
+        });
+        referencia = up.localizador || up.provedorFileId || up.driveFileId || null;
+        if (!referencia) erroCloud = 'o serviço não devolveu a referência do ficheiro';
+      } catch (err) {
+        erroCloud = err.message;
+      }
+    }
+
+    if (referencia) {
+      await log.update({ estado: 'concluido', ficheiro_drive_id: referencia, erro: null });
       const removidos = await limparBackupsAntigos(tipo);
-      console.log(`[backup] ${nome} concluído em ${provedor.rotulo()}${ligacao.conta ? ` (${ligacao.conta})` : ''} (${gz.length} bytes); ${removidos} antigo(s) fora da retenção.`);
+      console.log(`[backup] ${nome} concluído: cópia local + ${provedor.rotulo()}${ligacao.conta ? ` (${ligacao.conta})` : ''} (${gz.length} bytes); ${removidos} antigo(s) fora da retenção.`);
+    } else if (erroCloud) {
+      // A cópia local está feita e fica onde está: só a cópia cloud falhou.
+      await log.update({ estado: 'concluido', erro: `Cópia cloud não criada: ${erroCloud}` });
+      console.error(`[backup] ${nome} guardado localmente; cópia cloud (${destino}) falhou: ${erroCloud}`);
     } else {
-      const dir = path.join(__dirname, '..', 'backups', 'local');
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, nome), gz);
-      await log.update({ estado: 'concluido', tamanho: gz.length });
-      console.log(`[backup] ${nome} guardado localmente (sem destino de backups ligado na plataforma).`);
+      await log.update({ estado: 'concluido', erro: null });
+      console.log(`[backup] ${nome} guardado localmente (sem destino de backups configurado ou utilizável).`);
     }
     return log;
   } catch (err) {
-    await log.update({ estado: 'erro', erro: err.message });
-    console.error('[backup] erro:', err.message);
+    // Falhou ANTES da cópia local: não há backup nenhum (estado 'erro').
+    // Falhou DEPOIS: a cópia local existe e é preservada — regista-se a falha
+    // sem transformar um backup válido em «erro».
+    if (localFeito) {
+      await log.update({ estado: 'concluido', erro: err.message }).catch(() => {});
+      console.error('[backup] cópia local preservada; falha a seguir:', err.message);
+    } else {
+      await log.update({ estado: 'erro', erro: err.message }).catch(() => {});
+      console.error('[backup] erro:', err.message);
+    }
     return log;
   }
 }

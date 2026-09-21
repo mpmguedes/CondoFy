@@ -6,6 +6,8 @@ const path = require('path');
 const handlebars = require('handlebars');
 const helpers = require('../helpers/handlebars-helpers');
 const { construirDocumento } = require('../helpers/convocatoria');
+// Interpretação do estado do último backup (módulo puro, sem BD).
+const backupEstado = require('../helpers/backup-estado');
 
 const ROOT = path.join(__dirname, '..', 'views');
 
@@ -167,7 +169,16 @@ const estadoArm = (over = {}) => ({
     { nome: 'dropbox', rotulo: 'Dropbox', icone: 'bi bi-dropbox', disponivel: true, ligado: true, contaPlataforma: false, ligadoPlataforma: false, principal: false, conta: 'gestao@exemplo.pt', estado: {} },
     { nome: 'onedrive', rotulo: 'Microsoft OneDrive', icone: 'bi bi-microsoft', disponivel: true, ligado: false, contaPlataforma: false, ligadoPlataforma: false, principal: false, conta: null, estado: {} },
   ],
-  backup: { destino: 'dropbox', rotulo: 'Dropbox', ligadoPlataforma: true },
+  backup: {
+    destino: 'dropbox',
+    rotulo: 'Dropbox',
+    icone: 'bi bi-dropbox',
+    conta: 'backups@exemplo.pt',
+    origem: 'plataforma',
+    usavel: true,
+    ligadoPlataforma: true,
+    avisoPartilhado: false,
+  },
   // Estado da cifragem das credenciais (chave da instalação configurada).
   cifra: { configurada: true, kid: 'abc123', formato: 'enc:v1', algoritmo: 'AES-256-GCM', anteriores: 0, erro: null, mensagem: null, erroOperacional: null },
   plataforma: [
@@ -178,6 +189,10 @@ const estadoArm = (over = {}) => ({
   ...over,
 });
 const opcoesBase = { pastaRaiz: 'GesCondu', backupsDrive: true };
+// Estado do último backup JÁ interpretado (helpers/backup-estado.js): distingue
+// a cópia local da cópia cloud, sem a vista decidir nada.
+const ROTULOS_ARM = { google_drive: 'Google Drive', dropbox: 'Dropbox', onedrive: 'Microsoft OneDrive' };
+const estadoBackup = (linha) => backupEstado.interpretar(linha, { rotulos: ROTULOS_ARM });
 
 // Vários serviços ligados ao mesmo tempo, ligações no topo (estado + conta).
 html = armazenamento({ ...ctxArm, driveLigado: true, driveOpcoes: opcoesBase, ultimoBackup: null, armazenamento: estadoArm() });
@@ -238,10 +253,33 @@ html = armazenamento({
   driveLigado: true,
   driveOpcoes: opcoesBase,
   ultimoBackup: null,
-  armazenamento: estadoArm({ backup: { destino: 'dropbox', rotulo: 'Dropbox', icone: 'bi bi-dropbox', conta: 'gestao@exemplo.pt', origem: 'condominio', avisoPartilhado: true } }),
+  armazenamento: estadoArm({ backup: { destino: 'dropbox', rotulo: 'Dropbox', icone: 'bi bi-dropbox', conta: 'gestao@exemplo.pt', origem: 'condominio', usavel: true, avisoPartilhado: true } }),
 });
 assert.ok(html.includes('todos os condomínios'), 'armazenamento: avisa que os backups contêm todos os condomínios');
 assert.ok(html.includes('gestao@exemplo.pt'), 'armazenamento: identifica a conta que recebe os backups');
+
+// Um serviço ligado SÓ à plataforma (a ligação que o job de backups prefere)
+// tem de poder ser escolhido como destino — antes só apareciam os ligados ao
+// condomínio e a ligação de plataforma era inalcançável pela interface.
+html = armazenamento({
+  ...ctxArm,
+  driveLigado: false,
+  driveOpcoes: opcoesBase,
+  ultimoBackup: null,
+  ultimoBackupEstado: estadoBackup(null),
+  armazenamento: estadoArm({
+    provedores: [
+      { ...provedoresBase[0], ligado: false, conta: null, contaPlataforma: false, ligadoPlataforma: false },
+      { ...provedoresBase[1], ligado: false, conta: null, ligadoPlataforma: true },
+      provedoresBase[2],
+    ],
+    backup: { destino: null, rotulo: null, icone: null, conta: null, origem: null, usavel: false, avisoPartilhado: false },
+  }),
+});
+const blocoBackups = html.slice(html.indexOf('name="provedor" value="nenhum"'), html.indexOf('Guardar destino'));
+assert.ok(/name="provedor" value="dropbox"/.test(blocoBackups), 'armazenamento: ligação de plataforma disponível para backups');
+assert.ok(blocoBackups.includes('conta da plataforma'), 'armazenamento: identifica a ligação de plataforma');
+assert.ok(!/value="google_drive"/.test(blocoBackups), 'armazenamento: serviço sem ligação nenhuma continua fora da escolha');
 
 // Ligação revogada no fornecedor (removida): a página diz QUAL conta deixou de
 // ter acesso e quando, e dá o botão para a ligar de novo — em vez de mostrar
@@ -320,15 +358,63 @@ assert.ok(!/1 documentos/.test(html), 'armazenamento: singular/plural correto');
 assert.ok(!armazenamento({ ...ctxArm, driveLigado: true, driveOpcoes: opcoesBase, ultimoBackup: null, armazenamento: estadoArm() }).includes('não abrem'), 'armazenamento: sem aviso quando não há documentos no serviço desligado');
 
 
-// Último backup visível com estado.
-html = armazenamento({ ...ctxArm, driveLigado: true, driveOpcoes: opcoesBase, armazenamento: estadoArm(), ultimoBackup: { data: new Date(), tipo: 'diario', estado: 'concluido', erro: null } });
+// Último backup visível com estado (o estado vem de `ultimoBackupEstado`, já
+// interpretado pelo ajudante puro).
+html = armazenamento({
+  ...ctxArm,
+  driveLigado: true,
+  driveOpcoes: opcoesBase,
+  armazenamento: estadoArm(),
+  ultimoBackup: { data: new Date(), tipo: 'diario', estado: 'concluido', erro: null },
+  ultimoBackupEstado: estadoBackup({ data: new Date(), tipo: 'diario', estado: 'concluido', tamanho: 2048, ficheiro_drive_id: 'dbx:abc', erro: null }),
+});
 assert.ok(html.includes('Último backup'), 'armazenamento: último backup visível');
 assert.ok(html.includes('Concluído'), 'armazenamento: estado do último backup');
+assert.ok(html.includes('cópia local + Dropbox'), 'armazenamento: diz que a cópia local E a cloud foram feitas');
+
+// Cópia local feita mas cópia cloud falhada: o backup NÃO é apresentado como
+// erro (a cópia local existe), mas a falha fica visível com o motivo.
+html = armazenamento({
+  ...ctxArm,
+  driveLigado: true,
+  driveOpcoes: opcoesBase,
+  armazenamento: estadoArm(),
+  ultimoBackup: { data: new Date(), tipo: 'diario', estado: 'concluido', erro: 'Cópia cloud não criada: 503' },
+  ultimoBackupEstado: estadoBackup({ data: new Date(), tipo: 'diario', estado: 'concluido', tamanho: 2048, ficheiro_drive_id: null, erro: 'Cópia cloud não criada: 503' }),
+});
+assert.ok(html.includes('Concluído'), 'armazenamento: falha só da cópia cloud mantém o backup concluído');
+assert.ok(html.includes('cópia local'), 'armazenamento: identifica a cópia local');
+assert.ok(html.includes('Cópia cloud não criada: 503'), 'armazenamento: mostra o motivo da falha da cópia cloud');
+
+// Backup em erro (o dump falhou): nenhuma cópia existe.
+html = armazenamento({
+  ...ctxArm,
+  driveLigado: true,
+  driveOpcoes: opcoesBase,
+  armazenamento: estadoArm(),
+  ultimoBackup: { data: new Date(), tipo: 'diario', estado: 'erro', erro: 'mysqldump: command not found' },
+  ultimoBackupEstado: estadoBackup({ data: new Date(), tipo: 'diario', estado: 'erro', erro: 'mysqldump: command not found' }),
+});
+assert.ok(html.includes('Erro'), 'armazenamento: backup falhado é apresentado como erro');
+
+// Destino de backups configurado mas SEM ligação utilizável: o job ignora-o, por
+// isso a página avisa em vez de anunciar uma cópia cloud que nunca acontece.
+html = armazenamento({
+  ...ctxArm,
+  driveLigado: true,
+  driveOpcoes: opcoesBase,
+  ultimoBackup: null,
+  ultimoBackupEstado: estadoBackup(null),
+  armazenamento: estadoArm({ backup: { destino: 'dropbox', rotulo: 'Dropbox', icone: 'bi bi-dropbox', conta: null, origem: null, usavel: false, avisoPartilhado: false } }),
+});
+assert.ok(html.includes('Este destino não tem nenhuma ligação utilizável'), 'armazenamento: avisa quando o destino não é utilizável');
+assert.ok(html.includes('apenas neste servidor'), 'armazenamento: diz onde os backups estão mesmo a ficar');
 
 // Sem destino de backups: opção "só neste servidor" selecionada (radio).
-html = armazenamento({ ...ctxArm, driveLigado: false, driveOpcoes: opcoesBase, ultimoBackup: null, armazenamento: estadoArm({ backup: { destino: null, rotulo: null, icone: null, conta: null, origem: null, avisoPartilhado: false } }) });
+html = armazenamento({ ...ctxArm, driveLigado: false, driveOpcoes: opcoesBase, ultimoBackup: null, ultimoBackupEstado: estadoBackup(null), armazenamento: estadoArm({ backup: { destino: null, rotulo: null, icone: null, conta: null, origem: null, usavel: false, avisoPartilhado: false } }) });
 assert.ok(/value="nenhum"[\s\S]{0,60}checked/.test(html), 'armazenamento: sem destino de backups (só no servidor)');
 assert.ok(html.includes('Ainda não existem backups registados.'), 'armazenamento: sem backups registados');
+assert.ok(!html.includes('Este destino não tem nenhuma ligação utilizável'), 'armazenamento: sem destino não há aviso de ligação');
 
 // 6.3 Separador 3 — Documentos e Automações (área antes escondida atrás de um botão)
 const gruposAuto = [{

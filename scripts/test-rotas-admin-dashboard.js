@@ -60,6 +60,34 @@ const AUDITORIA = COM_DADOS
     ]
   : [];
 
+// ── Estado do armazenamento (dois eixos INDEPENDENTES) ────────────
+// DOCUMENTOS: serviço principal DESTE condomínio (por condomínio).
+// BACKUPS: destino GLOBAL da instalação + a cópia local (sempre existe).
+// O cenário «com dados» tem os dois em serviços DIFERENTES (documentos no
+// Google Drive, backups no Dropbox) para provar que o painel não os confunde.
+const ROTULOS_ARMAZENAMENTO = { google_drive: 'Google Drive', dropbox: 'Dropbox', onedrive: 'Microsoft OneDrive' };
+const armazenamento = COM_DADOS
+  ? {
+      documentosLigado: true,
+      // Configurado E utilizável (ligação de plataforma).
+      destino: 'dropbox',
+      ligacao: { condominioId: null, conta: 'backups@exemplo.pt', origem: 'plataforma' },
+    }
+  : {
+      documentosLigado: true,
+      // Sem destino de backups: a cópia local é a única que existe.
+      destino: null,
+      ligacao: null,
+    };
+
+// Último backup: no cenário «com dados» já foi copiado para o Dropbox; no
+// cenário calmo existe apenas a cópia local. `let` porque os últimos cenários
+// deste teste reescrevem o registo (falha da cópia cloud, erro, sem histórico).
+let BACKUP_LOG = COM_DADOS
+  ? { id: 1, tipo: 'diario', estado: 'concluido', data: `${HOJE}T03:00:00Z`, ficheiro_drive_id: 'dbx:ficheiro-1', tamanho: 51200, erro: null }
+  : { id: 2, tipo: 'diario', estado: 'concluido', data: `${HOJE}T03:00:00Z`, ficheiro_drive_id: null, tamanho: 51200, erro: null };
+const DATA_BACKUP = require('../helpers/dates').formatDate(new Date(BACKUP_LOG.data));
+
 function filtro(linhas, where) {
   if (!where) return linhas;
   return linhas.filter((l) => Object.entries(where).every(([k, v]) => {
@@ -98,7 +126,7 @@ require.cache[modelsPath] = {
     Fornecedor: { count: async () => 5, findAll: async () => [], findOne: async () => null },
     PagamentoFornecedor: { count: async (o = {}) => { consultas.push(['PagamentoFornecedor.count', o]); return COM_DADOS ? 2 : 0; } },
     EmailFila: { count: async () => 0, findAll: async () => [] },
-    BackupLog: { findOne: async () => ({ id: 1, estado: 'concluido', data_hora: `${HOJE}T03:00:00Z` }) },
+    BackupLog: { findOne: async () => (BACKUP_LOG ? { ...BACKUP_LOG } : null) },
     Assembleia: {
       findAll: async (o = {}) => { consultas.push(['Assembleia.findAll', o]); return ASSEMBLEIAS; },
       findOne: async () => null, count: async () => ASSEMBLEIAS.length,
@@ -177,9 +205,33 @@ const stubs = {
     ESTADOS_PENDENTES: ['pendente', 'parcialmente_paga', 'vencida'],
   },
   // Serviços ligados nos dois cenários: o cenário «sem nada a tratar» só pode
-  // ficar calmo se o armazenamento e o email estiverem configurados (os alertas
-  // de Drive/SMTP têm cobertura própria em scripts/test-dashboard-painel.js).
-  '../helpers/drive': { isConfigured: () => true, descargarArquivo: async () => null },
+  // ficar calmo se o armazenamento dos documentos e o email estiverem ligados
+  // (o sinal do armazenamento tem cobertura própria em
+  // scripts/test-dashboard-painel.js e a separação documentos/backups em
+  // scripts/test-backup-estado.js).
+  '../helpers/storage': {
+    // DOCUMENTOS: serviço principal do condomínio ativo. O âmbito é exigido:
+    // decidir o estado sem condomínio (como fazia a versão anterior) é o defeito
+    // que este teste tem de apanhar.
+    isConfigured: (condominioId) => {
+      assert.strictEqual(condominioId, 1, 'o armazenamento dos documentos resolve-se com o condomínio ativo');
+      return armazenamento.documentosLigado;
+    },
+    // BACKUPS: configuração GLOBAL + ligação que o job consegue usar.
+    destinoDeBackup: async () => armazenamento.destino,
+    ligacaoDeBackup: () => armazenamento.ligacao,
+    obterProvedor: (nome) => (nome
+      ? { nome, rotulo: () => ROTULOS_ARMAZENAMENTO[nome] || nome, icone: () => 'bi bi-cloud' }
+      : null),
+    provedores: () => Object.keys(ROTULOS_ARMAZENAMENTO),
+  },
+  // Regressão do defeito original: o painel decidia o estado do armazenamento
+  // pela ligação da PLATAFORMA. Este duplo rebenta se alguém voltar a usá-lo —
+  // o estado tem de vir de `storage` com o condomínio ativo.
+  '../helpers/drive': {
+    isConfigured: () => { throw new Error('o painel não pode decidir o armazenamento pela ligação da plataforma'); },
+    descargarArquivo: async () => null,
+  },
   '../helpers/mailer': { smtpConfigured: () => true, sendMail: async () => ({ ok: true }) },
   '../helpers/convites': { estadoDoConvite: () => 'enviado', marcarAceite: async () => ({}) },
   '../helpers/background-jobs': { resumo: () => ({ ativas: 0, emErro: 0 }), registar: () => {} },
@@ -307,6 +359,28 @@ function pedir(caminho) {
     assert.ok(/Top devedores/.test(r.html), 'painel: bloco de devedores intacto');
   }
 
+  // ── Estado do condomínio: documentos e backups em linhas separadas ─
+  // O defeito original: o rótulo era o do serviço do CONDOMÍNIO e o estado vinha
+  // da ligação da PLATAFORMA — um condomínio com o Drive ligado via
+  // «Google Drive: ○ Desligado».
+  assert.ok(r.html.includes('Documentos: <span class="text-success">● Google Drive</span>'),
+    'painel: documentos ligados nomeiam o serviço do condomínio');
+  assert.ok(r.html.includes('Cópias de segurança:'), 'painel: linha própria para as cópias de segurança');
+  assert.ok(r.html.includes('Email/SMTP: <span class="text-success">● Configurado</span>'),
+    'painel: linha do email mantida');
+  assert.ok(!/○ Desligado/.test(r.html), 'painel: nunca apresenta o armazenamento como «Desligado»');
+  assert.ok(r.html.includes(`Último backup: <span class="text-success">● Concluído</span> · ${DATA_BACKUP}`),
+    'painel: o último backup apresenta o estado e a data');
+  if (COM_DADOS) {
+    // Documentos no Google Drive, backups no Dropbox: o painel mostra os dois
+    // serviços, porque são escolhas independentes.
+    assert.ok(r.html.includes('Cópias de segurança: <i class="bi bi-cloud me-1"></i><span class="text-success">● Dropbox</span>'),
+      'painel: a cópia cloud é o serviço configurado para backups (≠ do dos documentos)');
+  } else {
+    assert.ok(r.html.includes('Cópias de segurança: <span class="text-muted">○ Apenas local</span>'),
+      'painel: sem cloud de backups mostra «Apenas local»');
+  }
+
   // ── Âmbito por condomínio (todas as consultas novas) ─────────────
   const porNome = (nome) => consultas.filter((c) => c[0] === nome).map((c) => c[1]);
   for (const nome of ['Fracao.count', 'Quota.findAll', 'Quota.count', 'Pagamento.count', 'Documento.count', 'Assembleia.findAll', 'PagamentoFornecedor.count']) {
@@ -350,6 +424,69 @@ function pedir(caminho) {
   assert.ok(/Fila de emails:/.test(rGestor.html) === /Fila de emails:/.test(rAdmin.html),
     'painel: a linha «Fila de emails» depende só dos dados, não do papel');
   PAPEL = 'admin';
+
+  // ── Separação documentos/backups: estados que não podem ser confundidos ──
+  // 1. Destino de backups configurado mas SEM ligação utilizável. O job ignora-o
+  //    (ver scripts/test-backup-estado.js), por isso o painel não pode anunciar
+  //    uma cópia cloud que nunca acontece.
+  armazenamento.destino = 'onedrive';
+  armazenamento.ligacao = null;
+  const rSemLigacao = await pedir('/admin');
+  assert.ok(rSemLigacao.html.includes('Cópias de segurança: <span class="text-muted">○ Apenas local</span>'),
+    'painel: destino sem ligação utilizável não é anunciado como cópia cloud');
+  assert.ok(!/● Microsoft OneDrive/.test(rSemLigacao.html),
+    'painel: não anuncia como ativo um serviço que o job não consegue usar');
+
+  // 2. Documentos sem serviço ligado: linha própria e sinal de atenção — mas o
+  //    estado dos BACKUPS não depende disso (a cópia local continua a existir).
+  armazenamento.destino = null;
+  armazenamento.documentosLigado = false;
+  const rSemDocs = await pedir('/admin');
+  assert.ok(rSemDocs.html.includes('Documentos: <span class="text-muted">○ Sem serviço ligado</span>'),
+    'painel: documentos sem serviço ligado');
+  assert.ok(rSemDocs.html.includes('Sem serviço de armazenamento para os documentos'),
+    'painel: sinal de atenção para os documentos');
+  assert.ok(rSemDocs.html.includes('○ Apenas local'),
+    'painel: o estado dos backups não depende do estado dos documentos');
+
+  // 3. Último backup concluído mas com a cópia cloud falhada: a cópia LOCAL
+  //    existe e o painel di-lo — sem transformar um backup válido em «Erro».
+  armazenamento.documentosLigado = true;
+  BACKUP_LOG.ficheiro_drive_id = null;
+  BACKUP_LOG.erro = 'Cópia cloud não criada: 503 service unavailable';
+  const rCloudFalhou = await pedir('/admin');
+  assert.ok(rCloudFalhou.html.includes(`Último backup: <span class="text-warning">● Concluído</span> · ${DATA_BACKUP}`),
+    'painel: cópia cloud falhada mantém o backup como concluído');
+  assert.ok(rCloudFalhou.html.includes('(cópia cloud falhou)'), 'painel: identifica a falha da cópia cloud');
+  assert.ok(rCloudFalhou.html.includes('A cópia cloud do último backup não foi criada (a cópia local existe)'),
+    'painel: sinal de atenção da cópia cloud');
+  assert.ok(!/503 service unavailable/.test(rCloudFalhou.html),
+    'painel: o sinal não despeja a mensagem técnica do fornecedor');
+
+  // 4. Backup em erro: não há cópia nenhuma e o painel diz «Erro».
+  BACKUP_LOG.estado = 'erro';
+  BACKUP_LOG.tamanho = null;
+  BACKUP_LOG.erro = 'mysqldump: command not found';
+  const rBackupErro = await pedir('/admin');
+  assert.ok(rBackupErro.html.includes(`Último backup: <span class="text-danger">● Erro</span> · ${DATA_BACKUP}`),
+    'painel: backup em erro é apresentado como erro');
+  assert.ok(rBackupErro.html.includes('O último backup falhou'), 'painel: sinal de atenção do backup em erro');
+
+  // 5. Backup a correr: nem sucesso nem falha.
+  BACKUP_LOG.estado = 'em_curso';
+  BACKUP_LOG.erro = null;
+  const rEmCurso = await pedir('/admin');
+  assert.ok(rEmCurso.html.includes(`Último backup: <span class="text-warning">● Em curso</span> · ${DATA_BACKUP}`),
+    'painel: backup a correr é apresentado como «Em curso»');
+
+  // 6. Sem histórico de backups: estado vazio explícito — nunca «Desligado»,
+  //    porque não é a mesma coisa não haver backups e não haver destino.
+  BACKUP_LOG = null;
+  const rSemHistorico = await pedir('/admin');
+  assert.ok(rSemHistorico.html.includes('Último backup: <span class="text-muted">○ Sem backups</span>'),
+    'painel: sem histórico de backups mostra «Sem backups»');
+  assert.ok(rSemHistorico.html.includes('Cópias de segurança: <span class="text-muted">○ Apenas local</span>'),
+    'painel: sem histórico, a cópia local continua a ser o destino');
 
   console.log(`✓ Testes das rotas do painel passaram (cenário «${CENARIO}», sem base de dados).`);
 })().catch((err) => {

@@ -167,13 +167,19 @@
           </label>
         </div>
         {{#each armazenamento.provedores}}
-        {{#if ligado}}
+        {{!-- Um serviço serve para backups quando tem QUALQUER ligação
+             utilizável: a da plataforma (a que o job de backups prefere) ou a
+             de um condomínio. Antes só apareciam os ligados ao condomínio, pelo
+             que uma ligação de plataforma criada para os backups não podia ser
+             escolhida aqui. --}}
+        {{#if (or ligado ligadoPlataforma)}}
         <div class="col-12 col-md-4">
           <label class="border rounded p-3 d-flex align-items-center gap-2 w-100 h-100 {{#if (eq nome ../armazenamento.backup.destino)}}border-primary border-2{{/if}}">
             <input class="form-check-input m-0" type="radio" name="provedor" value="{{nome}}" {{#if (eq nome ../armazenamento.backup.destino)}}checked{{/if}} />
             <i class="{{icone}} fs-5" aria-hidden="true"></i>
             <span class="fw-semibold">{{rotulo}}</span>
-            {{#if (eq nome ../armazenamento.backup.destino)}}<span class="badge text-bg-primary ms-auto">Em uso</span>{{/if}}
+            {{#if (eq nome ../armazenamento.backup.destino)}}<span class="badge text-bg-primary ms-auto">Em uso</span>
+            {{else}}{{#if ligadoPlataforma}}{{#unless ligado}}<span class="badge text-bg-light border ms-auto">conta da plataforma</span>{{/unless}}{{/if}}{{/if}}
           </label>
         </div>
         {{/if}}
@@ -207,17 +213,29 @@
             <i class="bi bi-hdd me-1" aria-hidden="true"></i>Só neste servidor
           {{/if}}
         </p>
+        {{#if armazenamento.backup.destino}}
+        {{#unless armazenamento.backup.usavel}}
+        <div class="alert alert-warning small mt-2 mb-0">
+          <span class="material-symbols-outlined me-1" aria-hidden="true">warning</span>
+          Este destino não tem nenhuma ligação utilizável: os backups estão a ser guardados
+          <strong>apenas neste servidor</strong>. Ligue uma conta a {{armazenamento.backup.rotulo}} para a cópia cloud voltar a ser feita.
+        </div>
+        {{/unless}}
+        {{/if}}
       </div>
       <div class="col-12 col-lg-6">
         <div class="fw-semibold small mb-1">Último backup</div>
-        {{#if ultimoBackup}}
+        {{#if ultimoBackupEstado.data}}
         <p class="small mb-0">
-          {{formatDateTime ultimoBackup.data}}
-          <span class="text-muted">· {{ultimoBackup.tipo}}</span>
-          {{#if (eq ultimoBackup.estado 'concluido')}}<span class="badge text-bg-success ms-1">Concluído</span>
-          {{else if (eq ultimoBackup.estado 'erro')}}<span class="badge text-bg-danger ms-1" title="{{ultimoBackup.erro}}">Erro</span>
-          {{else}}<span class="badge text-bg-warning ms-1">Em curso</span>{{/if}}
+          {{formatDateTime ultimoBackupEstado.data}}
+          <span class="text-muted">· {{ultimoBackupEstado.tipo}}</span>
+          <span class="badge text-bg-{{ultimoBackupEstado.cor}} ms-1" {{#if ultimoBackupEstado.erro}}title="{{ultimoBackupEstado.erro}}"{{/if}}>{{ultimoBackupEstado.rotulo}}</span>
+          {{#if ultimoBackupEstado.temCloud}}<span class="text-muted">cópia local + {{#if ultimoBackupEstado.cloud.rotulo}}{{ultimoBackupEstado.cloud.rotulo}}{{else}}cloud{{/if}}</span>
+          {{else if ultimoBackupEstado.temLocal}}<span class="text-muted">cópia local</span>{{/if}}
         </p>
+        {{#if ultimoBackupEstado.detalhe}}
+        <p class="small text-warning mb-0">{{#if ultimoBackupEstado.erro}}{{ultimoBackupEstado.erro}}{{else}}{{ultimoBackupEstado.detalhe}}{{/if}}</p>
+        {{/if}}
         {{else}}
         <p class="small mb-0 text-muted">Ainda não existem backups registados.</p>
         {{/if}}

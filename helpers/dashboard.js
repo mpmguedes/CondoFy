@@ -133,16 +133,17 @@ const PRIORIDADE_SINAL = {
   orcamento: 50,
   assembleias: 45,
   email_erros: 40,
+  backup: 35,
   drive: 30,
   smtp: 30,
 };
 
 // Sinais cujo DESTINO exige `comPapel('admin')` nos routers de `/admin`
-// (`routes/emails.js` → email_erros/smtp; `routes/configuracao.js` → drive).
-// Só se mostram a quem tem efetivamente esse papel: um gestor receberia um
-// `302 /` ao clicar. O papel NÃO vem de `users.role` (legado) — quem chama
-// passa `podeAdmin` a partir do papel do condomínio ATIVO.
-const SINAIS_SO_ADMIN = new Set(['email_erros', 'drive', 'smtp']);
+// (`routes/emails.js` → email_erros/smtp; `routes/configuracao.js` →
+// backup/drive). Só se mostram a quem tem efetivamente esse papel: um gestor
+// receberia um `302 /` ao clicar. O papel NÃO vem de `users.role` (legado) —
+// quem chama passa `podeAdmin` a partir do papel do condomínio ATIVO.
+const SINAIS_SO_ADMIN = new Set(['email_erros', 'backup', 'drive', 'smtp']);
 
 // Constrói os sinais. `dados`:
 //  · nVencidas {number}, comprovativosPendentes {number}
@@ -150,7 +151,13 @@ const SINAIS_SO_ADMIN = new Set(['email_erros', 'drive', 'smtp']);
 //  · orcamentoEstadoAberto {string|null}
 //  · proximasAssembleias {Array<{id, numero, data, designacao}>}
 //  · pagamentosFornecedorPendentes {number}, filaErros {number}
-//  · driveLigado {boolean}, smtp {boolean}
+//  · documentosLigado {boolean} — os DOCUMENTOS do condomínio têm um serviço
+//    de armazenamento ligado? (é o armazenamento principal do condomínio; não
+//    tem nada a ver com o destino dos backups, que é da instalação)
+//  · backupEstado {string|null} — estado interpretado do último backup
+//    (`helpers/backup-estado.js`): só 'erro' e 'local_copia_cloud_falhada'
+//    geram sinal (a cópia local existe nos dois casos).
+//  · smtp {boolean}
 //  · podeAdmin {boolean} — o perfil tem papel `admin` no condomínio ativo?
 //    Omisso ⇒ true (compatibilidade: quem não passa o contexto mantém o
 //    comportamento anterior). Com `false`, são omitidos os sinais cujo destino
@@ -240,13 +247,37 @@ function sinaisDeAtencao(dados = {}) {
   // Serviços: só se assinala o que está EXPLICITAMENTE desligado. Sem
   // informação (`undefined`) não se inventa um problema — evita alarmes falsos
   // se o contexto vier incompleto.
-  if (dados.driveLigado === false) {
+  //
+  // `documentosLigado` refere-se ao armazenamento principal DOS DOCUMENTOS do
+  // condomínio (por condomínio) — nunca ao destino dos backups, que é uma
+  // configuração da instalação e não depende deste condomínio.
+  if (dados.documentosLigado === false) {
     juntar('drive', {
       tipo: 'sistema',
       gravidade: 'info',
-      texto: 'Armazenamento externo desligado',
+      texto: 'Sem serviço de armazenamento para os documentos',
       quantidade: 0,
       destino: { url: '/admin/config/armazenamento', texto: 'Ligar armazenamento' },
+    });
+  }
+  // Último backup: só é um problema quando falhou por completo ou quando a
+  // cópia cloud não foi criada. Em ambos os casos a cópia LOCAL é sempre
+  // feita, por isso a mensagem di-lo explicitamente.
+  if (dados.backupEstado === 'erro') {
+    juntar('backup', {
+      tipo: 'sistema',
+      gravidade: 'atencao',
+      texto: 'O último backup falhou',
+      quantidade: 0,
+      destino: { url: '/admin/config/armazenamento', texto: 'Ver backups' },
+    });
+  } else if (dados.backupEstado === 'local_copia_cloud_falhada') {
+    juntar('backup', {
+      tipo: 'sistema',
+      gravidade: 'info',
+      texto: 'A cópia cloud do último backup não foi criada (a cópia local existe)',
+      quantidade: 0,
+      destino: { url: '/admin/config/armazenamento', texto: 'Ver backups' },
     });
   }
   if (dados.smtp === false) {
@@ -327,7 +358,9 @@ const ATIVIDADE = {
   configurar_smtp: { rotulo: 'Configuração de email alterada', icone: 'settings', url: '/admin/emails' },
   configurar_automacoes: { rotulo: 'Automações configuradas', icone: 'settings', url: '/admin/config/automacoes' },
   configurar_quotas: { rotulo: 'Configuração de quotas alterada', icone: 'settings', url: '/admin/quotas/config' },
-  definir_destino_backups: { rotulo: 'Destino de backups alterado', icone: 'backup', url: '/admin/config/armazenamento/backups' },
+  // `/admin/config/armazenamento/backups` só aceita POST: a atividade tem de
+  // apontar para a página (GET), senão o clique dava 404.
+  definir_destino_backups: { rotulo: 'Destino de backups alterado', icone: 'backup', url: '/admin/config/armazenamento' },
   configurar_armazenamento_drive: { rotulo: 'Armazenamento configurado', icone: 'cloud_done', url: '/admin/config/armazenamento' },
 };
 

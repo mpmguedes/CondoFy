@@ -36,7 +36,12 @@ const dashboardHelpers = require('../helpers/dashboard');
 // Histórico de titularidade da fração (relação temporal pessoa/conta ↔ fração).
 const titularidades = require('../helpers/titularidades');
 const { validarNif } = require('../public/js/validacao-fiscal');
-const drive = require('../helpers/drive');
+// Estado real do armazenamento: DOCUMENTOS (por condomínio) e BACKUPS
+// (configuração da instalação) são dois eixos independentes.
+const storage = require('../helpers/storage');
+// Interpretação pura de um registo de `backup_logs` (cópia local vs. cópia
+// cloud) — nenhuma vista decide isto por si.
+const backupEstado = require('../helpers/backup-estado');
 const { smtpConfigured, sendMail } = require('../helpers/mailer');
 const convites = require('../helpers/convites');
 // Acesso de suporte (terceiro contexto de autorização) — usado apenas no bloco
@@ -268,6 +273,35 @@ router.get('/', async (req, res) => {
     .sort((a, b) => b.totalC - a.totalC)
     .slice(0, 5);
 
+  // Estado real dos serviços, nos DOIS eixos independentes:
+  //  · DOCUMENTOS — o serviço principal DESTE condomínio (por condomínio);
+  //  · BACKUPS — a cópia LOCAL (sempre existe) e, quando configurado e
+  //    utilizável, o destino GLOBAL da instalação (que pode ser outro serviço).
+  // O serviço dos documentos resolve-se com o condomínio ativo: a versão
+  // anterior avaliava o armazenamento SEM âmbito de condomínio (lia apenas a
+  // ligação da plataforma) e mostrava «Desligado» a um condomínio que tinha o
+  // Drive ligado.
+  const documentosLigado = storage.isConfigured(req.condominioId);
+  const destinoBackup = await storage.destinoDeBackup().catch(() => null);
+  const provedorBackup = destinoBackup ? storage.obterProvedor(destinoBackup) : null;
+  const ligacaoBackup = destinoBackup ? storage.ligacaoDeBackup(destinoBackup) : null;
+  // Só é apresentado como destino ativo o que o job consegue mesmo usar: um
+  // destino configurado sem ligação utilizável é ignorado por ele.
+  const copiaCloud = provedorBackup && ligacaoBackup && ligacaoBackup.origem
+    ? {
+        nome: destinoBackup,
+        rotulo: provedorBackup.rotulo(),
+        icone: typeof provedorBackup.icone === 'function' ? provedorBackup.icone() : 'bi bi-cloud',
+        conta: ligacaoBackup.conta || null,
+      }
+    : null;
+  const rotulosProvedor = {};
+  for (const nome of storage.provedores()) {
+    const p = storage.obterProvedor(nome);
+    if (p) rotulosProvedor[nome] = p.rotulo();
+  }
+  const ultimoBackupEstado = backupEstado.interpretar(ultimoBackup, { rotulos: rotulosProvedor });
+
   // Sinais de atenção: a decisão é do ajudante (lógica pura); aqui só se reúne o
   // que ele precisa. Sem sinais a apresentar, a vista mostra o estado tranquilo.
   // `podeAdmin` vem do papel do condomínio ATIVO (a mesma fonte que
@@ -293,7 +327,8 @@ router.get('/', async (req, res) => {
       designacao: a.designacao || null,
     })),
     filaErros,
-    driveLigado: drive.isConfigured(),
+    documentosLigado,
+    backupEstado: ultimoBackupEstado.estado,
     smtp: smtpConfigured(),
   });
 
@@ -324,9 +359,14 @@ router.get('/', async (req, res) => {
       5
     ),
     sistema: {
-      driveLigado: drive.isConfigured(),
+      // Documentos do condomínio (serviço principal) — o nome e o ícone do
+      // serviço vêm de `@root.armazenamentoRotulo`/`armazenamentoIcone`.
+      documentos: { ligado: documentosLigado },
+      // Cópias de segurança: a local existe sempre; a cloud é opcional e
+      // independente do serviço dos documentos.
+      backups: { cloud: copiaCloud },
+      ultimoBackup: ultimoBackupEstado,
       smtp: smtpConfigured(),
-      ultimoBackup,
       filaPendentes,
       filaErros,
     },

@@ -39,7 +39,10 @@ const CALMO = {
   orcamentoEstadoAberto: null,
   proximasAssembleias: [],
   filaErros: 0,
-  driveLigado: true,
+  // Armazenamento dos DOCUMENTOS do condomínio (por condomínio) — não confundir
+  // com o destino dos backups, que é uma configuração da instalação.
+  documentosLigado: true,
+  backupEstado: null,
   smtp: true,
 };
 
@@ -48,8 +51,8 @@ function testeSemSinais() {
   assert.deepStrictEqual(sinaisDeAtencao(CALMO), [], 'condomínio em ordem: nenhum sinal');
   // Sem dados nenhuns não rebenta nem inventa sinais.
   assert.deepStrictEqual(sinaisDeAtencao(), [], 'sem dados não inventa sinais');
-  assert.deepStrictEqual(sinaisDeAtencao({ nVencidas: 0, quotasMesEmitidas: 12, driveLigado: true, smtp: true }), [],
-    'zeros e serviços ligados não produzem sinais');
+  assert.deepStrictEqual(sinaisDeAtencao({ nVencidas: 0, quotasMesEmitidas: 12, documentosLigado: true, backupEstado: 'local', smtp: true }), [],
+    'zeros, serviços ligados e um backup concluído não produzem sinais');
   console.log('  ✓ sem nada a tratar, a lista fica vazia (nenhum zero é «problema»)');
 }
 
@@ -62,7 +65,9 @@ function testeSinaisIndividuais() {
     ['pagamentos_fornecedor', { pagamentosFornecedorPendentes: 2 }, '/admin/fornecedores', 2],
     ['documentos', { documentosPorDisponibilizar: 5 }, '/admin/documentos', 5],
     ['email_erros', { filaErros: 7 }, '/admin/emails?estado=erros', 7],
-    ['drive', { driveLigado: false }, '/admin/config/armazenamento', 0],
+    ['backup', { backupEstado: 'erro' }, '/admin/config/armazenamento', 0],
+    ['backup', { backupEstado: 'local_copia_cloud_falhada' }, '/admin/config/armazenamento', 0],
+    ['drive', { documentosLigado: false }, '/admin/config/armazenamento', 0],
     ['smtp', { smtp: false }, '/admin/emails#smtp', 0],
   ];
   for (const [id, extra, url, quantidade] of casos) {
@@ -99,7 +104,7 @@ function testeSinaisIndividuais() {
 function testePrioridade() {
   const sinais = sinaisDeAtencao({
     nVencidas: 1, comprovativosPendentes: 1, quotasMesEmitidas: 0, pagamentosFornecedorPendentes: 1,
-    documentosPorDisponibilizar: 1, filaErros: 1, driveLigado: false, smtp: false,
+    documentosPorDisponibilizar: 1, filaErros: 1, documentosLigado: false, backupEstado: 'erro', smtp: false,
     ano: 2026, orcamentoEstadoAberto: 'aprovado', orcamentoEstadoRotulo: 'aprovado', orcamentoId: 3,
     proximasAssembleias: [{ id: 1, data: '01/12/2026' }],
   });
@@ -107,6 +112,8 @@ function testePrioridade() {
   assert.strictEqual(ordem[0], 'quotas_vencidas', 'a dívida dos condóminos vem primeiro');
   assert.ok(ordem.indexOf('comprovativos') < ordem.indexOf('documentos'), 'dinheiro antes de trabalho de arquivo');
   assert.ok(ordem.indexOf('quotas_mes') < ordem.indexOf('drive'), 'trabalho do mês antes da configuração');
+  assert.ok(ordem.indexOf('email_erros') < ordem.indexOf('backup'), 'um email falhado antes da cópia de segurança');
+  assert.ok(ordem.indexOf('backup') < ordem.indexOf('drive'), 'a cópia de segurança antes do destino da cópia');
   assert.ok(ordem.indexOf('email_erros') > ordem.indexOf('assembleias'), 'configuração depois do trabalho corrente');
   const prioridades = sinais.map((s) => s.prioridade);
   assert.deepStrictEqual(prioridades, [...prioridades].sort((a, b) => b - a), 'ordenados por prioridade decrescente');
@@ -236,6 +243,16 @@ function testeVista() {
   // condomínio»), sem duplicação na nova secção de sinais.
   const ocorrencias = (vista.match(/armazenamentoRotulo/g) || []).length;
   assert.strictEqual(ocorrencias, 1, `vista: o estado do armazenamento aparece uma só vez (${ocorrencias})`);
+  // Documentos e backups são linhas SEPARADAS: um condomínio com o serviço de
+  // documentos ligado não pode aparecer como «Desligado» só porque a ligação da
+  // plataforma (a dos backups) não existe.
+  for (const linha of ['Documentos:', 'Cópias de segurança:', 'Último backup:', 'Email/SMTP:']) {
+    assert.ok(vista.includes(linha), `vista: linha «${linha}» no cartão do estado`);
+  }
+  assert.ok(vista.includes('○ Apenas local'), 'vista: sem cloud de backups mostra «Apenas local»');
+  assert.ok(vista.includes('{{sistema.backups.cloud.rotulo}}'), 'vista: nomeia o serviço que recebe a cópia cloud');
+  assert.ok(vista.includes('formatDate sistema.ultimoBackup.data'), 'vista: o último backup mostra a data');
+  assert.ok(!/○ Desligado/.test(vista), 'vista: os backups nunca são apresentados como «Desligado»');
   const blocoAtencaoVista = vista.slice(vista.indexOf('Precisa de atenção'), vista.indexOf('TOP DEVEDORES'));
   assert.ok(!/armazenamentoRotulo|sistema\.smtp/.test(blocoAtencaoVista),
     'vista: a secção de sinais não repete o estado dos serviços');
