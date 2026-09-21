@@ -9,7 +9,13 @@ const router = express.Router();
 router.use(tenant.comCondominioAtivo);
 router.use(tenant.comPapel('admin'));
 
-router.post('/sistema/backup', async (req, res) => {
+// O backup é da INSTALAÇÃO (o dump contém dados de TODOS os condomínios), pelo
+// que o disparo manual é uma operação da administração global: só um Super
+// Admin a pode fazer (`tenant.apenasSuperAdmin`, decidido por
+// `users.role_global`). Sem esta guarda, um admin de condomínio iniciava um
+// backup da instalação inteira. A guarda corre ANTES do handler, pelo que um
+// pedido recusado não chega a arrancar o backup.
+router.post('/sistema/backup', tenant.apenasSuperAdmin, async (req, res) => {
   req.flash('success_msg', 'Backup manual iniciado.');
   executarBackup('manual')
     .then((log) => {

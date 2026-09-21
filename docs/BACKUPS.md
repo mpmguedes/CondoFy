@@ -1,0 +1,262 @@
+# Backups do GesCondu — arquitetura
+
+> **Resumo:** os backups são da **instalação**. Cada backup é um **dump completo da base de
+> dados**, que contém os dados de **todos os condomínios**. A cópia **local é obrigatória**; a
+> cópia **cloud é adicional**. As **retenções são independentes** (local e cloud), por **idade**,
+> com um mínimo de **30 dias**. O **último backup local válido é sempre preservado**.
+>
+> **Os documentos dos condomínios não fazem parte dos backups.**
+
+---
+
+## 1. O que é um backup (e o que não é)
+
+```
+                    GESCONDU
+                       │
+              Base de dados global
+                       │
+                 BACKUP DA INSTALAÇÃO
+                 (dump completo, .sql.gz)
+                       │
+              ┌────────┴────────┐
+              │                 │
+           LOCAL              CLOUD
+         obrigatório         adicional
+              │                 │
+         retenção A         retenção B
+              │                 │
+              └────────┬────────┘
+                       │
+                   dados da BD
+
+
+       DOCUMENTOS DOS CONDOMÍNIOS
+                       │
+              armazenamento próprio
+         Google Drive / Dropbox / OneDrive
+         (por condomínio — NUNCA no backup)
+```
+
+Um ficheiro como `backup_diario_2026-09-21_1790000000000.sql.gz` representa a **instalação
+inteira**. Não existe — e não se tenta inferir — uma correspondência `backup → condomínio`:
+
+* a tabela `backup_logs` **não tem** `condominio_id`;
+* não se introduz `condominio_id` só para satisfazer a interface;
+* não se tenta determinar que parte de um dump pertence a um condomínio;
+* não se transformam os backups em backups por condomínio.
+
+A área de administração **não** apresenta uma tabela «Condomínio A → 400 MB»: não há informação
+que a permita. O que existe por condomínio são os **documentos**, e isso é um eixo separado
+(secção 6).
+
+---
+
+## 2. Fluxo de um backup
+
+```
+Base de dados da instalação
+        ↓
+1. mysqldump --single-transaction --quick --skip-lock-tables
+        ↓
+2. gzip
+        ↓
+3. CÓPIA LOCAL (obrigatória)  →  backups/local/backup_<tipo>_<data>_<epoch>.sql.gz
+        ↓
+4. VALIDAÇÃO da cópia local   →  existe, não está vazia, começa por 1f 8b (gzip)
+        ↓
+5. `tamanho` registado em backup_logs   ← é a PROVA de que o backup existe
+        ↓
+6. CÓPIA CLOUD (opcional)     →  só se houver destino configurado E ligação utilizável
+        ↓
+7. RETENÇÃO (local e cloud, independentes)
+```
+
+**Regras que não se alteram sem revisão:**
+
+| Situação | Resultado |
+|---|---|
+| Sem cloud configurada | Cópia local criada; **não é erro**; o ciclo conclui |
+| Cloud funcional | Cópia local + cópia cloud, ambas registadas |
+| Cloud indisponível | Cópia local **preservada**; `erro` registado; estado «local, cópia cloud falhada» |
+| Credenciais cloud inválidas | Igual ao anterior — o local é independente |
+| **Falha da cópia local** | **O ciclo FALHA** (`estado='erro'`) — a cloud **nunca** é tratada como substituto |
+| Falha a seguir à cópia local | O backup continua **válido**; regista-se a falha sem o invalidar |
+
+`estado='concluido'` significa sempre **«o BACKUP concluiu»**. Uma falha apenas da cópia cloud
+não transforma um backup válido em erro.
+
+---
+
+## 3. Onde ficam as cópias
+
+| Cópia | Onde | Âmbito |
+|---|---|---|
+| Local | `BACKUP_LOCAL_DIR` ou `backups/local` (não versionada, `.gitignore:9`) | instalação |
+| Cloud | pasta `Backups` na raiz do serviço escolhido | instalação |
+
+A pasta local contém **apenas dumps da base de dados**. Não contém — e não passa a conter —
+documentos, PDFs, imagens, anexos, ZIP de documentos nem espelhos locais do Drive/Dropbox/OneDrive.
+Qualquer ficheiro que não siga o formato `backup_<tipo>_<AAAA-MM-DD>_<epoch>.sql.gz` é
+**ignorado** pelo inventário: nunca é contado, nunca é apagado.
+
+---
+
+## 4. Retenção
+
+* **Duas retenções independentes:** uma para a cópia local, outra para a cloud.
+  `Local 30 / Cloud 90` é uma combinação válida.
+* **Por idade**, nunca por número de ficheiros: «eliminar os backups com mais de 30 dias» —
+  não «manter os últimos 30».
+* **Mínimo: 30 dias.** Não há máximo artificial (`30 / 60 / 90 / 180 / 365` são sugestões; o
+  campo aceita mais). A validação é feita **no servidor**, não no browser.
+* A limpeza local **nunca** apaga ficheiros da cloud; a limpeza cloud **nunca** apaga ficheiros
+  locais. Uma falha de autenticação da cloud não provoca nenhuma eliminação local.
+* A limpeza automática pode ser **desligada**; a limpeza manual corre sempre.
+
+### ⛔ Proteção do último backup válido
+
+A limpeza automática **nunca** deixa a instalação sem qualquer backup local válido. Mesmo que a
+retenção indique que **todos** os backups estão fora do prazo, o **mais recente válido** é
+preservado. A mesma regra é aplicada às **operações manuais** (individual e por data).
+
+```
+retenção automática → apaga tudo → instalação sem backup local     ⛔ NÃO ACONTECE
+```
+
+### Configuração
+
+Guardada em `configuracoes` (chave-valor — **sem migration**), editável em
+**Administração global → Backups**:
+
+| Chave | Significado |
+|---|---|
+| `backup_retencao_local` | dias de retenção da cópia local (mín. 30) |
+| `backup_retencao_cloud` | dias de retenção da cópia cloud (mín. 30) |
+| `backup_limpeza_automatica` | `1`/`0` |
+| `backup_limite_local_gb` | limite **informativo** (nunca apaga) |
+| `backup_ultima_limpeza` | instante da última limpeza |
+| `backup_resultado_limpeza` | resumo da última limpeza |
+
+`.env` (apenas *fallback*, quando nada está guardado): `BACKUP_DAILY_RETENTION` (local),
+`BACKUP_CLOUD_RETENTION` (cloud), `BACKUP_LOCAL_LIMIT_GB`, `BACKUP_LOCAL_DIR`, `BACKUP_HOUR`.
+
+---
+
+## 5. Administração (Super Admin)
+
+**Administração global → Backups** (`/global/armazenamento`), acessível **apenas** a
+`users.role_global = 'super_admin'`. Um administrador de condomínio é recusado (302) — o dump
+contém dados de todos os condomínios.
+
+A página mostra:
+
+* **Cópia local:** espaço ocupado, nº de backups válidos (e ficheiros inválidos), backup mais
+  antigo/mais recente, último backup válido, espaço do volume, pasta, retenção configurada,
+  estado da limpeza automática e resultado da última limpeza. Tudo **medido a partir dos
+  ficheiros reais** (`fs.readdirSync` + `fs.statSync`).
+* **Cópia cloud:** destino, conta, ligação utilizável, nº de cópias **registadas**, mais
+  antiga/mais recente, retenção. O **espaço ocupado na cloud não é apresentado** — os
+  fornecedores não expõem a dimensão da pasta de backups na fachada do GesCondu. Diz-se
+  «não disponível» em vez de estimar.
+* **Lista de backups:** data/hora, tipo, destino, tamanho, estado.
+* **Eliminação manual:** um backup individual, ou todos os anteriores a uma data. Ambas com
+  confirmação explícita e a proteção do último backup válido.
+* **Armazenamento documental:** secção **separada**, com o tamanho **registado** por condomínio
+  (`documentos.tamanho`), mais antigo/mais recente e a contagem de documentos sem tamanho
+  registado. **Nunca somado** ao espaço dos backups.
+
+### Limite informativo de espaço
+
+`Limite informativo local (GB)` serve para **alertar** e prevenir crescimento inesperado.
+**Não** provoca eliminação automática. A retenção continua a ser por idade.
+
+---
+
+## 6. Documentos ≠ backups
+
+| | Backups | Documentos |
+|---|---|---|
+| O que protegem | os **dados da instalação** (base de dados) | os **ficheiros** de cada condomínio |
+| Âmbito | instalação (todos os condomínios) | **por condomínio** |
+| Onde | `backups/local` + destino cloud de backups | serviço escolhido pelo condomínio (Drive/Dropbox/OneDrive) |
+| Retenção | por idade, configurável | não é gerida pelo sistema de backups |
+
+* O espaço dos documentos **não** conta como espaço de backups locais.
+* Os documentos **não** são incluídos nas métricas de armazenamento dos backups.
+* A retenção de backups **nunca** elimina documentos.
+* Os documentos **nunca** são movidos para o armazenamento local de backups.
+
+---
+
+## 7. Segurança
+
+* Acesso exclusivo do **Super Admin** (`role_global`), com validação no servidor.
+* Os nomes de ficheiro vindos do cliente **nunca** são usados como caminhos: só passa um nome
+  simples, conforme ao formato de backup, e o resultado tem de ficar **dentro** do diretório
+  (`helpers/backup-inventario.js:caminhoSeguro`). Isto bloqueia *path traversal*.
+* Nenhum dump é servido por endpoint público; não são criados links do fornecedor nem links
+  partilhados.
+* Não são expostos tokens nem credenciais (os tokens continuam cifrados em repouso e não
+  aparecem nos registos).
+* As operações administrativas são auditadas (`backup_retencao_alterada`,
+  `backup_retencao_recusada`, `backup_eliminado`, `backup_eliminado_por_data`,
+  `backup_eliminacao_recusada`, `backup_limpeza_manual`).
+
+---
+
+## 8. Implementação
+
+| Ficheiro | Papel |
+|---|---|
+| `jobs/backup.js` | o ciclo (dump → local → validar → cloud → retenção) e as funções de inventário/retenção reutilizadas pela administração |
+| `helpers/backup-inventario.js` | lê o **disco**: nome, tipo, data, tamanho, validade; junta ao registo por `tipo|tamanho`; segurança de caminho |
+| `helpers/backup-retencao.js` | decisão pura: validação de dias (mín. 30), seleção por idade, proteção do último válido, configuração persistida |
+| `helpers/backup-estado.js` | interpretação pura de `backup_logs` (os 5 estados) |
+| `routes/global-admin.js` | rotas de `/global/armazenamento` (ver, retenção, limpeza, eliminação) |
+| `views/admin/global/armazenamento.handlebars` | a interface (PT-PT) |
+| `jobs/scheduler.js` | cron diário (`BACKUP_HOUR`) |
+
+**Sem migration.** Tudo cabe nas estruturas existentes: `backup_logs` (sem alterações) e
+`configuracoes` (chave-valor). O **nome do ficheiro é auto-descritivo** — `tipo`, data e instante
+saem do próprio nome —, pelo que não foi preciso acrescentar uma coluna de nome.
+
+### Limitações conhecidas
+
+* **Dropbox não suporta remoção** de ficheiros na fachada do GesCondu (`storage.apagarArquivo`
+  devolve `false`). Com destino de backups Dropbox, a retenção **cloud** é um no-op: as cópias
+  acumulam-se e o resultado da limpeza di-lo explicitamente («o serviço de destino não suporta
+  remoção»). A retenção **local** funciona normalmente.
+* **Espaço ocupado na cloud** não é medível (não há listagem de pasta na fachada). Apresenta-se
+  «não disponível».
+* **Âmbito da remoção cloud:** a remoção usa a ligação **atual** do destino. Se o destino for
+  mudado para outra conta entre o upload e a limpeza, a remoção de uma cópia antiga pode não
+  encontrar o ficheiro (o OneDrive devolve `true` num 404, por ser idempotente).
+* **Retenções por tipo** (`BACKUP_WEEKLY_RETENTION`, `BACKUP_MONTHLY_RETENTION`) foram
+  substituídas por retenções **por destino**. Só o backup `diario` é agendado; `semanal`,
+  `mensal` e `manual` existem no ENUM mas não têm agendamento.
+* **Fora de âmbito (documentado, não corrigido):** a escolha do destino de backups
+  (`POST /admin/config/armazenamento/backups`) e o disparo de um backup manual
+  (`POST /admin/sistema/backup`) continuam acessíveis a um administrador de condomínio, embora
+  sejam operações da **instalação**. São defeitos de autorização, não de backups, e ficam para
+  uma tarefa própria.
+
+---
+
+## 9. Testes
+
+| Script | Cobre |
+|---|---|
+| `scripts/test-backup-estado.js` | os 5 estados, o fluxo local+cloud, a independência dos fornecedores, a retenção configurável e o âmbito da remoção |
+| `scripts/test-backup-retencao.js` | cenários **A–I e K**: sem cloud, cloud funcional, cloud indisponível, credenciais inválidas, falha local, retenção local, retenção cloud, métricas, eliminação manual, documentos separados |
+| `scripts/test-rotas-global-backups.js` | cenário **J**: isolamento administrativo (HTTP real), a página com os valores reais e a validação no servidor |
+
+```bash
+node scripts/test-backup-estado.js
+node scripts/test-backup-retencao.js
+node scripts/test-rotas-global-backups.js
+```
+
+Os testes correm **sem base de dados e sem rede**, com duplos de `../models`,
+`../helpers/storage`, `../helpers/config` e `child_process.execFile`. A retenção local escreve num
+diretório temporário (`BACKUP_LOCAL_DIR`).

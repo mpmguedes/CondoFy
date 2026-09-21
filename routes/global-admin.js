@@ -20,13 +20,16 @@
 // canónico em `/global*`. O shim não serve conteúdo: é só um redirect.
 // ─────────────────────────────────────────────────────────────────────
 const express = require('express');
-const { Op } = require('sequelize');
+const fs = require('fs');
+const { Op, fn, col, literal } = require('sequelize');
 const {
   Condominio,
   User,
   UserCondominio,
   Fracao,
   AuditLog,
+  Documento,
+  BackupLog,
 } = require('../models');
 // Regra única do estado da associação (reativação só quando explícita).
 const titularidades = require('../helpers/titularidades');
@@ -37,6 +40,16 @@ const suporte = require('../helpers/suporte');
 // Eliminação de condomínio: descoberta de dependências a partir do schema real.
 const eliminacaoCondominio = require('../helpers/eliminacao-condominio');
 const { validarNif } = require('../public/js/validacao-fiscal');
+// ── Backups da instalação ───────────────────────────────────────────
+// DOIS EIXOS SEPARADOS, que nunca se somam nem se misturam:
+//   · BACKUPS — dump COMPLETO da base de dados da INSTALAÇÃO (contém os dados
+//     de todos os condomínios). A cópia local é obrigatória; a cloud é
+//     adicional. Não existe granularidade por condomínio.
+//   · DOCUMENTOS — armazenamento próprio, POR CONDOMÍNIO, no serviço escolhido
+//     (Google Drive/Dropbox/OneDrive). Não entram em nenhum backup.
+const backupJob = require('../jobs/backup');
+const storage = require('../helpers/storage');
+const backupRetencao = require('../helpers/backup-retencao');
 
 // Prefixo canónico do namespace global. Usado apenas como FALLBACK quando não
 // há pedido (chamadas directas em testes): em contexto de pedido, o prefixo
@@ -773,6 +786,284 @@ router.get('/auditoria', async (req, res) => {
     acoes: acoes.map((a) => a.acao),
     filtros: { acao: acao || '', entidade: entidade || '' },
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// BACKUPS DA INSTALAÇÃO — área do Super Admin
+//
+// Os backups são da INSTALAÇÃO: um dump COMPLETO da base de dados, que contém
+// os dados de TODOS os condomínios. Não existe `condominio_id` nos backups e
+// não se inventa granularidade por condomínio — não há informação que a
+// permita. Os DOCUMENTOS (por condomínio) são um eixo SEPARADO e são
+// apresentados numa secção própria, nunca somados ao espaço dos backups.
+//
+// Só o Super Admin entra aqui: o guard do router (`tenant.eSuperAdmin`) já
+// recusa qualquer administrador de condomínio. Um dump nunca é servido por um
+// endpoint público nem por um link do fornecedor.
+// ═══════════════════════════════════════════════════════════════════
+
+// Espaço do volume onde estão os backups locais. Informativo: serve para o
+// Super Admin ver a folga que tem. NUNCA é usado para apagar nada.
+// Devolve null quando não é possível medir (em vez de um valor inventado).
+function espacoDoVolume(diretorio) {
+  try {
+    if (typeof fs.statfsSync !== 'function') return null;
+    // O diretório pode ainda não existir: sobe-se até ao primeiro que exista.
+    let alvo = diretorio;
+    for (let i = 0; i < 40; i += 1) {
+      if (fs.existsSync(alvo)) break;
+      const pai = require('path').dirname(alvo);
+      if (pai === alvo) return null;
+      alvo = pai;
+    }
+    const st = fs.statfsSync(alvo);
+    const total = Number(st.blocks) * Number(st.bsize);
+    const livre = Number(st.bavail) * Number(st.bsize);
+    if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(livre)) return null;
+    const usado = total - livre;
+    return { total, livre, usado, percentagem: Math.round((usado / total) * 100) };
+  } catch (err) {
+    return null;
+  }
+}
+
+// Últimos registos do destino cloud. O registo (`backup_logs`) é o ÚNICO
+// índice que existe: os provedores não expõem listagem de pasta na fachada do
+// GesCondu, por isso não se apresenta «espaço ocupado na cloud» — não se
+// inventa uma métrica que o provedor não dá.
+async function registosCloud(limite = 50) {
+  return BackupLog.findAll({
+    where: { estado: 'concluido', ficheiro_drive_id: { [Op.ne]: null } },
+    order: [['data', 'DESC']],
+    limit: limite,
+  }).catch(() => []);
+}
+
+// Tamanho dos documentos por condomínio. É o tamanho REGISTADO no GesCondu
+// (`documentos.tamanho`) — não é uma medição ao vivo no fornecedor, pelo que a
+// vista di-lo com essas palavras. Documentos sem tamanho registado são
+// contados à parte em vez de entrarem como zero (o que os faria parecer vazios).
+async function documentosPorCondominio() {
+  const [porCondominio, semTamanho, condominios] = await Promise.all([
+    Documento.findAll({
+      attributes: [
+        'condominio_id',
+        [fn('COUNT', col('id')), 'documentos'],
+        [fn('SUM', col('tamanho')), 'bytes'],
+        [fn('MIN', col('data')), 'maisAntigo'],
+        [fn('MAX', col('data')), 'maisRecente'],
+      ],
+      group: ['condominio_id'],
+      raw: true,
+    }).catch(() => []),
+    Documento.findAll({
+      attributes: ['condominio_id', [fn('COUNT', col('id')), 'total']],
+      where: { [Op.or]: [{ tamanho: null }, { tamanho: 0 }] },
+      group: ['condominio_id'],
+      raw: true,
+    }).catch(() => []),
+    Condominio.findAll({ attributes: ['id', 'designacao'], order: [['designacao', 'ASC']], raw: true }).catch(() => []),
+  ]);
+
+  const nomes = new Map(condominios.map((c) => [c.id, c.designacao]));
+  const semTamanhoPor = new Map(semTamanho.map((r) => [r.condominio_id, Number(r.total)]));
+
+  const linhas = porCondominio.map((r) => ({
+    condominioId: r.condominio_id,
+    nome: nomes.get(r.condominio_id) || `Condomínio #${r.condominio_id}`,
+    documentos: Number(r.documentos) || 0,
+    bytes: Number(r.bytes) || 0,
+    semTamanho: semTamanhoPor.get(r.condominio_id) || 0,
+    maisAntigo: r.maisAntigo || null,
+    maisRecente: r.maisRecente || null,
+  }));
+  linhas.sort((a, b) => b.bytes - a.bytes);
+
+  return {
+    linhas,
+    totalDocumentos: linhas.reduce((s, l) => s + l.documentos, 0),
+    totalBytes: linhas.reduce((s, l) => s + l.bytes, 0),
+    totalSemTamanho: linhas.reduce((s, l) => s + l.semTamanho, 0),
+  };
+}
+
+router.get('/armazenamento', async (req, res) => {
+  const [local, config, documentos] = await Promise.all([
+    backupJob.listarBackupsLocais().catch(() => ({ diretorio: backupJob.pastaLocal(), existe: false, itens: [], ignorados: [], medicao: { numero: 0, numeroFicheiros: 0, invalidos: 0, bytes: 0, bytesValidos: 0, maisAntigo: null, maisRecente: null, ultimo: null } })),
+    backupJob.configuracaoRetencao(),
+    documentosPorCondominio(),
+  ]);
+
+  const [destino, registos] = await Promise.all([storage.destinoDeBackup().catch(() => null), registosCloud()]);
+  const provedor = destino ? storage.obterProvedor(destino) : null;
+  const ligacao = destino ? storage.ligacaoDeBackup(destino) : null;
+  const datasCloud = registos.map((r) => new Date(r.data).getTime()).filter((n) => Number.isFinite(n));
+
+  const limiteBytes = config.limiteLocalGb ? config.limiteLocalGb * 1024 * 1024 * 1024 : null;
+  const volume = espacoDoVolume(local.diretorio);
+
+  res.render('admin/global/armazenamento', {
+    titulo: 'Backups da instalação',
+    backup: {
+      diretorio: local.diretorio,
+      existe: local.existe,
+      // Mais recentes primeiro (é o que se procura numa lista de backups).
+      itens: local.itens.slice().reverse(),
+      ignorados: local.ignorados,
+      medicao: local.medicao,
+      volume,
+      limiteBytes,
+      limiteExcedido: Boolean(limiteBytes && local.medicao.bytes > limiteBytes),
+      retencaoLocal: config.retencaoLocal,
+      limpezaAutomatica: config.limpezaAutomatica,
+      ultimaLimpeza: config.ultimaLimpeza,
+      resultadoLimpeza: config.resultadoLimpeza,
+      origemConfig: config.origem,
+      erroConfiguracao: config.erroConfiguracao || null,
+    },
+    cloud: {
+      destino,
+      rotulo: provedor ? provedor.rotulo() : null,
+      icone: provedor && typeof provedor.icone === 'function' ? provedor.icone() : 'bi bi-cloud',
+      conta: ligacao ? ligacao.conta : null,
+      origem: ligacao ? ligacao.origem : null,
+      usavel: Boolean(ligacao && ligacao.origem),
+      numero: registos.length,
+      // O provedor não expõe o espaço ocupado pela pasta de backups na fachada
+      // do GesCondu: apresenta-se «não disponível», nunca uma estimativa.
+      bytes: null,
+      maisAntigo: datasCloud.length ? new Date(Math.min(...datasCloud)) : null,
+      maisRecente: datasCloud.length ? new Date(Math.max(...datasCloud)) : null,
+      retencaoDias: config.retencaoCloud,
+      registos,
+    },
+    documentos,
+    valoresRetencao: {
+      local: config.retencaoLocal,
+      cloud: config.retencaoCloud,
+      limiteGb: config.limiteLocalGb,
+      limpezaAutomatica: config.limpezaAutomatica,
+    },
+    presets: backupRetencao.PRESETS,
+    diasMinimo: backupRetencao.DIAS_MINIMO,
+    diasMaximo: backupRetencao.DIAS_MAXIMO,
+  });
+});
+
+// ── Retenção ────────────────────────────────────────────────────────
+// Validação SEMPRE no servidor (`backupRetencao.gravarConfiguracao`): o
+// formulário do browser não é fonte de verdade. Mínimo de 30 dias, sem máximo
+// artificial. Retenção local e cloud independentes.
+router.post('/armazenamento/retencao', async (req, res) => {
+  const r = await backupRetencao.gravarConfiguracao({
+    retencaoLocal: req.body.retencao_local,
+    retencaoCloud: req.body.retencao_cloud,
+    limpezaAutomatica: req.body.limpeza_automatica === 'on' || req.body.limpeza_automatica === '1',
+    limiteLocalGb: req.body.limite_local_gb,
+  });
+
+  if (!r.ok) {
+    await audit({
+      userId: req.user.id,
+      acao: 'backup_retencao_recusada',
+      entidade: 'Backup',
+      detalhes: { resultado: 'recusado', erros: r.erros.map((e) => e.erro) },
+    }).catch(() => {});
+    req.flash('error_msg', r.erros.map((e) => e.mensagem).join(' '));
+    return res.redirect(urlGlobal(req, '/armazenamento'));
+  }
+
+  await audit({
+    userId: req.user.id,
+    acao: 'backup_retencao_alterada',
+    entidade: 'Backup',
+    detalhes: r.valores,
+  }).catch(() => {});
+  req.flash(
+    'success_msg',
+    `Retenção guardada: ${r.valores.retencaoLocal} dias (local) e ${r.valores.retencaoCloud} dias (cloud).`
+  );
+  return res.redirect(urlGlobal(req, '/armazenamento'));
+});
+
+// ── Limpeza manual ──────────────────────────────────────────────────
+// Corre já, com a retenção configurada, e regista o resultado. A proteção do
+// último backup local válido é a MESMA da limpeza automática (mesma função).
+router.post('/armazenamento/limpar', async (req, res) => {
+  const r = await backupJob.executarLimpeza({ forcar: true });
+  await audit({
+    userId: req.user.id,
+    acao: 'backup_limpeza_manual',
+    entidade: 'Backup',
+    detalhes: {
+      resultado: r.resultado,
+      removidosLocal: r.local ? r.local.apagados.length : 0,
+      removidosCloud: r.cloud ? r.cloud.apagados.length : 0,
+      protegido: r.local && r.local.protegido ? r.local.protegido.nome : null,
+    },
+  }).catch(() => {});
+  req.flash('success_msg', `Limpeza executada. ${r.resultado || 'Nada a remover.'}`);
+  return res.redirect(urlGlobal(req, '/armazenamento'));
+});
+
+// ── Eliminação manual ───────────────────────────────────────────────
+// Duas formas: uma cópia individual, ou todas as anteriores a uma data. As
+// duas passam pela MESMA proteção — nunca se deixa a instalação sem o último
+// backup local válido. O nome vem do cliente mas NUNCA é usado como caminho:
+// só passa o que é um nome de backup bem formado dentro do diretório.
+router.post('/armazenamento/apagar', async (req, res) => {
+  const modo = String(req.body.modo || 'individual').trim();
+
+  if (modo === 'antes') {
+    const dataLimite = String(req.body.data_limite || '').trim();
+    const r = await backupJob.apagarBackupsAntesDe({ dataLimite });
+    if (!r.ok) {
+      req.flash('error_msg', r.motivo === 'data_invalida' ? 'Indique uma data válida.' : 'Não foi possível eliminar os backups indicados.');
+      return res.redirect(urlGlobal(req, '/armazenamento'));
+    }
+    await audit({
+      userId: req.user.id,
+      acao: 'backup_eliminado_por_data',
+      entidade: 'Backup',
+      detalhes: {
+        data_limite: dataLimite,
+        removidos: r.apagados.map((a) => a.nome),
+        protegido: r.protegido ? r.protegido.nome : null,
+        erros: r.erros,
+      },
+    }).catch(() => {});
+    const extra = r.protegido ? ` O último backup válido (${r.protegido.nome}) foi preservado.` : '';
+    req.flash('success_msg', `${r.apagados.length} backup(s) eliminado(s).${extra}`);
+    return res.redirect(urlGlobal(req, '/armazenamento'));
+  }
+
+  const nome = String(req.body.nome || '').trim();
+  const r = await backupJob.apagarBackupLocal({ nome });
+  if (!r.ok) {
+    const MENSAGENS = {
+      nome_invalido: 'Referência de backup inválida.',
+      nao_encontrado: 'O backup indicado já não existe.',
+      ultimo_backup_valido: 'Este é o último backup local válido: não pode ser eliminado.',
+      erro_remocao: 'Não foi possível eliminar o ficheiro.',
+    };
+    await audit({
+      userId: req.user.id,
+      acao: 'backup_eliminacao_recusada',
+      entidade: 'Backup',
+      detalhes: { nome, motivo: r.motivo },
+    }).catch(() => {});
+    req.flash('error_msg', MENSAGENS[r.motivo] || 'Não foi possível eliminar o backup.');
+    return res.redirect(urlGlobal(req, '/armazenamento'));
+  }
+
+  await audit({
+    userId: req.user.id,
+    acao: 'backup_eliminado',
+    entidade: 'Backup',
+    detalhes: { nome: r.item.nome, tamanho: r.item.tamanho },
+  }).catch(() => {});
+  req.flash('success_msg', `Backup ${r.item.nome} eliminado. As cópias na cloud não foram afetadas.`);
+  return res.redirect(urlGlobal(req, '/armazenamento'));
 });
 
 module.exports = router;

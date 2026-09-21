@@ -280,6 +280,13 @@ condomínios), por isso:
 * a arquitetura não impede vários destinos no futuro (basta permitir uma lista
   em `storage:backup`).
 
+A **retenção**, a **medição do espaço** e a **gestão manual** dos backups são
+administradas em **Administração global → Backups** (`/global/armazenamento`,
+só Super Admin): duas retenções independentes (local e cloud), por idade, com um
+mínimo de 30 dias e com a proteção obrigatória do último backup local válido. Os
+**documentos não fazem parte dos backups** — ver `docs/BACKUPS.md` para a
+arquitetura completa, as limitações conhecidas e os testes.
+
 ## 2.2 Recuperação em produção: a chave não chega ao processo
 
 **Sintoma:** em Configurações → Armazenamento e Backups aparece

@@ -87,9 +87,17 @@ app.engine('handlebars', engine({
 }));
 app.set('view engine', 'handlebars');
 app.set('views', path.join(__dirname, '..', 'views'));
+
+// O utilizador autenticado é MUTÁVEL: a maioria das rotas é de um admin de
+// condomínio, mas as operações da INSTALAÇÃO (destino dos backups) exigem
+// Super Admin (`users.role_global = 'super_admin'`) — ver A6.1.
+const UTILIZADOR_ADMIN = { id: 1, nome: 'Administrador', email: 'admin@exemplo.pt', role_global: 'admin' };
+const UTILIZADOR_SUPER = { id: 9, nome: 'Super Admin', email: 'super@exemplo.pt', role_global: 'super_admin' };
+let UTILIZADOR = UTILIZADOR_ADMIN;
+
 app.use((req, res, next) => {
   req.isAuthenticated = () => true;
-  req.user = { id: 1, nome: 'Administrador', email: 'admin@exemplo.pt', role_global: 'admin' };
+  req.user = UTILIZADOR;
   req.session = { condominio_ativo_id: 1 };
   req.flash = () => req;
   // Locais que o app.js define para o layout (navegação lateral, etc.).
@@ -262,10 +270,21 @@ const TAB4 = 'href="/admin/config/auditoria"';
     assert.ok(x.corpo.includes('class="config-tab active"'), `navegação: um ativo em ${url}`);
   }
 
-  // 6. Destino de backups: a interface só aceita o que o job consegue usar.
-  // Um destino com ligação utilizável é gravado…
+  // 6. Destino de backups: operação da INSTALAÇÃO ⇒ só Super Admin (A6.1).
+  // A interface só aceita o que o job consegue usar, e um admin de condomínio
+  // não pode mexer no destino global.
   destinosGravados.length = 0;
+
+  // Um admin de CONDOMÍNIO é recusado e NÃO grava nada.
+  UTILIZADOR = UTILIZADOR_ADMIN;
   let post = await enviar('/admin/config/armazenamento/backups', { provedor: 'dropbox' });
+  assert.strictEqual(post.status, 302, 'backups: admin de condomínio é recusado (302)');
+  assert.strictEqual(post.location, '/admin', 'backups: admin de condomínio volta ao painel');
+  assert.deepStrictEqual(destinosGravados, [], 'backups: admin de condomínio não altera o destino');
+
+  // Um Super Admin grava — um destino com ligação utilizável…
+  UTILIZADOR = UTILIZADOR_SUPER;
+  post = await enviar('/admin/config/armazenamento/backups', { provedor: 'dropbox' });
   assert.strictEqual(post.status, 302, 'backups: gravação responde 302');
   assert.strictEqual(post.location, '/admin/config/armazenamento', 'backups: volta para a página');
   assert.deepStrictEqual(destinosGravados, ['dropbox'], 'backups: destino utilizável é gravado');
@@ -277,6 +296,7 @@ const TAB4 = 'href="/admin/config/auditoria"';
   // …e "só neste servidor" continua a poder ser escolhido em qualquer altura.
   post = await enviar('/admin/config/armazenamento/backups', { provedor: 'nenhum' });
   assert.deepStrictEqual(destinosGravados, ['dropbox', null], 'backups: «só neste servidor» é gravado');
+  UTILIZADOR = UTILIZADOR_ADMIN;
 
   // 7. Desligar um serviço só liberta o destino dos backups quando não resta
   // NENHUMA ligação utilizável para ele (de plataforma ou de um condomínio).

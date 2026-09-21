@@ -267,6 +267,62 @@ function testeFonteDoPainel() {
   console.log('  ✓ o painel apresenta documentos e backups como eixos independentes');
 }
 
+// ── 10. Fonte: a retenção é configurável e o âmbito da cloud é respeitado ──
+function testeFonteDaRetencao() {
+  const job = ler('jobs/backup.js');
+
+  // A retenção deixou de vir só do `.env`: é lida da configuração persistida
+  // (com o `.env` como fallback) e validada com o mínimo de 30 dias. Deixou
+  // também de ser POR TIPO: passou a ser POR DESTINO (local e cloud), porque as
+  // duas cópias são independentes.
+  assert.ok(/retencao\.lerConfiguracao|lerConfiguracao/.test(job), 'o job lê a retenção configurada');
+  assert.ok(!/BACKUP_WEEKLY_RETENTION|BACKUP_MONTHLY_RETENTION/.test(job),
+    'a retenção por tipo no `.env` deixou de ser a fonte');
+  assert.ok(/limparBackupsLocais/.test(job) && /limparBackupsCloud/.test(job),
+    'as duas retenções são independentes e explícitas');
+  assert.ok(/protegerUltimo/.test(job), 'a retenção local protege o último backup válido');
+
+  // ⛔ O âmbito da remoção cloud tem de ser passado. Sem ele, a remoção resolvia
+  // os tokens do âmbito PLATAFORMA mesmo quando a cópia tinha sido enviada pela
+  // ligação de um condomínio: o `DELETE` caía noutra conta e o OneDrive
+  // respondia 404 → devolvia `true` («apagado») sem apagar nada.
+  assert.ok(/storage\.apagarArquivo\(b\.ficheiro_drive_id, condominioId\)/.test(job),
+    'a remoção cloud usa o âmbito da ligação do destino');
+  assert.ok(!/storage\.apagarArquivo\(b\.ficheiro_drive_id\)/.test(job),
+    'a remoção cloud já não é chamada sem âmbito');
+
+  // A limpeza corre depois do backup local e NÃO depende do sucesso da cloud.
+  assert.ok(/const limpeza = await executarLimpeza\(\{ ligacao \}\);/.test(job),
+    'a retenção corre depois do backup local, independentemente da cópia cloud');
+
+  // As funções que a área do Super Admin usa são as MESMAS do job (uma verdade).
+  const mod = require('../jobs/backup');
+  for (const nome of [
+    'executarBackup', 'configuracaoRetencao', 'pastaLocal', 'listarBackupsLocais',
+    'limparBackupsLocais', 'limparBackupsCloud', 'executarLimpeza', 'apagarBackupLocal', 'apagarBackupsAntesDe',
+  ]) {
+    assert.strictEqual(typeof mod[nome], 'function', `o job exporta ${nome}`);
+  }
+
+  // A área do Super Admin reutiliza o job e está atrás da guarda global.
+  const rota = ler('routes/global-admin.js');
+  assert.ok(/router\.get\('\/armazenamento'/.test(rota), 'a área de armazenamento existe no namespace global');
+  assert.ok(/backupJob\.listarBackupsLocais/.test(rota), 'a área usa o inventário do job (sem duplicar lógica)');
+  assert.ok(/backupJob\.executarLimpeza/.test(rota), 'a limpeza manual usa a mesma função do ciclo automático');
+  assert.ok(/backupRetencao\.gravarConfiguracao/.test(rota), 'a retenção é validada no servidor pela regra única');
+  const guarda = rota.slice(rota.indexOf('router.use((req, res, next)'), rota.indexOf('// Caminho de um recurso'));
+  assert.ok(/tenant\.eSuperAdmin\(req\.user\)/.test(guarda), 'a área global é decidida por `role_global`');
+
+  // A vista separa os dois eixos e diz que os backups são da instalação.
+  const vista = ler('views/admin/global/armazenamento.handlebars');
+  assert.ok(/Backups da instalação/.test(vista), 'a vista identifica os backups como da instalação');
+  assert.ok(/não existem backups por condomínio/.test(vista), 'a vista diz que não há backups por condomínio');
+  assert.ok(/Armazenamento documental/.test(vista), 'a vista separa o armazenamento documental');
+  assert.ok(/não fazem parte dos backups/.test(vista), 'a vista diz que os documentos não entram nos backups');
+  assert.ok(!/\{\{money/.test(vista), 'a vista não usa o helper inexistente `money` (rebentaria no render)');
+  console.log('  ✓ a retenção é configurável, o âmbito cloud é respeitado e a área reutiliza o job');
+}
+
 (async () => {
   testeEstados();
   await testeLocalSempre();
@@ -276,6 +332,7 @@ function testeFonteDoPainel() {
   await testeIndependenciaDosFornecedores();
   await testeFalhaDump();
   testeFonteDoPainel();
+  testeFonteDaRetencao();
   cp.execFile = execFileOriginal;
   fs.rmSync(dirLocal, { recursive: true, force: true });
   console.log('✓ Testes do backup local + cópia cloud opcional passaram (sem base de dados).');

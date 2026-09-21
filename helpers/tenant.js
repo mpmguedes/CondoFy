@@ -258,6 +258,24 @@ function semSuporte(req, res, next) {
   return next();
 }
 
+// ── Guarda de OPERAÇÃO DA INSTALAÇÃO (não do condomínio) ───────────
+// Para rotas que atuam sobre a plataforma inteira e não sobre o condomínio
+// ativo — hoje, as duas operações do backup da INSTALAÇÃO (o dump contém dados
+// de TODOS os condomínios). Um administrador de condomínio não pode, por isso,
+// escolher o destino global dos backups nem disparar um backup da instalação.
+//
+// Reutiliza o MESMO mecanismo do resto da autorização global — `eSuperAdmin`,
+// decidido EXCLUSIVAMENTE por `users.role_global` (`users.role` é legado e
+// nunca decide nada aqui). Não existe um segundo sistema de permissões.
+//
+// Aplica-se ROTA A ROTA (nunca ao router inteiro): o mesmo router serve rotas
+// legítimas de um admin de condomínio, que continuam a funcionar sem alteração.
+function apenasSuperAdmin(req, res, next) {
+  if (eSuperAdmin(req.user)) return next();
+  req.flash('error_msg', 'Esta operação é da administração global: apenas um Super Admin pode gerir os backups da instalação.');
+  return res.redirect(DESTINO_PAINEL);
+}
+
 // Negação do suporte numa guarda de APP (montada antes de qualquer router).
 //
 // `semSuporte` só é útil DENTRO de um router: `req.suporte` é criado por
@@ -386,6 +404,7 @@ module.exports = {
   comPapel,
   comSuporte,
   semSuporte,
+  apenasSuperAdmin,
   bloqueioSuporteNaSessao,
   somenteLeitura,
   auditarConsulta,

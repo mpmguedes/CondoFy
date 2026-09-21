@@ -324,7 +324,13 @@ router.post('/config/armazenamento/provedor', (req, res) => res.redirect(307, '/
 // Os backups usam a ligação JÁ EXISTENTE do serviço escolhido (uma ligação por
 // serviço, sem contas duplicadas). Como o dump contém dados de todos os
 // condomínios, a interface avisa quando a conta é a de um condomínio.
-router.post('/config/armazenamento/backups', async (req, res) => {
+//
+// Guarda: a escolha é da INSTALAÇÃO, não do condomínio ativo — só um Super
+// Admin a pode fazer (`tenant.apenasSuperAdmin`, decidido por
+// `users.role_global`). Sem isto, um admin de condomínio mudava o destino dos
+// backups de todos os condomínios. A guarda corre ANTES do handler, pelo que um
+// pedido recusado não grava nada.
+router.post('/config/armazenamento/backups', tenant.apenasSuperAdmin, async (req, res) => {
   const escolha = String(req.body.provedor || '').trim().toLowerCase();
   try {
     if (!escolha || escolha === 'nenhum') {

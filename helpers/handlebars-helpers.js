@@ -3,6 +3,26 @@ const { formatDate, formatDateTime, toDateInput, currentYear, monthName, diaSema
 const { urlExternaSegura } = require('./urls');
 const mascara = require('./mascara');
 
+// bytes(v) → '1,8 GB' | '850 MB' | '—'.
+// Usado pelas áreas de armazenamento/backups (a única forma de apresentar um
+// tamanho: as vistas não fazem contas). Devolve '—' quando não há valor — nunca
+// «0 B» para um dado ausente, que se leria como «vazio».
+function formatBytes(valor) {
+  const n = Number(valor);
+  if (valor === null || valor === undefined || valor === '' || !Number.isFinite(n) || n < 0) return '—';
+  if (n === 0) return '0 B';
+  const UNIDADES = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  let i = 0;
+  let x = n;
+  while (x >= 1024 && i < UNIDADES.length - 1) {
+    x /= 1024;
+    i += 1;
+  }
+  // Sem decimais nos bytes e nos valores ≥ 100 (evita «999,9 KB»).
+  const casas = i === 0 || x >= 100 ? 0 : 1;
+  return `${x.toFixed(casas).replace('.', ',')} ${UNIDADES[i]}`;
+}
+
 // Helpers Handlebars usados nas views.
 module.exports = {
   eq: (a, b) => String(a) === String(b),
@@ -20,6 +40,7 @@ module.exports = {
   diaSemana: (v) => diaSemana(v),
   dateInput: (v) => toDateInput(v),
   eur: (v) => formatEUR(v),
+  bytes: (v) => formatBytes(v),
   monthName: (m) => monthName(m),
   currentYear: () => currentYear(),
   currentMonth: () => new Date().getMonth() + 1,

@@ -1,0 +1,361 @@
+{{!-- ═══════════════════════════════════════════════════════════════════
+     Backups da INSTALAÇÃO (Super Admin)
+
+     Dois eixos que NUNCA se somam:
+       · BACKUPS — dump completo da base de dados da INSTALAÇÃO (contém os
+         dados de todos os condomínios). A cópia local é obrigatória; a cloud
+         é uma cópia ADICIONAL. Não há granularidade por condomínio.
+       · DOCUMENTOS — armazenamento próprio, POR CONDOMÍNIO, no serviço
+         escolhido. Não entram em nenhum backup.
+
+     Toda a informação é real: os valores locais vêm do DISCO e os documentos
+     do registo do GesCondu. O que não se sabe diz-se que não se sabe.
+     ═══════════════════════════════════════════════════════════════════ --}}
+
+<div class="page-heading">
+  <h1>Backups da instalação</h1>
+  <p class="subtitle">Cópia de segurança da base de dados global · local obrigatória, cloud adicional</p>
+</div>
+
+<div class="alert alert-info small">
+  <span class="material-symbols-outlined me-1" aria-hidden="true">database</span>
+  Cada backup é um <strong>dump completo da base de dados da instalação</strong> e contém os dados de
+  <strong>todos os condomínios</strong> — não existem backups por condomínio. A cópia
+  <strong>local é sempre criada</strong> no servidor; a cópia <strong>cloud é adicional</strong> e a sua
+  falha nunca afeta a cópia local. Os <strong>documentos</strong> dos condomínios têm armazenamento
+  próprio e <strong>não fazem parte</strong> dos backups.
+</div>
+
+{{#if backup.erroConfiguracao}}
+<div class="alert alert-warning small">
+  <span class="material-symbols-outlined me-1" aria-hidden="true">warning</span>
+  Não foi possível ler a retenção guardada ({{backup.erroConfiguracao}}). Estão a ser usados os valores por
+  omissão, que respeitam o mínimo de {{diasMinimo}} dias. Os backups não são afetados.
+</div>
+{{/if}}
+
+{{!-- ── 1. Cópia local: o que ocupa, quantos, desde quando ─────────── --}}
+<h2 class="h6 mt-3 mb-2">Cópia local (obrigatória)</h2>
+<div class="row g-3 mb-3">
+  <div class="col-6 col-lg-3"><div class="card mini-stat h-100"><div class="card-body">
+    <div class="mini-stat-label">Backups válidos</div>
+    <div class="mini-stat-value">{{backup.medicao.numero}}</div>
+    <div class="mini-stat-sub">
+      {{#if backup.medicao.invalidos}}{{backup.medicao.invalidos}} ficheiro(s) inválido(s) · {{/if}}
+      {{backup.medicao.numeroFicheiros}} ficheiro(s) no total
+    </div>
+  </div></div></div>
+  <div class="col-6 col-lg-3"><div class="card mini-stat h-100"><div class="card-body">
+    <div class="mini-stat-label">Espaço utilizado</div>
+    <div class="mini-stat-value">{{bytes backup.medicao.bytes}}</div>
+    <div class="mini-stat-sub">
+      {{#if backup.limiteBytes}}Limite informativo: {{bytes backup.limiteBytes}}{{else}}sem limite definido{{/if}}
+    </div>
+  </div></div></div>
+  <div class="col-6 col-lg-3"><div class="card mini-stat h-100"><div class="card-body">
+    <div class="mini-stat-label">Mais antigo</div>
+    <div class="mini-stat-value fs-5">{{#if backup.medicao.maisAntigo}}{{formatDate backup.medicao.maisAntigo}}{{else}}—{{/if}}</div>
+    <div class="mini-stat-sub">backup mais recente: {{#if backup.medicao.maisRecente}}{{formatDate backup.medicao.maisRecente}}{{else}}—{{/if}}</div>
+  </div></div></div>
+  <div class="col-6 col-lg-3"><div class="card mini-stat h-100"><div class="card-body">
+    <div class="mini-stat-label">Espaço no volume</div>
+    <div class="mini-stat-value fs-5">{{#if backup.volume}}{{bytes backup.volume.livre}}{{else}}—{{/if}}</div>
+    <div class="mini-stat-sub">
+      {{#if backup.volume}}livre de {{bytes backup.volume.total}} ({{backup.volume.percentagem}}% usado){{else}}não disponível neste sistema{{/if}}
+    </div>
+  </div></div></div>
+</div>
+
+{{#if backup.limiteExcedido}}
+<div class="alert alert-warning small">
+  <span class="material-symbols-outlined me-1" aria-hidden="true">warning</span>
+  O espaço ocupado pelos backups locais ({{bytes backup.medicao.bytes}}) já ultrapassa o limite informativo
+  definido ({{bytes backup.limiteBytes}}). Este limite <strong>não apaga nada</strong>: reveja a retenção
+  ou aumente o espaço disponível.
+</div>
+{{/if}}
+
+<div class="card mb-3">
+  <div class="card-body">
+    <p class="text-muted small mb-2">
+      Pasta no servidor: <code>{{backup.diretorio}}</code>
+      {{#unless backup.existe}}<span class="badge text-bg-secondary ms-1">ainda não existe — nenhum backup foi gerado</span>{{/unless}}
+    </p>
+    <p class="small mb-0">
+      <strong>Último backup válido:</strong>
+      {{#if backup.medicao.ultimo}}
+        {{backup.medicao.ultimo.nome}} · {{formatDateTime backup.medicao.ultimo.criadoEm}} · {{bytes backup.medicao.ultimo.tamanho}}
+      {{else}}
+        <span class="text-danger">não existe nenhum backup local válido.</span>
+        {{#if backup.existe}}Verifique a tarefa de backup e os registos do servidor.{{/if}}
+      {{/if}}
+    </p>
+  </div>
+</div>
+
+{{!-- ── 2. Retenção ────────────────────────────────────────────────── --}}
+<h2 class="h6 mt-4 mb-2">Retenção</h2>
+<div class="card mb-3">
+  <div class="card-body">
+    <p class="text-muted small">
+      A retenção é por <strong>idade</strong>: os backups com mais de X dias são removidos — nunca se
+      «mantêm os últimos N ficheiros». As duas retenções são <strong>independentes</strong>: a limpeza
+      local não toca em ficheiros da cloud e a limpeza cloud não toca em ficheiros locais.
+      O mínimo é de {{diasMinimo}} dias. O <strong>último backup local válido é sempre preservado</strong>.
+    </p>
+    <form action="/global/armazenamento/retencao" method="POST">
+      <div class="row g-3 align-items-end">
+        <div class="col-12 col-md-3">
+          <label class="form-label small" for="retencaoLocal">Backups locais (dias)</label>
+          <input type="number" class="form-control" id="retencaoLocal" name="retencao_local"
+                 value="{{valoresRetencao.local}}" min="{{diasMinimo}}" max="{{diasMaximo}}" step="1" required />
+          <div class="form-text">mín. {{diasMinimo}} · {{#each presets}}{{this}}{{#unless @last}} / {{/unless}}{{/each}}</div>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label small" for="retencaoCloud">Backups cloud (dias)</label>
+          <input type="number" class="form-control" id="retencaoCloud" name="retencao_cloud"
+                 value="{{valoresRetencao.cloud}}" min="{{diasMinimo}}" max="{{diasMaximo}}" step="1" required />
+          <div class="form-text">independente da retenção local</div>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label small" for="limiteLocalGb">Limite informativo local (GB)</label>
+          <input type="number" class="form-control" id="limiteLocalGb" name="limite_local_gb"
+                 value="{{valoresRetencao.limiteGb}}" min="1" step="0.1" placeholder="sem limite" />
+          <div class="form-text">só avisa — nunca apaga nada</div>
+        </div>
+        <div class="col-12 col-md-3">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="limpezaAutomatica" name="limpeza_automatica"
+                   value="1" {{#if valoresRetencao.limpezaAutomatica}}checked{{/if}} />
+            <label class="form-check-label small" for="limpezaAutomatica">
+              Eliminar automaticamente os backups antigos
+            </label>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm mt-2"><i class="bi bi-check2 me-1"></i>Guardar retenção</button>
+        </div>
+      </div>
+    </form>
+
+    <hr />
+    <div class="row g-3">
+      <div class="col-12 col-lg-8">
+        <div class="fw-semibold small mb-1">Última limpeza</div>
+        {{#if backup.ultimaLimpeza}}
+        <p class="small mb-0">
+          {{formatDateTime backup.ultimaLimpeza}}
+          {{#if backup.resultadoLimpeza}}<span class="text-muted">· {{backup.resultadoLimpeza}}</span>{{/if}}
+        </p>
+        {{else}}
+        <p class="small mb-0 text-muted">Ainda não correu nenhuma limpeza registada.</p>
+        {{/if}}
+        <p class="small text-muted mb-0 mt-1">
+          Limpeza automática: {{#if backup.limpezaAutomatica}}<span class="badge text-bg-success">Ativa</span>{{else}}<span class="badge text-bg-secondary">Desativada</span>{{/if}}
+        </p>
+      </div>
+      <div class="col-12 col-lg-4 d-flex align-items-end">
+        <form action="/global/armazenamento/limpar" method="POST" class="w-100"
+              data-confirmar="Correr agora a limpeza com a retenção configurada? O último backup local válido é sempre preservado.">
+          <button type="submit" class="btn btn-outline-secondary w-100">
+            <i class="bi bi-recycle me-1" aria-hidden="true"></i>Correr limpeza agora
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{!-- ── 3. Cópia cloud (adicional) ─────────────────────────────────── --}}
+<h2 class="h6 mt-4 mb-2">Cópia cloud (adicional)</h2>
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-12 col-lg-6">
+        <div class="fw-semibold small mb-1">Destino</div>
+        <p class="small mb-1">
+          {{#if cloud.destino}}
+            <i class="{{cloud.icone}} me-1" aria-hidden="true"></i>{{cloud.rotulo}}
+            {{#if cloud.conta}}<span class="text-muted">· {{cloud.conta}}</span>{{/if}}
+            {{#if cloud.origem}}<span class="badge text-bg-light border ms-1">{{#if (eq cloud.origem 'plataforma')}}conta da plataforma{{else}}conta de um condomínio{{/if}}</span>{{/if}}
+          {{else}}
+            <i class="bi bi-hdd me-1" aria-hidden="true"></i>Só neste servidor
+          {{/if}}
+        </p>
+        {{#if cloud.destino}}
+          {{#if cloud.usavel}}
+          <p class="small text-success mb-0"><i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Ligação utilizável.</p>
+          {{else}}
+          <p class="small text-warning mb-0">
+            <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+            Este destino não tem nenhuma ligação utilizável: os backups estão a ser guardados
+            <strong>apenas neste servidor</strong>.
+          </p>
+          {{/if}}
+        {{else}}
+        <p class="small text-muted mb-0">
+          Sem destino configurado os backups ficam apenas no servidor. Configure uma segunda cópia em
+          Configurações → Armazenamento e Backups (página do condomínio) para acrescentar proteção.
+        </p>
+        {{/if}}
+      </div>
+      <div class="col-12 col-lg-6">
+        <div class="fw-semibold small mb-1">Cópias registadas</div>
+        <p class="small mb-1">
+          <strong>{{cloud.numero}}</strong> cópia(s) ·
+          mais antiga: {{#if cloud.maisAntigo}}{{formatDate cloud.maisAntigo}}{{else}}—{{/if}} ·
+          mais recente: {{#if cloud.maisRecente}}{{formatDate cloud.maisRecente}}{{else}}—{{/if}}
+        </p>
+        <p class="small text-muted mb-0">
+          Espaço ocupado na cloud:
+          {{#if cloud.bytes}}<strong>{{bytes cloud.bytes}}</strong>{{else}}<strong>não disponível</strong> — os serviços de armazenamento não expõem
+          a dimensão da pasta de backups ao GesCondu. Não se apresenta um valor estimado.{{/if}}
+          Retenção cloud configurada: <strong>{{cloud.retencaoDias}} dias</strong>.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{!-- ── 4. Backups da instalação (lista + gestão) ──────────────────── --}}
+<h2 class="h6 mt-4 mb-2">Backups da instalação</h2>
+<div class="card mb-3">
+  <div class="card-body">
+    {{#if backup.itens.length}}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th scope="col">Data e hora</th>
+            <th scope="col">Tipo</th>
+            <th scope="col">Destino</th>
+            <th scope="col" class="text-end">Tamanho</th>
+            <th scope="col">Estado</th>
+            <th scope="col" class="text-end">Ação</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each backup.itens}}
+          <tr>
+            <td class="small">{{formatDateTime data}}</td>
+            <td class="small">{{tipoRotulo}}</td>
+            <td class="small">
+              <i class="bi bi-hdd me-1" aria-hidden="true"></i>Local
+              {{#if temCloud}}<br /><span class="text-muted"><i class="bi bi-cloud-arrow-up me-1" aria-hidden="true"></i>{{#if cloud.rotulo}}{{cloud.rotulo}}{{else}}cloud{{/if}}</span>{{/if}}
+            </td>
+            <td class="small text-end">{{bytes tamanho}}</td>
+            <td class="small">
+              <span class="badge text-bg-{{cor}}" {{#if erro}}title="{{erro}}"{{/if}}>{{rotulo}}</span>
+            </td>
+            <td class="text-end">
+              <form action="/global/armazenamento/apagar" method="POST" class="d-inline"
+                    data-confirmar="Esta operação elimina permanentemente os backups locais selecionados. As cópias existentes na cloud não são afetadas."
+                    data-confirmar-titulo="Eliminar backup" data-confirmar-perigo="1">
+                <input type="hidden" name="modo" value="individual" />
+                <input type="hidden" name="nome" value="{{nome}}" />
+                <button type="submit" class="btn btn-sm btn-outline-danger"
+                        title="Eliminar este backup local" aria-label="Eliminar o backup {{nome}}"
+                        data-ajuda="Elimina este ficheiro de backup local. A cópia na cloud, se existir, não é afetada." data-ajuda-titulo="Eliminar backup">
+                  <i class="bi bi-trash" aria-hidden="true"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="mb-0 text-muted small">
+      {{#if backup.existe}}Não há ficheiros de backup nesta pasta.{{else}}A pasta de backups ainda não existe: nenhum backup foi gerado.{{/if}}
+    </p>
+    {{/if}}
+
+    {{#if backup.ignorados.length}}
+    <p class="small text-muted mb-0 mt-2">
+      {{backup.ignorados.length}} ficheiro(s) nesta pasta não são backups do GesCondu e são ignorados
+      (nunca são apagados): {{#each backup.ignorados}}<code>{{this}}</code>{{#unless @last}}, {{/unless}}{{/each}}
+    </p>
+    {{/if}}
+
+    <hr />
+    <form action="/global/armazenamento/apagar" method="POST" class="row g-2 align-items-end"
+          data-confirmar="Esta operação elimina permanentemente os backups locais selecionados. As cópias existentes na cloud não são afetadas."
+          data-confirmar-titulo="Eliminar backups anteriores" data-confirmar-perigo="1">
+      <input type="hidden" name="modo" value="antes" />
+      <div class="col-12 col-md-6">
+        <label class="form-label small" for="dataLimite">Eliminar os backups locais anteriores a</label>
+        <input type="date" class="form-control" id="dataLimite" name="data_limite" required />
+        <div class="form-text">O último backup local válido é sempre preservado, mesmo que fique antes desta data.</div>
+      </div>
+      <div class="col-12 col-md-6">
+        <button type="submit" class="btn btn-outline-danger"><i class="bi bi-trash me-1" aria-hidden="true"></i>Eliminar backups anteriores</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{{!-- ── 5. Armazenamento documental (eixo SEPARADO) ────────────────── --}}
+<h2 class="h6 mt-4 mb-2">Armazenamento documental (separado dos backups)</h2>
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="alert alert-secondary small">
+      <span class="material-symbols-outlined me-1" aria-hidden="true">folder</span>
+      Os documentos dos condomínios são guardados no serviço de armazenamento de cada condomínio
+      (Google Drive, Dropbox ou OneDrive) e <strong>não fazem parte dos backups</strong>. O espaço abaixo
+      <strong>não está somado</strong> ao espaço dos backups e a retenção dos backups nunca os remove.
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-6 col-lg-3"><div class="card mini-stat h-100"><div class="card-body">
+        <div class="mini-stat-label">Documentos</div>
+        <div class="mini-stat-value">{{documentos.totalDocumentos}}</div>
+        <div class="mini-stat-sub">{{documentos.linhas.length}} condomínio(s) com documentos</div>
+      </div></div></div>
+      <div class="col-6 col-lg-3"><div class="card mini-stat h-100"><div class="card-body">
+        <div class="mini-stat-label">Tamanho registado</div>
+        <div class="mini-stat-value">{{bytes documentos.totalBytes}}</div>
+        <div class="mini-stat-sub">soma do tamanho registado no GesCondu</div>
+      </div></div></div>
+      <div class="col-6 col-lg-3"><div class="card mini-stat h-100"><div class="card-body">
+        <div class="mini-stat-label">Sem tamanho registado</div>
+        <div class="mini-stat-value">{{documentos.totalSemTamanho}}</div>
+        <div class="mini-stat-sub">documentos sem ficheiro ou sem dimensão conhecida</div>
+      </div></div></div>
+    </div>
+
+    {{#if documentos.linhas.length}}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th scope="col">Condomínio</th>
+            <th scope="col" class="text-end">Documentos</th>
+            <th scope="col" class="text-end">Tamanho registado</th>
+            <th scope="col">Mais antigo</th>
+            <th scope="col">Mais recente</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each documentos.linhas}}
+          <tr>
+            <td class="small">{{nome}}</td>
+            <td class="small text-end">
+              {{documentos}}{{#if semTamanho}}<span class="text-muted small"> ({{semTamanho}} sem tamanho)</span>{{/if}}
+            </td>
+            <td class="small text-end">{{bytes bytes}}</td>
+            <td class="small">{{#if maisAntigo}}{{formatDate maisAntigo}}{{else}}—{{/if}}</td>
+            <td class="small">{{#if maisRecente}}{{formatDate maisRecente}}{{else}}—{{/if}}</td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+    <p class="small text-muted mb-0 mt-2">
+      O tamanho é o <strong>registado no GesCondu</strong> no momento do carregamento, não uma medição ao
+      vivo no serviço de armazenamento. Documentos carregados antes do registo de tamanho aparecem como
+      «sem tamanho» em vez de zero.
+    </p>
+    {{else}}
+    <p class="mb-0 text-muted small">Ainda não existem documentos registados.</p>
+    {{/if}}
+  </div>
+</div>
