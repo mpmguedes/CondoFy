@@ -1,4 +1,5 @@
 const { toCents, fromCents } = require('./money');
+const { acrescentarFcrAoTotal } = require('./quotas-calc');
 
 // Lista dos meses {ano, mes} dentro do período (inclusivo), na ordem cronológica.
 function mesesDoPeriodo(dataInicio, dataFim) {
@@ -39,8 +40,14 @@ function dividirEm(totalC, n) {
 // rubricas: [{ id, periodicidade }]
 // distribuicoes: [{ rubrica_id, fracao_id, valor_anual }]
 // fracoes: [{ id }]
-// devolve: [{ fracaoId, ano, mes, valor, dataVencimento }]
-function calcularPlano({ orcamento, rubricas, distribuicoes, fracoes, diaVencimento = 8 }) {
+// fcrPercentagem: percentagem do Fundo Comum de Reserva do condomínio. As
+//   `distribuicoes` são DESPESAS; o valor a cobrar em cada quota é o total
+//   (despesas + FCR), obtido pelo ÚNICO ponto do acréscimo
+//   (`acrescentarFcrAoTotal`, a mesma função usada na geração de quotas).
+//   ⛔ Sem percentagem (0 ou omitida) o comportamento é exatamente o anterior —
+//   é o que mantém este caminho retrocompatível.
+// devolve: [{ fracaoId, ano, mes, valor, dataVencimento }]  (valor = total a cobrar)
+function calcularPlano({ orcamento, rubricas, distribuicoes, fracoes, diaVencimento = 8, fcrPercentagem = 0 }) {
   const meses = mesesDoPeriodo(orcamento.data_inicio, orcamento.data_fim);
   const plano = new Map(); // key `${fracaoId}|${ano}|${mes}` -> valorC (int)
 
@@ -64,8 +71,13 @@ function calcularPlano({ orcamento, rubricas, distribuicoes, fracoes, diaVencime
     }
   }
 
-  return [...plano.entries()].map(([key, valorC]) => {
+  const fcrP = Number(String(fcrPercentagem === null || fcrPercentagem === undefined ? '' : fcrPercentagem).replace(',', '.')) || 0;
+
+  return [...plano.entries()].map(([key, despesasC]) => {
     const [fracaoId, ano, mes] = key.split('|').map(Number);
+    // O que se cobra é o TOTAL (despesas + FCR). Com `fcrP = 0` o valor sai
+    // byte-idêntico ao de antes desta alteração.
+    const valorC = fcrP > 0 ? acrescentarFcrAoTotal(despesasC, fcrP) : despesasC;
     const dataVencimento = new Date(ano, mes - 1, Math.min(diaVencimento, 28));
     return { fracaoId, ano, mes, valor: fromCents(valorC), dataVencimento };
   });

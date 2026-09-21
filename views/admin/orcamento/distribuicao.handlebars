@@ -20,7 +20,14 @@
           <tr>
             <td class="fw-semibold text-nowrap">{{designacao}} <span class="text-muted small">({{permilagem}}‰)</span></td>
             {{#each valores}}
-            <td><input type="text" class="form-control form-control-sm text-end" name="dist[{{rubricaId}}][{{../id}}]" value="{{valor}}" /></td>
+            {{!-- Os ids levam prefixo (`r`/`f`) DE PROPÓSITO: o body-parser
+                 (`qs`, via `express.urlencoded({extended:true})`) interpreta
+                 chaves numéricas abaixo de 100 como ÍNDICES DE ARRAY. Com
+                 `dist[11][21]` o corpo era convertido em `[[…],[…]]`, os ids
+                 perdiam-se e a gravação tentava `rubrica_id = 0` →
+                 `ER_NO_REFERENCED_ROW_2`. O prefixo torna a chave não numérica
+                 e o valor chega intacto. --}}
+            <td><input type="text" class="form-control form-control-sm text-end" name="dist[r{{rubricaId}}][f{{../id}}]" value="{{valor}}" /></td>
             {{/each}}
           </tr>
           {{/each}}

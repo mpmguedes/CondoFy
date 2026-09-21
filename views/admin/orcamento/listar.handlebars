@@ -21,7 +21,7 @@
         <tr>
           <th>Ano</th>
           <th>Período</th>
-          <th class="text-end">Receitas</th>
+          <th class="text-end">Receitas (c/ FCR)</th>
           <th class="text-end">Despesas</th>
           <th class="text-end">Saldo</th>
           <th>Estado</th>
@@ -55,6 +55,10 @@
     </table>
   </div>
 </div>
+<p class="text-muted small mt-2 mb-0">
+  As <strong>receitas</strong> são o <strong>total a cobrar</strong> (despesas do orçamento + FCR) e passam a existir quando o plano de quotas é gerado.
+  O <strong>saldo</strong> é a diferença entre esse total e as despesas.
+</p>
 {{else}}
 {{> _empty-state icon="account_balance_wallet" titulo="Sem orçamentos" descricao="Crie o primeiro orçamento anual para distribuir e emitir quotas." link="/admin/orcamento/nova" linkTexto="Novo orçamento"}}
 {{/if}}

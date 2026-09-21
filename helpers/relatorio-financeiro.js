@@ -1108,6 +1108,10 @@ module.exports = {
   competenciaDaDespesa,
   rubricasConfiguradas,
   receitaPrevistaDoPeriodo,
+  // `construirReceitas` é pura (recebe os dados já carregados): é o que permite
+  // provar, sem base de dados, que o FCR entra no balancete UMA só vez — dentro
+  // do valor da quota — e nunca somado por cima do lançado.
+  construirReceitas,
   orcamentosDoPeriodo,
   orcamentoDeReferencia,
   REF_TRANSFERENCIA,

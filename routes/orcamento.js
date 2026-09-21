@@ -21,6 +21,7 @@ const { distribuirValorAnual } = require('../helpers/distribuicao');
 const { calcularPlano } = require('../helpers/plano');
 const { proximoNumero } = require('../helpers/numeracao');
 const { getQuotaConfig } = require('../helpers/quotas-config');
+const { dividirComponentesQuota } = require('../helpers/quotas-calc');
 const orcamentoEstado = require('../helpers/orcamento-estado');
 
 const router = express.Router();
@@ -515,28 +516,94 @@ router.post('/orcamento/:id/distribuicao', async (req, res) => {
     req.flash('error_msg', 'Orçamento anulado não pode ser alterado.');
     return res.redirect(`/admin/orcamento/${orcamento.id}`);
   }
+
+  // ── Leitura do corpo submetido ────────────────────────────────────
+  // Os campos do formulário são `dist[r<rubricaId>][f<fracaoId>]`. O prefixo
+  // NÃO é decorativo: o body-parser (`qs`, via
+  // `express.urlencoded({ extended: true })`) interpreta chaves numéricas
+  // abaixo de `arrayLimit` (100) como ÍNDICES DE ARRAY. Com os nomes antigos
+  // (`dist[11][21]`) o corpo era convertido em `[[…],[…]]`, os ids
+  // desapareciam e a gravação tentava `rubrica_id = 0` → o MySQL recusava com
+  // `ER_NO_REFERENCED_ROW_2` (chave estrangeira para `orcamento_rubricas`).
+  const corpo = req.body.dist;
+  if (corpo !== undefined && (corpo === null || typeof corpo !== 'object' || Array.isArray(corpo))) {
+    // Um formulário antigo (ou adulterado) já chega aqui sem os ids: a análise
+    // do corpo converteu-o em array e a informação perdeu-se. Não há como
+    // recuperar os ids — pede-se o reenvio em vez de gravar lixo.
+    req.flash('error_msg', 'Não foi possível ler a distribuição submetida (formato inválido). Recarregue a página e volte a guardar.');
+    return res.redirect(`/admin/orcamento/${orcamento.id}/distribuicao`);
+  }
+
+  // Âmbito: só rubricas DESTE orçamento e frações do condomínio ATIVO. Sem esta
+  // verificação, a FK de `rubrica_id` aceitaria uma rubrica de OUTRO orçamento
+  // (e, por isso, de outro condomínio) — a FK garante que a rubrica existe, não
+  // que pertence a este orçamento.
+  const rubricasDoOrcamento = new Set(
+    (await OrcamentoRubrica.findAll({ where: { orcamento_id: orcamento.id } })).map((r) => Number(r.id))
+  );
+  const fracoesDoAtivo = new Set(
+    (await Fracao.findAll({ where: { estado: 'ativo', condominio_id: req.condominioId } })).map((f) => Number(f.id))
+  );
+
+  const valores = corpo || {};
+  const registos = [];
+  const ignorados = [];
+  for (const [chaveRubrica, frac] of Object.entries(valores)) {
+    const rubricaId = parseInt(String(chaveRubrica).replace(/^r/, ''), 10);
+    if (!Number.isInteger(rubricaId) || rubricaId <= 0 || !rubricasDoOrcamento.has(rubricaId)) {
+      ignorados.push(`rubrica «${chaveRubrica}»`);
+      continue;
+    }
+    if (!frac || typeof frac !== 'object' || Array.isArray(frac)) {
+      ignorados.push(`rubrica «${chaveRubrica}»`);
+      continue;
+    }
+    for (const [chaveFracao, valor] of Object.entries(frac)) {
+      const fracaoId = parseInt(String(chaveFracao).replace(/^f/, ''), 10);
+      if (!Number.isInteger(fracaoId) || fracaoId <= 0 || !fracoesDoAtivo.has(fracaoId)) {
+        ignorados.push(`fração «${chaveFracao}»`);
+        continue;
+      }
+      const v = toNumber(valor);
+      if (v > 0) registos.push({ rubrica_id: rubricaId, fracao_id: fracaoId, valor_anual: v });
+    }
+  }
+  if (ignorados.length) {
+    console.warn('[orcamento/distribuicao] entradas ignoradas por não pertencerem ao âmbito:', {
+      orcamento: orcamento.id, condominio: req.condominioId, ignorados,
+    });
+  }
+
   const t = await sequelize.transaction();
   try {
-    const valores = req.body.dist || {};
     await OrcamentoDistribuicao.destroy({ where: { orcamento_id: orcamento.id }, transaction: t });
-    for (const [rubricaId, frac] of Object.entries(valores)) {
-      for (const [fracaoId, valor] of Object.entries(frac)) {
-        const v = toNumber(valor);
-        if (v > 0) {
-          await OrcamentoDistribuicao.create(
-            { orcamento_id: orcamento.id, rubrica_id: Number(rubricaId), fracao_id: Number(fracaoId), valor_anual: v },
-            { transaction: t }
-          );
-        }
-      }
+    for (const r of registos) {
+      await OrcamentoDistribuicao.create(
+        { orcamento_id: orcamento.id, rubrica_id: r.rubrica_id, fracao_id: r.fracao_id, valor_anual: r.valor_anual },
+        { transaction: t }
+      );
     }
     await t.commit();
     await audit({ userId: req.user.id, acao: 'calcular_distribuição', entidade: 'Orcamento', entidadeId: orcamento.id });
     req.flash('success_msg', 'Distribuição guardada.');
   } catch (err) {
     await t.rollback();
-    console.error(err);
-    req.flash('error_msg', 'Erro ao guardar a distribuição.');
+    // A mensagem genérica escondia a causa real. Regista-se o que o MySQL
+    // devolveu (`code`/`errno`/`sqlMessage`) e, quando é reconhecível,
+    // acrescenta-se ao aviso do utilizador uma indicação concreta.
+    console.error('[orcamento/distribuicao] falha ao gravar a distribuição:', {
+      orcamento: orcamento.id,
+      condominio: req.condominioId,
+      code: err.code,
+      errno: err.errno,
+      sqlMessage: err.sqlMessage || err.message,
+    });
+    const causa = err.code === 'ER_NO_REFERENCED_ROW_2'
+      ? ' Uma rubrica ou fração indicada já não existe — recarregue a página e verifique as rubricas do orçamento.'
+      : err.code === 'ER_DUP_ENTRY'
+        ? ' Há uma rubrica repetida para a mesma fração.'
+        : '';
+    req.flash('error_msg', `Erro ao guardar a distribuição.${causa}`);
   }
   res.redirect(`/admin/orcamento/${orcamento.id}/distribuicao`);
 });
@@ -585,6 +652,9 @@ router.get('/orcamento/:id/plano', async (req, res) => {
     fracoes,
     totaisMes,
     totalGeral: fromCents(plano.reduce((s, p) => s + toCents(p.valor), 0)),
+    // Os valores do plano são o TOTAL a cobrar (despesas + FCR): a vista
+    // identifica a percentagem aplicada para o valor não parecer inexplicado.
+    quotaConfig: await getQuotaConfig(req.condominioId),
   });
 });
 
@@ -624,11 +694,17 @@ router.post('/orcamento/:id/plano', async (req, res) => {
   }
   distribuicoes = await OrcamentoDistribuicao.findAll({ where: { orcamento_id: orcamento.id } });
 
+  // A percentagem do FCR é do CONDOMÍNIO (não do orçamento). O plano passa a
+  // representar o TOTAL a cobrar em cada quota (despesas + FCR), pela mesma
+  // função do acréscimo usada na geração de quotas — sem ela, as quotas
+  // emitidas a partir do orçamento ficavam sem componente de fundo.
+  const { fcrPercentagem } = await getQuotaConfig(req.condominioId);
   const plano = calcularPlano({
     orcamento: orcamento.toJSON(),
     rubricas: rubricas.map((r) => r.toJSON()),
     distribuicoes: distribuicoes.map((d) => d.toJSON()),
     fracoes: fracoes.map((f) => f.toJSON()),
+    fcrPercentagem,
   });
 
   const t = await sequelize.transaction();
@@ -720,8 +796,22 @@ router.post('/orcamento/:id/emitir', async (req, res) => {
       return res.redirect(`/admin/orcamento/${orcamento.id}/emitir`);
     }
 
+    // Componentes da quota: o valor do plano é o TOTAL a cobrar (despesas +
+    // FCR, ver `helpers/plano.js`). A decomposição usa a MESMA regra D1 do
+    // cálculo das quotas (`dividirComponentesQuota`) e a percentagem vem da
+    // configuração do CONDOMÍNIO — sem isto, a quota emitida a partir do
+    // orçamento ficava sem componente de fundo (`valor_fcr` nulo).
+    const { fcrPercentagem } = await getQuotaConfig(req.condominioId);
+    const fracoes = await Fracao.findAll({
+      where: { condominio_id: orcamento.condominio_id },
+      attributes: ['id', 'permilagem'],
+      transaction: t,
+    });
+    const permilagemPorFracao = new Map(fracoes.map((f) => [Number(f.id), f.permilagem]));
+
     for (const p of plano) {
       const numero = await proximoNumero('aviso_quota', { ano, transaction: t });
+      const partes = dividirComponentesQuota(toCents(p.valor), fcrPercentagem);
       await Quota.create(
         {
           condominio_id: orcamento.condominio_id,
@@ -731,7 +821,11 @@ router.post('/orcamento/:id/emitir', async (req, res) => {
           ano,
           mes,
           periodo: new Date(ano, mes - 1, 1),
-          valor: p.valor,
+          valor: fromCents(partes.totalC),
+          valor_base: fromCents(partes.baseC),
+          valor_fcr: fromCents(partes.fcrC),
+          permilagem_aplicada: permilagemPorFracao.get(Number(p.fracao_id)) ?? null,
+          fcr_percentagem: partes.fcrPercentagem,
           data_emissao: new Date(),
           data_vencimento: p.data_vencimento,
           estado: 'pendente',
