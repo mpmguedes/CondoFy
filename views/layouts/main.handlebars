@@ -27,7 +27,9 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="icon" type="image/png" href="/img/favicon.png" />
+  {{!-- `?v=` é cache-busting: o caminho do favicon não muda, mas o conteúdo
+       sim — sem isto o Chrome/Android continua a mostrar o ícone antigo. --}}
+  <link rel="icon" type="image/png" href="/img/favicon.png?v=20260921a" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -49,7 +51,10 @@
   <div class="app-shell" id="appShell">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">
-        <img src="/img/gescondu-logo-ativo.png" alt="GesCondu" class="sidebar-logo" />
+        {{!-- Marca ISOLADA, sem o texto «GesCondu»: o ficheiro já é só o
+             símbolo. `gescondu-logo-ativo.png` (marca + texto) continua a
+             servir a entrada, as páginas legais e a homepage — não se toca. --}}
+        <img src="/img/gescondu-marca.png" alt="GesCondu" class="sidebar-logo" />
       </div>
 
       <nav class="sidebar-nav" aria-label="Navegação principal">
