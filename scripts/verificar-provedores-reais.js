@@ -17,8 +17,16 @@
 // (OneDrive: ONEDRIVE_CLIENT_ID / ONEDRIVE_CLIENT_SECRET / --provedor onedrive)
 //
 // Antes de correr, registe no fornecedor o redirect URI indicado pelo script
-// (http://127.0.0.1:53682/callback por omissão). Nunca são impressos tokens,
+// (http://localhost:53682/callback por omissão). Nunca são impressos tokens,
 // segredos ou chaves; os erros são apresentados já saneados.
+//
+// O host e a porta do servidor de retorno são configuráveis:
+//   --host localhost   (por omissão)
+//   --porta 53682      (por omissão)
+// Em Microsoft Entra, `http://localhost` é aceite como redirect; `http://127.0.0.1`
+// NÃO é aceite pelo portal (só por edição do manifesto `replyUrlsWithType`), por
+// isso o default deixou de ser 127.0.0.1. Em loopback a porta é ignorada no
+// matching, mas o caminho (`/callback`) não: registe-o tal e qual.
 // ═══════════════════════════════════════════════════════════════════
 const http = require('http');
 const crypto = require('crypto');
@@ -31,6 +39,7 @@ function argumento(nome, defeito = null) {
 
 const PROVEDOR = String(argumento('provedor', '')).toLowerCase();
 const PORTA = Number(argumento('porta', 53682));
+const HOST = String(argumento('host', 'localhost')).trim() || 'localhost';
 const CID = Number(argumento('condominio', 1));
 const ANO = new Date().getFullYear();
 
@@ -45,7 +54,7 @@ const CREDENCIAIS = {
   onedrive: { enabled: 'ONEDRIVE_ENABLED', id: 'ONEDRIVE_CLIENT_ID', segredo: 'ONEDRIVE_CLIENT_SECRET' },
 }[PROVEDOR];
 
-const REDIRECT_URI = `http://127.0.0.1:${PORTA}/callback`;
+const REDIRECT_URI = `http://${HOST}:${PORTA}/callback`;
 
 // ── Instalação temporária em memória (sem BD) ───────────────────────
 // A chave de cifragem é aleatória por execução: valida o caminho de cifragem
@@ -122,11 +131,16 @@ function verificarCredenciais() {
     console.error('     · Supported account types: Accounts in any organizational directory and personal');
     console.error('       Microsoft accounts (para OneDrive pessoal) — ou só a organização, se for empresarial');
     console.error(`     · Redirect URI: plataforma "Web" → ${REDIRECT_URI}`);
-    console.error('  2. Certificates & secrets → New client secret (copie o Value)');
+    console.error('       (o portal do Entra aceita http://localhost; um redirect http://127.0.0.1');
+    console.error('        só entra por edição do manifesto `replyUrlsWithType`)');
+    console.error('  2. Certificates & secrets → New client secret (copie o Value, não o Secret ID)');
     console.error('  3. API permissions → Microsoft Graph → Delegated: offline_access, Files.ReadWrite, User.Read');
+    console.error('     (nenhuma exige consentimento administrativo numa conta pessoal; User.Read é o');
+    console.error('      que permite identificar QUAL conta ficou ligada)');
     console.error('  4. Defina:');
     console.error("     $env:ONEDRIVE_CLIENT_ID='<application (client) id>'; $env:ONEDRIVE_CLIENT_SECRET='<secret value>'");
     console.error('     (opcional) $env:ONEDRIVE_TENANT=\'common\' ou o id do tenant');
+    console.error('  Guia completo: docs/ONEDRIVE.md');
   }
   console.error('');
   return false;
@@ -136,7 +150,7 @@ function verificarCredenciais() {
 function esperarCodigo(state) {
   return new Promise((resolve, reject) => {
     const servidor = http.createServer((req, res) => {
-      const url = new URL(req.url, `http://127.0.0.1:${PORTA}`);
+      const url = new URL(req.url, `http://${HOST}:${PORTA}`);
       if (url.pathname !== '/callback') {
         res.writeHead(404).end();
         return;
@@ -153,7 +167,7 @@ function esperarCodigo(state) {
       resolve(code);
     });
     servidor.on('error', reject);
-    servidor.listen(PORTA, '127.0.0.1', () => {
+    servidor.listen(PORTA, HOST, () => {
       console.log('');
       console.log(`  Servidor de retorno à escuta em ${REDIRECT_URI}`);
     });
@@ -205,6 +219,17 @@ async function main() {
   const codigo = await esperarCodigo(state);
   const tokens = await provedor.trocarCodigo({ code: codigo, redirectUri: REDIRECT_URI, condominioId: CID });
   registar('Código trocado por tokens', Boolean(tokens && (tokens.access_token || tokens.refresh_token)), `conta: ${tokens && tokens.conta ? tokens.conta : '(não identificada)'}`);
+  // A conta tem de ficar identificada por `GET /me`, que exige o scope
+  // delegado `User.Read`. Sem esta asserção, faltar o `User.Read` passava
+  // despercebido: a conta aparecia como «(não identificada)» no detalhe e a
+  // verificação continuava verde. O id do drive nunca substitui a conta.
+  registar(
+    'conta identificada via /me',
+    Boolean(tokens && tokens.conta),
+    tokens && tokens.conta
+      ? String(tokens.conta)
+      : `não identificada${tokens && tokens.contaErro ? ' — ' + tokens.contaErro : ' (scope User.Read consentido?)'}`
+  );
 
   // 2. Cifragem em repouso (o valor guardado tem de estar cifrado)
   const chaveGuardada = ligacoes.chaveTokens(PROVEDOR, CID);
@@ -279,7 +304,17 @@ async function main() {
   registar('chaves de configuração distintas', chaveCondominio !== chavePlataforma, `${chaveCondominio} ≠ ${chavePlataforma.slice(0, 30)}…`);
   registar('valores cifrados distintos e cifrados', loja.get(chaveCondominio) !== loja.get(chavePlataforma) && cifra.estaCifrado(loja.get(chavePlataforma)), 'enc:v1 em ambas as chaves');
   registar('token do condomínio não é o da plataforma', Boolean(tokensCondominio) && tokensCondominio.access_token !== tokensPlataforma.access_token, 'access tokens diferentes');
-  registar('sem ligação de plataforma o condomínio não herda a conta', true, 'regra aplicada pela camada de ligações (Dropbox/OneDrive)');
+  // Um condomínio SEM ligação própria não pode herdar a conta da plataforma
+  // (só o Google Drive admite essa queda). A ligação de plataforma existe — é
+  // isso que dá sentido à verificação. Antes reportava `true` sem testar nada.
+  const outroCondominio = ligacoes.tokensSync(PROVEDOR, CID + 1000).tokens;
+  registar(
+    'sem ligação de plataforma o condomínio não herda a conta',
+    Boolean(tokensPlataforma) && !outroCondominio,
+    outroCondominio
+      ? 'herdou indevidamente a conta da plataforma'
+      : 'plataforma ligada e um condomínio sem ligação própria continua sem tokens'
+  );
 
   const pastaBackups = await provedor.pastaDeBackups();
   registar('pastaDeBackups (ligação de plataforma)', Boolean(pastaBackups), String(pastaBackups).slice(0, 80));

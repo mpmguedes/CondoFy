@@ -38,6 +38,19 @@
 //  obterPastaCondominioId(condominioId)    → id/caminho da pasta do condomínio
 //  criarEstruturaPastas(condominioId, ano) → { raizId, condominioFolderId, anoId, subpastas, backupsId }
 //  linkPasta(pastaId)                      → URL do painel do fornecedor (ou null)
+//
+// ── MÉTODOS OPCIONAIS (capacidade, não obrigação) ────────────────────
+// Não entram em METODOS_OBRIGATORIOS: um provedor que não os tenha continua
+// conforme ao contrato, e a fachada degrada em vez de rebentar.
+//
+//  pastaDeBackups(condominioId?)           → pasta dos backups da instalação
+//  apagarArquivo(fileId, condominioId?)    → true (removido ou já inexistente)
+//     · Usado pela retenção de backups (jobs/backup.js). Implementado pelo
+//       Google Drive e pelo Microsoft OneDrive. A Dropbox ainda não o tem:
+//       nesse caso `storage.apagarArquivo` devolve false e a retenção cloud é
+//       simplesmente ignorada para esse destino (a cópia local mantém-se).
+//     · Nunca é chamado ao desligar uma ligação: desligar remove só os tokens
+//       e deixa os ficheiros na conta do fornecedor.
 // ─────────────────────────────────────────────────────────────────────
 
 const METODOS_OBRIGATORIOS = [

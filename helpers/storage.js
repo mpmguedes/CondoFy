@@ -112,6 +112,19 @@ function abrePastaNoFornecedor(condominioId) {
 }
 
 // ── Estado para a interface ─────────────────────────────────────────
+// Um serviço está DISPONÍVEL quando a instalação tem as credenciais técnicas
+// (`temCredenciais`) E a integração está ligada por configuração
+// (`featureAtiva`). Sem a segunda condição a página mostrava um botão «Ligar»
+// que a rota depois recusava («ainda não está disponível nesta instalação») —
+// um estado incoerente, já que TODAS as operações (isConfigured, ligar,
+// upload) exigem o `featureAtiva`. Não liga nada: só descreve o que já é
+// verdade para as operações.
+function servicoDisponivel(p) {
+  if (!p) return false;
+  if (typeof p.featureAtiva === 'function' && !p.featureAtiva()) return false;
+  return Boolean(typeof p.temCredenciais === 'function' && p.temCredenciais());
+}
+
 // Serviços do condomínio + armazenamento principal + backups da instalação.
 async function estadoDoCondominio(condominioId) {
   const principal = String(await nomePrincipalDoCondominio(condominioId)).trim().toLowerCase();
@@ -140,8 +153,10 @@ async function estadoDoCondominio(condominioId) {
       rotulo: p.rotulo(),
       icone: typeof p.icone === 'function' ? p.icone() : 'bi bi-hdd-network',
       capacidades: p.capacidades(),
-      // A instalação tem as credenciais técnicas para disponibilizar o serviço?
-      disponivel: Boolean(p.temCredenciais && p.temCredenciais()),
+      // A instalação tem as credenciais técnicas E a integração está ligada?
+      // (ver `servicoDisponivel`: sem o `featureAtiva` a interface oferecia uma
+      // ligação que a rota recusava)
+      disponivel: servicoDisponivel(p),
       ligado,
       // Ligado através da conta da plataforma (só acontece no Google Drive).
       contaPlataforma: Boolean(ligado && origem === 'plataforma_fallback'),
@@ -205,7 +220,7 @@ async function estadoDoCondominio(condominioId) {
         nome: chave,
         rotulo: p.rotulo(),
         icone: typeof p.icone === 'function' ? p.icone() : 'bi bi-hdd-network',
-        disponivel: Boolean(p.temCredenciais && p.temCredenciais()),
+        disponivel: servicoDisponivel(p),
         ligado: Boolean(tokens && (tokens.access_token || tokens.refresh_token)),
         conta: (tokens && tokens.conta) || null,
       };

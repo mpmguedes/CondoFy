@@ -241,6 +241,31 @@
         {{/if}}
       </div>
     </div>
+
+    {{!-- Ligação de PLATAFORMA: conta própria da INSTALAÇÃO, separada das
+         contas de cada condomínio. É a que os backups usam (o dump contém
+         dados de todos os condomínios). Só aparece para serviços disponíveis
+         que ainda não tenham ligação de plataforma; a mesma conta pode ser
+         autorizada nos dois âmbitos, porque são tokens distintos. --}}
+    {{#each armazenamento.plataforma}}
+    {{#if disponivel}}
+    {{#unless ligado}}
+    <div class="mt-3 pt-3 border-top">
+      <p class="small text-muted mb-2">
+        <span class="material-symbols-outlined me-1" aria-hidden="true">cloud_upload</span>
+        <strong>Ligar conta da plataforma para backups.</strong>
+        Esta é uma ligação própria da <strong>instalação</strong>, independente das contas de cada
+        condomínio — é a que os backups usam, porque o dump contém dados de todos os condomínios.
+        Pode autorizar a mesma conta que já usa nos documentos: é uma autorização separada, com o
+        seu próprio token (desligar uma não afeta a outra).
+      </p>
+      <a href="/admin/config/armazenamento/{{nome}}/ligar?ambito=plataforma" class="btn btn-sm btn-outline-primary" data-ajuda="Autoriza uma conta da instalação (não de um condomínio) para receber os backups. Não altera a conta usada pelos documentos." data-ajuda-titulo="Ligar conta da plataforma">
+        <i class="{{icone}} me-1" aria-hidden="true"></i>Ligar conta da plataforma ({{rotulo}})
+      </a>
+    </div>
+    {{/unless}}
+    {{/if}}
+    {{/each}}
   </div>
 </div>
 

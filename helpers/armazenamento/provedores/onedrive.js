@@ -49,9 +49,18 @@ const ROTULO = 'Microsoft OneDrive';
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const LOGIN = 'https://login.microsoftonline.com';
 
-// Scope mínimo: ler/escrever os ficheiros do utilizador + refresh token.
+// Scope mínimo, só DELEGADO (a aplicação age em nome da conta autorizada):
+//  · Files.ReadWrite → ler/escrever os ficheiros do utilizador;
+//  · offline_access  → refresh token (a ligação renova-se sozinha);
+//  · User.Read       → `GET /me`, para a interface saber QUAL conta está
+//    ligada. Sem este scope o Graph responde 403 ao /me e a conta fica sem
+//    identificação (não se inventa uma conta a partir do id do drive).
+// Deliberadamente FORA: `Files.ReadWrite.All` (dá acesso a todos os ficheiros
+// a que o utilizador chega e exige consentimento administrativo) e qualquer
+// permissão de APLICAÇÃO (exige consentimento administrativo e daria acesso a
+// todos os drives do tenant).
 // Na Microsoft os scopes vão separados por ESPAÇOS.
-const SCOPE = 'offline_access Files.ReadWrite';
+const SCOPE = 'offline_access Files.ReadWrite User.Read';
 
 // Limite do upload simples (PUT .../content). Acima disto usa-se sessão de
 // upload (createUploadSession) com fatias de 320 KiB (múltiplo exigido pelo
@@ -155,17 +164,51 @@ function respostaVazia(status, dados = null) {
   return { ok: status >= 200 && status < 300, status, dados };
 }
 
+// Caracteres que o OneDrive (como o Windows) recusa dentro de um nome.
+// `\` e `/` são tratados à parte — viram espaço, porque `segmentosDe` e
+// `caminhoGraph` também recebem caminhos já montados: '/GesCondu' tem de
+// continuar a dar 'GesCondu' e não '-GesCondu'.
+const CARACTERES_INVALIDOS = /[:*?"<>|]+/g;
+
+// Nomes que o OneDrive recusa por si só, independentemente da extensão.
+const NOMES_RESERVADOS = new Set([
+  'con', 'prn', 'aux', 'nul',
+  'com0', 'com1', 'com2', 'com3', 'com4', 'com5', 'com6', 'com7', 'com8', 'com9',
+  'lpt0', 'lpt1', 'lpt2', 'lpt3', 'lpt4', 'lpt5', 'lpt6', 'lpt7', 'lpt8', 'lpt9',
+  'desktop.ini',
+]);
+
+// `CON`, `con.txt` e `desktop.ini` são reservados: o OneDrive olha para o nome
+// ANTES da extensão. `~$…` (temporários do Office) e `_vti_…` também são
+// recusados. Em vez de descartar o nome — que perderia legibilidade —,
+// prefixa-se com `_` e SÓ quando é mesmo necessário (evita colisões inúteis).
+function nomeReservado(nome) {
+  const base = String(nome == null ? '' : nome).trim().toLowerCase();
+  if (!base) return false;
+  if (base.startsWith('~$') || base.startsWith('_vti_')) return true;
+  if (NOMES_RESERVADOS.has(base)) return true;
+  return NOMES_RESERVADOS.has(base.split('.')[0]);
+}
+
 // Normaliza um único segmento: sem `\` nem `/` (um nome nunca cria
-// subpastas), sem espaços nas pontas, sem comprimento abusivo.
+// subpastas), sem os caracteres que o OneDrive recusa, sem caracteres de
+// controlo, sem pontos/espaços no fim e sem comprimento abusivo.
+// Os caracteres de controlo viram ESPAÇO, não desaparecem: 'Ata\u0001de 2026'
+// tem de dar 'Ata de 2026' e não 'Atade 2026' — um nome legível vale mais do
+// que um nome colado, e o `\s+` seguinte volta a colapsar o que sobrar.
 function segmentoSeguro(segmento, fallback = '') {
   const texto = String(segmento == null ? '' : segmento)
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .replace(/[\\/]+/g, ' ')
+    .replace(CARACTERES_INVALIDOS, '-')
     .replace(/\s+/g, ' ')
     .replace(/^\.+/, '')
     .trim()
     .slice(0, 120)
+    .replace(/[. ]+$/, '')
     .trim();
-  return texto || fallback;
+  if (!texto) return fallback;
+  return nomeReservado(texto) ? `_${texto}` : texto;
 }
 
 // Converte uma lista de segmentos no caminho do Graph:
@@ -426,20 +469,22 @@ async function estadoLigacao(condominioId) {
   };
 }
 
-// Confirma que a ligação funciona: quem é o utilizador e que o drive
-// responde. Nunca lança — a interface mostra sempre uma mensagem.
+// Confirma que a ligação funciona: que o drive responde. Nunca lança — a
+// interface mostra sempre uma mensagem.
+// A conta devolvida vem SÓ dos tokens (identificada em `GET /me` durante o
+// OAuth): o id do drive NUNCA é usado como conta — não é um identificador
+// legível e apresentá-lo dava a ideia de uma conta identificada que não existe.
 async function testarLigacao(condominioId) {
   if (!isConfigured(condominioId)) {
     return { ok: false, erro: 'O Microsoft OneDrive não está ligado.' };
   }
   try {
-    const resposta = await operacaoGraph(condominioId, 'teste da ligação', (token) => ({
+    await operacaoGraph(condominioId, 'teste da ligação', (token) => ({
       url: http.urlComQuery(`${GRAPH}/me/drive`, { $select: 'id,driveType' }),
       method: 'GET',
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
     }));
-    const dados = resposta.dados || {};
-    return { ok: true, conta: contaDosTokens(await lerTokens(condominioId)) || dados.id || null };
+    return { ok: true, conta: contaDosTokens(await lerTokens(condominioId)) };
   } catch (err) {
     return { ok: false, erro: err.message };
   }
@@ -478,6 +523,30 @@ function urlAutorizacao({ redirectUri, state, condominioId } = {}) {
   return `${LOGIN}/${tenant()}/oauth2/v2.0/authorize?${query}`;
 }
 
+// Identifica a conta autorizada através de `GET /me` (exige o scope
+// `User.Read`, incluído em SCOPE). Nunca lança e nunca inventa uma conta:
+// devolve `{ conta, erro }`, com o erro já sanitizado (sem tokens), para o
+// chamador poder dizer PORQUE é que a conta não ficou identificada em vez de
+// apresentar uma conta falsa.
+async function identificarConta(accessToken) {
+  try {
+    const resposta = await http.pedir(
+      http.urlComQuery(`${GRAPH}/me`, { $select: 'userPrincipalName,mail,displayName' }),
+      {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+      }
+    );
+    if (!resposta.ok) {
+      return { conta: null, erro: http.mensagemErro(resposta, 'não foi possível identificar a conta') };
+    }
+    const perfil = resposta.dados || {};
+    return { conta: perfil.userPrincipalName || perfil.mail || perfil.displayName || null, erro: null };
+  } catch (err) {
+    return { conta: null, erro: http.sanitizar((err && err.message) || 'falha ao identificar a conta') };
+  }
+}
+
 // Troca o código de autorização pelos tokens e guarda-os por condomínio.
 // O refresh_token é essencial (offline_access): sem ele a ligação não se
 // renova sozinha.
@@ -501,41 +570,44 @@ async function trocarCodigo({ code, redirectUri, condominioId } = {}) {
   const access = dados.access_token || null;
   if (!access) throw new Error('A Microsoft não devolveu um access token.');
 
-  // Identificar a conta é opcional: se falhar, a ligação continua válida.
-  let conta = null;
-  try {
-    const resposta = await http.pedir(http.urlComQuery(`${GRAPH}/me`, { $select: 'userPrincipalName,mail,displayName' }), {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${access}`, Accept: 'application/json' },
-    });
-    if (resposta.ok) {
-      const perfil = resposta.dados || {};
-      conta = perfil.userPrincipalName || perfil.mail || perfil.displayName || null;
-    }
-  } catch (err) {
-    // identificar a conta é opcional — não invalida a ligação
+  // Identificar a conta é o que permite à interface dizer QUAL conta está
+  // ligada. Uma falha aqui NÃO invalida a ligação (os ficheiros continuam
+  // acessíveis) mas é reportada: fica `conta: null` + a razão, e nunca se
+  // substitui a conta pelo id do drive.
+  const identificacao = await identificarConta(access);
+  if (identificacao.erro) {
+    console.warn('[onedrive] conta não identificada:', identificacao.erro);
   }
 
   const guardados = await ligacoes.guardarTokens(NOME, condominioId, {
     access_token: access,
     refresh_token: dados.refresh_token || null,
     expiry_date: calcularExpiry(dados),
-    conta,
+    conta: identificacao.conta,
   });
-  return { conta: contaDosTokens(guardados) };
+  return { conta: contaDosTokens(guardados), contaErro: identificacao.erro };
 }
 
 // Desligar remove APENAS os tokens guardados localmente.
+//  · O âmbito é EXPLÍCITO (`opcoes.plataforma`): desligar a ligação de um
+//    condomínio nunca pode remover a da plataforma (a que os backups usam) e
+//    vice-versa. Confiar só no `condominioId` deixava o âmbito implícito e
+//    tornava um erro de chamada numa ligação apagada por engano.
 //  · A Microsoft não tem um endpoint de revogação simples equivalente ao
 //    do Google (o utilizador pode retirar o acesso da aplicação em
 //    account.live.com → Aplicações e serviços, ou no Entra ID do tenant).
 //  · Os ficheiros já existentes no OneDrive NÃO são apagados — continuam
 //    privados na conta e o GesCondu deixa apenas de os conseguir aceder.
-async function desligar(condominioId) {
+async function desligar(condominioId, opcoes = {}) {
+  const plataforma = Boolean(opcoes && opcoes.plataforma);
+  const alvo = plataforma ? null : condominioId;
+  if (!alvo && !plataforma) {
+    throw new Error('condominioId é obrigatório para desligar a ligação ao Microsoft OneDrive.');
+  }
   // Sem BD acessível (testes offline, manutenção) não há tokens a limpar:
   // falhar aqui só bloquearia a interface sem efeito útil.
   try {
-    await ligacoes.limparTokens(NOME, condominioId);
+    await ligacoes.limparTokens(NOME, alvo);
   } catch (err) {
     console.warn('[onedrive] tokens locais não removidos:', http.sanitizar(err.message));
   }
@@ -657,16 +729,22 @@ function tipoConteudo(nomeArquivo, mimeType) {
   return (ext && MIME_POR_EXTENSAO[ext[1]]) || 'application/octet-stream';
 }
 
-// Nome do ficheiro: sem `\` nem `/` (nunca cria subpastas nem sai da pasta
-// do documento) e com um fallback sempre válido.
+// Nome do ficheiro: sem `\` nem `/` (nunca cria subpastas nem sai da pasta do
+// documento), sem caracteres que o OneDrive recusa, sem controlos (que viram
+// espaço, para o nome continuar legível), sem pontos/espaços finais e com um
+// fallback sempre válido.
 function nomeSeguro(nome) {
   const limpo = String(nome == null ? '' : nome)
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .replace(/[\\/]+/g, '_')
-    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(CARACTERES_INVALIDOS, '-')
+    .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 180)
+    .replace(/[. ]+$/, '')
     .trim();
-  return limpo || `documento-${Date.now()}`;
+  if (!limpo) return `documento-${Date.now()}`;
+  return nomeReservado(limpo) ? `_${limpo}` : limpo;
 }
 
 // Pasta-mãe do upload: aceita o caminho devolvido pelos resolvedores
@@ -859,6 +937,31 @@ async function abrirFluxo(fileId, condominioId) {
   };
 }
 
+// Apaga um ficheiro no OneDrive (capacidade OPCIONAL do contrato, usada pela
+// retenção de backups em jobs/backup.js). `DELETE /me/drive/items/{id}`
+// responde 204 sem corpo.
+//  · Idempotente: um 404 significa que o item já não existe — a remoção
+//    pretendida está feita, logo devolve true (a retenção não pode ficar
+//    presa num ficheiro que já desapareceu).
+//  · Nunca é chamado ao desligar a ligação: desligar remove só os tokens e
+//    deixa os ficheiros na conta.
+//  · O id é o do driveItem, já resolvido pelo localizador `od:` na fachada.
+async function apagarArquivo(fileId, condominioId) {
+  const id = String(fileId == null ? '' : fileId).trim();
+  if (!id) throw new Error('fileId é obrigatório para apagar do Microsoft OneDrive.');
+  try {
+    await operacaoGraph(condominioId, 'remoção do ficheiro', (token) => ({
+      url: `${GRAPH}/me/drive/items/${encodeURIComponent(id)}`,
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    }));
+    return true;
+  } catch (err) {
+    if (err.status === 404) return true;
+    throw err;
+  }
+}
+
 module.exports = {
   // Identificação
   nome,
@@ -889,6 +992,8 @@ module.exports = {
   uploadArquivo,
   descarregarArquivo,
   abrirFluxo,
+  // Remoção (capacidade opcional do contrato — usada pela retenção de backups)
+  apagarArquivo,
   // Estrutura partilhada (multi-provedor)
   nomePastaCondominio: estrutura.nomePastaCondominio,
   subpastaDoTipo: estrutura.subpastaDoTipo,

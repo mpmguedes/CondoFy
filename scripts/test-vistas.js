@@ -224,6 +224,33 @@ assert.ok(!html.includes('ambito=plataforma'), 'armazenamento: sem ligações de
 assert.ok(html.includes('Destino atual') && html.includes('Último backup'), 'armazenamento: destino e último backup visíveis');
 assert.ok(!html.includes('Ligue um serviço acima para escolher onde guardar os documentos.'), 'armazenamento: com ligações não pede para ligar um serviço');
 
+// Ligação de PLATAFORMA (B3): a página tem de oferecer uma ação EXPLÍCITA para
+// autorizar a conta da INSTALAÇÃO — a que os backups usam — separada das contas
+// de cada condomínio. Só aparece para serviços DISPONÍVEIS e ainda sem ligação
+// de plataforma: um serviço indisponível mostraria um botão que a rota recusa
+// (a mesma incoerência que a fachada deixou de produzir).
+const plataformaCom = (lista) => armazenamento({
+  ...ctxArm,
+  driveLigado: true,
+  driveOpcoes: opcoesBase,
+  ultimoBackup: null,
+  armazenamento: estadoArm({ plataforma: lista }),
+});
+html = plataformaCom([
+  { nome: 'google_drive', rotulo: 'Google Drive', icone: 'bi bi-google', disponivel: true, ligado: true, conta: 'plataforma@gmail.com' },
+  { nome: 'dropbox', rotulo: 'Dropbox', icone: 'bi bi-dropbox', disponivel: true, ligado: true, conta: 'backups@exemplo.pt' },
+  { nome: 'onedrive', rotulo: 'Microsoft OneDrive', icone: 'bi bi-microsoft', disponivel: true, ligado: false, conta: null },
+]);
+assert.ok(html.includes('href="/admin/config/armazenamento/onedrive/ligar?ambito=plataforma"'), 'armazenamento: ligação de plataforma oferecida para serviço disponível e não ligado');
+assert.ok(html.includes('Ligar conta da plataforma (Microsoft OneDrive)'), 'armazenamento: botão de plataforma nomeia o serviço');
+assert.ok(!/google_drive\/ligar\?ambito=plataforma/.test(html), 'armazenamento: serviço já ligado à plataforma não volta a oferecer ligação');
+assert.ok(/ligação própria da <strong>instalação<\/strong>/.test(html), 'armazenamento: explica que a ligação é da instalação, não de um condomínio');
+assert.ok(html.includes('dados de todos os condomínios'), 'armazenamento: justifica porque a conta é da instalação');
+assert.ok(html.includes('a mesma conta'), 'armazenamento: diz que a mesma conta pode ser autorizada nos dois âmbitos');
+
+html = plataformaCom([{ nome: 'onedrive', rotulo: 'Microsoft OneDrive', icone: 'bi bi-microsoft', disponivel: false, ligado: false, conta: null }]);
+assert.ok(!html.includes('ambito=plataforma'), 'armazenamento: serviço indisponível não oferece ligação de plataforma');
+
 // Google Drive ligado pela conta da plataforma (caso histórico: o condomínio não
 // tem ligação própria). A ligação pertence à instalação, por isso Testar e
 // Desligar têm de usar o âmbito da plataforma — sem isso o "Desligar" não fazia

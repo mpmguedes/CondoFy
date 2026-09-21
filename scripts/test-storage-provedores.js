@@ -363,6 +363,30 @@ async function testarEstadoInterface() {
   assert.strictEqual(estado.provedores.filter((p) => p.principal).length, 1, 'exatamente um serviço principal');
   assert.ok('destino' in estado.backup, 'estado dos backups presente');
   assert.strictEqual(estado.provedores.find((p) => p.nome === 'google_drive').disponivel, false, 'sem credenciais → não disponível');
+
+  // B4: «disponível para ligar» exige a configuração técnica E a integração
+  // ligada por configuração (`featureAtiva`). Sem a segunda condição a página
+  // mostrava um botão «Ligar» que a rota depois recusava — estado incoerente.
+  const envOneDrive = {
+    ONEDRIVE_ENABLED: process.env.ONEDRIVE_ENABLED,
+    ONEDRIVE_CLIENT_ID: process.env.ONEDRIVE_CLIENT_ID,
+    ONEDRIVE_CLIENT_SECRET: process.env.ONEDRIVE_CLIENT_SECRET,
+  };
+  process.env.ONEDRIVE_CLIENT_ID = 'cliente-teste';
+  process.env.ONEDRIVE_CLIENT_SECRET = 'segredo-teste';
+  const disponivelOneDrive = async () =>
+    (await storage.estadoDoCondominio(3)).provedores.find((p) => p.nome === 'onedrive').disponivel;
+
+  process.env.ONEDRIVE_ENABLED = 'false';
+  assert.strictEqual(await disponivelOneDrive(), false, 'ONEDRIVE_ENABLED=false → não disponível (não oferece «Ligar»)');
+  process.env.ONEDRIVE_ENABLED = 'true';
+  assert.strictEqual(await disponivelOneDrive(), true, 'credenciais + integração ligada → disponível');
+  delete process.env.ONEDRIVE_CLIENT_SECRET;
+  assert.strictEqual(await disponivelOneDrive(), false, 'sem credenciais técnicas → não disponível');
+  for (const [k, v] of Object.entries(envOneDrive)) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
   delete process.env.GOOGLE_DRIVE_ENABLED;
 }
 
@@ -584,7 +608,10 @@ function testarUrlAutorizacao() {
     const onedrive = storage.obterProvedor('onedrive');
     const urlOneDrive = onedrive.urlAutorizacao({ redirectUri: 'https://exemplo.pt/cb', state: 'abc', condominioId: 1 });
     assert.ok(urlOneDrive.includes('prompt=select_account'), 'OneDrive pede a escolha da conta');
-    assert.ok(urlOneDrive.includes('scope=offline_access%20Files.ReadWrite'), 'OneDrive mantém os scopes (espaço como %20)');
+    // B1: o scope delegado tem de incluir `User.Read` — é o que permite
+    // `GET /me` e, portanto, dizer QUAL conta ficou ligada.
+    assert.ok(urlOneDrive.includes('scope=offline_access%20Files.ReadWrite%20User.Read'), 'OneDrive pede o scope delegado completo (com User.Read)');
+    assert.ok(!/\.All\b/.test(urlOneDrive), 'OneDrive não pede permissões .All (só o necessário)');
     assert.ok(urlOneDrive.includes('response_mode=query'), 'OneDrive mantém response_mode=query');
   } finally {
     for (const [k, v] of Object.entries(envAntes)) {

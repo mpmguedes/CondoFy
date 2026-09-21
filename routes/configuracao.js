@@ -201,7 +201,17 @@ router.get('/config/armazenamento/:provedor/callback', async (req, res) => {
       detalhes: { provedor, ambito: guardado.ambito || 'condominio', conta: tokens && tokens.conta ? tokens.conta : null },
     }).catch(() => {});
     const onde = guardado.ambito === 'plataforma' ? 'à plataforma' : 'a este condomínio';
-    req.flash('success_msg', `${p.rotulo()} ligado ${onde}${tokens && tokens.conta ? ` (${tokens.conta})` : ''}.`);
+    if (tokens && tokens.conta) {
+      req.flash('success_msg', `${p.rotulo()} ligado ${onde} (${tokens.conta}).`);
+    } else if (tokens && tokens.contaErro) {
+      // A ligação foi criada, mas a conta não ficou identificada (por exemplo:
+      // o scope `User.Read` não foi consentido no ecrã da Microsoft). Dizê-lo
+      // é mais honesto do que mostrar uma conta que não é a real; a mensagem já
+      // vem sanitizada do adaptador (nunca traz tokens).
+      req.flash('success_msg', `${p.rotulo()} ligado ${onde}. Não foi possível identificar a conta ligada: ${tokens.contaErro}`);
+    } else {
+      req.flash('success_msg', `${p.rotulo()} ligado ${onde}.`);
+    }
   } catch (err) {
     console.error(`[armazenamento] callback ${provedor}:`, err.message);
     req.flash('error_msg', `Não foi possível ligar ${p.rotulo()}: ${err.message}`);
