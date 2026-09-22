@@ -38,9 +38,9 @@ menores registados e deliberadamente não corrigidos (secção 4).
 
 | Item                  | Valor                                                                                                                                                                                                      |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `HEAD`                | `6405039` — «Agenda de backups: dia da semana numérico (o node-cron 3.x rejeita `SU`) — P55» (2026-09-22) — **publicado**                                                                                                                                                 |
-| Remoto `origin/main`  | `6405039` — confirmado por `git ls-remote origin main` (2026-09-22) ⇒ **alinhado com o `HEAD` local** (**0 commits por publicar**); o ciclo A1–A8 **está publicado**. A lista de commits está no **§7**; o número exato **não se fixa aqui** de propósito — este documento é editado pelos próprios commits que descreve                                |
-| Working tree          | **stage vazio**; medido a 2026-09-22 **depois da frente R10/Q11 e da revisão pré-commit** (ainda **por commitar**): **12 ` M` + 31 `??`**. Os ` M` são os **7 de R10/Q11** (`routes/financeiro.js`, `routes/extra-quotas.js`, `models/ExtraQuota.js`, `models/index.js`, `package.json`, `scripts/test-quotas-recalculo-plano.js`, `.gitignore`), os **4 da frente de páginas legais/públicas** (`routes/publicas.js`, `scripts/test-paginas-publicas.js` e 2 views) e este documento. Em `??` estão os **3 helpers novos** (`quota-imutabilidade.js`, `quotas-previsao.js`, `quota-acerto.js`), a migração `…00080`, `scripts/test-quotas-r10.js` e os não rastreados anteriores (branding/legais, 4 auditorias, `docs/documentos/`, `docs/mobile/`, `.workbuddy-ai/`, `.commit-c3.tmp.txt`). Os **3 resíduos `.mutation-backup-*`** de um harness morto a meio passaram a estar **ignorados** por `.gitignore` — ver §4.6 |
+| `HEAD`                | `9b422eb` — «Endurecer imutabilidade das quotas e suportar acertos — R10/Q11» (2026-09-22) — **commit local, por publicar**                                                                                |
+| Remoto `origin/main`  | `6405039` — confirmado por `git ls-remote origin main` (2026-09-22) ⇒ **1 commit por publicar** (`9b422eb`, R10/Q11, está só no clone); o ciclo A1–A8 **está publicado**. A lista de commits está no **§7**; o número exato **não se fixa aqui** de propósito — este documento é editado pelos próprios commits que descreve|
+| Working tree          | **stage vazio**; medido a 2026-09-22 **depois do commit de R10/Q11 (`9b422eb`)**: **4 ` M` + 26 `??`**. Os ` M` são os **4 da frente de páginas legais/públicas** (`routes/publicas.js`, `scripts/test-paginas-publicas.js` e 2 views). Em `??` estão os não rastreados que não pertencem a nenhuma frente (branding/legais, 4 auditorias, `docs/documentos/`, `docs/mobile/`, `.workbuddy-ai/`, o resíduo alheio `.commit-c3.tmp.txt`). A frente **R10/Q11 já não está aqui** — foi commitada em `9b422eb` (15 ficheiros, +2285/−109) e está **por publicar** (§4.6). Os **3 resíduos `.mutation-backup-*`** de um harness morto a meio continuam **ignorados** por `.gitignore`|
 | Migrations            | 80 (`migrations/20260101000001…00080`; a `…00079-segredos-em-repouso` é a migração da frente A1 e a `…00080-extra-quota-acerto` a da frente R10/Q11)                                                                                                                                                                     |
 | Modelos               | 47 ficheiros em `models/`                                                                                                                                                                                  |
 | Routers               | 28 ficheiros em `routes/`                                                                                                                                                                                  |
@@ -466,7 +466,7 @@ agente possa retomar sem recomeçar do zero.
 
 | Funcionalidade                                  | Estado | Implementação                                                                                                         | Testes                                                                                                                               | Documentação                                          | Próximo passo                                                                                      |
 | ----------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Cadeia `test:offline`                           | 🟢     | `package.json` → `scripts['test:offline']` (**fonte única**, não repetir em documentação)                             | **105 passos** (`HEAD` = `6405039`) / 89 em `bf4b6f5` (a frente Tips acrescentou os 4 `test-tips*`) / 85 em `f2e5345`; **0 entradas órfãs** | —                                                     | A antiga falha A3-1 (**3 entradas órfãs** em `7f3f59a`/`8cc6750`) está **RESOLVIDA** em `4c34532`. |
+| Cadeia `test:offline`                           | 🟢     | `package.json` → `scripts['test:offline']` (**fonte única**, não repetir em documentação)                             | **105 passos** (`HEAD` = `9b422eb`) / 89 em `bf4b6f5` (a frente Tips acrescentou os 4 `test-tips*`) / 85 em `f2e5345`; **0 entradas órfãs** | —                                                     | A antiga falha A3-1 (**3 entradas órfãs** em `7f3f59a`/`8cc6750`) está **RESOLVIDA** em `4c34532`. |
 | Testes de mutação (provam que os testes mordem) | 🟢     | `scripts/test-mutacao-{suporte,fcr,mensal,fcr-orcamento}.js`                                                          | —                                                                                                                                    | `docs/GIT-E-MUTACAO.md` (memória)                     | Usar sempre antes de concluir «sem regressão».                                                     |
 | Verificadores read-only de produção             | 🟢     | `scripts/verificar-{readonly-admitidos,pre-commit-suporte,titularidades,provedores-reais}.js`                         | —                                                                                                                                    | —                                                     | Escrevem-se aqui, correm em `/opt/condofy`.                                                        |
 | `check-templates.js` (todas as vistas)          | 🟢     | `scripts/check-templates.js`                                                                                          | na cadeia                                                                                                                            | —                                                     | —                                                                                                  |
@@ -756,12 +756,15 @@ Trabalho que **não pertence ao ciclo A1–A8** e que, por isso, **não entrou n
 > lista completa de ficheiros foi **movida** para **§5.2** (histórico preservado, não apagado).  
 > O stage ficou **vazio** e `docs/ROADMAP.md` continua **fora** dele.
 
-> **Entrada nesta lista (2026-09-22) — frente R10/Q11 (congelamento do cálculo de quotas):**
-> está **na working tree e por commitar**. Ver **§4.6** para o que foi implementado, os testes e as
-> provas de mutação. São 5 ` M` (`routes/financeiro.js`, `models/ExtraQuota.js`, `models/index.js`,
-> `package.json`, `scripts/test-quotas-recalculo-plano.js`), 1 migração nova
-> (`…00080-extra-quota-acerto`), 3 helpers novos (`quota-imutabilidade.js`, `quotas-previsao.js`,
-> `quota-acerto.js`) e `scripts/test-quotas-r10.js`. **Nada foi commitado nem publicado.**
+> **Saída desta lista (2026-09-22) — frente R10/Q11 (congelamento do cálculo de quotas):** a frente
+> deixou de estar na working tree — foi **commitada localmente em `9b422eb`** («Endurecer imutabilidade
+> das quotas e suportar acertos — R10/Q11»; **15 ficheiros, +2285/−109**), **ainda por publicar**.
+> Entraram 5 ` M` (`routes/financeiro.js`, `models/ExtraQuota.js`, `models/index.js`, `package.json`,
+> `scripts/test-quotas-recalculo-plano.js`), 1 migração nova (`…00080-extra-quota-acerto`), 3 helpers
+> novos (`quota-imutabilidade.js`, `quotas-previsao.js`, `quota-acerto.js`) e
+> `scripts/test-quotas-r10.js` — mais `.gitignore`, `helpers/relatorio-financeiro.js`,
+> `scripts/test-relatorio-financeiro.js` e este documento. O stage ficou **vazio**. Ver **§4.6** para
+> o que foi implementado, os testes e as provas de mutação.
 
 ### 5.2 Frentes recentes já commitadas
 
@@ -826,9 +829,9 @@ Trabalho que **não pertence ao ciclo A1–A8** e que, por isso, **não entrou n
 ## 7. Histórico de implementações
 
 Hashtags reais obtidos de `git log` (nenhum hash inventado). «Estado» = relação com `origin/main`  
-(que está em `6405039`, **alinhado com o `HEAD` local**): **publicado** = já em `origin/main`; **local** = só no clone.
-O remoto `origin/main` está em `6405039` e o `HEAD` local também. Todos os commits abaixo (do ciclo A1–A8, mais a documentação do fecho, que é o que introduz este documento) **estão publicados** — **nada
-ficou por publicar.**
+(que está em `6405039`; o `HEAD` local está **um commit à frente**, em `9b422eb`): **publicado** = já em `origin/main`; **local** = só no clone.
+O remoto `origin/main` está em `6405039` e o `HEAD` local em `9b422eb`. Todos os commits abaixo (do ciclo A1–A8, mais a documentação do fecho, que é o que introduz este documento) **estão publicados** — **nada
+ficou por publicar**; o único commit **local** é `9b422eb` (R10/Q11), registado no §4.6.
 
 | Data       | Área                     | Implementação                                                                | Commit    | Estado    |
 | ---------- | ------------------------ | ---------------------------------------------------------------------------- | --------- | --------- |
@@ -928,5 +931,6 @@ ficou por publicar.**
 ---
 
 *Documento de levantamento. Nenhuma alteração funcional foi feita ao criar este ficheiro.  
-Estado verificado em **2026-09-22**, após o push: `HEAD` = `6405039` = `origin/main` (alinhados; **
-0 commits por publicar**) e working tree com **12 ` M` + 31 `??`** — a frente **R10/Q11** está nesta árvore e **ainda não foi commitada** (§4.6; lista de commits no §7).*
+Estado verificado em **2026-09-22**: `HEAD` = `9b422eb` (commit **local** de R10/Q11, **por publicar**;
+`origin/main` = `6405039`, **1 commit por publicar**) e working tree com **4 ` M` + 26 `??`** — a frente
+**R10/Q11** foi commitada em `9b422eb` (§4.6; lista de commits no §7).*
