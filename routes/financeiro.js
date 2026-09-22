@@ -504,6 +504,20 @@ router.post('/categorias/:id/eliminar', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 // DESPESAS
 // ═══════════════════════════════════════════════════════════════════
+
+// Rollback que nunca rebenta. Quando o próprio `commit()` falha (deadlock no
+// fecho, ligação perdida), a transação já caiu do lado do servidor e o
+// `rollback()` pode ele próprio lançar — o que mascararia o erro original e
+// deixaria o utilizador sem resposta. O erro do rollback é registado, não
+// propagado.
+async function rollbackSilencioso(t) {
+  try {
+    await t.rollback();
+  } catch (e) {
+    console.error('[transacao] rollback falhou:', e.message);
+  }
+}
+
 router.get('/despesas', async (req, res) => {
   const despesas = await Despesa.findAll({
     where: ondeCondominio(req),
@@ -541,6 +555,15 @@ router.get('/despesas/nova', async (req, res) => {
 router.post('/despesas', async (req, res) => {
   const { descricao, categoria_id, valor, data, fornecedor, conta_bancaria_id, metodo_pagamento_id, observacoes, estado } = req.body;
   const dataObj = data ? new Date(data) : new Date();
+  // ⚠️ O número é reservado FORA da transação, de propósito. `numeracoes` é uma
+  // série GLOBAL: quando `proximoNumero` recebe uma transação, grava o
+  // incremento da sequência NESSA transação — e um abort posterior desfaria o
+  // incremento, deixando a série PRESA a recomputar o mesmo número em cada
+  // tentativa (foi a causa do incidente de numeração em pagamentos). Sem
+  // transação, o incremento é autónomo: um abort deixa no máximo um SALTO na
+  // série — aceitável; um número repetido, não. A série 'despesa' não tem
+  // (ainda) predicado `jaUsado`, logo esta ordem é deliberada e não deve ser
+  // "corrigida" para dentro da transação.
   const numero = await proximoNumero('despesa', { ano: dataObj.getFullYear() });
 
   // Conta bancária da despesa tem de pertencer ao condomínio ativo (IDOR).
@@ -579,24 +602,43 @@ router.post('/despesas', async (req, res) => {
     deliberacaoValidada = decisao;
   }
 
-  const despesa = await Despesa.create({
-    condominio_id: req.condominioId,
-    numero_documento: numero,
-    descricao,
-    categoria_id: categoria_id || null,
-    valor: toNumber(valor),
-    data: dataObj,
-    competencia_ano: dataObj.getFullYear(),
-    competencia_mes: dataObj.getMonth() + 1,
-    fornecedor: fornecedorTexto || null,
-    fornecedor_id,
-    conta_bancaria_id: contaId,
-    metodo_pagamento_id: metodo_pagamento_id || null,
-    deliberacao_id: deliberacaoId,
-    observacoes,
-    estado: estado || 'registada',
-  });
-  await sincronizarMovimentoDespesa(despesa, req.user.id, undefined, req.condominioId);
+  // A despesa e o movimento bancário que a desconta são gravados na MESMA
+  // transação. Sem isto, uma falha ao criar o movimento deixava a despesa
+  // gravada sem saída na conta — o saldo deixaria de descontar uma despesa paga
+  // e a divergência era silenciosa (o pedido parecia ter corrido bem).
+  const t = await sequelize.transaction();
+  let despesa;
+  try {
+    despesa = await Despesa.create(
+      {
+        condominio_id: req.condominioId,
+        numero_documento: numero,
+        descricao,
+        categoria_id: categoria_id || null,
+        valor: toNumber(valor),
+        data: dataObj,
+        competencia_ano: dataObj.getFullYear(),
+        competencia_mes: dataObj.getMonth() + 1,
+        fornecedor: fornecedorTexto || null,
+        fornecedor_id,
+        conta_bancaria_id: contaId,
+        metodo_pagamento_id: metodo_pagamento_id || null,
+        deliberacao_id: deliberacaoId,
+        observacoes,
+        estado: estado || 'registada',
+      },
+      { transaction: t }
+    );
+    await sincronizarMovimentoDespesa(despesa, req.user.id, t, req.condominioId);
+    await t.commit();
+  } catch (err) {
+    await rollbackSilencioso(t);
+    console.error('[despesas] criar:', err);
+    req.flash('error_msg', 'Não foi possível criar a despesa. Nenhum dado foi gravado.');
+    return res.redirect('/admin/despesas/nova');
+  }
+  // A auditoria fica FORA da transação (e depois do commit): regista operações
+  // que ficaram gravadas, nunca tentativas abortadas.
   await audit({
     userId: req.user.id,
     acao: 'criar_despesa',
@@ -678,22 +720,43 @@ router.post('/despesas/:id', async (req, res) => {
     deliberacaoValidada = decisao;
   }
 
-  await despesa.update({
-    descricao,
-    categoria_id: categoria_id || null,
-    valor: toNumber(valor),
-    data: dataObj,
-    competencia_ano: dataObj.getFullYear(),
-    competencia_mes: dataObj.getMonth() + 1,
-    fornecedor: fornecedorTexto || null,
-    fornecedor_id,
-    conta_bancaria_id: contaId,
-    metodo_pagamento_id: metodo_pagamento_id || null,
-    deliberacao_id: deliberacaoId,
-    observacoes,
-    estado: estado || 'registada',
-  });
-  await sincronizarMovimentoDespesa(despesa, req.user.id, undefined, req.condominioId);
+  // Alteração da despesa e do movimento bancário na MESMA transação: se o
+  // movimento não puder ser atualizado, a despesa não pode ficar com os valores
+  // novos — senão a conta passaria a descontar um valor que não corresponde a
+  // nenhuma despesa gravada.
+  const t = await sequelize.transaction();
+  try {
+    await despesa.update(
+      {
+        descricao,
+        categoria_id: categoria_id || null,
+        valor: toNumber(valor),
+        data: dataObj,
+        competencia_ano: dataObj.getFullYear(),
+        competencia_mes: dataObj.getMonth() + 1,
+        fornecedor: fornecedorTexto || null,
+        fornecedor_id,
+        conta_bancaria_id: contaId,
+        metodo_pagamento_id: metodo_pagamento_id || null,
+        deliberacao_id: deliberacaoId,
+        observacoes,
+        estado: estado || 'registada',
+      },
+      { transaction: t }
+    );
+    await sincronizarMovimentoDespesa(despesa, req.user.id, t, req.condominioId);
+    await t.commit();
+  } catch (err) {
+    await rollbackSilencioso(t);
+    console.error('[despesas] editar:', err);
+    // Nota: a instância `despesa` fica com os valores novos em memória mesmo
+    // depois do rollback (o Sequelize escreve-os no objeto antes de os gravar);
+    // como a resposta é um redirect e o pedido termina aqui, não há leitura
+    // posterior que possa observar esse estado — a base de dados é que ficou
+    // intacta.
+    req.flash('error_msg', 'Não foi possível atualizar a despesa. Nenhuma alteração foi gravada.');
+    return res.redirect(`/admin/despesas/${despesa.id}/editar`);
+  }
   await audit({
     userId: req.user.id,
     acao: 'editar_despesa',
@@ -708,8 +771,20 @@ router.post('/despesas/:id', async (req, res) => {
 router.post('/despesas/:id/anular', async (req, res) => {
   const despesa = await carregarDespesa(req);
   if (despesa) {
-    await despesa.update({ estado: 'anulada' });
-    await sincronizarMovimentoDespesa(despesa, req.user.id, undefined, req.condominioId);
+    // Anulação da despesa e do movimento bancário na MESMA transação: uma
+    // despesa anulada com o movimento ainda 'confirmado' continuaria a
+    // descontar no saldo da conta — uma despesa cancelada a pesar no extrato.
+    const t = await sequelize.transaction();
+    try {
+      await despesa.update({ estado: 'anulada' }, { transaction: t });
+      await sincronizarMovimentoDespesa(despesa, req.user.id, t, req.condominioId);
+      await t.commit();
+    } catch (err) {
+      await rollbackSilencioso(t);
+      console.error('[despesas] anular:', err);
+      req.flash('error_msg', 'Não foi possível anular a despesa. Nada foi alterado.');
+      return res.redirect('/admin/despesas');
+    }
     await audit({ userId: req.user.id, acao: 'anular_despesa', entidade: 'Despesa', entidadeId: despesa.id });
   }
   req.flash('success_msg', 'Despesa anulada.');

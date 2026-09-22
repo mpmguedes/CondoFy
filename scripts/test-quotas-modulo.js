@@ -168,6 +168,22 @@ function testVistaComprovativos() {
       comprovativo_ficheiro: null,
       comprovativo_motivo: null,
     },
+    // P8 — comprovativo POR VALIDAR num pagamento já confirmado: é aqui que a
+    // ação «Validar» aparece e onde o ícone não podia parecer «aprovar o valor».
+    {
+      id: 3,
+      numero_documento: '2026/0003',
+      data_pagamento: '2026-03-05',
+      valor: 42.5,
+      metodo: 'Transferência',
+      estado: 'confirmado',
+      condominos: 'Ana Dias',
+      fracao: 'Fração C',
+      comprovativo_estado: 'pendente',
+      comprovativo_nome: 'recibo-banco.pdf',
+      comprovativo_ficheiro: 'y_comprovativo.pdf',
+      comprovativo_motivo: null,
+    },
   ];
   const html = tpl({
     titulo: 'Quotas · Pagamentos',
@@ -181,6 +197,44 @@ function testVistaComprovativos() {
   assert.ok(html.includes('/admin/pagamentos/1/comprovativo'), 'visualizar comprovativo');
   assert.ok(html.includes('modalAnexar') && html.includes('Carregar comprovativo'), 'modal de anexo');
   assert.ok(html.includes('Registar pagamento'), 'ação registar pagamento');
+
+  // ── P8 — a ação «Validar» é DOCUMENTAL, não aprovação do pagamento ──
+  // O pagamento está sempre 'confirmado' quando a ação aparece; o ícone tem de
+  // dizer que é conferência de DOCUMENTO (não um visto de aprovação de valor).
+  assert.ok(
+    html.includes('/admin/pagamentos/3/comprovativo/validar'),
+    'P8: o comprovativo pendente tem a ação de validar'
+  );
+  assert.ok(
+    html.includes('>fact_check</span>'),
+    'P8: o ícone de validar é documental (fact_check), não o visto genérico «check»'
+  );
+  assert.ok(
+    !html.includes('>check</span>'),
+    'P8: o visto genérico «check» (que se lê como aprovar o valor) já não é usado'
+  );
+  assert.ok(
+    /aria-label="Validar comprovativo"/.test(html),
+    'P8: o botão só-ícone tem rótulo acessível'
+  );
+  assert.ok(
+    /Validar comprovativo — não altera o pagamento/.test(html),
+    'P8: o rótulo diz explicitamente que não altera o pagamento'
+  );
+  assert.ok(
+    /não altera valores nem estados financeiros/.test(html),
+    'P8: a ajuda contextual reafirma que é conferência documental'
+  );
+  // Só aparece no comprovativo POR VALIDAR: nem no já validado (id 1), nem no
+  // que não tem comprovativo (id 2).
+  assert.ok(
+    !html.includes('/admin/pagamentos/1/comprovativo/validar'),
+    'P8: um comprovativo já validado não volta a oferecer «Validar»'
+  );
+  assert.ok(
+    !html.includes('/admin/pagamentos/2/comprovativo/validar'),
+    'P8: um pagamento sem comprovativo não oferece «Validar»'
+  );
 }
 
 function testVistaRecibos() {
@@ -325,6 +379,49 @@ function testVistaDetalhePagamento() {
   });
   assert.ok(sem.includes('Sem comprovativo associado'), 'sem comprovativo indica estado vazio');
   assert.ok(sem.includes('Anexar comprovativo'), 'botão anexar disponível');
+
+  // ── P8 — no detalhe, a ação diz «Validar comprovativo» (não «Validar») ──
+  // O pagamento já está confirmado: «Validar» sozinho lia-se como aprovar o valor.
+  const pendente = tpl({
+    titulo: 'Pagamento 2026/0003',
+    driveLigado: false,
+    pagamento: {
+      id: 9,
+      numero_documento: '2026/0003',
+      estado: 'confirmado',
+      valor: 42.5,
+      data_pagamento: '2026-03-05',
+      referencia: null,
+      metodo_pagamento: { nome: 'Transferência' },
+      fracao: { designacao: 'Fração C' },
+      comprovativo_ficheiro: 'z_comp.pdf',
+      comprovativo_nome: 'recibo-banco.pdf',
+      comprovativo_estado: 'pendente',
+      comprovativo_motivo: null,
+      comprovativo_data: '2026-03-06',
+      quotas: [],
+    },
+  });
+  assert.ok(
+    pendente.includes('/admin/pagamentos/9/comprovativo/validar'),
+    'P8: comprovativo pendente oferece validar'
+  );
+  assert.ok(
+    /bi-clipboard-check/.test(pendente),
+    'P8: o ícone é documental (clipboard-check), não um visto de aprovação'
+  );
+  assert.ok(
+    !/bi-check-lg/.test(pendente),
+    'P8: o visto genérico deixou de ser usado nesta ação'
+  );
+  assert.ok(
+    />Validar comprovativo</.test(pendente),
+    'P8: o rótulo visível diz «Validar comprovativo» e não «Validar»'
+  );
+  assert.ok(
+    !/>Validar</.test(pendente),
+    'P8: já não existe um botão com o rótulo ambíguo «Validar»'
+  );
 }
 
 // ── 3. Valores transitados — parser (persistência com regras de vazio) ──

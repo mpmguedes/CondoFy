@@ -70,7 +70,7 @@
               {{#if comprovativo_ficheiro}}
                 {{#if (eq comprovativo_estado 'pendente')}}
                 <form action="/admin/pagamentos/{{id}}/comprovativo/validar" method="POST" class="d-inline">
-                  <button class="btn btn-sm btn-outline-success px-1" title="Validar comprovativo" data-ajuda="Dá o comprovativo por conferido. Não altera valores nem estados financeiros do pagamento." data-ajuda-titulo="Validar comprovativo"><span class="material-symbols-outlined" style="font-size:1rem">check</span></button>
+                  <button class="btn btn-sm btn-outline-success px-1" title="Validar comprovativo — não altera o pagamento" aria-label="Validar comprovativo" data-ajuda="Dá o comprovativo por conferido. O pagamento já está confirmado: isto é conferência documental e não altera valores nem estados financeiros." data-ajuda-titulo="Validar comprovativo"><span class="material-symbols-outlined" style="font-size:1rem" aria-hidden="true">fact_check</span></button>
                 </form>
                 <button type="button" class="btn btn-sm btn-outline-danger px-1 btn-rejeitar" data-bs-toggle="modal" data-bs-target="#modalRejeitar" data-id="{{id}}" data-nome="{{comprovativo_nome}}" title="Rejeitar comprovativo" data-ajuda="Rejeita o comprovativo apresentado. O condómino pode anexar outro; o pagamento mantém-se." data-ajuda-titulo="Rejeitar comprovativo"><span class="material-symbols-outlined" style="font-size:1rem">close</span></button>
                 {{/if}}

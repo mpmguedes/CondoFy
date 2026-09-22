@@ -53,7 +53,7 @@
           <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalPgAnexar" data-id="{{pagamento.id}}" data-fracao="{{pagamento.fracao.designacao}}" data-substituir="1" data-ajuda="Substitui o comprovativo atual. O ficheiro anterior é removido e o novo fica a aguardar validação." data-ajuda-titulo="Substituir comprovativo"><i class="bi bi-arrow-repeat me-1"></i>Substituir</button>
           {{#if (eq pagamento.comprovativo_estado 'pendente')}}
           <form action="/admin/pagamentos/{{pagamento.id}}/comprovativo/validar" method="POST" class="d-inline">
-            <button class="btn btn-sm btn-outline-success" data-ajuda="Dá o comprovativo por conferido. Não altera valores nem estados financeiros do pagamento." data-ajuda-titulo="Validar comprovativo"><i class="bi bi-check-lg me-1"></i>Validar</button>
+            <button class="btn btn-sm btn-outline-success" data-ajuda="Dá o comprovativo por conferido. O pagamento já está confirmado: isto é conferência documental e não altera valores nem estados financeiros." data-ajuda-titulo="Validar comprovativo"><i class="bi bi-clipboard-check me-1"></i>Validar comprovativo</button>
           </form>
           <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalPgRejeitar" data-id="{{pagamento.id}}" data-nome="{{pagamento.comprovativo_nome}}" data-ajuda="Rejeita o comprovativo apresentado. O condómino pode anexar outro; o pagamento mantém-se." data-ajuda-titulo="Rejeitar comprovativo"><i class="bi bi-x-lg me-1"></i>Rejeitar</button>
           {{/if}}
