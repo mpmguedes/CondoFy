@@ -39,7 +39,7 @@ menores registados e deliberadamente não corrigidos (secção 4).
 | Item                  | Valor                                                                                                                                                                                                      |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `HEAD`                | `f9f63f6` — «Exportação RGPD, confirmação do orçamento e higiene de testes» (2026-09-22) — `HEAD` **local** após o ciclo A1–A8                                                                                                                             |
-| Remoto `origin/main`  | `bf4b6f5` — confirmado por `git ls-remote origin main` (2026-09-22) ⇒ **4 commits locais por publicar** (`b18cfea` → `9034e08` → `f9f63f6` + o **commit de integração A9**, o que inclui este documento) — **nada publicado nesta frente**                                |
+| Remoto `origin/main`  | `bf4b6f5` — confirmado por `git ls-remote origin main` (2026-09-22) ⇒ o `HEAD` local está **à frente** do remoto e **nada foi publicado desde `bf4b6f5`**. Os commits locais do ciclo estão listados no **§7**; o número exato **não se fixa aqui** de propósito — este documento é editado pelos próprios commits que descreve                                |
 | Working tree          | **stage vazio**; medido no fecho do ciclo: **57 ` M` + 48 `??`** (frentes A1–A8 + documentação do ciclo). Depois do commit de integração A9 fica por rastrear apenas o que **não pertence a este ciclo** (branding/legais, auditorias anteriores, `docs/documentos/`, `docs/mobile/`, `.workbuddy-ai/`, resíduos `.tmp`) — ver §5 |
 | Migrations            | 79 (`migrations/20260101000001…00079`; a `…00079-segredos-em-repouso` é a migração da frente A1)                                                                                                                                                                     |
 | Modelos               | 47 ficheiros em `models/`                                                                                                                                                                                  |
@@ -745,8 +745,8 @@ Trabalho que **não pertence ao ciclo A1–A8** e que, por isso, **não entrou n
 
 Hashtags reais obtidas de `git log` (nenhum hash inventado). «Estado» = relação com `origin/main`  
 (que está em `bf4b6f5`): **publicado** = já em `origin/main`; **local** = só no clone.  
-O `HEAD` local está **3 commits à frente** do remoto (`b18cfea`, `9034e08`, `f9f63f6`) e o **commit de integração A9** é o 4.º — **nada foi  
-publicado desde `bf4b6f5`.**
+O remoto `origin/main` está em `bf4b6f5`. Todos os commits locais abaixo (do ciclo A1–A8, mais a documentação do fecho, que é o que introduz este documento) **estão por publicar** — **nada foi  
+publicado depois de `bf4b6f5`.**
 
 | Data       | Área                     | Implementação                                                                | Commit    | Estado    |
 | ---------- | ------------------------ | ---------------------------------------------------------------------------- | --------- | --------- |
@@ -847,4 +847,4 @@ publicado desde `bf4b6f5`.**
 
 *Documento de levantamento. Nenhuma alteração funcional foi feita ao criar este ficheiro.  
 Estado verificado em **2026-09-22** (fecho do ciclo A1–A8) contra `HEAD` = `f9f63f6` + a working tree  
-integrada no commit de integração A9; o remoto `origin/main` continua em `bf4b6f5` ⇒ **4 commits locais por publicar**.*
+integrada no commit de integração A9; o remoto `origin/main` continua em `bf4b6f5` ⇒ **nada publicado desde então** (lista no §7).*
