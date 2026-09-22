@@ -7,6 +7,7 @@ const { sendMail } = require('../helpers/mailer');
 const { audit } = require('../helpers/audit');
 const { createLimiter } = require('../helpers/seguranca');
 const convites = require('../helpers/convites');
+const tokens = require('../helpers/tokens');
 const doisFatores = require('../helpers/doisfatores');
 const { eAutenticado } = require('../helpers/eAdmin');
 const sessao = require('../helpers/sessao');
@@ -443,7 +444,9 @@ router.post('/recuperar', limiteRecuperar, async (req, res) => {
     if (user) {
       const token = crypto.randomBytes(32).toString('hex');
       const expires = new Date(Date.now() + 1000 * 60 * 60); // 1 hora
-      await user.update({ reset_token: token, reset_token_expires: expires });
+      // Guarda-se o DIGEST: o token em claro só existe no link enviado por
+      // email (ver helpers/tokens.js). O fluxo de redefinição não muda.
+      await user.update({ reset_token: tokens.digest(token), reset_token_expires: expires });
 
       const link = `${req.protocol}://${req.get('host')}/redefinir/${token}`;
       await sendMail({
@@ -470,7 +473,10 @@ router.post('/recuperar', limiteRecuperar, async (req, res) => {
 
 router.get('/redefinir/:token', async (req, res) => {
   if (req.isAuthenticated()) return res.redirect('/');
-  const user = await User.findOne({ where: { reset_token: req.params.token } });
+  // A pesquisa é feita pelo DIGEST do token apresentado (o valor em repouso
+  // nunca é o token). Tokens antigos em texto simples continuam a ser aceites
+  // e são convertidos no momento em que são usados.
+  const user = await tokens.utilizadorPorToken(User, 'reset_token', req.params.token);
   if (!user || !user.reset_token_expires || user.reset_token_expires < new Date()) {
     req.flash('error_msg', 'O link de recuperação é inválido ou expirou.');
     return res.redirect('/login');
@@ -494,7 +500,10 @@ router.post('/redefinir/:token', limiteRedefinir, async (req, res) => {
     req.flash('error_msg', 'As palavras-passe não coincidem.');
     return res.redirect(`/redefinir/${req.params.token}`);
   }
-  const user = await User.findOne({ where: { reset_token: req.params.token } });
+  // A pesquisa é feita pelo DIGEST do token apresentado (o valor em repouso
+  // nunca é o token). Tokens antigos em texto simples continuam a ser aceites
+  // e são convertidos no momento em que são usados.
+  const user = await tokens.utilizadorPorToken(User, 'reset_token', req.params.token);
   if (!user || !user.reset_token_expires || user.reset_token_expires < new Date()) {
     req.flash('error_msg', 'O link de recuperação é inválido ou expirou.');
     return res.redirect('/login');
@@ -510,8 +519,10 @@ router.post('/redefinir/:token', limiteRedefinir, async (req, res) => {
 // Token único com validade (30 dias por omissão); estados pendente/enviado
 // → aceite. Um convite revogado/aceite não pode ser reutilizado.
 async function utilizadorPorConvite(token) {
-  const user = await User.findOne({ where: { convite_token: token } });
-  return user || null;
+  // Comparação por DIGEST (ver helpers/tokens.js): o convite em claro só
+  // existe no link enviado por email. Convites antigos em texto simples
+  // continuam a ser aceites e são convertidos na primeira utilização.
+  return tokens.utilizadorPorToken(User, 'convite_token', token);
 }
 
 router.get('/aceitar-convite/:token', async (req, res) => {

@@ -791,6 +791,73 @@ async function abrirFluxo(fileId, condominioId) {
   });
 }
 
+// ── Remoção ─────────────────────────────────────────────────────────
+// Apaga um ficheiro na Dropbox (capacidade OPCIONAL do contrato, usada pela
+// retenção de backups em jobs/backup.js). Sem isto, `storage.apagarArquivo`
+// devolvia `false` e a retenção CLOUD era um no-op sempre que o destino fosse
+// a Dropbox: as cópias acumulavam-se sem limite.
+//
+//  · `files/delete_v2` aceita o `id:…` que está guardado no localizador — a
+//    Dropbox trata `id:` como referência opaca ao ficheiro, pelo que não é
+//    preciso reconstruir caminhos (nem sequer os conhecemos com segurança,
+//    já que o ficheiro pode ter sido renomeado/movido na conta).
+//  · IDEMPOTENTE: `path_lookup/not_found` significa que o ficheiro já não
+//    existe — a remoção pretendida está feita, logo devolve `true`. Sem isto,
+//    a retenção ficava presa num ficheiro que já desapareceu (o OneDrive faz
+//    o mesmo com o 404).
+//  · NUNCA é chamado ao desligar uma ligação: desligar remove só os tokens e
+//    deixa os ficheiros na conta do fornecedor.
+//  · Um token revogado é tratado pelo `comAutenticacao` (limpa a ligação do
+//    âmbito e lança uma mensagem que aponta para Configuração).
+async function apagarArquivo(fileId, condominioId) {
+  const alvo = referencia(fileId);
+  await comAutenticacao(condominioId, async (accessToken) => {
+    const resposta = await pedir(`${URL_API}/files/delete_v2`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      json: { path: alvo },
+    });
+    if (resposta.ok) return;
+    // Já não existe: a remoção pretendida está feita (idempotência).
+    const etiqueta = etiquetaErro(resposta);
+    if (etiqueta === 'path_lookup/not_found' || etiqueta === 'path/not_found') return;
+    throw erroDropbox(resposta, 'não foi possível apagar o ficheiro no Dropbox');
+  });
+  return true;
+}
+
+// ── Espaço da conta (capacidade OPCIONAL) ───────────────────────────
+// `users/get_space_usage` é a ÚNICA métrica de espaço que a API da Dropbox
+// devolve de forma direta (usado / alocado). NÃO é a dimensão da pasta de
+// backups: a Dropbox não devolve o tamanho de uma pasta numa só chamada, pelo
+// que não se estima nem se apresenta uma soma como se fosse a pasta.
+// O caller decide o que dizer quando o serviço não responde — este método
+// lança (nunca devolve um valor inventado).
+async function espacoNaCloud(condominioId) {
+  return comAutenticacao(condominioId, async (accessToken) => {
+    const resposta = await pedir(`${URL_API}/users/get_space_usage`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      // Endpoint sem argumentos: a Dropbox espera o corpo `null`.
+      body: 'null',
+    });
+    if (!resposta.ok) throw erroDropbox(resposta, 'não foi possível medir o espaço da conta Dropbox');
+    const d = resposta.dados || {};
+    const usados = Number(d.used);
+    const total = d.allocation && d.allocation.allocated != null ? Number(d.allocation.allocated) : NaN;
+    const temUsados = Number.isFinite(usados) && usados >= 0;
+    const temTotal = Number.isFinite(total) && total > 0;
+    return {
+      suportado: true,
+      totalBytes: temTotal ? total : null,
+      usadosBytes: temUsados ? usados : null,
+      livresBytes: temTotal && temUsados ? Math.max(0, total - usados) : null,
+      // Identifica a origem do número (a interface di-lo por palavras).
+      fonte: 'dropbox:users/get_space_usage',
+    };
+  });
+}
+
 module.exports = {
   nome,
   rotulo,
@@ -808,6 +875,10 @@ module.exports = {
   uploadArquivo,
   descarregarArquivo,
   abrirFluxo,
+  // Remoção (capacidade opcional do contrato — usada pela retenção de backups).
+  apagarArquivo,
+  // Espaço da conta (capacidade opcional — medição real, nunca estimada).
+  espacoNaCloud,
   pastaParaDocumento,
   pastaParaFornecedor,
   obterPastaCondominioId,

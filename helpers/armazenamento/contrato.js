@@ -45,12 +45,27 @@
 //
 //  pastaDeBackups(condominioId?)           → pasta dos backups da instalação
 //  apagarArquivo(fileId, condominioId?)    → true (removido ou já inexistente)
-//     · Usado pela retenção de backups (jobs/backup.js). Implementado pelo
-//       Google Drive e pelo Microsoft OneDrive. A Dropbox ainda não o tem:
-//       nesse caso `storage.apagarArquivo` devolve false e a retenção cloud é
-//       simplesmente ignorada para esse destino (a cópia local mantém-se).
+//     · Usado pela retenção de backups (jobs/backup.js). Implementado pelos
+//       TRÊS provedores: Google Drive, Dropbox (`files/delete_v2`) e Microsoft
+//       OneDrive (`DELETE /me/drive/items/{id}`).
+//     · IDEMPOTENTE em todos: um ficheiro que já não existe conta como
+//       removido (Dropbox `path_lookup/not_found`, OneDrive 404). Sem isto, a
+//       retenção ficava presa num ficheiro que já desapareceu.
+//     · Um provedor sem este método faz `storage.apagarArquivo` devolver
+//       `false`; a retenção cloud é então ignorada para esse destino (a cópia
+//       local mantém-se) e o resumo da limpeza di-lo explicitamente.
 //     · Nunca é chamado ao desligar uma ligação: desligar remove só os tokens
 //       e deixa os ficheiros na conta do fornecedor.
+//  espacoNaCloud(condominioId?)            → { suportado, totalBytes, usadosBytes,
+//                                              livresBytes, fonte }
+//     · Medição REAL do espaço da CONTA do serviço, pela API de cada provedor
+//       (Google Drive `storageQuota`, Dropbox `users/get_space_usage`, OneDrive
+//       `quota`). NUNCA se estima: um campo que a API não devolva fica `null`.
+//     · NÃO é a dimensão da pasta de backups — nenhuma das três APIs devolve o
+//       tamanho de uma pasta numa só chamada. A interface apresenta-a como
+//       «espaço da conta» e diz explicitamente que inclui mais do que backups.
+//     · Lança em caso de falha de rede/credenciais (o caller decide o que
+//       mostrar); um provedor sem este método faz a fachada devolver `null`.
 // ─────────────────────────────────────────────────────────────────────
 
 const METODOS_OBRIGATORIOS = [

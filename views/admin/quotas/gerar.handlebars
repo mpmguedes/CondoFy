@@ -129,9 +129,29 @@
       <input class="form-check-input" type="checkbox" role="switch" id="enviarEmail" name="enviar_email" value="on" {{#if autoQuotas.email}}checked{{/if}} data-ajuda="Envia o aviso de quota por email a cada condómino logo após a geração. Sem esta opção, os avisos ficam apenas na aplicação." data-ajuda-titulo="Enviar quotas por email" />
       <label class="form-check-label" for="enviarEmail">Enviar quotas por email (imediatamente após gerar)</label>
     </div>
-    <div class="form-check form-switch mb-1">
-      <input class="form-check-input" type="checkbox" role="switch" id="envioAutomatico" name="envio_automatico" value="on" {{#if autoQuotas.automatico}}checked{{/if}} disabled />
-      <label class="form-check-label" for="envioAutomatico">Envio automático ativo (Configurações → Documentos e Automações)</label>
+    {{!-- ⛔ P2 — indicador de LEITURA, não um controlo de formulário.
+         Aqui estava um `<input type="checkbox" disabled name="envio_automatico">`:
+         um controlo permanentemente desativado, que o browser nunca submete e
+         que o servidor nunca lê. O `POST /quotas/gerar` decide o envio por
+         `enviar_email` OU por `auto_quotas_automatico` (routes/financeiro.js),
+         e o campo desativado não entra em nenhum dos lados. Como não é
+         editável aqui, não deve parecer um controlo avariado — mostra-se o
+         ESTADO e o atalho para onde é realmente configurado.
+         O atalho só aparece a quem o pode ABRIR: `/admin/config/automacoes`
+         exige `admin`, e esta vista é alcançável ao `gestor` — um link para uma
+         página proibida é um beco sem saída. Mesmo idioma do dashboard
+         (`views/admin/dashboard.handlebars`). O ESTADO fica visível aos dois. --}}
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+      <span class="small text-muted">Envio automático (automação):</span>
+      {{#if autoQuotas.automatico}}
+      <span class="badge text-bg-success">Ativo</span>
+      <span class="form-text mb-0">Com a automação ativa, o aviso é enviado por email mesmo sem marcar a opção acima.</span>
+      {{else}}
+      <span class="badge text-bg-secondary">Inativo</span>
+      {{/if}}
+      {{#if (ne condominioAtivo.role 'gestor')}}
+      <a href="/admin/config/automacoes" class="small">Configurar em Documentos e Automações</a>
+      {{/if}}
     </div>
     <p class="form-text mt-1 mb-0">
       Depois de gerar, pode enviar em lote (incluindo reenvios) em <strong>Quotas → Enviar por email</strong>.
@@ -143,61 +163,28 @@
 <script>
   const FRACOES = {{{fracoesJson}}};
   const CFG = {{{json quotaConfig}}};
-  const ORCAMENTOS = {{{orcamentosJson}}};
   const EXISTENTES = {{{existentesJson}}};
+  // Valores JÁ CALCULADOS pelo servidor, com as mesmas funções que geram e
+  // gravam as quotas (`calcularQuota` no método permilagem,
+  // `calcularQuotasOrcamento` no método orçamento). Esta vista NÃO calcula
+  // quotas: só formata e soma o que o servidor vai gravar — não existe uma
+  // segunda implementação da fórmula no browser.
+  const PREVISAO = {{{previsaoJson}}};
   const fmt = (n) => n.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
-
-  // Divisão da quota nas suas componentes (despesas correntes + FCR): é a MESMA
-  // função do cálculo final no servidor, injetada aqui já avaliada — a
-  // pré-visualização nunca inventa números que o servidor não vá gravar.
-  {{{fcrSplitterJs}}}
-  const pctFcr = () => {
-    const p = parseFloat(String(CFG.fcrPercentagem).replace(',', '.'));
-    return Number.isFinite(p) && p > 0 ? p : 0;
-  };
-  function dividir(totalMensal, percentagem) {
-    const partes = window.__GESCONDU_DIVIDIR_FCR(Math.round(totalMensal * 100), percentagem);
-    return { base: partes.baseC / 100, fcr: partes.fcrC / 100, total: partes.totalC / 100 };
-  }
 
   function ehOrcamento() { return document.getElementById('metodoOrcamento').checked; }
 
-  // Acrescenta o FCR a um valor de DESPESAS, obtendo o total a distribuir.
-  // Espelha `acrescentarFcrAoTotal` do servidor: o FCR entra ANTES da
-  // distribuição, pelo que o total a distribuir é despesas + FCR.
-  function totalComFcr(despesas, percentagem) {
-    const p = percentagem > 0 ? percentagem : 0;
-    if (p <= 0) return despesas;
-    return despesas * (100 + p) / 100;
-  }
-
-  function calc(perm) {
-    if (ehOrcamento()) {
-      const orc = ORCAMENTOS.find((o) => String(o.id) === String(document.getElementById('wOrcamento').value));
-      const despesas = orc ? parseFloat(orc.total) : 0;
-      // O orçamento define as DESPESAS; o total a distribuir é despesas + FCR.
-      // Só depois D1 decompõe cada quota (o FCR não é somado outra vez).
-      const totalAnual = totalComFcr(despesas, pctFcr());
-      const totalPerm = FRACOES.reduce((s, f) => s + (parseFloat(f.permilagem) || 0), 0);
-      const anual = totalPerm > 0 ? totalAnual * (parseFloat(perm) || 0) / totalPerm : totalAnual / FRACOES.length;
-      // C3: o ANUAL é a base de fecho (`Σ meses === anual`, por fração). O valor
-      // mostrado é o anual ÷ 12 arredondado ao cêntimo — a média dos meses, que
-      // difere de um mês concreto no máximo 1 cêntimo (o servidor grava o mês
-      // exato em `porMes`). O TOTAL do ano, esse, fecha exatamente com o
-      // orçamento — é `anual` × N frações, não a soma dos mensais arredondados.
-      const anualC = Math.round(anual * 100);
-      return { ...dividir(anualC / 12 / 100, pctFcr()), orcamento: orc, anual };
-    }
-    // (permilagem / 1000) × valor por 1000‰ — onde `valorPor1000` é o TOTAL por
-    // 1000‰, JÁ COM FCR. Depois o FCR é apenas uma COMPONENTE desse total, pela
-    // MESMA função D1 do servidor (`dividir()` acima, que chama
-    // `__GESCONDU_DIVIDIR_FCR` injetada a partir de `dividirComponentesQuota`).
-    // NÃO voltar a somar o FCR à base: a fórmula antiga
-    // (`fcr = round(base × pct / 100)`, `total = base + fcr`) foi removida —
-    // inflava o total em vez de o repartir.
-    const valorPor1000C = Math.round(parseFloat(CFG.valorPor1000) * 100);
-    const totalPrecoC = Math.round((parseFloat(perm) || 0) / 1000 * valorPor1000C);
-    return dividir(totalPrecoC / 100, pctFcr());
+  // Bloco de pré-visualização de uma fração no método escolhido.
+  // `mes` é o mês do período (1-12): no método permilagem o valor é o mesmo em
+  // todos os meses, no método orçamento vem o mês concreto (o ano é que fecha
+  // exatamente — ver `calcularQuotasOrcamento`).
+  function calc(f, mes) {
+    const bloco = ehOrcamento()
+      ? ((PREVISAO.orcamento[document.getElementById('wOrcamento').value] || {})[f.id] || null)
+      : (PREVISAO.permilagem[f.id] || null);
+    if (!bloco) return { base: 0, fcr: 0, total: 0, anual: 0 };
+    const doMes = (bloco.meses && bloco.meses[mes - 1]) || bloco;
+    return { base: doMes.base, fcr: doMes.fcr, total: doMes.total, anual: bloco.anual };
   }
 
   const wizard = {
@@ -228,7 +215,10 @@
       }
       const ano = parseInt(document.getElementById('wAno').value, 10);
       const nMeses = this.ehAno() ? 12 : 1;
-      const mes = this.ehAno() ? null : parseInt(document.getElementById('wMes').value, 10);
+      // No escopo anual o valor mensal mostrado é o do 1.º mês do período (no
+      // método permilagem é igual em todos; no método orçamento o que conta é o
+      // total ANUAL, que fecha exatamente).
+      const mes = this.ehAno() ? 1 : parseInt(document.getElementById('wMes').value, 10);
       const tbody = document.getElementById('previewBody');
       let html = '';
       let totalMes = 0;
@@ -236,7 +226,7 @@
       let novas = 0;
       let existentes = 0;
       for (const f of FRACOES) {
-        const r = calc(f.permilagem);
+        const r = calc(f, mes);
         totalMes += r.total;
         totalAno += r.anual === undefined ? r.total : r.anual;
         html += `<tr><td>${f.designacao}</td><td class="text-end">${f.permilagem} ‰</td><td class="text-end">${fmt(r.base)}</td><td class="text-end">${fmt(r.fcr)}</td><td class="text-end fw-semibold">${fmt(r.total)}</td></tr>`;

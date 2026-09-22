@@ -62,6 +62,8 @@ const DOCS_SEM_TAMANHO = [{ condominio_id: 2, total: 2 }];
 
 // ── Duplos ─────────────────────────────────────────────────────────
 const loja = new Map();
+// Medição de espaço da conta do serviço de destino (null = não medida).
+let ESPACO_CLOUD = null;
 const stubs = {
   '../models': {
     Condominio: {
@@ -110,6 +112,10 @@ const stubs = {
     obterProvedor: (nome) => (nome ? { nome, rotulo: () => 'Dropbox', icone: () => 'bi bi-dropbox' } : null),
     ligacaoDeBackup: () => ({ condominioId: null, conta: 'backups@exemplo.pt', origem: 'plataforma' }),
     provedores: () => ['google_drive', 'dropbox', 'onedrive'],
+    // Medição de espaço da conta do serviço. Mutável: o teste pede a página
+    // duas vezes — uma sem medição (o serviço não respondeu) e outra com os
+    // valores REAIS que a API devolveria.
+    espacoNaCloud: async () => ESPACO_CLOUD,
   },
 };
 for (const [rel, valor] of Object.entries(stubs)) {
@@ -253,6 +259,43 @@ async function testePagina() {
   console.log('  ✓ J. o Super Admin vê os valores reais, com os documentos claramente separados');
 }
 
+// ── J3: espaço da conta do serviço — medido, nunca inventado ──────
+// O painel deixou de dizer simplesmente «não disponível»: pede à API do
+// serviço de destino a quota da conta. Duas situações, ambas verificadas:
+//  · sem medição (serviço não responde / não expõe quota) ⇒ «não disponível»;
+//  · com medição ⇒ os números REAIS formatados, identificados como espaço da
+//    CONTA (que inclui mais do que os backups) e com a origem do número.
+async function testeEspacoCloud() {
+  UTILIZADOR = SUPER;
+
+  ESPACO_CLOUD = null;
+  const semMedicao = await pedir('GET', '/global/armazenamento');
+  assert.strictEqual(semMedicao.status, 200);
+  assert.ok(
+    /Espaço da conta do serviço:\s*<strong>não disponível<\/strong>/.test(semMedicao.texto),
+    'sem medição ⇒ «não disponível» (nunca um valor estimado)'
+  );
+
+  ESPACO_CLOUD = {
+    suportado: true,
+    totalBytes: 5000000000,
+    usadosBytes: 2000000000,
+    livresBytes: 3000000000,
+    fonte: 'dropbox:users/get_space_usage',
+  };
+  const comMedicao = await pedir('GET', '/global/armazenamento');
+  assert.ok(comMedicao.texto.includes('1,9 GB'), 'os usados reais aparecem formatados (1,9 GB)');
+  assert.ok(comMedicao.texto.includes('4,7 GB'), 'o total real aparece formatado (4,7 GB)');
+  assert.ok(comMedicao.texto.includes('2,8 GB'), 'o espaço livre aparece formatado (2,8 GB)');
+  assert.ok(
+    /inclui todos os ficheiros da conta, não só os backups/.test(comMedicao.texto),
+    'diz explicitamente que NÃO é só o espaço dos backups'
+  );
+  assert.ok(/dropbox:users\/get_space_usage/.test(comMedicao.texto), 'identifica a origem do número (a API)');
+  ESPACO_CLOUD = null;
+  console.log('  ✓ o espaço da cloud é o real da conta (ou «não disponível»), nunca uma estimativa');
+}
+
 // ── Retenção: validação no SERVIDOR ───────────────────────────────
 async function testeRetencao() {
   UTILIZADOR = SUPER;
@@ -323,6 +366,7 @@ async function testeEliminacaoPelaRota() {
 (async () => {
   await testeIsolamento();
   await testePagina();
+  await testeEspacoCloud();
   await testeRetencao();
   await testeEliminacaoPelaRota();
   fs.rmSync(dirBackups, { recursive: true, force: true });

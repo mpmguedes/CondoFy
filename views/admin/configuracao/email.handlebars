@@ -57,9 +57,13 @@
         </div>
         <div class="col-6 col-md-2">
           <label class="form-label small" for="smtp_tls">Segurança</label>
+          {{!-- ⛔ O `selected` reflete o valor GUARDADO (`estadoSmtp.tls`). Uma opção
+               fixa em `selected` fazia o formulário contradizer a linha «Segurança»
+               logo acima e, ao gravar, religava o TLS sem intenção (P50). As duas
+               opções são exclusivas: `if`/`unless` garantem sempre uma só. --}}
           <select class="form-select form-select-sm" id="smtp_tls" name="tls">
-            <option value="true" selected>Usar TLS (587/465)</option>
-            <option value="false">Sem TLS</option>
+            <option value="true" {{#if estadoSmtp.tls}}selected{{/if}}>Usar TLS (587/465)</option>
+            <option value="false" {{#unless estadoSmtp.tls}}selected{{/unless}}>Sem TLS</option>
           </select>
         </div>
         <div class="col-12 col-md-6">

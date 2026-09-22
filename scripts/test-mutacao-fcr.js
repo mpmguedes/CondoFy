@@ -145,14 +145,16 @@ function mutacao({ nome, ficheiro, de, para, global = false, script }) {
     script: 'test-fcr-base.js',
   });
 
-  // ── 3. A pré-visualização do browser deixa de acrescentar o FCR ──
-  // A vista tem de espelhar o servidor; sem `totalComFcr` no modo orçamento,
-  // a pré-visualização volta a distribuir as despesas e diverge do gravado.
+  // ── 3. A pré-visualização deixa de usar os valores do SERVIDOR ──
+  // P20: a vista passou a apresentar a pré-visualização calculada no servidor
+  // (já não há fórmula no browser). Se o método orçamento passar a ler o bloco
+  // do método permilagem, a vista volta a mostrar números que o servidor não
+  // vai gravar.
   mutacao({
-    nome: '3. pré-visualização do browser deixa de acrescentar o FCR',
+    nome: '3. a pré-visualização do método orçamento deixa de usar os valores do servidor',
     ficheiro: 'views/admin/quotas/gerar.handlebars',
-    de: '      const totalAnual = totalComFcr(despesas, pctFcr());',
-    para: '      const totalAnual = despesas;',
+    de: "      ? ((PREVISAO.orcamento[document.getElementById('wOrcamento').value] || {})[f.id] || null)",
+    para: '      ? (PREVISAO.permilagem[f.id] || null)',
     script: 'test-fcr-base.js',
   });
 

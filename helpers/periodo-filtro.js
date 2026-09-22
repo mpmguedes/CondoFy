@@ -90,7 +90,8 @@ function intervaloDoAtalho(id, agora = new Date()) {
 //   · `de`/`ate`  — instantes prontos para a consulta (início e fim do dia,
 //     ambos INCLUSIVOS);
 //   · `deInput`/`ateInput` — 'YYYY-MM-DD', para os campos de data da vista;
-//   · `atalho`/`rotulo` — atalho ativo, DERIVADO do intervalo efetivo.
+//   · `atalho`/`rotulo` — atalho ativo: o PEDIDO quando é um atalho calculado
+//     válido; caso contrário, DERIVADO do intervalo efetivo.
 function resolverPeriodo(query = {}, agora = new Date()) {
   const q = query || {};
   const hoje = inicioDoDia(agora) || new Date();
@@ -120,21 +121,28 @@ function resolverPeriodo(query = {}, agora = new Date()) {
   const deInput = toDateInput(de);
   const ateInput = toDateInput(ate);
 
-  // O atalho ativo é DERIVADO do intervalo efetivo (e não do parâmetro): assim
-  // a entrada inicial — sem parâmetros — aparece como «Este mês», e não como
-  // «Personalizado».
+  // O atalho ativo PREFERE o `periodo` PEDIDO quando é um atalho calculado
+  // válido — é o botão que o utilizador carregou, e o intervalo acima já veio
+  // dele. Só na ausência de parâmetro (ou quando ele é inválido ou
+  // `personalizado`) é que se DERIVA do intervalo efetivo, para que a entrada
+  // inicial — sem parâmetros — apareça como «Este mês» e não «Personalizado».
   //
-  // Coincidências MEDIDAS (intervalos realmente iguais, pelo que a consulta é a
-  // mesma — muda apenas o botão assinalado): até ao dia 7, «Este mês» e
-  // «Últimos 7 dias» dão o mesmo intervalo; no dia 30, «Este mês» e «Últimos
-  // 30 dias». A ordem de `IDS_ATALHO` decide (ganha sempre «Este mês»).
-  // Comportamento registado no Roadmap (P51).
-  let atalho = 'personalizado';
-  for (const id of IDS_ATALHO) {
-    const iv = intervaloDoAtalho(id, agora);
-    if (iv && toDateInput(iv.de) === deInput && toDateInput(iv.ate) === ateInput) {
-      atalho = id;
-      break;
+  // Porquê a preferência: os intervalos COLIDEM em certos dias. Até ao dia 7,
+  // «Este mês» e «Últimos 7 dias» dão o MESMO intervalo; no dia 30, «Este mês»
+  // e «Últimos 30 dias». A consulta é idêntica, mas a derivação assinalava
+  // sempre «Este mês» (a ordem de `IDS_ATALHO` decide), contradizendo o botão
+  // carregado. Comportamento registado no Roadmap (P51).
+  let atalho;
+  if (IDS_ATALHO.includes(pedido)) {
+    atalho = pedido;
+  } else {
+    atalho = 'personalizado';
+    for (const id of IDS_ATALHO) {
+      const iv = intervaloDoAtalho(id, agora);
+      if (iv && toDateInput(iv.de) === deInput && toDateInput(iv.ate) === ateInput) {
+        atalho = id;
+        break;
+      }
     }
   }
 

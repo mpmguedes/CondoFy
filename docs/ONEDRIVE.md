@@ -228,3 +228,13 @@ isolamento, pasta de backups, ausência de links públicos e desligar.
   serviço (o principal).
 - **Não duplica** as pastas: a criação é idempotente (um `409` significa
   «já existe»).
+
+## 10. O que faz, além do essencial
+
+- **Apaga ficheiros quando a retenção de backups o pede** (`DELETE
+  /me/drive/items/{id}`), mas **nunca** ao desligar uma ligação. É idempotente:
+  um `404` conta como removido (o ficheiro já não estava lá).
+- **Mede o espaço da conta** (`GET /me/drive?$select=quota`), devolvendo
+  `total`, `used` e `remaining`. É a quota da **conta** — não a dimensão da
+  pasta de backups, que a Graph não devolve numa só chamada. Quando o serviço
+  não responde, a interface diz «não disponível» em vez de estimar.

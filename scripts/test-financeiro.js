@@ -128,12 +128,22 @@ async function main() {
   const qB = calcularQuota('500', '110.0000', '10');
   assert.strictEqual(qA.total + qB.total, 110, 'total mensal = 110 €');
 
-  // 6. Parcelamento: soma exata e resto na última parcela
+  // 6. Parcelamento: soma exata e parcelas IGUAIS dentro de 1 cêntimo.
+  //    O cêntimo sobrante vai para as PRIMEIRAS parcelas (maior-resto). Antes ia
+  //    TODO para a última: com 60 parcelas isso punha até 0,59 € numa parcela só,
+  //    contra a promessa de «parcelas iguais» e contra o que a vista mostra (cada
+  //    parcela tem o seu `valor`). É a mesma regra do `dividirEm` (P22).
   const p1 = parcelar(10000, 3);
-  assert.deepStrictEqual(p1, [3333, 3333, 3334], 'resto na última parcela');
+  assert.deepStrictEqual(p1, [3334, 3333, 3333],
+    'maior-resto: o cêntimo sobrante vai para a 1.ª parcela, não para a última');
   assert.strictEqual(p1.reduce((a, b) => a + b, 0), 10000, 'soma das parcelas = valor');
+  assert.ok(Math.max(...p1) - Math.min(...p1) <= 1, 'parcelas iguais dentro de 1 cêntimo');
   const p2 = parcelar(1, 3);
   assert.strictEqual(p2.reduce((a, b) => a + b, 0), 1, '1 cêntimo dividido por 3 soma 1');
+  // Caso que expõe o defeito antigo: 60 parcelas de 1.000,01 €.
+  const p60 = parcelar(toCents('1000.01'), 60);
+  assert.ok(Math.max(...p60) - Math.min(...p60) <= 1,
+    'com 60 parcelas a diferença mantém-se em 1 cêntimo (a regra antiga punha 41 cêntimos numa só)');
 
   // 7. Quota extra: distribuição permilagem e igual com soma exata
   const fracoesExtra = [

@@ -7,10 +7,17 @@
 //
 // Segurança: a password SMTP nunca é devolvida nem aparece na interface
 // (apenas indicador "definida"). Nada de credenciais em logs.
+//
+// Em repouso a password é guardada CIFRADA (AES-256-GCM, chave da instalação)
+// através de helpers/segredos.js — a mesma proteção das credenciais de
+// armazenamento, que vivem na mesma tabela `configuracoes`. A decifragem
+// acontece na leitura (`lerChavesDb`), pelo que o resto do módulo continua a
+// trabalhar com texto simples em memória.
 // ─────────────────────────────────────────────────────────────────────
 const nodemailer = require('nodemailer');
 const { Op } = require('sequelize');
 const { Configuracao } = require('../models');
+const segredos = require('./segredos');
 
 const CHAVES = {
   host: 'smtp_host',
@@ -25,6 +32,25 @@ const CHAVES = {
 const TTL = 30 * 1000; // cache curto (30 s) para leituras à BD
 let _cache = { at: 0, dados: null };
 
+// Substitui a password em texto simples pela versão cifrada (migração
+// transparente). Falha em silêncio: o valor continua utilizável em texto
+// simples e a tentativa repete-se na leitura seguinte. Sem chave de cifra não
+// há nada a migrar.
+async function migrarPasswordSmtp(texto) {
+  if (!texto) return;
+  try {
+    const valor = segredos.protegerPasswordSmtp(texto);
+    if (valor === texto) return; // sem chave: mantém-se como está
+    const [reg] = await Configuracao.findOrCreate({ where: { chave: CHAVES.pass }, defaults: { valor } });
+    if (reg.valor !== valor) {
+      reg.valor = valor;
+      await reg.save();
+    }
+  } catch (err) {
+    // Sem chave ou BD indisponível: mantém-se em texto simples.
+  }
+}
+
 async function lerChavesDb() {
   const rows = await Configuracao.findAll({
     where: { chave: { [Op.like]: 'smtp_%' } },
@@ -32,6 +58,24 @@ async function lerChavesDb() {
   });
   const mapa = {};
   for (const r of rows) mapa[r.chave] = r.valor;
+
+  // A password é decifrada aqui, uma única vez por leitura, para que
+  // `comporConfigSmtp` continue a receber texto simples e todo o resto do
+  // módulo (e a interface) funcione exatamente como antes.
+  const p = segredos.lerPasswordSmtp(mapa[CHAVES.pass]);
+  if (p.erro) {
+    // Segredo ilegível (chave diferente ou valor alterado): um valor não
+    // autenticado nunca é usado. A BD fica sem password e o `.env` serve de
+    // queda, tal como quando a chave não existe na tabela.
+    console.warn(
+      '[mailer] a password SMTP guardada não pôde ser decifrada (ENCRYPTION_KEY diferente?). ' +
+        'A password do `.env` (SMTP_PASS) continua a aplicar-se; guarde a password novamente em Configuração → Email / SMTP.'
+    );
+    mapa[CHAVES.pass] = '';
+  } else {
+    mapa[CHAVES.pass] = p.valor;
+    if (p.precisaMigrar) await migrarPasswordSmtp(p.valor);
+  }
   return mapa;
 }
 
@@ -217,8 +261,14 @@ function mensagemErroAmigavel(err) {
 }
 
 // Estado para a interface (nunca inclui a password).
+//
+// `tls` é devolvido como BOOLEANO (e não apenas como a etiqueta `seguranca`):
+// o formulário tem de refletir o valor GUARDADO — sem isto, o `<select>` ficava
+// com uma opção fixa e gravar (mesmo só para mudar a password) enviava
+// `tls=true`, sobrepondo um `smtp_tls='false'` guardado. Ver P50.
 async function obterEstadoSmtp() {
   const cfg = await obterConfigSmtp({ force: true });
+  const tls = cfg.tls === 'true';
   return {
     configurado: Boolean(cfg.host),
     servidor: cfg.host || null,
@@ -226,7 +276,8 @@ async function obterEstadoSmtp() {
     utilizador: cfg.user || null,
     remetente: cfg.from || null,
     nomeRemetente: cfg.fromName || null,
-    seguranca: cfg.tls === 'true' ? (String(cfg.port) === '465' ? 'SSL/TLS (465)' : 'STARTTLS (587)') : 'Sem TLS',
+    tls,
+    seguranca: tls ? (String(cfg.port) === '465' ? 'SSL/TLS (465)' : 'STARTTLS (587)') : 'Sem TLS',
     temPassword: Boolean(cfg.pass),
   };
 }
@@ -242,7 +293,10 @@ async function guardarConfigSmtp(dados) {
   if (dados.from !== undefined) mapa[CHAVES.from] = String(dados.from).trim();
   if (dados.fromName !== undefined) mapa[CHAVES.fromName] = String(dados.fromName).trim();
   if (dados.pass !== undefined && String(dados.pass).trim() !== '') {
-    mapa[CHAVES.pass] = String(dados.pass); // apenas quando o administrador introduz nova password
+    // Só quando o administrador introduz uma password nova (nunca é mostrada
+    // nem devolvida). É guardada CIFRADA em repouso; sem chave de cifra fica em
+    // texto simples (comportamento anterior) e é emitido um aviso.
+    mapa[CHAVES.pass] = segredos.protegerPasswordSmtp(String(dados.pass));
   }
 
   for (const [chave, valor] of Object.entries(mapa)) {

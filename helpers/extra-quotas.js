@@ -13,14 +13,23 @@ function distribuicaoExtra(valorTotal, fracoes, metodo) {
   return distribuirPorPesos(totalC, pesos);
 }
 
-// Divide um valor anual (em cêntimos) por n parcelas IGUAIS; a diferença de
-// arredondamento é atribuída à última parcela.
+// Divide um valor (em cêntimos) por n parcelas cuja soma é EXATAMENTE o valor.
+//
+// Antes: `parcelas[n-1] += resto`. A soma também fechava, mas TODO o resto caía
+// na última parcela — com 60 parcelas isso é até **0,59 €** de diferença numa
+// parcela só, contra a promessa do próprio comentário («parcelas IGUAIS») e
+// contra o que a vista mostra (cada parcela tem o seu `valor`).
+//
+// Agora: maior-resto — as parcelas diferem no máximo 1 cêntimo e a soma continua
+// a fechar por construção. É a MESMA regra do `dividirEm` (`helpers/plano.js`,
+// P22) e o padrão que o preflight da Fase A marca como comportamento antigo a
+// alterar (assinatura A4, `scripts/diagnostico-fase-a-preflight.js`).
 function parcelar(valorFracaoC, n) {
-  const base = Math.floor(valorFracaoC / n);
-  let resto = valorFracaoC - base * n;
-  const parcelas = new Array(n).fill(base);
-  parcelas[n - 1] += resto;
-  return parcelas;
+  const total = Math.round(Number(valorFracaoC) || 0);
+  const partesN = Math.max(1, Math.round(Number(n) || 0));
+  const base = Math.floor(total / partesN);
+  const resto = total - base * partesN; // 0 … partesN−1 cêntimos
+  return Array.from({ length: partesN }, (_, i) => base + (i < resto ? 1 : 0));
 }
 
 const PERIODICIDADE_MESES = { mensal: 1, bimestral: 2, trimestral: 3, semestral: 6, anual: 12 };

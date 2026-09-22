@@ -170,7 +170,17 @@ router.post('/quotas-extra', async (req, res) => {
     return res.redirect('/admin/quotas-extra/nova');
   }
 
-  const fracoes = await Fracao.findAll({ where: { id: { [Op.in]: fracaoIds }, estado: 'ativo', condominio_id: req.condominioId } });
+  // ⚠ `order` OBRIGATÓRIO: esta lista alimenta `distribuicaoExtra` →
+  // `distribuirPorPesos`, que fecha a soma pelo MAIOR RESTO e desempata por
+  // índice do array (o `sort` é estável). Com empate — método `igual`, ou
+  // frações com a mesma permilagem — é a ORDEM desta lista que decide QUE
+  // fração paga o cêntimo sobrante. Sem `order`, a ordem vem da base de dados
+  // (não especificada) e a distribuição deixa de ser reprodutível: a soma
+  // mantém-se, mas quem paga varia de execução para execução.
+  const fracoes = await Fracao.findAll({
+    where: { id: { [Op.in]: fracaoIds }, estado: 'ativo', condominio_id: req.condominioId },
+    order: [['designacao', 'ASC']],
+  });
   if (fracoes.length === 0) {
     req.flash('error_msg', 'Nenhuma fração selecionada está ativa neste condomínio.');
     return res.redirect('/admin/quotas-extra/nova');

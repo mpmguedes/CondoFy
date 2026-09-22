@@ -205,9 +205,18 @@
           mais recente: {{#if cloud.maisRecente}}{{formatDate cloud.maisRecente}}{{else}}—{{/if}}
         </p>
         <p class="small text-muted mb-0">
-          Espaço ocupado na cloud:
+          Espaço ocupado pela pasta de backups:
           {{#if cloud.bytes}}<strong>{{bytes cloud.bytes}}</strong>{{else}}<strong>não disponível</strong> — os serviços de armazenamento não expõem
           a dimensão da pasta de backups ao GesCondu. Não se apresenta um valor estimado.{{/if}}
+        </p>
+        <p class="small text-muted mb-0">
+          {{#if cloud.espaco}}
+            Espaço da conta do serviço ({{cloud.espaco.fonte}}):
+            <strong>{{bytes cloud.espaco.usadosBytes}}</strong> usados{{#if cloud.espaco.totalBytes}} de <strong>{{bytes cloud.espaco.totalBytes}}</strong>{{#if cloud.espaco.livresBytes}} ({{bytes cloud.espaco.livresBytes}} livres){{/if}}{{/if}}
+            — <span class="fst-italic">inclui todos os ficheiros da conta, não só os backups</span>.
+          {{else}}
+            Espaço da conta do serviço: <strong>não disponível</strong> — o serviço não respondeu ou não expõe a quota da conta.
+          {{/if}}
           Retenção cloud configurada: <strong>{{cloud.retencaoDias}} dias</strong>.
         </p>
       </div>

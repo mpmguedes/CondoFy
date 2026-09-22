@@ -356,6 +356,16 @@ async function apagarArquivo(localizador, condominioId) {
   return p.apagarArquivo(id, condominioId);
 }
 
+// Espaço REAL da conta do serviço (capacidade opcional). É a única métrica de
+// espaço que as APIs expõem de forma direta — não é a dimensão da pasta de
+// backups, e nunca é uma estimativa. Devolve `null` quando o provedor não
+// suporta a capacidade; lança quando o serviço não responde (o caller decide).
+async function espacoNaCloud(nomeProvedor, condominioId) {
+  const p = exigirProvedor(nomeProvedor);
+  if (typeof p.espacoNaCloud !== 'function') return null;
+  return p.espacoNaCloud(condominioId);
+}
+
 // ── Backups (instalação) ────────────────────────────────────────────
 async function destinoDeBackup() {
   return ligacoes.lerDestinoBackup().catch(() => null);
@@ -432,6 +442,8 @@ module.exports = {
   abrirFluxo,
   descargarArquivo,
   apagarArquivo,
+  // medição real de espaço (capacidade opcional dos provedores)
+  espacoNaCloud,
   // `descargarArquivo` é o nome histórico; mantém-se como canónico.
   descarregarArquivo: descargarArquivo,
   // atalhos

@@ -156,9 +156,14 @@ A página mostra:
   estado da limpeza automática e resultado da última limpeza. Tudo **medido a partir dos
   ficheiros reais** (`fs.readdirSync` + `fs.statSync`).
 * **Cópia cloud:** destino, conta, ligação utilizável, nº de cópias **registadas**, mais
-  antiga/mais recente, retenção. O **espaço ocupado na cloud não é apresentado** — os
-  fornecedores não expõem a dimensão da pasta de backups na fachada do GesCondu. Diz-se
-  «não disponível» em vez de estimar.
+  antiga/mais recente, retenção.
+  * **Espaço ocupado pela pasta de backups:** continua **não disponível** — nenhuma das três
+    APIs devolve a dimensão de uma pasta numa só chamada, e não se soma o que não se mede.
+  * **Espaço da conta do serviço:** é **medido** pela API do destino (`storage.espacoNaCloud`):
+    Google Drive `about.get({fields:'storageQuota'})`, Dropbox `users/get_space_usage`,
+    OneDrive `GET /me/drive?$select=quota`. A página apresenta-o como «espaço da conta» e diz
+    explicitamente que **inclui todos os ficheiros da conta, não só os backups**. Quando o
+    serviço não responde (ou não expõe a quota) mostra «não disponível» — nunca uma estimativa.
 * **Lista de backups:** data/hora, tipo, destino, tamanho, estado.
 * **Eliminação manual:** um backup individual, ou todos os anteriores a uma data. Ambas com
   confirmação explícita e a proteção do último backup válido.
@@ -215,7 +220,8 @@ A página mostra:
 | `helpers/backup-estado.js` | interpretação pura de `backup_logs` (os 5 estados) |
 | `routes/global-admin.js` | rotas de `/global/armazenamento` (ver, retenção, limpeza, eliminação) |
 | `views/admin/global/armazenamento.handlebars` | a interface (PT-PT) |
-| `jobs/scheduler.js` | cron diário (`BACKUP_HOUR`) |
+| `jobs/scheduler.js` | registo das tarefas cron dos backups (diário, semanal, mensal) |
+| `helpers/backup-agenda.js` | **decisão pura** da agenda (hora, dias, ligar/desligar) — o que `jobs/scheduler.js` regista |
 
 **Sem migration.** Tudo cabe nas estruturas existentes: `backup_logs` (sem alterações) e
 `configuracoes` (chave-valor). O **nome do ficheiro é auto-descritivo** — `tipo`, data e instante
@@ -223,18 +229,28 @@ saem do próprio nome —, pelo que não foi preciso acrescentar uma coluna de n
 
 ### Limitações conhecidas
 
-* **Dropbox não suporta remoção** de ficheiros na fachada do GesCondu (`storage.apagarArquivo`
-  devolve `false`). Com destino de backups Dropbox, a retenção **cloud** é um no-op: as cópias
-  acumulam-se e o resultado da limpeza di-lo explicitamente («o serviço de destino não suporta
-  remoção»). A retenção **local** funciona normalmente.
-* **Espaço ocupado na cloud** não é medível (não há listagem de pasta na fachada). Apresenta-se
-  «não disponível».
+* **Remoção no fornecedor:** implementada nos **três** provedores — Google Drive (`files.delete`),
+  Dropbox (`files/delete_v2`) e OneDrive (`DELETE /me/drive/items/{id}`). A retenção **cloud**
+  funciona, portanto, com qualquer destino. É **idempotente** em todos: um ficheiro que já não
+  existe conta como removido (Dropbox `path_lookup/not_found`, OneDrive 404) — sem isso a
+  retenção ficava presa num ficheiro que já desapareceu. Um provedor sem a capacidade faz
+  `storage.apagarArquivo` devolver `false` e o resumo da limpeza di-lo («o serviço de destino não
+  suporta remoção»).
+* **Espaço ocupado pela pasta de backups** não é medível (nenhuma das três APIs devolve a
+  dimensão de uma pasta numa só chamada). Apresenta-se «não disponível» para esse campo; em
+  alternativa, mede-se a **quota da conta** do serviço (ver §5) — uma métrica diferente, dita
+  como tal.
 * **Âmbito da remoção cloud:** a remoção usa a ligação **atual** do destino. Se o destino for
   mudado para outra conta entre o upload e a limpeza, a remoção de uma cópia antiga pode não
   encontrar o ficheiro (o OneDrive devolve `true` num 404, por ser idempotente).
 * **Retenções por tipo** (`BACKUP_WEEKLY_RETENTION`, `BACKUP_MONTHLY_RETENTION`) foram
-  substituídas por retenções **por destino**. Só o backup `diario` é agendado; `semanal`,
-  `mensal` e `manual` existem no ENUM mas não têm agendamento.
+  substituídas por retenções **por destino**. **Agendamento:** `diario`, `semanal` e `mensal`
+  correm no cron (`jobs/scheduler.js`), com a decisão em `helpers/backup-agenda.js` —
+  `BACKUP_HOUR` (hora comum), `BACKUP_WEEKLY_DAY` (por omissão `SU`), `BACKUP_MONTHLY_DAY`
+  (1–28; por omissão 1) e `BACKUP_WEEKLY_ENABLED`/`BACKUP_MONTHLY_ENABLED` para desligar um
+  ciclo. O máximo **28** no dia mensal é deliberado: os dias 29–31 não existem em todos os
+  meses, pelo que um agendamento para 31 nunca correria em fevereiro. `manual` **não** é
+  agendado (dispara-se à mão em Administração global → Backups).
 * **Fora de âmbito (documentado, não corrigido):** a escolha do destino de backups
   (`POST /admin/config/armazenamento/backups`) e o disparo de um backup manual
   (`POST /admin/sistema/backup`) continuam acessíveis a um administrador de condomínio, embora
@@ -248,13 +264,17 @@ saem do próprio nome —, pelo que não foi preciso acrescentar uma coluna de n
 | Script | Cobre |
 |---|---|
 | `scripts/test-backup-estado.js` | os 5 estados, o fluxo local+cloud, a independência dos fornecedores, a retenção configurável e o âmbito da remoção |
+| `scripts/test-backup-agenda.js` | a **agenda**: validação dos valores de ambiente, o plano (diário/semanal/mensal, `manual` fora) e a ligação REAL ao `jobs/scheduler.js` (com `node-cron` substituído) — dispara cada tarefa e confirma o tipo chamado |
 | `scripts/test-backup-retencao.js` | cenários **A–I e K**: sem cloud, cloud funcional, cloud indisponível, credenciais inválidas, falha local, retenção local, retenção cloud, métricas, eliminação manual, documentos separados |
-| `scripts/test-rotas-global-backups.js` | cenário **J**: isolamento administrativo (HTTP real), a página com os valores reais e a validação no servidor |
+| `scripts/test-rotas-global-backups.js` | cenário **J**: isolamento administrativo (HTTP real), a página com os valores reais, o **espaço da conta cloud** (medido ou «não disponível») e a validação no servidor |
+| `scripts/test-storage-provedores.js` | a **remoção** (`apagarArquivo`) e a **medição de espaço** na Dropbox/OneDrive, com um interceptor do cliente HTTP (sem rede) |
 
 ```bash
 node scripts/test-backup-estado.js
+node scripts/test-backup-agenda.js
 node scripts/test-backup-retencao.js
 node scripts/test-rotas-global-backups.js
+node scripts/test-storage-provedores.js
 ```
 
 Os testes correm **sem base de dados e sem rede**, com duplos de `../models`,

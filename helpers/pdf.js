@@ -854,7 +854,12 @@ async function gerarConvocatoriaPDF(condominio, d) {
     numero: d.numero,
     tipo,
     data: d.data,
-    dataEmissao: d.dataEmissao || new Date(),
+    // ⛔ Passa-se o valor TAL E QUAL. `helpers/convocatoria.js` já aplica a
+    // omissão correta (`hojeInput()`, data LOCAL em ISO). Injetar aqui um
+    // `new Date()` rebentava com `isoData` — que é `String(valor).slice(0,10)`
+    // e transformava o `Date` em «Tue Sep 22», fazendo a carta sair com
+    // «22 de setembro de 2001».
+    dataEmissao: d.dataEmissao,
     hora: d.hora,
     horaSegunda: d.horaSegunda,
     local: d.local,

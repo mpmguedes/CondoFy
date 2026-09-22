@@ -7,19 +7,14 @@ const {
   Documento,
   EmailFila,
 } = require('../models');
-const { Op } = require('sequelize');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const { resolverDestinatarios } = require('../helpers/avisos');
+// Motor ÚNICO de enfileiramento de avisos — o mesmo que o job dos avisos
+// programados usa (`jobs/avisos-programados.js`). Não há segundo motor.
+const { enfileirarAviso, ESTADOS_EM_CURSO } = require('../helpers/avisos-envio');
 const { smtpConfigured } = require('../helpers/mailer');
 const documentActions = require('../helpers/document-actions');
-const { enfileirarEmail: enfileirarEmailFila } = require('../helpers/email-fila');
-const { compor: comporEmail } = require('../helpers/email-templates');
-const { getCondominio } = require('../helpers/condominio');
-const drive = require('../helpers/drive');
-// Link do documento para email: sempre uma rota do GesCondu (nunca o link do
-// fornecedor de armazenamento).
-const { urlParaEmail } = require('../helpers/documentos-acesso');
 
 const router = express.Router();
 // Isolamento: condomínio ativo (sessão validada) em todas as operações.
@@ -112,103 +107,24 @@ router.post('/avisos/:id/enviar', async (req, res) => {
   });
   if (!aviso) return res.redirect('/admin/avisos');
 
-  const destinatarios = await AvisoDestinatario.findAll({
-    where: { aviso_id: aviso.id },
-    include: [{ model: Pessoa, as: 'pessoa' }],
+  // O enfileiramento (destinatários → deduplicação → templates → fila) vive em
+  // `helpers/avisos-envio.js`: é o MESMO motor que o job dos avisos programados
+  // usa (P29). Aqui só se decide ENVIAR — a ação do administrador.
+  //
+  // A deduplicação do envio manual usa `ESTADOS_EM_CURSO`: depois de um `erro`
+  // ou de um `cancelado`, carregar em «Enviar» volta a pôr a mensagem na fila,
+  // porque é uma ação explícita. (O disparo automático é mais restrito.)
+  const r = await enfileirarAviso({
+    aviso,
+    condominioId: req.condominioId,
+    userId: req.user.id,
+    baseUrl: `${req.protocol}://${req.get('host')}`,
+    estadosJaDespachados: ESTADOS_EM_CURSO,
   });
 
-  // Previne duplicados: não volta a enfileirar emails já pendentes/enviados
-  // para o mesmo aviso e destinatário.
-  const existentes = await EmailFila.findAll({
-    where: {
-      aviso_id: aviso.id,
-      estado: { [Op.in]: ['pendente', 'a_enviar', 'enviado'] },
-    },
-    attributes: ['destinatario_email'],
-  });
-  const jaEnviados = new Set(existentes.map((e) => String(e.destinatario_email).toLowerCase()));
-
-  const lista = destinatarios
-    .filter((d) => d.pessoa && d.pessoa.email)
-    .map((d) => ({ email: d.pessoa.email, nome: d.pessoa.nome }))
-    .filter((d) => !jaEnviados.has(String(d.email).toLowerCase()));
-
-  if (!lista.length) {
+  if (!r.enfileirados) {
     req.flash('success_msg', 'Não há novos destinatários para enfileirar (envio já agendado/enviado).');
     return res.redirect(`/admin/avisos/${aviso.id}`);
-  }
-
-  const mensagem = aviso.mensagem || '';
-
-  // Anexo: descarrega o documento associado (Drive) quando disponível.
-  const doc = aviso.documento || null;
-  let anexoBuffer = null;
-  let anexoNome = null;
-  if (doc && doc.drive_file_id && drive.isConfigured(req.condominioId)) {
-    try {
-      anexoBuffer = await drive.descargarArquivo(doc.drive_file_id, req.condominioId);
-      anexoNome = String(doc.nome || '').trim() || 'documento.pdf';
-    } catch (err) {
-      anexoBuffer = null;
-    }
-  }
-  const comAnexo = Boolean(anexoBuffer);
-  const cond = await getCondominio({ id: req.condominioId });
-  const condNome = (cond && String(cond.designacao || '').trim()) || '';
-  const adminNome = (cond && String(cond.administracao_nome || '').trim()) || '';
-  // Link do aviso: NUNCA o link do fornecedor de armazenamento — passa sempre
-  // pelo GesCondu (rota autenticada ou link temporário com validade limitada).
-  const baseUrlAviso = `${req.protocol}://${req.get('host')}`;
-  const emailsCondominos = new Set(
-    (await Pessoa.findAll({
-      where: { condominio_id: req.condominioId, email: { [Op.ne]: null } },
-      attributes: ['email'],
-    }).catch(() => [])).map((p) => String(p.email).trim().toLowerCase())
-  );
-
-  let enfileirados = 0;
-  for (const dest of lista) {
-    const urlOnline = doc
-      ? urlParaEmail({
-          documento: doc,
-          baseUrl: baseUrlAviso,
-          destinatarioInterno: emailsCondominos.has(String(dest.email).trim().toLowerCase()),
-        })
-      : null;
-    const tpl = mensagem
-      ? comporEmail('generico', {
-          destinatarioNome: dest.nome,
-          condominio: condNome,
-          administracao: adminNome,
-          titulo: aviso.assunto,
-          mensagem,
-          urlOnline,
-          urlTexto: 'Consultar aviso online',
-        })
-      : comporEmail('aviso', {
-          destinatarioNome: dest.nome,
-          condominio: condNome,
-          administracao: adminNome,
-          tituloAviso: aviso.assunto,
-          urlOnline,
-          anexo: comAnexo,
-        });
-    await enfileirarEmailFila({
-      destinatario_email: dest.email,
-      destinatario_nome: dest.nome,
-      assunto: tpl.assunto,
-      corpo: tpl.text,
-      corpo_html: tpl.html,
-      documento_id: aviso.documento_id || null,
-      aviso_id: aviso.id,
-      entidade_tipo: 'Aviso',
-      entidade_id: aviso.id,
-      condominioId: req.condominioId,
-      userId: req.user.id,
-      anexoNome: comAnexo ? anexoNome : null,
-      anexoBuffer: comAnexo ? anexoBuffer : null,
-    });
-    enfileirados++;
   }
 
   await audit({
@@ -216,9 +132,9 @@ router.post('/avisos/:id/enviar', async (req, res) => {
     acao: 'enviar_aviso',
     entidade: 'Aviso',
     entidadeId: aviso.id,
-    detalhes: { enfileirados, comAnexo },
+    detalhes: { enfileirados: r.enfileirados, comAnexo: r.comAnexo },
   }).catch(() => {});
-  req.flash('success_msg', `Foram enfileirados ${enfileirados} email(s).${comAnexo ? ' (com documento em anexo)' : ''}`);
+  req.flash('success_msg', `Foram enfileirados ${r.enfileirados} email(s).${r.comAnexo ? ' (com documento em anexo)' : ''}`);
   res.redirect(`/admin/avisos/${aviso.id}`);
 });
 

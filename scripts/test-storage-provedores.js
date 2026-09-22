@@ -6,7 +6,9 @@
 //  · os localizadores de ficheiro (compatibilidade com os ids antigos do Drive);
 //  · as ligações POR CONDOMÍNIO (isolamento) e o fallback à ligação global
 //    antiga do Google Drive;
-//  · a fachada helpers/storage (contrato histórico mantido).
+//  · a fachada helpers/storage (contrato histórico mantido);
+//  · a remoção de ficheiros e a medição de espaço na Dropbox e no OneDrive,
+//    com um interceptor do cliente HTTP (sem rede real).
 // Utilização: node scripts/test-storage-provedores.js
 // ═══════════════════════════════════════════════════════════════════
 const assert = require('assert');
@@ -52,6 +54,31 @@ require.cache[configPath] = {
     setConfig: async (chave, valor) => {
       loja.set(chave, valor);
       return { chave, valor };
+    },
+  },
+};
+
+// ── Duplo do cliente HTTP dos provedores ────────────────────────────
+// A Dropbox e o OneDrive falam com as APIs por `helpers/armazenamento/http`.
+// Sem este interceptor, tudo o que NÃO passa pelo Google Drive (remoção de
+// ficheiros, medição de espaço) nunca seria executado offline — ficaria por
+// provar. Cada secção decide a resposta com `responderCom(...)`; um pedido sem
+// resposta preparada FALHA (nunca devolve um valor plausível por acidente).
+const httpReal = require('../helpers/armazenamento/http');
+const httpPath = require.resolve('../helpers/armazenamento/http');
+const pedidosHttp = [];
+let responderHttp = null;
+function responderCom(fn) {
+  responderHttp = fn;
+}
+require.cache[httpPath] = {
+  id: httpPath, filename: httpPath, loaded: true, children: [], paths: [],
+  exports: {
+    ...httpReal,
+    pedir: async (url, opcoes) => {
+      pedidosHttp.push({ url, opcoes });
+      if (!responderHttp) throw new Error(`pedido HTTP não simulado: ${url}`);
+      return responderHttp(url, opcoes);
     },
   },
 };
@@ -586,6 +613,117 @@ async function testarLigacaoRevogada() {
   assert.strictEqual(estadoPlat.provedores.find((p) => p.nome === provedor).ligacaoInvalida.plataforma, true, 'âmbito de plataforma assinalado');
 }
 
+// ── 8.5 Remoção e espaço na Dropbox/OneDrive (interceptor HTTP) ─────
+// A retenção CLOUD de backups só funciona se o adaptador souber APAGAR. A
+// Dropbox não exportava `apagarArquivo` ⇒ `storage.apagarArquivo` devolvia
+// `false` e as cópias acumulavam-se sem limite. Prova-se aqui que:
+//  · a remoção é pedida ao endpoint certo, com o `id:…` do localizador;
+//  · um ficheiro que já não existe conta como removido (idempotência);
+//  · um erro real NÃO é engolido; um token revogado limpa a ligação do âmbito;
+//  · a medição de espaço usa a API real e NUNCA inventa valores em falta.
+async function testarRemocaoEEspacoCloud() {
+  loja.clear();
+  ligacoes.limparCache();
+  const cid = 21;
+  const envAntes = {
+    DROPBOX_ENABLED: process.env.DROPBOX_ENABLED,
+    DROPBOX_APP_KEY: process.env.DROPBOX_APP_KEY,
+    DROPBOX_APP_SECRET: process.env.DROPBOX_APP_SECRET,
+    ONEDRIVE_ENABLED: process.env.ONEDRIVE_ENABLED,
+    ONEDRIVE_CLIENT_ID: process.env.ONEDRIVE_CLIENT_ID,
+    ONEDRIVE_CLIENT_SECRET: process.env.ONEDRIVE_CLIENT_SECRET,
+  };
+  process.env.DROPBOX_ENABLED = 'true';
+  process.env.DROPBOX_APP_KEY = 'chave-teste';
+  process.env.DROPBOX_APP_SECRET = 'segredo-teste';
+  process.env.ONEDRIVE_ENABLED = 'true';
+  process.env.ONEDRIVE_CLIENT_ID = 'cliente-teste';
+  process.env.ONEDRIVE_CLIENT_SECRET = 'segredo-teste';
+  try {
+    await ligacoes.guardarTokens('dropbox', cid, { access_token: 'tok-apagar' });
+
+    // 1. Remoção bem-sucedida: `files/delete_v2`, com o id sem o prefixo `dbx:`
+    //    e autenticado com o token DO CONDOMÍNIO.
+    pedidosHttp.length = 0;
+    responderCom(() => ({ ok: true, status: 200, dados: { metadata: { '.tag': 'file' } } }));
+    assert.strictEqual(await storage.apagarArquivo('dbx:id:AAA111', cid), true, 'a remoção devolve true');
+    assert.strictEqual(pedidosHttp.length, 1, 'uma só chamada à API por remoção');
+    assert.ok(/\/files\/delete_v2$/.test(pedidosHttp[0].url), 'endpoint de remoção da Dropbox');
+    assert.strictEqual(pedidosHttp[0].opcoes.json.path, 'id:AAA111', 'envia o id do localizador (sem o prefixo dbx:)');
+    assert.strictEqual(pedidosHttp[0].opcoes.headers.Authorization, 'Bearer tok-apagar', 'usa o token do condomínio');
+
+    // 2. IDEMPOTÊNCIA: o ficheiro já não existe ⇒ a remoção pretendida está
+    //    feita. Sem isto, a retenção ficava presa num ficheiro desaparecido.
+    responderCom(() => ({ ok: false, status: 409, dados: { error_summary: 'path_lookup/not_found/..' } }));
+    assert.strictEqual(await storage.apagarArquivo('dbx:id:AAA222', cid), true, 'path_lookup/not_found ⇒ já não existe ⇒ true');
+    responderCom(() => ({ ok: false, status: 409, dados: { error_summary: 'path/not_found/..' } }));
+    assert.strictEqual(await storage.apagarArquivo('dbx:id:AAA333', cid), true, 'path/not_found (formato antigo) também é idempotente');
+
+    // 3. Um erro real (sem permissão) é PROPAGADO — a retenção tem de o
+    //    registar, não fingir que apagou.
+    responderCom(() => ({ ok: false, status: 409, dados: { error_summary: 'path/no_permission/..' } }));
+    await assert.rejects(() => storage.apagarArquivo('dbx:id:AAA444', cid), /Dropbox/i, 'erro real propagado (não engolido)');
+
+    // 4. Token revogado: a ligação do âmbito é limpa (o serviço não pode ficar
+    //    "Ligado" sem funcionar) e a mensagem aponta para a religação.
+    responderCom(() => ({ ok: false, status: 401, dados: { error_summary: 'invalid_access_token/..' } }));
+    await assert.rejects(() => storage.apagarArquivo('dbx:id:AAA555', cid), /expirou ou foi revogada/i, 'token revogado ⇒ mensagem de religação');
+    assert.strictEqual(ligacoes.tokensSync('dropbox', cid).tokens, null, 'ligação do condomínio removida (não fica "Ligado")');
+
+    // 5. Espaço da conta Dropbox: números REAIS da API.
+    await ligacoes.guardarTokens('dropbox', cid, { access_token: 'tok-espaco' });
+    pedidosHttp.length = 0;
+    responderCom(() => ({ ok: true, status: 200, dados: { used: 500000000, allocation: { '.tag': 'individual', allocated: 2000000000 } } }));
+    assert.deepStrictEqual(
+      await storage.espacoNaCloud('dropbox', cid),
+      { suportado: true, totalBytes: 2000000000, usadosBytes: 500000000, livresBytes: 1500000000, fonte: 'dropbox:users/get_space_usage' },
+      'espaço da conta Dropbox medido pela API'
+    );
+    assert.ok(/\/users\/get_space_usage$/.test(pedidosHttp[0].url), 'endpoint de espaço da Dropbox');
+
+    // 6. Sem total conhecido (conta gerida por uma equipa) ⇒ `null`, nunca zero
+    //    nem uma estimativa: o que a API não dá não se inventa.
+    responderCom(() => ({ ok: true, status: 200, dados: { used: 10 } }));
+    const semTotal = await storage.espacoNaCloud('dropbox', cid);
+    assert.strictEqual(semTotal.totalBytes, null, 'sem total ⇒ null (não 0)');
+    assert.strictEqual(semTotal.usadosBytes, 10, 'os usados são apresentados quando existem');
+    assert.strictEqual(semTotal.livresBytes, null, 'sem total não há livres');
+
+    // 7. OneDrive: `quota` da Graph, pedida com `$select=quota`.
+    await ligacoes.guardarTokens('onedrive', cid, { access_token: 'tok-od' });
+    responderCom((url) => {
+      assert.ok(url.includes('/me/drive'), 'a medição do OneDrive usa /me/drive');
+      assert.ok(url.includes('quota'), 'pede a quota ($select=quota)');
+      return { ok: true, status: 200, dados: { quota: { total: 1000000, used: 250000, remaining: 750000 } } };
+    });
+    assert.deepStrictEqual(
+      await storage.espacoNaCloud('onedrive', cid),
+      { suportado: true, totalBytes: 1000000, usadosBytes: 250000, livresBytes: 750000, fonte: 'onedrive:quota' },
+      'espaço da conta OneDrive medido pela API'
+    );
+
+    // 8. Um provedor SEM a capacidade ⇒ `null` (a interface diz «não
+    //    disponível»), nunca um valor inventado.
+    const original = storage.obterProvedor('dropbox').espacoNaCloud;
+    delete storage.obterProvedor('dropbox').espacoNaCloud;
+    try {
+      assert.strictEqual(await storage.espacoNaCloud('dropbox', cid), null, 'provedor sem a capacidade ⇒ null');
+    } finally {
+      storage.obterProvedor('dropbox').espacoNaCloud = original;
+    }
+
+    // 9. Um localizador sem provedor conhecido ⇒ `apagarArquivo` devolve
+    //    `false` (a retenção registra «provedor sem remoção» em vez de rebentar).
+    assert.strictEqual(await storage.apagarArquivo('', cid), false, 'sem provedor ⇒ false');
+  } finally {
+    responderHttp = null;
+    for (const [k, v] of Object.entries(envAntes)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+
 // ── 9. URL de autorização: pede sempre a escolha da conta ───────────
 function testarUrlAutorizacao() {
   const envAntes = {
@@ -662,6 +800,50 @@ async function testarLeituraPorLocalizador() {
   }
 }
 
+// ── 11. Armadilha do âmbito: `isConfigured()` sem condomínio ────────
+// `isConfigured()` SEM condomínio responde pela ligação da **PLATAFORMA** (a
+// que serve os backups e os condomínios sem conta própria). Num contexto
+// DOCUMENTAL é sempre preciso passar o condomínio — foi exatamente esta a
+// armadilha que fazia `POST /admin/config/drive/estrutura` recusar um
+// condomínio com conta Google própria só porque a plataforma não tinha conta
+// (a árvore era depois criada com o condomínio ativo, que estava ligado).
+async function testarArmadilhaDoAmbito() {
+  loja.clear();
+  ligacoes.limparCache();
+  const envAntes = {
+    GOOGLE_DRIVE_ENABLED: process.env.GOOGLE_DRIVE_ENABLED,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+  };
+  process.env.GOOGLE_DRIVE_ENABLED = 'true';
+  process.env.GOOGLE_CLIENT_ID = 'cliente-teste';
+  process.env.GOOGLE_CLIENT_SECRET = 'segredo-teste';
+  try {
+    const drive = require('../helpers/drive');
+    // Só o condomínio 5 tem conta Google; a PLATAFORMA não tem nenhuma.
+    await ligacoes.guardarTokens('google_drive', 5, { refresh_token: 'tok-c5' });
+    assert.strictEqual(drive.isConfigured(5), true, 'com o condomínio: ligado PARA ELE');
+    assert.strictEqual(drive.isConfigured(), false, 'sem condomínio: responde pela PLATAFORMA (sem conta) → false');
+    assert.strictEqual(await storage.isConfiguredPara(5), true, 'a fachada com o condomínio vê a ligação');
+
+    // A ligação da plataforma existe ⇒ os dois âmbitos ficam ligados, mas por
+    // contas DIFERENTES (não é a mesma ligação).
+    await ligacoes.guardarTokens('google_drive', null, { refresh_token: 'tok-plataforma' });
+    assert.strictEqual(drive.isConfigured(5), true, 'condomínio continua ligado');
+    assert.strictEqual(drive.isConfigured(), true, 'plataforma ligada');
+    assert.strictEqual(
+      ligacoes.tokensSync('google_drive', 5).tokens.refresh_token,
+      'tok-c5',
+      'o condomínio usa a SUA conta (não a da plataforma)'
+    );
+  } finally {
+    for (const [k, v] of Object.entries(envAntes)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+
 // ── 5. Fachada: contrato histórico ──────────────────────────────────
 function testarFachada() {
   delete process.env.STORAGE_PROVIDER;
@@ -693,8 +875,10 @@ function testarFachada() {
   testarEtiquetasDropbox();
   await testarDocumentosPorServico();
   await testarLigacaoRevogada();
+  await testarRemocaoEEspacoCloud();
   testarUrlAutorizacao();
   await testarLeituraPorLocalizador();
+  await testarArmadilhaDoAmbito();
   testarFachada();
   console.log('✓ Testes da arquitetura de armazenamento (multi-provedor) passaram.');
 })().catch((err) => {

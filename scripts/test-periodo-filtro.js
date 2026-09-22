@@ -9,7 +9,8 @@
 //   · atalhos com intervalo calculado (mês anterior, últimos 7/30 dias);
 //   · intervalo personalizado escrito pelo utilizador, com normalização de
 //     ordem e rejeição de datas inexistentes;
-//   · o atalho ativo é DERIVADO do intervalo efetivo.
+//   · o atalho ativo é o PEDIDO quando é um atalho calculado válido, e
+//     DERIVADO do intervalo efetivo só quando não há parâmetro (P51).
 //
 // Todas as datas são construídas em hora LOCAL (nunca `toISOString`), tal como
 // o módulo — a asserção é, por isso, independente do fuso da máquina.
@@ -210,5 +211,55 @@ const refCopia = ref.getTime();
 resolverPeriodo({ periodo: 'mes-anterior' }, ref);
 assert.strictEqual(ref.getTime(), refCopia, 'não altera a data de referência recebida');
 feito('função pura: determinística e sem efeitos colaterais');
+
+// ── 9. P51 — o atalho assinalado é o BOTÃO CARREGADO ──────────────
+titulo('P51 — atalho pedido prevalece quando o intervalo COLIDE');
+// Os intervalos de dois atalhos COLIDEM em dois dias do mês: no dia 7,
+// «Este mês» e «Últimos 7 dias» dão exatamente o mesmo intervalo; no dia 30,
+// «Este mês» e «Últimos 30 dias». A consulta é a mesma, mas derivar o atalho
+// do intervalo assinalava sempre «Este mês» — o botão pressionado não era o
+// botão assinalado. O `periodo` pedido passa a mandar.
+const DIA7 = new Date(2026, 8, 7, 14, 30);
+const DIA30 = new Date(2026, 8, 30, 14, 30);
+
+// (a) A colisão é REAL: os dois atalhos produzem o mesmo intervalo nesses dias.
+const col7a = resolverPeriodo({ periodo: 'este-mes' }, DIA7);
+const col7b = resolverPeriodo({ periodo: 'ultimos-7' }, DIA7);
+assert.strictEqual(col7a.deInput, '2026-09-01', 'dia 7: «Este mês» começa no dia 1');
+assert.strictEqual(col7a.ateInput, '2026-09-07', 'dia 7: «Este mês» termina hoje');
+assert.strictEqual(col7b.deInput, col7a.deInput, 'dia 7: «Últimos 7 dias» tem o MESMO início (colisão real)');
+assert.strictEqual(col7b.ateInput, col7a.ateInput, 'dia 7: «Últimos 7 dias» tem o MESMO fim (colisão real)');
+const col30a = resolverPeriodo({ periodo: 'este-mes' }, DIA30);
+const col30b = resolverPeriodo({ periodo: 'ultimos-30' }, DIA30);
+assert.strictEqual(col30b.deInput, col30a.deInput, 'dia 30: «Últimos 30 dias» tem o MESMO início (colisão real)');
+assert.strictEqual(col30b.ateInput, col30a.ateInput, 'dia 30: «Últimos 30 dias» tem o MESMO fim (colisão real)');
+
+// (b) Apesar da colisão, cada botão fica assinalado por si.
+assert.strictEqual(col7a.atalho, 'este-mes', 'dia 7: carregar «Este mês» assinala «Este mês»');
+assert.strictEqual(col7b.atalho, 'ultimos-7', 'dia 7: carregar «Últimos 7 dias» assinala «Últimos 7 dias» (não «Este mês»)');
+assert.strictEqual(col7b.rotulo, 'Últimos 7 dias', 'dia 7: o rótulo acompanha o atalho pedido');
+assert.strictEqual(col30a.atalho, 'este-mes', 'dia 30: carregar «Este mês» assinala «Este mês»');
+assert.strictEqual(col30b.atalho, 'ultimos-30', 'dia 30: carregar «Últimos 30 dias» assinala «Últimos 30 dias»');
+assert.strictEqual(col30b.rotulo, 'Últimos 30 dias', 'dia 30: o rótulo acompanha o atalho pedido');
+
+// (c) Sem parâmetro, a derivação continua a dar «Este mês» — a entrada inicial
+// da listagem não pode passar a aparecer como «Personalizado».
+assert.strictEqual(resolverPeriodo({}, DIA7).atalho, 'este-mes', 'dia 7 sem parâmetro: deriva «Este mês»');
+assert.strictEqual(resolverPeriodo({}, DIA30).atalho, 'este-mes', 'dia 30 sem parâmetro: deriva «Este mês»');
+
+// (d) O atalho pedido só manda se for CALCULADO e válido: «personalizado» e
+// valores inventados continuam a cair na derivação.
+assert.strictEqual(
+  resolverPeriodo({ periodo: 'personalizado', de: '2026-01-01', ate: '2026-01-31' }, AGORA).atalho,
+  'personalizado',
+  '«personalizado» não é atalho calculado: usa as datas dos campos'
+);
+assert.strictEqual(resolverPeriodo({ periodo: 'inventado' }, AGORA).atalho, 'este-mes', 'atalho inventado cai na derivação');
+assert.strictEqual(
+  resolverPeriodo({ periodo: 'ultimos-7', de: '2026-01-01', ate: '2026-01-31' }, AGORA).deInput,
+  '2026-09-14',
+  'o atalho pedido continua a mandar sobre as datas dos campos'
+);
+feito('P51 — atalho pedido prevalece, com derivação preservada na ausência de parâmetro');
 
 console.log(`\n✓ Testes do período da listagem de emails passaram (${n} verificações, sem BD).`);

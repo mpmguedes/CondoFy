@@ -1,4 +1,5 @@
 const { DataTypes } = require('sequelize');
+const segredos = require('../helpers/segredos');
 
 module.exports = (sequelize) => {
   const User = sequelize.define(
@@ -39,7 +40,28 @@ module.exports = (sequelize) => {
       // 2FA por código de email OU aplicação autenticadora (TOTP).
       two_fa_ativo: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       two_fa_metodo: { type: DataTypes.ENUM('email', 'totp'), allowNull: false, defaultValue: 'email' },
-      two_fa_totp_secret: { type: DataTypes.STRING(64), allowNull: true },
+      // Segredo TOTP — guardado CIFRADO em repouso (AES-256-GCM; ver
+      // helpers/segredos.js). O acesso é transparente: `user.two_fa_totp_secret`
+      // devolve sempre o segredo em claro e qualquer escrita cifra, pelo que
+      // nenhum ponto do código (ativar, verificar, desativar) precisa de saber
+      // disto. A coluna é STRING(255) porque o formato cifrado
+      // (`enc:v1:<kid>:<iv>:<tag>:<ct>`) ocupa ~97 caracteres para um segredo
+      // Base32 de 32 — não caberia em STRING(64).
+      //
+      // Sem ENCRYPTION_KEY o valor é guardado em texto simples (comportamento
+      // anterior, sem regressão) e é emitido um aviso administrativo; um valor
+      // antigo em texto simples continua a ser lido e passa a cifrado na
+      // escrita seguinte.
+      two_fa_totp_secret: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        get() {
+          return segredos.lerTotp(this.getDataValue('two_fa_totp_secret')).valor;
+        },
+        set(valor) {
+          this.setDataValue('two_fa_totp_secret', segredos.protegerTotp(valor));
+        },
+      },
       two_fa_email_codigo_hash: { type: DataTypes.STRING(64), allowNull: true },
       two_fa_email_codigo_expira: { type: DataTypes.DATE, allowNull: true },
       two_fa_email_tentativas: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },

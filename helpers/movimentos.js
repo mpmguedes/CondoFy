@@ -120,8 +120,18 @@ async function registarTransferencia({
 }
 
 // Sincroniza o movimento bancário de saída de uma despesa com o seu estado:
-// - despesa 'paga' com conta → garante um movimento de saída;
+// - despesa 'paga' com conta → garante um movimento de saída CONFIRMADO, com os
+//   valores atuais da despesa (cria-o se não existir, ATUALIZA-O se existir —
+//   inclusive se estiver anulado);
 // - caso contrário → anula o movimento existente.
+//
+// ⚠️ O movimento ANULADO é reposto a 'confirmado' quando a despesa volta a
+// estar paga. Sem isto, a sequência «pagar → anular → corrigir para paga»
+// deixava a despesa paga SEM saída a contar no saldo, em silêncio. Repor é
+// seguro porque um movimento ligado a uma despesa só pode ser anulado por esta
+// função: o extrato recusa anular movimentos com origem operacional e manda
+// corrigir na origem (`routes/financeiro.js`, `POST /movimentos/:id/anular`),
+// logo nunca há aqui uma decisão do utilizador a sobrepor.
 //
 // `condominioId` é opcional e existe só para deixar explícito o condomínio em
 // quem chama; quando omitido cai para `despesa.condominio_id` (NOT NULL no
@@ -132,19 +142,18 @@ async function sincronizarMovimentoDespesa(despesa, userId, transaction, condomi
   const movimento = await MovimentoBancario.findOne({ where: { despesa_id: despesa.id }, transaction });
   if (despesa.estado === 'paga' && despesa.conta_bancaria_id) {
     if (movimento) {
-      if (movimento.estado === 'confirmado') {
-        await movimento.update(
-          {
-            conta_bancaria_id: despesa.conta_bancaria_id,
-            condominio_id: cid,
-            data: despesa.data || new Date(),
-            valor: despesa.valor,
-            descricao: despesa.descricao,
-            categoria_id: despesa.categoria_id,
-          },
-          { transaction }
-        );
-      }
+      await movimento.update(
+        {
+          conta_bancaria_id: despesa.conta_bancaria_id,
+          condominio_id: cid,
+          data: despesa.data || new Date(),
+          valor: despesa.valor,
+          descricao: despesa.descricao,
+          categoria_id: despesa.categoria_id,
+          estado: 'confirmado',
+        },
+        { transaction }
+      );
     } else {
       await criarMovimento({
         contaBancariaId: despesa.conta_bancaria_id,

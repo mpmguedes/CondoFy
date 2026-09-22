@@ -126,7 +126,10 @@ document.querySelectorAll('.alert-dismissible').forEach((a) => {
   document.addEventListener('submit', function (ev) {
     var form = ev.target;
     if (!form || !form.getAttribute || !form.hasAttribute('data-confirmar')) return;
-    if (form.getAttribute('data-confirmado') === '1') { form.removeAttribute('data-confirmado'); return; }
+    // Marca posta pelo botão da caixa: este envio já foi confirmado — deixa
+    // seguir. Quem a limpa é o clique que a pôs (é de UM só envio), para que um
+    // envio cancelado por outra via volte a pedir confirmação.
+    if (form.getAttribute('data-confirmado') === '1') return;
     ev.preventDefault();
     formPendente = form;
     respostaPendente = null;
@@ -140,18 +143,36 @@ document.querySelectorAll('.alert-dismissible').forEach((a) => {
 
   if (botaoAcao) {
     botaoAcao.addEventListener('click', function () {
+      // P1 — UM só disparo por confirmação. O botão é desativado no primeiro
+      // clique, por isso um duplo clique rápido (ou um segundo Enter) já não
+      // volta a submeter; só é reativado quando a caixa fecha.
+      if (botaoAcao.disabled) return;
+      botaoAcao.disabled = true;
       modal.hide();
-      if (respostaPendente) { var r = respostaPendente; respostaPendente = null; r(true); return; }
+      if (respostaPendente) { var r = respostaPendente; respostaPendente = null; return r(true); }
       if (!formPendente) return;
       var form = formPendente;
       formPendente = null;
       form.setAttribute('data-confirmado', '1');
-      if (typeof form.requestSubmit === 'function') form.requestSubmit(); else form.submit();
+      try {
+        if (typeof form.requestSubmit === 'function') {
+          form.requestSubmit();
+        } else {
+          // `form.submit()` NÃO dispara o evento `submit`: a marca ficaria no
+          // formulário e um envio posterior passaria sem confirmação. Tira-se
+          // o `data-confirmar` para o formulário deixar de ser interceptado.
+          form.removeAttribute('data-confirmar');
+          form.submit();
+        }
+      } finally {
+        form.removeAttribute('data-confirmado');
+      }
     });
   }
 
   modalEl.addEventListener('hidden.bs.modal', function () {
     formPendente = null;
+    if (botaoAcao) botaoAcao.disabled = false; // a caixa fechou: volta a aceitar
     if (respostaPendente) { var r = respostaPendente; respostaPendente = null; r(false); }
   });
 

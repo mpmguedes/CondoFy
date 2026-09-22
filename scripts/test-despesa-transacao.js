@@ -504,11 +504,36 @@ async function main() {
     assert.notStrictEqual(numeroNovo, '2026/0001', '8c. o número abortado não é reutilizado');
     ok('a série de numeração avança fora da transação (salto, nunca repetição)');
 
-    // ── 9. Um movimento nunca fica sem despesa ───────────────────
+    // ── 9. Voltar a marcar «paga» repõe o movimento ───────────────
+    // Sequência real: pagar → anular → corrigir para «paga». O movimento fica
+    // 'anulado' e o saldo deixa de descontar uma despesa que voltou a estar
+    // paga — sem erro visível. Repor é seguro: o movimento de uma despesa só
+    // pode ser anulado por esta via (o extrato RECUSA anular movimentos com
+    // origem — «corrija o registo na origem»), logo não se sobrepõe a nenhuma
+    // decisão humana.
+    grupo('9. Voltar a marcar «paga» repõe o movimento');
+    reiniciar();
+    const r9a = await pedir('/admin/despesas', { metodo: 'POST', corpo: CORPO_BASE });
+    assert.strictEqual(r9a.localizacao, '/admin/despesas', '9a. a despesa é criada paga');
+    const id9 = db.despesas[0].id;
+    assert.strictEqual(db.movimentos[0].estado, 'confirmado', '9b. com o movimento confirmado');
+    await pedir(`/admin/despesas/${id9}/anular`, { metodo: 'POST', corpo: {} });
+    assert.strictEqual(db.despesas[0].estado, 'anulada', '9c. a despesa é anulada');
+    assert.strictEqual(db.movimentos[0].estado, 'anulado', '9d. e o movimento é anulado com ela');
+    const r9b = await pedir(`/admin/despesas/${id9}`, { metodo: 'POST', corpo: { ...CORPO_BASE, valor: '80' } });
+    assert.strictEqual(r9b.localizacao, '/admin/despesas', '9e. a correção para «paga» é aceite');
+    assert.strictEqual(db.despesas[0].estado, 'paga', '9f. a despesa voltou a estar paga');
+    assert.strictEqual(db.movimentos.length, 1, '9g. não se cria um segundo movimento');
+    assert.strictEqual(db.movimentos[0].estado, 'confirmado',
+      '9h. o movimento volta a contar no saldo (senão a despesa ficava paga SEM saída na conta)');
+    assert.strictEqual(toCents(db.movimentos[0].valor), 8000, '9i. com o valor atualizado');
+    ok('pagar → anular → voltar a pagar repõe o movimento (o saldo volta a descontar)');
+
+    // ── 10. Um movimento nunca fica sem despesa ──────────────────
     // Invariante global depois de todos os cenários.
-    grupo('9. Invariante — nenhum movimento aponta para despesa inexistente');
+    grupo('10. Invariante — nenhum movimento aponta para despesa inexistente');
     const semDono = db.movimentos.filter((m) => m.despesa_id && !db.despesas.some((d) => Number(d.id) === Number(m.despesa_id)));
-    assert.strictEqual(semDono.length, 0, '9a. todos os movimentos de despesa têm a despesa correspondente');
+    assert.strictEqual(semDono.length, 0, '10a. todos os movimentos de despesa têm a despesa correspondente');
     ok('invariante mantida: movimento de despesa ⇒ despesa existe');
 
     console.log('');

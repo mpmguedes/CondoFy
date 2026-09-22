@@ -1,6 +1,27 @@
 # Auditoria — integração Microsoft OneDrive (read-only)
 
 **Data:** 2026-09-21 · **Âmbito:** auditoria apenas, sem alterações de código, migrations, `.env`, documentos ou backups. Sem commit, sem push.
+
+> ## ⚠️ Estado atual (revisão de 2026-09-22) — auditoria parcialmente SUPERADA
+>
+> Confirmado **no código** (não por inspeção visual):
+>
+> | Achado | Estado |
+> |---|---|
+> | **B1** — `User.Read` não pedido | **Corrigido.** `onedrive.js` tem `SCOPE = 'offline_access Files.ReadWrite User.Read'`; `test-storage-provedores.js` §9 assere o scope na URL de autorização. |
+> | **B2** — sem `apagarArquivo` | **Corrigido.** `apagarArquivo` existe no OneDrive (`DELETE /me/drive/items/{id}`, idempotente no 404) e na **Dropbox** (`files/delete_v2`, idempotente em `path_lookup/not_found`). A retenção cloud deixou de ser um no-op. |
+> | **B3** — sem UI para a ligação de plataforma | **Tratado** na interface de armazenamento (`?ambito=plataforma`); ver §3.12 do Roadmap. |
+> | **B4** — `disponivel` ignorava `featureAtiva()` | **Corrigido.** `helpers/storage.js:servicoDisponivel` exige `featureAtiva()` **e** `temCredenciais()`. |
+> | **B7** — `desligar` ignorava `opcoes.plataforma` | **Corrigido.** A assinatura é `desligar(condominioId, opcoes)` e honra o âmbito. |
+> | **B8** — documentação de configuração em falta | **Corrigido.** Existe `docs/ONEDRIVE.md`; `.env.example` documenta `ONEDRIVE_ENABLED`. |
+> | **B5** — nomes sanitizados só para Windows | **Em aberto** (não corrigido por esta revisão). |
+> | **B6** — nenhum teste offline toca na Graph API | **Parcialmente tratado:** existe `scripts/test-onedrive-graph.js` (14 secções) e `test-storage-provedores.js` §8.5 cobre a remoção e a quota com um interceptor do cliente HTTP. |
+> | **B9** — «listagem» não existe | **Não é lacuna** (mantém-se): o índice de documentos é a base de dados. |
+> | **B10** — eliminar documento não apaga no fornecedor | **Decisão de produto em aberto** — ver **P4**. |
+>
+> **Falta apenas a Fase 2** (§8): configurar a App Registration Microsoft e correr
+> `npm run verificar:provedores -- --provedor onedrive` na máquina com credenciais reais.
+> Nada disso exige código novo.
 **Pergunta de partida:** o que já está implementado, o que impede a utilização real do OneDrive, e o que é preciso fazer na conta Microsoft **existente** (sem criar conta nova).
 
 ---

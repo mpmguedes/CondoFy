@@ -27,12 +27,23 @@ function indicesCobranca(periodicidade, totalMeses) {
   return Array.from({ length: totalMeses }, (_, i) => i); // mensal
 }
 
-// Divide um total em cêntimos por n partes IGUAIS (todas com o mesmo valor),
-// para que cada fração pague exatamente o mesmo todos os meses. O arredondamento
-// é absorvido no total anual (n × parte), nunca nos meses.
+// Divide um total em cêntimos por n partes cuja soma é EXATAMENTE o total (P22).
+//
+// Antes: `Math.round(totalC / n)` repetido n vezes. O erro de arredondamento era
+// multiplicado por n — um valor anual de 3.333,33 € dava 12 × 277,78 € =
+// 3.333,36 €, ou seja +3 cêntimos por rubrica × fração. Medido na auditoria de
+// 2026-09-20: +0,08 €/ano num orçamento de 10.000 € repartido por 3 frações.
+//
+// Agora: as partes diferem no máximo 1 cêntimo (maior-resto) e a soma fecha ao
+// cêntimo por construção. O cêntimo sobrante é atribuído de forma
+// determinística aos primeiros índices — nunca «atirado» ao último mês, que era
+// o padrão que inflacionava a última célula noutros módulos.
 function dividirEm(totalC, n) {
-  const valor = Math.round(totalC / n);
-  return new Array(n).fill(valor);
+  const total = Math.round(Number(totalC) || 0);
+  const partesN = Math.max(1, Math.round(Number(n) || 0));
+  const base = Math.floor(total / partesN);
+  const resto = total - base * partesN; // 0 … partesN−1 cêntimos
+  return Array.from({ length: partesN }, (_, i) => base + (i < resto ? 1 : 0));
 }
 
 // Calcula o plano de quotas de um orçamento a partir da distribuição.

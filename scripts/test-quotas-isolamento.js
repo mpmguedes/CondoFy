@@ -387,6 +387,11 @@ async function testeLembretesIsolados() {
         return QUOTAS.filter((q) => !where.condominio_id || where.condominio_id[require('sequelize').Op.in].includes(Number(q.condominio_id)));
       },
     },
+    // O job consulta o MARCADOR de envio na fila (uma linha por quota+assunto já
+    // despachada) — o duplo tem de modelar o que o código usa, senão o teste
+    // falha por uma dependência em falta e não pelo que quer provar. Vazio =
+    // nada despachado, que é o cenário deste teste (ambas as quotas entram).
+    EmailFila: { async findAll() { return []; } },
   };
 
   require.cache[modelsPath] = { id: modelsPath, filename: modelsPath, loaded: true, children: [], paths: [], exports: fakeModels };

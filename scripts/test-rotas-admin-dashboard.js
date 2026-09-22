@@ -8,6 +8,10 @@
 // Cobre: sinais de atenção (com dados e sem nada a tratar), atividade recente,
 // próximas assembleias, estado vazio e âmbito por condomínio.
 //
+// Cobre também (P7): `POST /admin/fracoes/:id/eliminar` — a pré-verificação das
+// dependências tem de recusar com a lista exata do que bloqueia, eliminar quando
+// não há nada associado, e nunca tocar numa fração de outro condomínio.
+//
 // Utilização: node scripts/test-rotas-admin-dashboard.js
 // ═══════════════════════════════════════════════════════════════════
 const assert = require('assert');
@@ -98,11 +102,32 @@ function filtro(linhas, where) {
 
 // ── Duplos dos modelos (antes de carregar as rotas) ────────────────
 const consultas = [];
+
+// Pré-verificação de eliminação de fração (P7). As contagens só respondem
+// quando a consulta é por `fracao_id`; as contagens do painel (por condomínio)
+// mantêm exatamente o valor de sempre.
+const DEP_FRACAO = { quotas: 0, pagamentos: 0, distribuicoes: 0, planos: 0, recibos: 0, titularidades: 0 };
+const porFracao = (chave) => (o = {}) => (o.where && o.where.fracao_id !== undefined ? DEP_FRACAO[chave] : 0);
+let FRACAO_EXISTE = true;
+let eliminacoes = 0;
+const FRACAO = {
+  id: 5,
+  designacao: 'R/C Esquerdo',
+  condominio_id: 1,
+  async destroy() { eliminacoes += 1; },
+};
+
 const modelsPath = require.resolve('../models');
 require.cache[modelsPath] = {
   id: modelsPath, filename: modelsPath, loaded: true, children: [], paths: [],
   exports: {
-    Fracao: { count: async (o = {}) => { consultas.push(['Fracao.count', o]); return 8; }, findAll: async () => [], findOne: async () => null },
+    Fracao: {
+      count: async (o = {}) => { consultas.push(['Fracao.count', o]); return 8; },
+      findAll: async () => [],
+      // `carregarFracao` procura pela fração do CONDOMÍNIO ATIVO: um id de outro
+      // condomínio (ou inexistente) tem de devolver null.
+      findOne: async (o = {}) => (FRACAO_EXISTE && o.where && Number(o.where.id) === FRACAO.id ? FRACAO : null),
+    },
     Pessoa: { count: async () => 12, findAll: async () => [PESSOA], findOne: async () => PESSOA },
     UserCondominio: {
       count: async () => 3,
@@ -113,10 +138,21 @@ require.cache[modelsPath] = {
     Condominio: { findByPk: async () => COND, findOne: async () => COND, findAll: async () => [COND] },
     Quota: {
       findAll: async (o = {}) => { consultas.push(['Quota.findAll', o]); return QUOTAS; },
-      count: async (o = {}) => { consultas.push(['Quota.count', o]); return COM_DADOS ? 0 : 8; },
+      count: async (o = {}) => {
+        consultas.push(['Quota.count', o]);
+        if (o.where && o.where.fracao_id !== undefined) return DEP_FRACAO.quotas;
+        return COM_DADOS ? 0 : 8;
+      },
       findOne: async () => null, sum: async () => 0,
     },
-    Pagamento: { findAll: async () => [], findOne: async () => null, sum: async () => 0, count: async (o = {}) => { consultas.push(['Pagamento.count', o]); return COM_DADOS ? 2 : 0; } },
+    Pagamento: {
+      findAll: async () => [], findOne: async () => null, sum: async () => 0,
+      count: async (o = {}) => {
+        consultas.push(['Pagamento.count', o]);
+        if (o.where && o.where.fracao_id !== undefined) return DEP_FRACAO.pagamentos;
+        return COM_DADOS ? 2 : 0;
+      },
+    },
     PagamentoQuota: { findAll: async () => [] },
     Despesa: { findAll: async () => [], sum: async () => 0, count: async () => 0 },
     Documento: {
@@ -142,10 +178,17 @@ require.cache[modelsPath] = {
     ContaBancaria: { findAll: async () => [] },
     Orcamento: { findAll: async () => [], findOne: async () => null, findByPk: async () => null },
     OrcamentoRubrica: { findAll: async () => [] },
-    PlanoQuota: { findAll: async () => [] },
+    PlanoQuota: { findAll: async () => [], count: porFracao('planos') },
+    Recibo: { findAll: async () => [], count: porFracao('recibos') },
+    OrcamentoDistribuicao: { count: porFracao('distribuicoes') },
     MovimentoBancario: { findAll: async () => [], sum: async () => 0 },
     FracaoPessoa: { findAll: async () => [] },
-    FracaoTitularidade: { findAll: async () => [] },
+    FracaoTitularidade: { findAll: async () => [], count: porFracao('titularidades') },
+    // Tips contextuais do painel: o handler lê as dispensas desta conta
+    // (`carregarDispensas`). Sem este duplo o bloco dos tips falhava sempre por
+    // dentro — em silêncio, porque é tolerante a falhas — e o teste deixava de
+    // exercitar o caminho real.
+    RecomendacaoEstado: { findAll: async () => [], findOne: async () => null, create: async () => ({}), update: async () => [0] },
     ExtraQuota: { findAll: async () => [], findOne: async () => null },
     ExtraQuotaParcela: { findAll: async () => [] },
   },
@@ -268,6 +311,17 @@ app.use(express.urlencoded({ extended: true }));
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(flash());
+// Avisos (flash) apanhados à mão: as rotas de escrita redirecionam e a mensagem
+// viaja na sessão — sem isto não se poderia provar O QUE o utilizador leu.
+const FLASHES = [];
+app.use((req, res, next) => {
+  req.flash = (tipo, msg) => {
+    if (msg === undefined) return FLASHES.filter(([t]) => t === tipo).map(([, m]) => m);
+    FLASHES.push([tipo, msg]);
+    return FLASHES.length;
+  };
+  next();
+});
 // O papel do condomínio ativo decide o que o painel mostra. Os testes correm
 // com `admin` e repetem as asserções de UI com `gestor` (ver o fim do ficheiro).
 let PAPEL = 'admin';
@@ -298,6 +352,67 @@ function pedir(caminho) {
       }).on('error', (e) => { servidor.close(); reject(e); });
     });
   });
+}
+
+// POST (sem corpo): as rotas de escrita redirecionam sempre — o que interessa é
+// o código, o destino e o efeito nos duplos dos modelos.
+function postar(caminho) {
+  return new Promise((resolve, reject) => {
+    const servidor = app.listen(0, '127.0.0.1', () => {
+      const pedido = http.request(
+        { host: '127.0.0.1', port: servidor.address().port, path: caminho, method: 'POST' },
+        (res) => {
+          res.resume();
+          res.on('end', () => {
+            servidor.close();
+            resolve({ status: res.statusCode, localizacao: res.headers.location, html: '' });
+          });
+        }
+      );
+      pedido.on('error', (e) => { servidor.close(); reject(e); });
+      pedido.end();
+    });
+  });
+}
+
+const avisos = (tipo) => FLASHES.filter(([t]) => t === tipo).map(([, m]) => m).join(' | ');
+
+// ── P7: eliminação de fração com pré-verificação das dependências ──
+async function testarEliminacaoFracao() {
+  // (a) Fração com dependências → recusa ANTES de tocar na base de dados, com
+  //     a lista exata do que a bloqueia (não a mensagem genérica da FK).
+  Object.assign(DEP_FRACAO, { quotas: 3, pagamentos: 0, distribuicoes: 0, planos: 0, recibos: 2, titularidades: 1 });
+  FRACAO_EXISTE = true;
+  eliminacoes = 0;
+  FLASHES.length = 0;
+  let r = await postar('/admin/fracoes/5/eliminar');
+  assert.strictEqual(r.status, 302, 'com dependências: redireciona (não 500)');
+  assert.strictEqual(r.localizacao, '/admin/fracoes', 'com dependências: volta à lista');
+  assert.strictEqual(eliminacoes, 0, 'com dependências: NÃO eliminou');
+  const recusa = avisos('error_msg');
+  assert.match(recusa, /R\/C Esquerdo/, 'a recusa nomeia a fração');
+  assert.match(recusa, /3 quotas/, 'diz quantas quotas');
+  assert.match(recusa, /2 recibos emitidos/, 'diz quantos recibos emitidos');
+  assert.match(recusa, /1 período de titularidade/, 'usa o singular quando é 1 (titularidade)');
+  assert.ok(!/pode ter registos associados/.test(recusa), 'já não é a mensagem genérica da FK');
+  assert.strictEqual(avisos('success_msg'), '', 'não anuncia sucesso nenhum');
+
+  // (b) Fração sem dependências → elimina, como antes.
+  Object.assign(DEP_FRACAO, { quotas: 0, pagamentos: 0, distribuicoes: 0, planos: 0, recibos: 0, titularidades: 0 });
+  eliminacoes = 0;
+  FLASHES.length = 0;
+  r = await postar('/admin/fracoes/5/eliminar');
+  assert.strictEqual(eliminacoes, 1, 'sem dependências: elimina');
+  assert.match(avisos('success_msg'), /R\/C Esquerdo.*eliminada/s, 'anuncia a eliminação com a designação');
+
+  // (c) Isolamento: fração inexistente (ou de OUTRO condomínio) não é eliminada.
+  FRACAO_EXISTE = false;
+  eliminacoes = 0;
+  FLASHES.length = 0;
+  r = await postar('/admin/fracoes/99/eliminar');
+  assert.strictEqual(eliminacoes, 0, 'fração de outro condomínio: não elimina');
+  assert.match(avisos('error_msg'), /não encontrada neste condomínio/i, 'diz que não é deste condomínio');
+  FRACAO_EXISTE = true;
 }
 
 (async () => {
@@ -487,6 +602,9 @@ function pedir(caminho) {
     'painel: sem histórico de backups mostra «Sem backups»');
   assert.ok(rSemHistorico.html.includes('Cópias de segurança: <span class="text-muted">○ Apenas local</span>'),
     'painel: sem histórico, a cópia local continua a ser o destino');
+
+  // ── P7: eliminação de fração (pré-verificação das dependências) ──
+  await testarEliminacaoFracao();
 
   console.log(`✓ Testes das rotas do painel passaram (cenário «${CENARIO}», sem base de dados).`);
 })().catch((err) => {

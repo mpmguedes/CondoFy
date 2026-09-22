@@ -220,27 +220,38 @@ function testePrevisualizacaoUsaAMesmaRegra() {
   assert.ok(!/calcularQuotasOrcamento\(\{[\s\S]{0,200}metodo: 'permilagem',\s*meses: 12,\s*\}\)/.test(blocoOrcamento),
     'cálculo final: não há chamada sem percentagem');
 
-  // A pré-visualização recebe a MESMA função de divisão e usa-a no método
-  // orçamento (deixou de devolver `fcr: 0`).
-  assert.ok(rota.includes('fcrSplitterJs'), 'a rota injeta a função de divisão na vista');
-  assert.ok(/window\.__GESCONDU_DIVIDIR_FCR/.test(vista), 'a vista usa a função de divisão injetada');
-  assert.ok(/dividir\(anualC \/ 12 \/ 100, pctFcr\(\)\)/.test(vista),
-    'pré-visualização do método orçamento: usa o total com o FCR separado');
-  // C2: no modo orçamento, a pré-visualização acrescenta o FCR ao valor das
-  // DESPESAS antes de distribuir — espelhando `acrescentarFcrAoTotal` do servidor.
-  assert.ok(/function totalComFcr\(/.test(vista),
-    'pré-visualização: o acréscimo do FCR (despesas → despesas + FCR) existe no browser');
-  assert.ok(/totalComFcr\(despesas,\s*pctFcr\(\)\)/.test(vista),
-    'pré-visualização do método orçamento: aplica o FCR às despesas antes de distribuir');
+  // P20 — a pré-visualização deixou de reimplementar a fórmula: os valores são
+  // calculados no SERVIDOR, com os motores reais, e injetados já prontos.
+  const iPrevisao = rota.indexOf('const previsao = { permilagem: {}, orcamento: {} };');
+  const blocoPrevisao = iPrevisao === -1 ? '' : rota.slice(iPrevisao, rota.indexOf('res.render(', iPrevisao));
+  assert.ok(blocoPrevisao, 'a rota constrói a pré-visualização (bloco `previsao`)');
+  assert.ok(/calcularQuota\(/.test(blocoPrevisao),
+    'pré-visualização (método permilagem): usa o motor real `calcularQuota`');
+  assert.ok(/calcularQuotasOrcamento\(/.test(blocoPrevisao),
+    'pré-visualização (método orçamento): usa o motor real `calcularQuotasOrcamento`');
+  assert.ok(/fcrPercentagem: quotaConfig\.fcrPercentagem/.test(blocoPrevisao),
+    'pré-visualização: usa a MESMA percentagem de FCR do cálculo final');
+  assert.ok(rota.includes('previsaoJson'), 'a rota injeta a pré-visualização já calculada');
+
+  assert.ok(/PREVISAO/.test(vista), 'a vista lê a pré-visualização injetada');
+  assert.ok(/PREVISAO\.orcamento\[/.test(vista),
+    'a vista usa o bloco do ORÇAMENTO quando o método é o orçamento');
+  assert.ok(/bloco\.meses\[mes - 1\]/.test(vista),
+    'a vista mostra o valor do MÊS calculado pelo servidor');
+  // A vista NÃO pode voltar a ter fórmula de cálculo (P20).
+  assert.ok(!/totalComFcr\(/.test(vista), 'a vista não tem o acréscimo do FCR reimplementado');
+  assert.ok(!/__GESCONDU_DIVIDIR_FCR/.test(vista), 'a vista não tem a decomposição reimplementada');
+  assert.ok(!/despesas \* \(100 \+ p\)/.test(vista), 'a vista não reimplementa `acrescentarFcrAoTotal`');
+  assert.ok(!/valorPor1000C|totalPerm|anualC/.test(vista), 'a vista não reimplementa o cálculo da quota');
+  assert.ok(!/pctFcr\(\)/.test(vista), 'a vista não recalcula a percentagem do FCR');
   assert.ok(!/return \{ base: mensal, fcr: 0, total: mensal/.test(vista),
-    'pré-visualização: já não apresenta FCR a zero no método orçamento');
-  assert.ok(/pctFcr\(\)/.test(vista) && /CFG\.fcrPercentagem/.test(vista),
-    'pré-visualização: a percentagem vem da configuração');
+    'pré-visualização: nunca apresenta FCR a zero no método orçamento');
+  assert.ok(/CFG\.fcrPercentagem/.test(vista), 'a vista mostra a percentagem em vigor');
   // A percentagem do formulário respeita o mínimo legal.
   const listar = ler('views/admin/quotas/listar.handlebars');
   assert.ok(/name="fcr_percentagem"[^>]*min="10"/.test(listar), 'formulário: o FCR tem mínimo 10');
   assert.ok(/Mínimo legal/.test(listar), 'formulário: explica o mínimo legal');
-  console.log('  ✓ pré-visualização e cálculo final usam a mesma percentagem e a mesma função');
+  console.log('  ✓ pré-visualização e cálculo final usam a mesma percentagem (o servidor calcula, a vista apresenta)');
 }
 
 // ── 9. Regra de negócio C2 — despesas + FCR ⇒ total a distribuir ──

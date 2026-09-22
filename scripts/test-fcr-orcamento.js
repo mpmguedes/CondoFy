@@ -409,9 +409,12 @@ function testeInterface() {
   const gerar = ler('views/admin/quotas/gerar.handlebars');
   assert.ok(/<th class="text-end">Base<\/th><th class="text-end">FCR<\/th><th class="text-end">Total<\/th>/.test(gerar),
     'a pré-visualização da geração mostra Base / FCR / Total por fração');
-  assert.ok(/function totalComFcr\(/.test(gerar) && /despesas \* \(100 \+ p\) \/ 100/.test(gerar),
-    'a pré-visualização aplica o FCR sobre as DESPESAS do orçamento');
-  assert.ok(/__GESCONDU_DIVIDIR_FCR/.test(gerar), 'a decomposição usa a MESMA função do servidor (sem segunda implementação)');
+  // P20 — a pré-visualização consome os valores calculados pelo servidor; já não
+  // reimplementa o acréscimo do FCR nem a decomposição no browser.
+  assert.ok(/PREVISAO/.test(gerar) && /previsaoJson/.test(ler('routes/financeiro.js')),
+    'a pré-visualização usa os valores calculados pelo servidor (P20)');
+  assert.ok(!/totalComFcr\(/.test(gerar) && !/__GESCONDU_DIVIDIR_FCR/.test(gerar),
+    'a pré-visualização não reimplementa nenhuma fórmula no browser');
 
   // Mapa de quotas.
   const mapa = ler('views/admin/quotas/mapa.handlebars');

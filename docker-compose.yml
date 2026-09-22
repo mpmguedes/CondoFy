@@ -75,6 +75,20 @@ services:
       ONEDRIVE_TENANT: ${ONEDRIVE_TENANT:-common}
       ONEDRIVE_REDIRECT_URI: ${ONEDRIVE_REDIRECT_URI:-}
       ONEDRIVE_ROOT_FOLDER: ${ONEDRIVE_ROOT_FOLDER:-}
+      # ── Backups da instalação (agenda e retenção) ──
+      # Hora comum aos ciclos automáticos (diário, semanal e mensal).
+      BACKUP_HOUR: ${BACKUP_HOUR:-3}
+      # Dia do ciclo semanal (SU…SA ou 0–6; 0=domingo) e do ciclo mensal (1–28).
+      BACKUP_WEEKLY_DAY: ${BACKUP_WEEKLY_DAY:-SU}
+      BACKUP_MONTHLY_DAY: ${BACKUP_MONTHLY_DAY:-1}
+      # `0` desliga o ciclo correspondente (o diário corre sempre).
+      BACKUP_WEEKLY_ENABLED: ${BACKUP_WEEKLY_ENABLED:-1}
+      BACKUP_MONTHLY_ENABLED: ${BACKUP_MONTHLY_ENABLED:-1}
+      # Pasta da cópia local. ⚠️ Por omissão fica DENTRO do contentor
+      # (`backups/local`), pelo que não sobrevive a um `docker compose down -v`
+      # nem a uma reconstrução: para produção, aponte-a para um volume/montagem
+      # persistente (ex.: /var/backups/gescondu) e monte-o no serviço `app`.
+      BACKUP_LOCAL_DIR: ${BACKUP_LOCAL_DIR:-}
       # ── Links temporários de documentos (emails a quem não tem conta) ──
       DOC_LINK_SECRET: ${DOC_LINK_SECRET:-}
       DOC_LINK_TTL_HOURS: ${DOC_LINK_TTL_HOURS:-168}

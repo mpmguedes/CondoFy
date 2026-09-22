@@ -827,10 +827,29 @@ function espacoDoVolume(diretorio) {
   }
 }
 
+// Espaço REAL da conta do serviço de destino (capacidade opcional dos
+// provedores: Google Drive `storageQuota`, Dropbox `users/get_space_usage`,
+// OneDrive `quota`). É a única métrica de espaço que as APIs devolvem de forma
+// direta — NÃO é a dimensão da pasta de backups (nenhuma das três APIs devolve
+// o tamanho de uma pasta numa só chamada), e a vista di-lo por palavras.
+// Devolve `null` quando não há ligação utilizável, o provedor não suporta a
+// capacidade ou o serviço não responde: nunca se estima.
+async function espacoDaContaCloud(destino, ligacao) {
+  if (!destino || !ligacao || !ligacao.origem) return null;
+  if (typeof storage.espacoNaCloud !== 'function') return null;
+  try {
+    const r = await storage.espacoNaCloud(destino, ligacao.condominioId);
+    return r && r.suportado ? r : null;
+  } catch (err) {
+    console.warn('[armazenamento] espaço da conta cloud não medido:', err.message);
+    return null;
+  }
+}
+
 // Últimos registos do destino cloud. O registo (`backup_logs`) é o ÚNICO
-// índice que existe: os provedores não expõem listagem de pasta na fachada do
-// GesCondu, por isso não se apresenta «espaço ocupado na cloud» — não se
-// inventa uma métrica que o provedor não dá.
+// índice que existe do que foi enviado: não há listagem de pasta na fachada do
+// GesCondu, pelo que a contagem e as datas vêm daqui. O espaço é pedido à API
+// (conta do serviço) — ver `espacoDaContaCloud`.
 async function registosCloud(limite = 50) {
   return BackupLog.findAll({
     where: { estado: 'concluido', ficheiro_drive_id: { [Op.ne]: null } },
@@ -897,6 +916,9 @@ router.get('/armazenamento', async (req, res) => {
   const [destino, registos] = await Promise.all([storage.destinoDeBackup().catch(() => null), registosCloud()]);
   const provedor = destino ? storage.obterProvedor(destino) : null;
   const ligacao = destino ? storage.ligacaoDeBackup(destino) : null;
+  // Medição real do espaço da conta do serviço de destino (null quando não é
+  // possível medir — a vista diz «não disponível» em vez de estimar).
+  const espacoCloud = await espacoDaContaCloud(destino, ligacao);
   const datasCloud = registos.map((r) => new Date(r.data).getTime()).filter((n) => Number.isFinite(n));
 
   const limiteBytes = config.limiteLocalGb ? config.limiteLocalGb * 1024 * 1024 * 1024 : null;
@@ -929,9 +951,14 @@ router.get('/armazenamento', async (req, res) => {
       origem: ligacao ? ligacao.origem : null,
       usavel: Boolean(ligacao && ligacao.origem),
       numero: registos.length,
-      // O provedor não expõe o espaço ocupado pela pasta de backups na fachada
-      // do GesCondu: apresenta-se «não disponível», nunca uma estimativa.
+      // A dimensão da PASTA de backups não é medível: nenhuma das três APIs a
+      // devolve numa só chamada, e não se soma o que não se pode medir. Fica
+      // `null` (a vista diz «não disponível» para este campo).
       bytes: null,
+      // Espaço REAL da conta do serviço (quota da API). É uma métrica
+      // diferente e a vista identifica-a como tal — nunca se apresenta como se
+      // fosse o espaço ocupado pelos backups.
+      espaco: espacoCloud,
       maisAntigo: datasCloud.length ? new Date(Math.min(...datasCloud)) : null,
       maisRecente: datasCloud.length ? new Date(Math.max(...datasCloud)) : null,
       retencaoDias: config.retencaoCloud,

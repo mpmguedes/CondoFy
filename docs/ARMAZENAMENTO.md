@@ -430,9 +430,19 @@ aplicação, e nunca imprime tokens, segredos ou chaves.
   documentos (`helpers/document-actions.js`), assembleias, convocatórias,
   quotas, recibos, documentos e fornecedores. As descargas usam o localizador
   do ficheiro, pelo que continuam a funcionar depois de mudar de serviço.
-* Os tokens das ligações são guardados em texto simples na tabela
-  `configuracoes`, como acontecia com o Google Drive. Cifrá-los exige uma
-  chave de aplicação (`ENCRYPTION_KEY`) e é uma evolução separada.
+* Os tokens das ligações **são cifrados em repouso** (AES-256-GCM, chave
+  `ENCRYPTION_KEY` — ver §2.1). Valores antigos em texto simples continuam
+  legíveis e são migrados na primeira leitura.
+* **Remoção no fornecedor:** os três adaptadores implementam `apagarArquivo`
+  (Google Drive `files.delete`, Dropbox `files/delete_v2`, OneDrive
+  `DELETE /me/drive/items/{id}`), todos **idempotentes**. É usado pela retenção
+  cloud dos backups — nunca ao desligar uma ligação (desligar remove só os
+  tokens e deixa os ficheiros na conta).
+* **Medição de espaço:** `storage.espacoNaCloud(provedor, condominioId)` devolve
+  a quota **real** da conta do serviço (Drive `storageQuota`, Dropbox
+  `users/get_space_usage`, OneDrive `quota`). **Não** é a dimensão da pasta de
+  backups — nenhuma das APIs a devolve numa só chamada — e nunca se estima: um
+  campo que a API não devolva fica `null`.
 * O logótipo do condomínio continua a ser gravado em `public/uploads` (ficheiro
   de imagem servido como estático, agora com validação de tipo no servidor).
   Se se pretender que nem o logótipo seja servido por URL direto, terá de passar

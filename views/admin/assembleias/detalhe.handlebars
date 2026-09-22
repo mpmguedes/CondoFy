@@ -224,5 +224,19 @@
         {{/each}}
       </ul>
     </div>
+
+    {{!-- Corpo da ata: é ESTE texto que o PDF imprime em «Deliberações».
+          Sem ele, a ata sai com «(sem conteúdo registado)». --}}
+    <div class="card mt-3">
+      <div class="card-header bg-white"><i class="bi bi-journal-text me-1"></i>Ata — deliberações</div>
+      <div class="card-body">
+        <form action="/admin/assembleias/{{assembleia.id}}/ata/texto" method="POST">
+          <label class="form-label" for="ata_texto">Texto da ata</label>
+          <textarea class="form-control" id="ata_texto" name="ata_texto" rows="10" placeholder="Registe aqui o que foi deliberado na reunião." data-ajuda="Texto impresso na secção «Deliberações» do PDF da ata. Deixe vazio para gerar a ata sem corpo." data-ajuda-titulo="Texto da ata">{{assembleia.ata_texto}}</textarea>
+          <div class="form-text">O PDF da ata («Gerar ata (PDF)») imprime este texto na secção «Deliberações». Sem texto, a ata indica «(sem conteúdo registado)».</div>
+          <button class="btn btn-primary mt-2" data-ajuda="Guarda o texto da ata desta assembleia." data-ajuda-titulo="Guardar texto da ata"><span class="material-symbols-outlined me-1">save</span>Guardar texto da ata</button>
+        </form>
+      </div>
+    </div>
   </div>
 </div>

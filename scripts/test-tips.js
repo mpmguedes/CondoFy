@@ -22,6 +22,7 @@
 // Utilização: node scripts/test-tips.js
 // ═══════════════════════════════════════════════════════════════════
 const assert = require('assert');
+const fs = require('fs');
 const path = require('path');
 
 // Modelo em duplo: este teste não persiste nada por omissão.
@@ -287,6 +288,23 @@ function testeCatalogoCoerente() {
   // real a avaliar. Ver docs/TIPS-CONTEXTUAIS.md.
   for (const proibido of ['votacoes', 'tickets', 'seguros', 'amenidades', 'documentos_novos', 'avisos_novos']) {
     assert.ok(!ids.includes(proibido), `não existe tip para «${proibido}»`);
+  }
+
+  // ── P34: o motor só conhece papéis de CONDOMÍNIO ──────────────────
+  // `helpers/tips.js` decide pelo papel DENTRO do condomínio (`admin`/`gestor`)
+  // e não distingue um Super Admin (`users.role_global`, avaliado em
+  // `helpers/tenant.js`). Se um tip passasse a exigir «só Super Admin», o CTA
+  // seria um beco sem saída: apareceria a quem não o pode abrir — e o motor
+  // não teria como o saber. A decisão é NÃO ensinar o motor a distinguir
+  // Super Admin (seria um segundo motor de tips, e o Super Admin é um papel de
+  // PLATAFORMA, não de condomínio): os CTAs apontam para páginas do
+  // backoffice que o papel de condomínio já governa.
+  for (const ficheiro of ['helpers/tips.js', 'helpers/tips/contexto.js', 'helpers/tips/registo-administracao.js']) {
+    const fonte = fs.readFileSync(path.join(__dirname, '..', ficheiro), 'utf8');
+    assert.ok(
+      !/apenasSuperAdmin|super_admin|role_global|eSuperAdmin/.test(fonte),
+      `${ficheiro} não conhece Super Admin — nenhum CTA pode ficar inalcançável (P34)`
+    );
   }
   // Um tip tem sempre título, ação e mensagem (via condição satisfeita).
   for (const tip of tips.elegiveis({

@@ -14,6 +14,9 @@ const {
   ContaBancaria,
   Quota,
   Pagamento,
+  Recibo,
+  OrcamentoDistribuicao,
+  PlanoQuota,
   Despesa,
   Documento,
   Aviso,
@@ -44,6 +47,7 @@ const storage = require('../helpers/storage');
 const backupEstado = require('../helpers/backup-estado');
 const { smtpConfigured, sendMail } = require('../helpers/mailer');
 const convites = require('../helpers/convites');
+const tokens = require('../helpers/tokens');
 // Acesso de suporte (terceiro contexto de autorização) — usado apenas no bloco
 // que autoriza/recusa/revoga os pedidos de diagnóstico feitos por um Super
 // Admin. As restantes rotas deste router ignoram-no por completo.
@@ -570,17 +574,75 @@ router.post('/fracoes/:id', async (req, res) => {
   res.redirect('/admin/fracoes');
 });
 
+// Lista em português: «a, b e c» (em vez de «a, b, c»).
+function listaEmPortugues(itens) {
+  if (itens.length <= 1) return itens.join('');
+  return `${itens.slice(0, -1).join(', ')} e ${itens[itens.length - 1]}`;
+}
+
+// Eliminar fração — com pré-verificação das dependências (P7).
+//
+// Sem isto a decisão era da base de dados, e o resultado era mau dos dois lados:
+//
+//  · FKs RESTRICT (`quotas`, `pagamentos`, `orcamento_distribuicoes`,
+//    `planos_quota`) — o `destroy()` rebentava e o utilizador via sempre a
+//    mesma mensagem genérica («pode ter registos associados»), sem saber o que
+//    o bloqueava nem o que fazer a seguir.
+//
+//  · FKs CASCADE (`fracao_titularidades`, `recibos`, `fracao_pessoas`) — a
+//    eliminação PASSAVA e levava o histórico atrás em silêncio. É o caso mais
+//    grave: a própria ajuda da página promete «não é possível se tiver quotas,
+//    movimentos ou titularidades associados», e a titularidade é o registo
+//    histórico de quem foi titular — apagá-la não é uma limpeza, é perda de
+//    prova. Um recibo emitido tem número de série: eliminá-lo rompe a série.
+//
+// Por isso as dependências são contadas ANTES e a mensagem diz exatamente o que
+// impede. Sem dependências, a eliminação continua a ser imediata.
+const DEPENDENCIAS_FRACAO = [
+  { modelo: Quota, coluna: 'fracao_id', singular: 'quota', plural: 'quotas' },
+  { modelo: Pagamento, coluna: 'fracao_id', singular: 'pagamento', plural: 'pagamentos' },
+  { modelo: OrcamentoDistribuicao, coluna: 'fracao_id', singular: 'distribuição de orçamento', plural: 'distribuições de orçamento' },
+  { modelo: PlanoQuota, coluna: 'fracao_id', singular: 'plano de quota', plural: 'planos de quota' },
+  { modelo: Recibo, coluna: 'fracao_id', singular: 'recibo emitido', plural: 'recibos emitidos' },
+  { modelo: FracaoTitularidade, coluna: 'fracao_id', singular: 'período de titularidade', plural: 'períodos de titularidade' },
+];
+
+async function dependenciasDaFracao(fracaoId) {
+  const contagens = await Promise.all(
+    DEPENDENCIAS_FRACAO.map((d) => d.modelo.count({ where: { [d.coluna]: fracaoId } }))
+  );
+  return DEPENDENCIAS_FRACAO
+    .map((d, i) => ({
+      rotulo: `${contagens[i]} ${contagens[i] === 1 ? d.singular : d.plural}`,
+      n: contagens[i],
+    }))
+    .filter((d) => d.n > 0);
+}
+
 router.post('/fracoes/:id/eliminar', async (req, res) => {
+  const fracao = await carregarFracao(req);
+  if (!fracao) {
+    req.flash('error_msg', 'Fração não encontrada neste condomínio.');
+    return res.redirect('/admin/fracoes');
+  }
+
   try {
-    const fracao = await carregarFracao(req);
-    if (fracao) {
-      await fracao.destroy();
-      await audit({ userId: req.user.id, acao: 'eliminar_fração', entidade: 'Fracao', entidadeId: req.params.id });
+    const dependencias = await dependenciasDaFracao(fracao.id);
+    if (dependencias.length) {
+      req.flash(
+        'error_msg',
+        `Não é possível eliminar «${fracao.designacao}»: tem ${listaEmPortugues(dependencias.map((d) => d.rotulo))} associado(s). `
+        + 'Encerre primeiro esses registos ou desative a fração, para preservar o histórico.'
+      );
+      return res.redirect('/admin/fracoes');
     }
-    req.flash('success_msg', 'Fração eliminada.');
+
+    await fracao.destroy();
+    await audit({ userId: req.user.id, acao: 'eliminar_fração', entidade: 'Fracao', entidadeId: req.params.id });
+    req.flash('success_msg', `Fração «${fracao.designacao}» eliminada.`);
   } catch (err) {
     console.error(err);
-    req.flash('error_msg', 'Não foi possível eliminar a fração (pode ter registos associados).');
+    req.flash('error_msg', 'Não foi possível eliminar a fração. Tente novamente; se persistir, verifique os registos associados.');
   }
   res.redirect('/admin/fracoes');
 });
@@ -1099,7 +1161,9 @@ async function enviarConviteAoUtilizador(user, req) {
   const token = convites.gerarToken();
   const expira = convites.calcularExpiracao();
   await user.update({
-    convite_token: token,
+    // Guarda-se o DIGEST do token (ver helpers/tokens.js): o valor em repouso
+    // deixa de permitir reconstruir o link de convite.
+    convite_token: tokens.digest(token),
     convite_token_expira: expira,
     convite_estado: 'enviado',
     email_confirmado: false,
@@ -1188,7 +1252,8 @@ router.post('/utilizadores', apenasAdmin, async (req, res) => {
       ativo: titularidades.contaAtivaDoFormulario(ativo),
       // Por convite: o email só fica confirmado quando o utilizador aceitar.
       email_confirmado: enviarConvite ? false : true,
-      convite_token: token,
+      // Digest do token (o convite em claro só existe no email).
+      convite_token: token ? tokens.digest(token) : null,
       convite_token_expira: expira,
       convite_estado: enviarConvite ? 'pendente' : null,
     });

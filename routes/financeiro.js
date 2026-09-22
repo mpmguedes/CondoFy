@@ -54,7 +54,7 @@ const { estaAtivo } = require('../helpers/notificacoes');
 const { estaAtivo: automacaoAtiva } = require('../helpers/automacoes');
 const background = require('../helpers/background-jobs');
 const { getQuotaConfig, setQuotaConfig, validarFcrPercentagem } = require('../helpers/quotas-config');
-const { calcularQuota, calcularQuotasOrcamento, dividirComponentesQuota } = require('../helpers/quotas-calc');
+const { calcularQuota, calcularQuotasOrcamento } = require('../helpers/quotas-calc');
 const { resumoFcr, transferirFcr, transferirFcrAprovado } = require('../helpers/fcr');
 const {
   deliberacoesAprovadas,
@@ -910,9 +910,22 @@ router.post('/quotas/config', async (req, res) => {
   if (req.body.recalcular === 'futuras') {
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
+    // P19 — só quotas SEM pagamento aplicado.
+    //
+    // Uma quota `parcialmente_paga` já tem dinheiro aplicado: recalcular-lhe o
+    // `valor` mudaria a dívida de quem já pagou parte (o que foi pago deixaria
+    // de ser proporcional ao novo total) e o recálculo nunca reverte o
+    // pagamento. A própria vista promete «Quotas já pagas nunca são alteradas»
+    // (views/admin/quotas/listar.handlebars) — incluir aqui as parcialmente
+    // pagas contradizia essa promessa.
+    //
+    // `vencida` entra por convenção do projeto nos filtros de «não paga»: é um
+    // estado DERIVADO de `data_vencimento` (nunca gravado — ver
+    // `helpers/saldos.js:estadoEfetivo`), mas as consultas defensivas do
+    // projeto incluem-no (ex.: `helpers/dashboard.js`, `routes/condomino.js`).
     const futuras = await Quota.findAll({
       where: {
-        estado: { [Op.in]: ['pendente', 'parcialmente_paga'] },
+        estado: { [Op.in]: ['pendente', 'vencida'] },
         data_vencimento: { [Op.gte]: hoje },
         condominio_id: req.condominioId,
       },
@@ -983,8 +996,10 @@ router.get('/quotas/gerar', async (req, res) => {
   ]);
 
   // Orçamentos com total de rubricas (receita anual definida pelo orçamento).
+  const totalAnualPorOrcamento = new Map();
   const orcamentosJson = orcamentos.map((o) => {
     const totalC = o.rubricas.filter((r) => r.ativo).reduce((s, r) => s + toCents(r.valor_anual), 0);
+    totalAnualPorOrcamento.set(o.id, totalC);
     return {
       id: o.id,
       designacao: o.designacao,
@@ -992,6 +1007,57 @@ router.get('/quotas/gerar', async (req, res) => {
       total: fromCents(totalC),
     };
   });
+
+  // ── Pré-visualização (P20) ─────────────────────────────────────────
+  // Os valores que a vista apresenta são calculados AQUI, com as MESMAS
+  // funções que geram e gravam as quotas (`calcularQuota` e
+  // `calcularQuotasOrcamento`). Não existe nenhuma fórmula de cálculo no
+  // browser — a vista só formata e soma.
+  //
+  // Antes: a vista reimplementava as duas regras em JS (`totalComFcr`, a
+  // proporção direta `totalAnual × perm / Σperm` e a divisão por 12) e, no
+  // método orçamento, divergia do gravado sempre que havia resto — o servidor
+  // distribui por maior-resto (`distribuirPorPesos`, soma exata) e a vista por
+  // proporção contínua. O comentário da vista prometia «a pré-visualização
+  // nunca inventa números que o servidor não vá gravar», o que era falso nesse
+  // ramo.
+  const previsao = { permilagem: {}, orcamento: {} };
+
+  // Método permilagem: quota mensal única, repetida nos 12 meses.
+  for (const f of fracoes) {
+    const q = calcularQuota(f.permilagem, quotaConfig.valorPor1000, quotaConfig.fcrPercentagem);
+    previsao.permilagem[f.id] = {
+      base: q.base,
+      fcr: q.fcr,
+      total: q.total,
+      anual: fromCents(q.totalC * 12),
+      meses: null, // o mesmo valor em todos os meses
+    };
+  }
+
+  // Método orçamento: cada mês tem o SEU valor (é o ano que fecha exatamente).
+  for (const o of orcamentos) {
+    const totalC = totalAnualPorOrcamento.get(o.id) || 0;
+    const mapa = calcularQuotasOrcamento({
+      fracoes,
+      totalAnual: fromCents(totalC),
+      metodo: 'permilagem',
+      meses: 12,
+      fcrPercentagem: quotaConfig.fcrPercentagem,
+    });
+    const bloco = {};
+    for (const [id, v] of mapa) {
+      const primeiroMes = (v.porMes && v.porMes[0]) || { base: 0, fcr: 0, total: 0 };
+      bloco[id] = {
+        base: primeiroMes.base,
+        fcr: primeiroMes.fcr,
+        total: primeiroMes.total,
+        anual: v.total,
+        meses: v.porMes.map((m) => ({ base: m.base, fcr: m.fcr, total: m.total })),
+      };
+    }
+    previsao.orcamento[o.id] = bloco;
+  }
 
   // Conjunto de quotas já existentes (fração|ano|mes) para o preview idempotente.
   const existentesSet = {};
@@ -1010,13 +1076,11 @@ router.get('/quotas/gerar', async (req, res) => {
     fracoes,
     quotaConfig,
     orcamentos: orcamentosJson,
-    orcamentosJson: JSON.stringify(orcamentosJson),
     fracoesJson: JSON.stringify(fracoes.map((f) => ({ id: f.id, designacao: f.designacao, permilagem: f.permilagem }))),
     existentesJson: JSON.stringify(existentesSet),
-    // Pré-visualização: a divisão entre despesas correntes e FCR é feita pela
-    // MESMA função do cálculo final (passada já avaliada), para não existir uma
-    // segunda implementação da regra no browser.
-    fcrSplitterJs: `window.__GESCONDU_DIVIDIR_FCR = ${dividirComponentesQuota.toString()};`,
+    // Pré-visualização: valores já calculados pelo servidor com as funções
+    // reais (ver o bloco `previsao` acima). A vista não tem fórmulas.
+    previsaoJson: JSON.stringify(previsao),
     driveLigado: storage.isConfigured(req.condominioId),
     autoQuotas: { drive: autoQuotasDrive, email: autoQuotasEmail, automatico: autoQuotasAutomatico },
   });

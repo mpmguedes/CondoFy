@@ -728,8 +728,13 @@ router.post('/config/drive/testar', async (req, res) => {
 });
 
 // Cria a estrutura de pastas no Google Drive (do condomínio ativo).
+// ⛔ `isConfigured()` SEM condomínio responde pelo âmbito da PLATAFORMA (a
+// conta que serve os backups e os condomínios sem conta própria). A árvore,
+// porém, é criada com `req.condominioId` — logo a verificação tem de ser feita
+// para ESSE condomínio: sem isto, um condomínio com a sua própria conta Google
+// era recusado («não está ligado») só porque a plataforma não tinha ligação.
 router.post('/config/drive/estrutura', async (req, res) => {
-  if (!drive.isConfigured()) {
+  if (!drive.isConfigured(req.condominioId)) {
     req.flash('error_msg', 'Google Drive não está ligado — ligue a conta Google primeiro.');
     return res.redirect('/admin/config/armazenamento#google-drive');
   }

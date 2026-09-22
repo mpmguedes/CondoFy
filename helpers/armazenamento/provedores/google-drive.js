@@ -65,6 +65,8 @@ module.exports = {
   descarregarArquivo: (fileId, condominioId) => drive.descargarArquivo(fileId, condominioId),
   abrirFluxo: (fileId, condominioId) => drive.abrirFluxo(fileId, condominioId),
   apagarArquivo: (fileId, condominioId) => drive.apagarArquivo(fileId, condominioId),
+  // Espaço da conta (capacidade opcional do contrato — medição real, nunca estimada)
+  espacoNaCloud: (condominioId) => drive.espacoNaCloud(condominioId),
 
   // Atalho de administração para o painel do fornecedor (nunca para servir
   // documentos). Devolve null quando não há pasta.

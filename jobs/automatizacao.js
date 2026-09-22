@@ -1,13 +1,38 @@
 const sequelize = require('../config/database');
 const { Op } = require('sequelize');
-const { Quota, Fracao, Configuracao, Condominio } = require('../models');
+const { Quota, Fracao, Configuracao, Condominio, EmailFila } = require('../models');
 const { proximoNumero } = require('../helpers/numeracao');
-const { monthName } = require('../helpers/dates');
+const { monthName, somarDias, toDateInput } = require('../helpers/dates');
 const { getQuotaConfig } = require('../helpers/quotas-config');
 const { calcularQuota } = require('../helpers/quotas-calc');
 const { resolverDestinatarios } = require('../helpers/avisos');
 const { enfileirarEmail } = require('../helpers/email-fila');
 const { estaAtivo } = require('../helpers/notificacoes');
+
+// ─────────────────────────────────────────────────────────────────────
+// Lembretes/atrasos — janela relativa com MARCADOR de envio
+//
+// Os assuntos são também a CHAVE do marcador (a fila guarda-os em
+// `email_fila.assunto`): o email e o marcador usam a MESMA constante, pelo que
+// não podem divergir. Reescrever um assunto isoladamente faz o job voltar a
+// enviar (o marcador deixa de casar) — há um teste que morde nisto.
+// ─────────────────────────────────────────────────────────────────────
+const ASSUNTO_LEMBRETE = 'Lembrete de vencimento da quota';
+const ASSUNTO_ATRASO = 'Aviso de atraso — quota em dívida';
+
+// Estados da fila que contam como JÁ DESPACHADO (mesmo critério de
+// `ESTADOS_DESPACHADOS` em `helpers/avisos-envio.js`): `erro` e `cancelado`
+// também bloqueiam — um envio que falhou não é ressuscitado pela passagem
+// seguinte. Definido aqui (e não importado) para não arrastar para este job a
+// cadeia de dependências do motor dos avisos.
+const ESTADOS_JA_DESPACHADOS = ['pendente', 'a_enviar', 'enviado', 'erro', 'cancelado'];
+
+// Folga de recuperação. A janela é relativa para uma paragem não perder a
+// coorte do dia — mas tem de ser LIMITADA: sem limite inferior, a primeira
+// execução depois desta alteração varreria TODAS as quotas antigas em atraso e
+// dispararia um aviso por cada uma. Recupera-se a semana perdida, não o
+// histórico.
+const DIAS_RECUPERACAO = 7;
 
 async function getConfigNumero(chave, fallback) {
   const reg = await Configuracao.findOne({ where: { chave } });
@@ -114,35 +139,76 @@ async function gerarQuotasAutomaticas() {
 }
 
 // Envia lembretes de vencimento e avisos de atraso (dias configuráveis).
+//
+// A seleção é uma JANELA RELATIVA, não um dia exato: se o job não correr num dia
+// (paragem, deploy, reinício), um `data_vencimento = <dia>` perderia a coorte
+// desse dia para sempre. Como a janela é relativa, a MESMA quota continua
+// dentro dela amanhã — o que impede o reenvio não é a consulta, é o MARCADOR
+// (uma linha na fila para a mesma quota e o mesmo assunto).
 async function enviarLembretesAutomaticos() {
   const diasLembrete = await getConfigNumero('lembrete_dias', 5);
   const diasAtraso = await getConfigNumero('atraso_dias', 3);
 
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
-  const dLembrete = new Date(hoje);
-  dLembrete.setDate(dLembrete.getDate() + diasLembrete);
-  const dAtraso = new Date(hoje);
-  dAtraso.setDate(dAtraso.getDate() - diasAtraso);
 
-  const lembreteISO = dLembrete.toISOString().slice(0, 10);
-  const atrasoISO = dAtraso.toISOString().slice(0, 10);
+  // ⛔ Datas em componentes LOCAIS (`toDateInput`). Com `toISOString()` a
+  // meia-noite local é convertida para UTC e o dia RECUA em fusos a leste de
+  // UTC: em Portugal no verão os «dias configuráveis» valiam um dia a menos, e
+  // o defeito aparecia/desaparecia com a mudança da hora.
+  const hojeISO = toDateInput(hoje);
+  const fimLembrete = toDateInput(somarDias(hoje, diasLembrete));
+  const fimAtraso = toDateInput(somarDias(hoje, -diasAtraso));
+  const inicioAtraso = toDateInput(somarDias(hoje, -diasAtraso - DIAS_RECUPERACAO));
 
   const alvos = await Quota.findAll({
     where: {
       estado: { [Op.in]: ['pendente', 'parcialmente_paga', 'vencida'] },
-      data_vencimento: { [Op.in]: [lembreteISO, atrasoISO] },
+      // Vencimento ainda por chegar (dentro dos próximos `lembrete_dias`) OU já
+      // vencido há pelo menos `atraso_dias` (com a folga de recuperação).
+      [Op.or]: [
+        { data_vencimento: { [Op.between]: [hojeISO, fimLembrete] } },
+        { data_vencimento: { [Op.between]: [inicioAtraso, fimAtraso] } },
+      ],
       // Só quotas de condomínios ATIVOS (as de um condomínio inativo não geram avisos).
       condominio_id: { [Op.in]: (await condominiosAtivos()).map((c) => Number(c.id)) },
     },
     include: [{ model: Fracao, as: 'fracao' }],
   });
 
+  // Marcador de idempotência: uma linha na fila para a MESMA quota e o MESMO
+  // assunto ⇒ já foi despachado, esta passagem não repete. Uma só consulta
+  // (nunca uma por quota).
+  const jaDespachado = new Set();
+  const ids = alvos.map((q) => Number(q.id)).filter((n) => Number.isFinite(n) && n > 0);
+  if (ids.length) {
+    const registos = await EmailFila.findAll({
+      where: {
+        entidade_tipo: 'Quota',
+        entidade_id: { [Op.in]: ids },
+        assunto: { [Op.in]: [ASSUNTO_LEMBRETE, ASSUNTO_ATRASO] },
+        estado: { [Op.in]: ESTADOS_JA_DESPACHADOS },
+      },
+      attributes: ['entidade_id', 'assunto'],
+    });
+    for (const r of registos) jaDespachado.add(`${Number(r.entidade_id)}:${r.assunto}`);
+  }
+
   let enviados = 0;
+  let repetidos = 0;
   for (const q of alvos) {
-    const ehAtraso = q.data_vencimento === atrasoISO;
+    const vencimento = String(q.data_vencimento).slice(0, 10);
+    // «Em atraso» = o vencimento já passou. Uma quota que vence hoje não é
+    // atraso — entra pela janela do lembrete.
+    const ehAtraso = vencimento < hojeISO;
     // Avisos de atraso respeitam a preferência "Quotas em atraso → email".
     if (ehAtraso && !(await estaAtivo('quotas_atraso', 'email'))) continue;
+
+    const assunto = ehAtraso ? ASSUNTO_ATRASO : ASSUNTO_LEMBRETE;
+    if (jaDespachado.has(`${Number(q.id)}:${assunto}`)) {
+      repetidos++;
+      continue;
+    }
 
     // O condomínio vem da PRÓPRIA quota (nunca de uma assunção global). Sem ele,
     // `resolverDestinatarios` desliga o escopo por condomínio e pode devolver
@@ -154,9 +220,6 @@ async function enviarLembretesAutomaticos() {
       { modo: 'fracoes', fracoes: [q.fracao_id] },
       condominioId
     );
-    const assunto = ehAtraso
-      ? 'Aviso de atraso — quota em dívida'
-      : 'Lembrete de vencimento da quota';
     const corpo = [
       `Fração ${q.fracao.designacao}`,
       `Período: ${monthName(q.mes)} ${q.ano}`,
@@ -182,8 +245,10 @@ async function enviarLembretesAutomaticos() {
       });
       enviados++;
     }
+    // Marcador também dentro da passagem: a mesma quota não é processada duas vezes.
+    jaDespachado.add(`${Number(q.id)}:${assunto}`);
   }
-  return { enviados, alvos: alvos.length };
+  return { enviados, alvos: alvos.length, repetidos };
 }
 
 module.exports = { gerarQuotasAutomaticas, enviarLembretesAutomaticos, condominiosAtivos };

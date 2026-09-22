@@ -486,8 +486,12 @@ async function testarApagarArquivo() {
   assert.ok(ultimoPedido('DELETE', '/me/drive/items/FILE-RETENCAO'), 'a remoção chegou ao Graph com o id do localizador');
   assert.ok(!/od:/.test(ultimoPedido('DELETE').url), 'o prefixo od: não vai para o Graph (é da fachada)');
 
-  // Dropbox continua sem remoção: a fachada degrada em vez de rebentar.
-  assert.strictEqual(await storage.apagarArquivo('dbx:id:abc', CID), false, 'Dropbox continua sem apagarArquivo (false, sem exceção)');
+  // O Dropbox passou a ter remoção (P25): a fachada deixa de degradar para
+  // `false` e chega ao adaptador. Sem ligação Dropbox configurada neste teste,
+  // o adaptador falha de forma legível — é essa a prova de que a capacidade
+  // está ligada. Antes da P25 esta chamada devolvia `false` sem exceção.
+  const semLigacaoDropbox = await erroDe(() => storage.apagarArquivo('dbx:id:abc', CID));
+  assert.ok(/Dropbox não está ligado/i.test(semLigacaoDropbox.message), `o Dropbox deixou de ser um no-op na retenção (${semLigacaoDropbox.message})`);
 }
 
 // ── 9. Localizadores od: na fachada ─────────────────────────────────

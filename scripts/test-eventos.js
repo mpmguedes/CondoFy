@@ -249,12 +249,27 @@ assert.ok(
   /^20260101000078-eventos\.js$/.test(nomeMigracao),
   `a migration é a seguinte disponível (obtido: ${nomeMigracao})`
 );
-// Nada com número superior pode já existir (a migration tem de ser a próxima).
-const maiorNumero = ficheirosMigracao
-  .map((f) => Number((/^(\d+)/.exec(f) || [])[1] || 0))
-  .reduce((a, b) => Math.max(a, b), 0);
-assert.strictEqual(maiorNumero, 20260101000078, 'não há migration posterior a esta');
-feito(`Migration ${nomeMigracao} é a seguinte disponível (a mais alta de ${ficheirosMigracao.length})`);
+// A proteção que interessa: nenhuma migração POSTERIOR pode alterar a tabela
+// `eventos` sem este teste o saber. (Antes exigia-se que a migração de eventos
+// fosse a MAIS ALTA de todas — condição que qualquer migração nova de outra
+// frente torna falsa para sempre; passou a verificar-se o que é mesmo
+// relevante: que nenhuma posterior toca em `eventos`.)
+const numeroEventos = 20260101000078;
+const posteriores = ficheirosMigracao.filter((f) => {
+  const n = Number((/^(\d+)/.exec(f) || [])[1] || 0);
+  return n > numeroEventos;
+});
+for (const f of posteriores) {
+  const fonte = fs.readFileSync(path.join(RAIZ, 'migrations', f), 'utf8');
+  assert.ok(
+    !/\beventos\b/.test(fonte),
+    `migração posterior «${f}» não pode alterar a tabela \`eventos\``
+  );
+}
+feito(
+  `Migration ${nomeMigracao} cria \`eventos\` e nenhuma das ${posteriores.length} posteriores lhe toca ` +
+    `(a mais alta é ${Math.max(...ficheirosMigracao.map((f) => Number((/^(\d+)/.exec(f) || [])[1] || 0)))})`
+);
 
 const fonteMigracao = fs.readFileSync(path.join(RAIZ, 'migrations', nomeMigracao), 'utf8');
 for (const coluna of [

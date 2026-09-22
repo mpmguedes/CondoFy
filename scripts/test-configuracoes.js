@@ -68,16 +68,21 @@ const mailer = require('../helpers/mailer');
 const smtpGuardado = [];
 const smtpTestado = [];
 const smtpEnviado = [];
-mailer.obterEstadoSmtp = async () => ({
+// O estado devolvido pelo mailer é MUTÁVEL para o teste poder provar que a vista
+// reflete o valor GUARDADO — e não uma opção fixa. `tls` faz parte do contrato
+// real de `obterEstadoSmtp()` (P50): o stub tem de o imitar, senão não prova nada.
+let estadoSmtpStub = {
   configurado: true,
   servidor: 'smtp.gmail.com',
   porta: '587',
   utilizador: 'condominio@gmail.com',
   remetente: 'condominio@gmail.com',
   nomeRemetente: 'Administração do Condomínio',
+  tls: true,
   seguranca: 'STARTTLS (587)',
   temPassword: true,
-});
+};
+mailer.obterEstadoSmtp = async () => ({ ...estadoSmtpStub });
 mailer.guardarConfigSmtp = async (dados) => { smtpGuardado.push(dados); };
 mailer.testarLigacao = async () => { smtpTestado.push(true); return { ok: true, servidor: 'smtp.gmail.com' }; };
 mailer.enviarEmailTeste = async (dados) => { smtpEnviado.push(dados); return { ok: true, messageId: '<teste@exemplo.pt>' }; };
@@ -296,6 +301,34 @@ const TAB5 = 'href="/admin/config/auditoria"';
   // A password nunca é impressa (apenas o indicador «Definida»).
   assert.ok(!/name="pass"[^>]*value="[^"]+"/.test(r.corpo), 'email: a password SMTP nunca é preenchida na vista');
   assert.ok(r.corpo.includes('Definida'), 'email: indicador de password definida');
+
+  // 4.0 P50 — o `<select name="tls">` reflete o valor GUARDADO.
+  // Um `selected` fixo na opção «Usar TLS» fazia o formulário contradizer a
+  // linha «Segurança» logo acima e, ao gravar (mesmo só para mudar a password),
+  // enviava `tls=true` — sobrepondo um `smtp_tls='false'` guardado.
+  // A asserção olha para o BLOCO do select e para o atributo `selected`, e não
+  // para a presença das strings: a presença passaria com qualquer dos estados.
+  const opcoesTlsSelecionadas = (html) => {
+    const inicio = html.indexOf('id="smtp_tls"');
+    assert.ok(inicio !== -1, 'P50: o select do TLS existe na página');
+    const bloco = html.slice(inicio);
+    const select = bloco.slice(0, bloco.indexOf('</select>'));
+    return [...select.matchAll(/<option value="(true|false)"([^>]*)>/g)]
+      .filter((o) => /\bselected\b/.test(o[2]))
+      .map((o) => o[1]);
+  };
+  assert.deepStrictEqual(opcoesTlsSelecionadas(r.corpo), ['true'],
+    'P50: com tls guardado = true, é «Usar TLS» que fica assinalado');
+  // O mesmo formulário com o TLS GUARDADO desligado tem de assinalar «Sem TLS».
+  estadoSmtpStub = { ...estadoSmtpStub, tls: false, seguranca: 'Sem TLS' };
+  const rSemTls = await pedir('/admin/config/email');
+  assert.deepStrictEqual(opcoesTlsSelecionadas(rSemTls.corpo), ['false'],
+    'P50: com tls guardado = false, é «Sem TLS» que fica assinalado');
+  assert.ok(!/<option value="true"[^>]*\bselected\b/.test(rSemTls.corpo),
+    'P50: a opção «Usar TLS» NÃO fica assinalada quando o valor guardado é false');
+  assert.ok(rSemTls.corpo.includes('Sem TLS'),
+    'P50: a linha «Segurança» e o select concordam quando o TLS está desligado');
+  estadoSmtpStub = { ...estadoSmtpStub, tls: true, seguranca: 'STARTTLS (587)' };
 
   // 4.1 As rotas de escrita reutilizam o MESMO mailer (sem segunda configuração).
   let postEmail;

@@ -962,6 +962,34 @@ async function apagarArquivo(fileId, condominioId) {
   }
 }
 
+// Espaço da conta OneDrive (capacidade OPCIONAL do contrato). `GET /me/drive`
+// devolve `quota` com `total`, `used` e `remaining` — é a métrica de espaço que
+// a Graph expõe de forma direta. NÃO é a dimensão da pasta de backups (o
+// `driveItem.size` de uma pasta soma os filhos, mas medir a pasta exigiria uma
+// segunda chamada que não é feita aqui): o que se apresenta é a quota da conta,
+// identificada como tal na interface. Nunca se estima — em caso de falha o erro
+// sobe e o caller decide (a interface diz «não disponível»).
+async function espacoNaCloud(condominioId) {
+  const resposta = await operacaoGraph(condominioId, 'medição do espaço da conta', (token) => ({
+    url: http.urlComQuery(`${GRAPH}/me/drive`, { $select: 'quota' }),
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  }));
+  const q = (resposta.dados && resposta.dados.quota) || {};
+  const total = Number(q.total);
+  const usados = Number(q.used);
+  const livres = Number(q.remaining);
+  const temTotal = Number.isFinite(total) && total > 0;
+  const temUsados = Number.isFinite(usados) && usados >= 0;
+  return {
+    suportado: true,
+    totalBytes: temTotal ? total : null,
+    usadosBytes: temUsados ? usados : null,
+    livresBytes: Number.isFinite(livres) && livres >= 0 ? livres : temTotal && temUsados ? Math.max(0, total - usados) : null,
+    fonte: 'onedrive:quota',
+  };
+}
+
 module.exports = {
   // Identificação
   nome,
@@ -994,6 +1022,8 @@ module.exports = {
   abrirFluxo,
   // Remoção (capacidade opcional do contrato — usada pela retenção de backups)
   apagarArquivo,
+  // Espaço da conta (capacidade opcional — medição real, nunca estimada)
+  espacoNaCloud,
   // Estrutura partilhada (multi-provedor)
   nomePastaCondominio: estrutura.nomePastaCondominio,
   subpastaDoTipo: estrutura.subpastaDoTipo,

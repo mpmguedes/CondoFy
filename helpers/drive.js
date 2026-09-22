@@ -551,6 +551,31 @@ async function apagarArquivo(fileId, condominioId) {
   }, condominioId);
 }
 
+// Espaço da conta Google (capacidade OPCIONAL do contrato).
+// `about.get({fields:'storageQuota'})` é a métrica de espaço que a Drive API
+// expõe de forma direta: `limit` (nulo em contas com espaço ilimitado, ex.
+// Workspace) e `usage`. NÃO é a dimensão da pasta de backups — o Drive não
+// devolve o tamanho de uma pasta, e somar os descendentes exigiria uma
+// travessia recursiva que não é feita aqui. Nunca se estima: em caso de falha
+// o erro sobe e o caller decide (a interface diz «não disponível»).
+async function espacoNaCloud(condominioId) {
+  return operacaoDrive(async () => {
+    const about = await getDrive(condominioId).about.get({ fields: 'storageQuota' });
+    const q = (about.data && about.data.storageQuota) || {};
+    const total = q.limit != null ? Number(q.limit) : NaN;
+    const usados = q.usage != null ? Number(q.usage) : NaN;
+    const temTotal = Number.isFinite(total) && total > 0;
+    const temUsados = Number.isFinite(usados) && usados >= 0;
+    return {
+      suportado: true,
+      totalBytes: temTotal ? total : null,
+      usadosBytes: temUsados ? usados : null,
+      livresBytes: temTotal && temUsados ? Math.max(0, total - usados) : null,
+      fonte: 'google_drive:storageQuota',
+    };
+  }, condominioId);
+}
+
 // ── Upload ──────────────────────────────────────────────────────────
 // Faz upload de um Buffer para o Drive.
 // Devolve as chaves novas do contrato de armazenamento (provedorFileId,
@@ -598,6 +623,7 @@ module.exports = {
   uploadArquivo,
   abrirFluxo,
   apagarArquivo,
+  espacoNaCloud,
   encontrarOuCriarPasta,
   // Estrutura por condomínio (multi-condomínio). As funções puras vivem em
   // helpers/armazenamento/estrutura.js (fonte única) e são reexportadas para

@@ -469,6 +469,49 @@ router.post('/assembleias/:id/participantes/:pid/eliminar', async (req, res) => 
   res.redirect(`/admin/assembleias/${assembleia.id}`);
 });
 
+// ═══════════════════════════════════════════════════════════════════
+// ATA — texto das deliberações (`Assembleia.ata_texto`)
+// ═══════════════════════════════════════════════════════════════════
+// `ata_texto` é o CORPO da ata: é este texto que `helpers/pdf.js`
+// (`gerarAtaPDF`) imprime na secção «Deliberações». Sem uma rota que o
+// escreva, o campo era lido mas nunca preenchido e a ata saía sempre com
+// «(sem conteúdo registado)».
+//
+// Âmbito deliberado: aqui guarda-se APENAS a redação da ata, em texto livre.
+// O resultado de cada ponto (aprovada/rejeitada, valor do FCR) continua a
+// registar-se na rota de deliberação por item — não há votação eletrónica
+// nem apuramento automático (ver a nota em `/:aid/deliberacao`).
+//
+// Isolamento: `carregarAssembleia` procura por `{ id, condominio_id }` com o
+// condomínio ativo da SESSÃO, pelo que um id de outro condomínio é tratado
+// como inexistente (não há escrita nem revelação de existência).
+const ATA_TEXTO_MAX = 200000; // teto de segurança (a coluna é TEXT)
+
+router.post('/assembleias/:id/ata/texto', async (req, res) => {
+  const assembleia = await carregarAssembleia(req);
+  if (!assembleia) return res.redirect('/admin/assembleias');
+
+  const bruto = req.body && req.body.ata_texto != null ? String(req.body.ata_texto) : '';
+  const texto = bruto.trim();
+  if (texto.length > ATA_TEXTO_MAX) {
+    req.flash('error_msg', 'O texto da ata é demasiado longo.');
+    return res.redirect(`/admin/assembleias/${assembleia.id}`);
+  }
+
+  // Texto vazio = ata sem redação registada (o PDF volta ao marcador), não
+  // uma string vazia gravada: um só estado para «não há ata escrita».
+  await assembleia.update({ ata_texto: texto || null });
+  await audit({
+    userId: req.user.id,
+    acao: 'registar_ata_texto',
+    entidade: 'Assembleia',
+    entidadeId: assembleia.id,
+    detalhes: { condominioId: req.condominioId, caracteres: texto.length },
+  });
+  req.flash('success_msg', texto ? 'Texto da ata guardado.' : 'Texto da ata removido.');
+  res.redirect(`/admin/assembleias/${assembleia.id}`);
+});
+
 // ── PDFs ───────────────────────────────────────────────────────────
 router.get('/assembleias/:id/convocatoria', async (req, res) => {
   const assembleia = await carregarAssembleia(req, [{ model: AgendaItem, as: 'agenda_itens' }]);

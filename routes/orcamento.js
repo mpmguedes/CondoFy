@@ -666,7 +666,17 @@ router.post('/orcamento/:id/plano', async (req, res) => {
     return res.redirect(`/admin/orcamento/${orcamento.id}`);
   }
   const rubricas = await OrcamentoRubrica.findAll({ where: { orcamento_id: orcamento.id, ativo: true } });
-  const fracoes = await Fracao.findAll({ where: { estado: 'ativo', condominio_id: req.condominioId } });
+  // ⚠ `order` OBRIGATÓRIO: esta lista alimenta `distribuirValorAnual` →
+  // `distribuirPorPesos`, que fecha a soma pelo método do MAIOR RESTO. O
+  // desempate é por índice do array (o `sort` é estável) — logo, quando há
+  // EMPATE (método `igual`, ou frações com a mesma permilagem), é a ORDEM
+  // deste array que decide QUE fração paga o cêntimo sobrante. Sem `order`, a
+  // ordem vem da base de dados (não especificada) e a distribuição deixa de
+  // ser reprodutível. A soma nunca mudava — mas quem pagava o cêntimo, sim.
+  const fracoes = await Fracao.findAll({
+    where: { estado: 'ativo', condominio_id: req.condominioId },
+    order: [['designacao', 'ASC']],
+  });
   let distribuicoes = await OrcamentoDistribuicao.findAll({ where: { orcamento_id: orcamento.id } });
 
   // Distribuição automática para rubricas ainda sem distribuição (permilagem/igual).
