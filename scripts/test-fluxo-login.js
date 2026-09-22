@@ -253,7 +253,7 @@ function casca(html) {
     etapa: /class="auth-stage"/.test(html),
     mensagem: /class="auth-message"/.test(html),
     slogan: /class="auth-message-apoio"/.test(html),
-    logotipo: /class="auth-logo"[\s\S]{0,160}?src="\/img\/gescondu-logo-ativo\.png"/.test(html),
+    logotipo: /class="auth-logo"[\s\S]{0,160}?src="\/img\/gescondu_logo\.png"/.test(html),
     cartao: /class="auth-panel"/.test(html),
     cartaoInterior: /class="auth-panel-inner auth-panel-center"/.test(html),
     tituloCartao: /class="auth-titulo"/.test(html),
@@ -773,7 +773,7 @@ function testarPaginasDeConta() {
       assert.ok(v.includes(classe), `${ficheiro}: usa a casca de autenticação (${classe})`);
     }
     assert.ok(v.includes('btn btn-primary w-100 auth-btn'), `${ficheiro}: botão principal da casca`);
-    assert.ok(v.includes('src="/img/gescondu-logo-ativo.png"'), `${ficheiro}: logótipo sobre fundo escuro (o mesmo da entrada)`);
+    assert.ok(v.includes('src="/img/gescondu_logo.png"'), `${ficheiro}: logótipo sobre fundo escuro (o mesmo da entrada)`);
     assert.ok(v.includes('<footer class="auth-foot">') && v.includes('href="/politica-privacidade"'), `${ficheiro}: rodapé legal`);
     assert.ok(/<h1 class="auth-titulo">/.test(v), `${ficheiro}: um só título principal do cartão`);
     // Nada da casca antiga clara, nem CSS próprio na vista.

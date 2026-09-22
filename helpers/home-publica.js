@@ -237,7 +237,7 @@ function dadosHome(req) {
     ogTipo: 'website',
     ogSite: 'GesCondu',
     ogLocale: 'pt_PT',
-    ogImagem: base ? `${base}/img/gescondu-logo-ativo.png` : null,
+    ogImagem: base ? `${base}/img/gescondu_logo.png` : null,
     temaCor: '#06213F',
     jsonLd: dadosEstruturados({ base, descricao: DESCRICAO_HOME, comFaq: true }),
     headExtra: recursosHtml(),
