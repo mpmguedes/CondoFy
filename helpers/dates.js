@@ -85,6 +85,43 @@ function formatDateExtenso(value) {
   return `${d.getDate()} de ${MESES[d.getMonth()].toLowerCase()} de ${d.getFullYear()}`;
 }
 
+// ── Aritmética de datas em hora LOCAL ───────────────────────────────
+// Todas as funções abaixo trabalham com o fuso LOCAL do servidor e NUNCA com
+// `toISOString()`: `config/config.js` fixa `timezone: 'Europe/Lisbon'`, pelo que
+// converter para UTC deslocaria o dia (em Portugal, no horário de verão, a
+// meia-noite local é 23:00 do dia anterior em UTC). Um filtro por período
+// construído com `toISOString()` excluiria o primeiro dia do intervalo.
+
+// Cópia do instante com `dias` somados (aritmética de calendário local: o
+// `setDate` trata corretamente da passagem de mês/ano e do horário de verão).
+function somarDias(value, dias) {
+  const d = asDateLocal(value);
+  if (!d) return null;
+  const r = new Date(d.getTime());
+  r.setDate(r.getDate() + Number(dias || 0));
+  return r;
+}
+
+// Primeiro dia do mês de `value`, à meia-noite local.
+function primeiroDiaDoMes(value) {
+  const d = asDateLocal(value) || new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+// Meia-noite local do dia de `value` (início do dia, inclusive).
+function inicioDoDia(value) {
+  const d = asDateLocal(value);
+  if (!d) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+}
+
+// 23:59:59.999 locais do dia de `value` (fim do dia, inclusive).
+function fimDoDia(value) {
+  const d = asDateLocal(value);
+  if (!d) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+}
+
 module.exports = {
   formatDate,
   formatDateTime,
@@ -94,4 +131,8 @@ module.exports = {
   MESES,
   diaSemana,
   formatDateExtenso,
+  somarDias,
+  primeiroDiaDoMes,
+  inicioDoDia,
+  fimDoDia,
 };

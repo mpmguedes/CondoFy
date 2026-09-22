@@ -114,6 +114,10 @@ const ctxEmails = {
     { id: 2, tipo: 'aviso', estado: 'enviado', tentativas: 1, destinatario_email: 'ana@exemplo.pt', assunto: 'Aviso', message_id: '<abc@exemplo.pt>', erro: null, data_enviada: '2026-02-02', data_prevista: null },
   ],
   filtro: 'todas', tipo: null, origens: {},
+  // Período da listagem: a MESMA resolução da vista de administração (o suporte
+  // não pode ver um histórico silenciosamente truncado, nem deixar de o alargar).
+  periodo: { deInput: '2026-09-01', ateInput: '2026-09-20', atalho: 'este-mes', rotulo: 'Este mês' },
+  periodos: [{ id: 'este-mes', rotulo: 'Este mês' }, { id: 'mes-anterior', rotulo: 'Mês anterior' }, { id: 'ultimos-7', rotulo: 'Últimos 7 dias' }, { id: 'ultimos-30', rotulo: 'Últimos 30 dias' }, { id: 'personalizado', rotulo: 'Personalizado' }],
   contagens: { total: 2, pendentes: 0, enviados: 1, erros: 1, cancelados: 0 },
   estadoSmtp: { configurado: true, servidor: 'smtp.gmail.com', porta: '587', utilizador: 'condominio@gmail.com', remetente: 'condominio@gmail.com', nomeRemetente: 'Administração', seguranca: 'STARTTLS (587)', temPassword: true, ultimo_erro: 'Falha de autenticação' },
   preferencias: [], estadosLabel: {},
@@ -305,7 +309,7 @@ const vazios = [
   { ficheiro: 'views/admin/condominos/listar-suporte.handlebars', ctx: { titulo: 'Condóminos', pessoas: [] } },
   { ficheiro: 'views/admin/contas/listar-suporte.handlebars', ctx: { titulo: 'Contas', contas: [], resumo: { saldoContas: 0, fundoReserva: 0 } } },
   { ficheiro: 'views/admin/documentos/listar-suporte.handlebars', ctx: { titulo: 'Documentos', documentos: [], pastas: {}, pasta: null, pastasMulti: null, rotulo: null, driveLigado: false } },
-  { ficheiro: 'views/admin/emails/index-suporte.handlebars', ctx: { titulo: 'Emails', emails: [], contagens: null, estadoSmtp: null, filtro: 'todas' } },
+  { ficheiro: 'views/admin/emails/index-suporte.handlebars', ctx: { titulo: 'Emails', emails: [], contagens: null, estadoSmtp: null, filtro: 'todas', periodo: { deInput: '2026-09-01', ateInput: '2026-09-20', atalho: 'este-mes' }, periodos: [{ id: 'este-mes', rotulo: 'Este mês' }, { id: 'personalizado', rotulo: 'Personalizado' }] } },
   { ficheiro: 'views/admin/quotas-extra/detalhe-suporte.handlebars', ctx: { titulo: 'Extra', extra: { designacao: 'X', metodo_divisao: 'igual', numero_parcelas: 0, periodicidade: 'mensal', valor_total: 0, estado: 'pendente' }, grupos: [], resumo: { pago: 0, emFalta: 0 }, periodicidadeLabel: {} } },
   { ficheiro: 'views/admin/orcamento/detalhe-suporte.handlebars', ctx: { titulo: 'Orçamento', orcamento: { designacao: 'X', estado: 'rascunho', data_inicio: '2026-01-01', data_fim: '2026-12-31', rubricas: [] }, total: 0, nDistribuicoes: 0, nPlano: 0, alteracoes: [] } },
 ];

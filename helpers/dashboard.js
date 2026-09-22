@@ -286,7 +286,9 @@ function sinaisDeAtencao(dados = {}) {
       gravidade: 'info',
       texto: 'Email/SMTP não configurado',
       quantidade: 0,
-      destino: { url: '/admin/emails#smtp', texto: 'Configurar' },
+      // A configuração SMTP passou para Configuração → Email / SMTP; a Central
+      // de Emails ficou só com a operação da fila.
+      destino: { url: '/admin/config/email', texto: 'Configurar' },
     });
   }
 
@@ -355,7 +357,7 @@ const ATIVIDADE = {
   alterar_associacao_condominio: { rotulo: 'Acesso a condomínio alterado', icone: 'swap_horiz', url: '/admin/utilizadores' },
   reativar_acesso_condominio: { rotulo: 'Acesso a condomínio reativado', icone: 'lock_open', url: '/admin/utilizadores' },
   encerrar_acesso_condominio: { rotulo: 'Acesso a condomínio encerrado', icone: 'lock', url: '/admin/utilizadores' },
-  configurar_smtp: { rotulo: 'Configuração de email alterada', icone: 'settings', url: '/admin/emails' },
+  configurar_smtp: { rotulo: 'Configuração de email alterada', icone: 'settings', url: '/admin/config/email' },
   configurar_automacoes: { rotulo: 'Automações configuradas', icone: 'settings', url: '/admin/config/automacoes' },
   configurar_quotas: { rotulo: 'Configuração de quotas alterada', icone: 'settings', url: '/admin/quotas/config' },
   // `/admin/config/armazenamento/backups` só aceita POST: a atividade tem de

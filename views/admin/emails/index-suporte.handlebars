@@ -69,12 +69,40 @@
 
 <div class="card mb-3">
   <div class="card-body">
+    {{!--
+      O PERÍODO aplica-se também aqui: a rota é a mesma e o intervalo vai à
+      consulta. Sem estes controlos, o suporte veria apenas o mês em curso sem
+      forma de o alargar — o que degradaria precisamente o diagnóstico de
+      «o email não saiu». Continua a ser apenas leitura (GET).
+    --}}
+    <form method="GET" action="/admin/emails">
+      <input type="hidden" name="estado" value="{{filtro}}" />
+      <div class="row g-2 align-items-end">
+        <div class="col-6 col-sm-4 col-lg-3">
+          <label class="form-label small mb-1" for="sup_de">Data inicial</label>
+          <input type="date" class="form-control form-control-sm" id="sup_de" name="de" value="{{periodo.deInput}}" />
+        </div>
+        <div class="col-6 col-sm-4 col-lg-3">
+          <label class="form-label small mb-1" for="sup_ate">Data final</label>
+          <input type="date" class="form-control form-control-sm" id="sup_ate" name="ate" value="{{periodo.ateInput}}" />
+        </div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+        <span class="small text-muted">Período:</span>
+        {{#each periodos}}
+        <button type="submit" name="periodo" value="{{id}}" class="btn btn-sm {{#if (eq ../periodo.atalho id)}}btn-primary{{else}}btn-outline-secondary{{/if}}">{{rotulo}}</button>
+        {{/each}}
+      </div>
+    </form>
+
+    <hr class="my-3" />
+
     <div class="d-flex flex-wrap gap-2">
-      <a href="/admin/emails" class="btn btn-sm {{#if (eq filtro 'todas')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Todas</a>
-      <a href="/admin/emails?estado=pendentes" class="btn btn-sm {{#if (eq filtro 'pendentes')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Pendentes</a>
-      <a href="/admin/emails?estado=enviados" class="btn btn-sm {{#if (eq filtro 'enviados')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Enviados</a>
-      <a href="/admin/emails?estado=erros" class="btn btn-sm {{#if (eq filtro 'erros')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Erros</a>
-      <a href="/admin/emails?estado=cancelados" class="btn btn-sm {{#if (eq filtro 'cancelados')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Cancelados</a>
+      <a href="/admin/emails?estado=todas&de={{periodo.deInput}}&ate={{periodo.ateInput}}" class="btn btn-sm {{#if (eq filtro 'todas')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Todas</a>
+      <a href="/admin/emails?estado=pendentes&de={{periodo.deInput}}&ate={{periodo.ateInput}}" class="btn btn-sm {{#if (eq filtro 'pendentes')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Pendentes</a>
+      <a href="/admin/emails?estado=enviados&de={{periodo.deInput}}&ate={{periodo.ateInput}}" class="btn btn-sm {{#if (eq filtro 'enviados')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Enviados</a>
+      <a href="/admin/emails?estado=erros&de={{periodo.deInput}}&ate={{periodo.ateInput}}" class="btn btn-sm {{#if (eq filtro 'erros')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Erros</a>
+      <a href="/admin/emails?estado=cancelados&de={{periodo.deInput}}&ate={{periodo.ateInput}}" class="btn btn-sm {{#if (eq filtro 'cancelados')}}btn-primary{{else}}btn-outline-secondary{{/if}}">Cancelados</a>
     </div>
   </div>
 </div>

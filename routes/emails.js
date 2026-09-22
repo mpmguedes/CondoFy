@@ -1,5 +1,11 @@
 // ─────────────────────────────────────────────────────────────────────
-// Emails — central administrativa (fila) + configuração SMTP + teste.
+// Emails — central OPERACIONAL (fila de envio + histórico + preferências).
+//
+// A configuração técnica do serviço de email (SMTP) e o envio do email de
+// teste NÃO vivem aqui: passaram para Configuração → Email / SMTP
+// (`routes/configuracao.js`, `/admin/config/email`). Esta central ficou só com
+// a operação: listar/filtrar a fila, reenviar, cancelar e as preferências de
+// notificação. A configuração continua a ser a MESMA (`helpers/mailer.js`).
 // ─────────────────────────────────────────────────────────────────────
 const express = require('express');
 const { Op } = require('sequelize');
@@ -15,9 +21,11 @@ const {
   filtroFilaPorCondominio,
 } = require('../helpers/email-fila');
 const { listarPreferencias, guardarPreferencias } = require('../helpers/notificacoes');
+// Período da listagem (mês em curso até hoje, por omissão). Puro e sem BD.
+const { resolverPeriodo, ATALHOS } = require('../helpers/periodo-filtro');
 
 const router = express.Router();
-// Central de emails (fila + SMTP) — módulo de plataforma/condomínio admin.
+// Central de emails (operação da fila) — módulo de plataforma/condomínio admin.
 router.use(tenant.comCondominioAtivo);
 
 // ── Suporte diagnóstico: admissão explícita DESTE módulo ───────────
@@ -68,6 +76,13 @@ router.get('/emails', async (req, res) => {
     : 'todas';
   const tipo = Object.prototype.hasOwnProperty.call(ORIGENS, req.query.tipo) ? req.query.tipo : 'todas';
 
+  // Período: mês em curso até hoje por omissão, alterável por atalho ou por
+  // datas. Resolvido numa função PURA (helpers/periodo-filtro.js) e aplicado
+  // ABAIXO, na consulta — nunca escondendo registos no frontend depois de os
+  // carregar todos. É um filtro de LEITURA: não altera nem apaga nada.
+  const periodo = resolverPeriodo(req.query);
+  const ondeData = { createdAt: { [Op.between]: [periodo.de, periodo.ate] } };
+
   // Isolamento: a Central de Emails vive dentro de um condomínio — todas as
   // listagens/contagens filtram condominio_id = ativo. Registos históricos sem
   // condominio_id (NULL/órfãos) nunca aparecem aqui.
@@ -76,7 +91,12 @@ router.get('/emails', async (req, res) => {
   const [contagens, emails, estadoSmtp, preferencias] = await Promise.all([
     contarFila({ condominioId: req.condominioId }),
     EmailFila.findAll({
-      where: { ...baseCondominio, ...filtraPor(filtro), ...filtraOrigem(tipo) },
+      where: {
+        ...baseCondominio,
+        ...ondeData,
+        ...filtraPor(filtro),
+        ...filtraOrigem(tipo),
+      },
       include: [
         { model: Documento, as: 'documento', attributes: ['id', 'nome', 'drive_status', 'url'] },
         { model: Aviso, as: 'aviso', attributes: ['id', 'assunto'] },
@@ -99,6 +119,8 @@ router.get('/emails', async (req, res) => {
     estadoSmtp,
     preferencias,
     estadosLabel: ESTADOS_LABEL,
+    periodo,
+    periodos: ATALHOS,
   });
 });
 
@@ -113,72 +135,6 @@ router.post('/emails/notificacoes', async (req, res) => {
     req.flash('error_msg', 'Não foi possível guardar as notificações.');
   }
   res.redirect('/admin/emails#notificacoes');
-});
-
-// ── SMTP: guardar configuração ──────────────────────────────────────
-router.post('/emails/smtp', async (req, res) => {
-  try {
-    await mailer.guardarConfigSmtp({
-      host: req.body.host,
-      port: req.body.port,
-      user: req.body.user,
-      pass: req.body.pass, // vazio → mantém a existente
-      tls: req.body.tls,
-      from: req.body.from,
-      fromName: req.body.from_name,
-    });
-    await audit({ userId: req.user.id, acao: 'configurar_smtp', entidade: 'Configuracao' });
-    req.flash('success_msg', 'Configuração SMTP guardada.');
-  } catch (err) {
-    console.error('[smtp] erro ao guardar:', err.message);
-    req.flash('error_msg', 'Não foi possível guardar a configuração SMTP.');
-  }
-  res.redirect('/admin/emails#smtp');
-});
-
-// ── SMTP: testar ligação (verificação, sem enviar) ─────────────────
-router.post('/emails/smtp/testar', async (req, res) => {
-  try {
-    const r = await mailer.testarLigacao();
-    if (r.ok) {
-      await audit({ userId: req.user.id, acao: 'testar_smtp', entidade: 'Configuracao', detalhes: { ok: true, servidor: r.servidor } });
-      req.flash('success_msg', '✓ Ligação SMTP estabelecida.');
-    } else {
-      req.flash('error_msg', `✕ ${r.erro}`);
-    }
-  } catch (err) {
-    req.flash('error_msg', `✕ Não foi possível ligar ao servidor SMTP: ${mailer.mensagemErroAmigavel(err)}`);
-  }
-  res.redirect('/admin/emails#smtp');
-});
-
-// ── SMTP: enviar email de teste (envio IMEDIATO, fora da fila) ─────
-router.post('/emails/teste', async (req, res) => {
-  const para = String(req.body.para || '').trim();
-  if (!para) {
-    req.flash('error_msg', 'Indique o email de destino do teste.');
-    return res.redirect('/admin/emails#smtp');
-  }
-  const r = await mailer.enviarEmailTeste({
-    para,
-    assunto: req.body.assunto || 'Teste SMTP — GesCondu',
-    mensagem: req.body.mensagem || 'Este é um email de teste do GesCondu.',
-    // Teste feito dentro do condomínio ativo: o nome do remetente segue a
-    // mesma prioridade dos envios reais (override global ou nome do condomínio).
-    condominioId: req.condominioId,
-  });
-  await audit({
-    userId: req.user.id,
-    acao: 'email_teste',
-    entidade: 'EmailFila',
-    detalhes: { ok: r.ok, para },
-  }).catch(() => {});
-  if (r.ok) {
-    req.flash('success_msg', `✓ Email de teste enviado para ${para}.`);
-  } else {
-    req.flash('error_msg', `✕ Não foi possível enviar o email de teste: ${r.erro}`);
-  }
-  res.redirect('/admin/emails#smtp');
 });
 
 // ── Ações sobre a fila (sempre isoladas por condomínio ativo) ───────

@@ -16,6 +16,10 @@ const storage = require('../helpers/storage');
 const backupEstado = require('../helpers/backup-estado');
 const { contarPorServico, documentosDoServico } = require('../helpers/documentos-por-servico');
 const { validarNif, validarIban } = require('../public/js/validacao-fiscal');
+// Email/SMTP: a configuração técnica do serviço de email é uma CONFIGURAÇÃO do
+// condomínio (não operação da fila) — vive neste router. O envio do email de
+// teste reutiliza o MESMO mailer: não existe uma segunda configuração.
+const mailer = require('../helpers/mailer');
 
 const router = express.Router();
 // Isolamento: a configuração edita o condomínio ATIVO (sessão).
@@ -448,7 +452,7 @@ router.get('/config/automacoes', async (req, res) => {
   });
 });
 
-// ── Separador 4: Auditoria (antes com entrada própria no menu principal) ──
+// ── Separador 5: Auditoria (antes com entrada própria no menu principal) ──
 router.get('/config/auditoria', async (req, res) => {
   const logs = await AuditLog.findAll({
     include: [{ model: User, as: 'user', attributes: ['nome', 'email'] }],
@@ -472,6 +476,91 @@ router.post('/config/automacoes', async (req, res) => {
     req.flash('error_msg', 'Não foi possível guardar as automações.');
   }
   res.redirect('/admin/config/automacoes');
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Separador 4: Email / SMTP (antes na Central de Emails)
+//
+// A CONFIGURAÇÃO técnica do serviço de email é administração do condomínio,
+// não operação da fila: a Central de Emails fica com a fila (reenviar,
+// cancelar) e a configuração passa a viver aqui. Não há — nem pode haver —
+// uma segunda configuração SMTP: as três rotas abaixo usam o MESMO
+// `helpers/mailer` que a fila usa para enviar.
+//
+// O envio do email de teste é uma AÇÃO DE VALIDAÇÃO desta configuração: usa a
+// configuração JÁ GUARDADA (`obterConfigSmtp` lê a BD com prioridade sobre o
+// `.env`), pelo que testa o que está efetivamente a ser usado nos envios reais.
+// ═══════════════════════════════════════════════════════════════════
+router.get('/config/email', async (req, res) => {
+  // `obterEstadoSmtp` nunca devolve a password — apenas o indicador «definida».
+  const estadoSmtp = await mailer.obterEstadoSmtp();
+  res.render('admin/configuracao/email', { titulo: 'Email / SMTP', estadoSmtp });
+});
+
+// ── Guardar a configuração SMTP ────────────────────────────────────
+router.post('/config/email/smtp', async (req, res) => {
+  try {
+    await mailer.guardarConfigSmtp({
+      host: req.body.host,
+      port: req.body.port,
+      user: req.body.user,
+      pass: req.body.pass, // vazio → mantém a existente
+      tls: req.body.tls,
+      from: req.body.from,
+      fromName: req.body.from_name,
+    });
+    await audit({ userId: req.user.id, acao: 'configurar_smtp', entidade: 'Configuracao' });
+    req.flash('success_msg', 'Configuração SMTP guardada.');
+  } catch (err) {
+    console.error('[smtp] erro ao guardar:', err.message);
+    req.flash('error_msg', 'Não foi possível guardar a configuração SMTP.');
+  }
+  res.redirect('/admin/config/email');
+});
+
+// ── Testar a ligação (verificação, sem enviar nada) ────────────────
+router.post('/config/email/smtp/testar', async (req, res) => {
+  try {
+    const r = await mailer.testarLigacao();
+    if (r.ok) {
+      await audit({ userId: req.user.id, acao: 'testar_smtp', entidade: 'Configuracao', detalhes: { ok: true, servidor: r.servidor } });
+      req.flash('success_msg', '✓ Ligação SMTP estabelecida.');
+    } else {
+      req.flash('error_msg', `✕ ${r.erro}`);
+    }
+  } catch (err) {
+    req.flash('error_msg', `✕ Não foi possível ligar ao servidor SMTP: ${mailer.mensagemErroAmigavel(err)}`);
+  }
+  res.redirect('/admin/config/email');
+});
+
+// ── Enviar email de teste (envio IMEDIATO, fora da fila) ───────────
+router.post('/config/email/teste', async (req, res) => {
+  const para = String(req.body.para || '').trim();
+  if (!para) {
+    req.flash('error_msg', 'Indique o email de destino do teste.');
+    return res.redirect('/admin/config/email');
+  }
+  const r = await mailer.enviarEmailTeste({
+    para,
+    assunto: req.body.assunto || 'Teste SMTP — GesCondu',
+    mensagem: req.body.mensagem || 'Este é um email de teste do GesCondu.',
+    // Teste feito dentro do condomínio ativo: o nome do remetente segue a
+    // mesma prioridade dos envios reais (override global ou nome do condomínio).
+    condominioId: req.condominioId,
+  });
+  await audit({
+    userId: req.user.id,
+    acao: 'email_teste',
+    entidade: 'EmailFila',
+    detalhes: { ok: r.ok, para },
+  }).catch(() => {});
+  if (r.ok) {
+    req.flash('success_msg', `✓ Email de teste enviado para ${para}.`);
+  } else {
+    req.flash('error_msg', `✕ Não foi possível enviar o email de teste: ${r.erro}`);
+  }
+  res.redirect('/admin/config/email');
 });
 
 // ═══════════════════════════════════════════════════════════════════

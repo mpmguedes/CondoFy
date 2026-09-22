@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════
 // Testes das Configurações — separadores do módulo (sem base de dados)
 //   Configuração do Condomínio | Armazenamento e Backups | Documentos e Automações
+//   | Email / SMTP | Auditoria
 //
 // Monta o router real num servidor Express com o mesmo motor de vistas do
 // app.js (layouts + partials + helpers) e verifica, na resposta HTTP, que
@@ -20,6 +21,7 @@ const orig = {
   userCondominioFindOne: models.UserCondominio.findOne,
   backupLogFindOne: models.BackupLog.findOne,
   auditLogFindAll: models.AuditLog.findAll,
+  auditLogCreate: models.AuditLog.create,
 };
 
 const condominioFake = {
@@ -41,6 +43,9 @@ const condominioFake = {
 
 models.UserCondominio.findOne = async () => ({ role: 'admin', condominio_id: 1 });
 models.BackupLog.findOne = async () => null;
+// As rotas de gravação chamam `audit()` → `AuditLog.create`. Sem este duplo, o
+// teste (que se quer SEM BD) tentaria escrever no log de auditoria real.
+models.AuditLog.create = async () => ({});
 models.AuditLog.findAll = async () => ([
   { data_hora: new Date('2026-09-09T10:15:00Z'), user: { nome: 'Administrador', email: 'admin@exemplo.pt' }, acao: 'editar_configuração', entidade: 'Condominio', entidade_id: 1, detalhes: null },
   { data_hora: new Date('2026-09-08T18:02:00Z'), user: null, acao: 'criar_quota', entidade: 'Quota', entidade_id: 42, detalhes: '{"mes":9}' },
@@ -54,6 +59,29 @@ config.getConfig = async (chave, defeito) => (chave === 'drive_auto_backups' ? '
 const drive = require('../helpers/drive');
 const estadoDrive = { ativo: true, credenciais: true, ligado: true, viaEnv: false, conta: 'admin@gmail.com', redirectUriDefinido: true };
 drive.estadoLigacao = async () => ({ ...estadoDrive });
+
+// SMTP: o separador Email/SMTP lê o estado pelo `helpers/mailer` (que leria a
+// tabela `configuracoes`) e escreve/valida por ele. Substitui-se só o que toca
+// na BD/rede; a superfície do módulo mantém-se intacta — é a MESMA que a fila
+// de emails usa, para que não exista uma segunda configuração.
+const mailer = require('../helpers/mailer');
+const smtpGuardado = [];
+const smtpTestado = [];
+const smtpEnviado = [];
+mailer.obterEstadoSmtp = async () => ({
+  configurado: true,
+  servidor: 'smtp.gmail.com',
+  porta: '587',
+  utilizador: 'condominio@gmail.com',
+  remetente: 'condominio@gmail.com',
+  nomeRemetente: 'Administração do Condomínio',
+  seguranca: 'STARTTLS (587)',
+  temPassword: true,
+});
+mailer.guardarConfigSmtp = async (dados) => { smtpGuardado.push(dados); };
+mailer.testarLigacao = async () => { smtpTestado.push(true); return { ok: true, servidor: 'smtp.gmail.com' }; };
+mailer.enviarEmailTeste = async (dados) => { smtpEnviado.push(dados); return { ok: true, messageId: '<teste@exemplo.pt>' }; };
+
 const automacoes = require('../helpers/automacoes');
 const GRUPOS = [{
   rotulo: 'Assembleias',
@@ -151,7 +179,8 @@ const enviar = (url, corpo) => new Promise((resolve, reject) => {
 const TAB1 = 'href="/admin/config"';
 const TAB2 = 'href="/admin/config/armazenamento"';
 const TAB3 = 'href="/admin/config/automacoes"';
-const TAB4 = 'href="/admin/config/auditoria"';
+const TAB4 = 'href="/admin/config/email"';
+const TAB5 = 'href="/admin/config/auditoria"';
 
 (async () => {
   // 1. Separador 1 — Configuração do Condomínio (campos intactos)
@@ -161,6 +190,7 @@ const TAB4 = 'href="/admin/config/auditoria"';
   assert.ok(r.corpo.includes(`class="config-tab active" ${TAB1}`), 'config: separador 1 ativo por defeito');
   assert.ok(r.corpo.includes('aria-current="page"'), 'config: estado ativo assinalado');
   assert.ok(r.corpo.includes(TAB2) && r.corpo.includes(TAB3), 'config: separadores 2 e 3 acessíveis');
+  assert.ok(r.corpo.includes(TAB4) && r.corpo.includes(TAB5), 'config: separadores 4 (Email/SMTP) e 5 (Auditoria) acessíveis');
   assert.ok(r.corpo.includes('name="designacao"'), 'config: campo designação');
   assert.ok(r.corpo.includes('name="iban_principal"') && r.corpo.includes('data-validar="iban"'), 'config: pagamentos e validação');
   assert.ok(r.corpo.includes('enctype="multipart/form-data"'), 'config: upload do logótipo');
@@ -241,10 +271,62 @@ const TAB4 = 'href="/admin/config/auditoria"';
   assert.ok(r.corpo.includes('href="/admin/emails"'), 'automações: atalho para a central de emails');
   assert.ok(!r.corpo.includes('name="designacao"'), 'automações: sem campos do condomínio');
 
-  // 4. Separador 4 — Auditoria (antes com entrada própria no menu principal)
+  // 4. Separador 4 — Email / SMTP (antes na Central de Emails)
+  r = await pedir('/admin/config/email');
+  assert.strictEqual(r.status, 200, 'GET /admin/config/email responde 200');
+  assert.ok(r.corpo.includes(`class="config-tab active" ${TAB4}`), 'email: separador 4 ativo');
+  // Os campos SMTP que existiam na Central de Emails continuam a existir, aqui.
+  for (const campo of ['name="host"', 'name="port"', 'name="tls"', 'name="user"', 'name="pass"', 'name="from"', 'name="from_name"']) {
+    assert.ok(r.corpo.includes(campo), `email: campo SMTP preservado (${campo})`);
+  }
+  assert.ok(r.corpo.includes('action="/admin/config/email/smtp"'), 'email: gravação da configuração SMTP');
+  assert.ok(r.corpo.includes('action="/admin/config/email/smtp/testar"'), 'email: testar ligação');
+  assert.ok(r.corpo.includes('action="/admin/config/email/teste"'), 'email: envio de email de teste');
+  // As duas áreas ficam SEPARADAS: a configuração (campos) e a validação (teste)
+  // são cartões distintos, com âncoras próprias — nunca um só bloco misturado.
+  assert.ok(r.corpo.includes('id="smtp"') && r.corpo.includes('id="teste"'), 'email: configuração e teste em áreas distintas');
+  assert.ok(r.corpo.includes('Configuração do serviço de email') && r.corpo.includes('Validação da configuração'), 'email: áreas identificadas por título próprio');
+  // O envio de teste NÃO é um campo de configuração: o formulário de teste não
+  // traz nenhum campo SMTP.
+  const blocoTeste = r.corpo.slice(r.corpo.indexOf('id="teste"'));
+  for (const campo of ['name="host"', 'name="port"', 'name="user"', 'name="pass"']) {
+    assert.ok(!blocoTeste.includes(campo), `email: o bloco de teste não expõe o campo de configuração ${campo}`);
+  }
+  assert.ok(blocoTeste.includes('name="para"') && blocoTeste.includes('name="assunto"') && blocoTeste.includes('name="mensagem"'), 'email: o teste pede apenas destino/assunto/mensagem');
+  // A password nunca é impressa (apenas o indicador «Definida»).
+  assert.ok(!/name="pass"[^>]*value="[^"]+"/.test(r.corpo), 'email: a password SMTP nunca é preenchida na vista');
+  assert.ok(r.corpo.includes('Definida'), 'email: indicador de password definida');
+
+  // 4.1 As rotas de escrita reutilizam o MESMO mailer (sem segunda configuração).
+  let postEmail;
+  smtpGuardado.length = 0;
+  postEmail = await enviar('/admin/config/email/smtp', { host: 'smtp.exemplo.pt', port: '465', user: 'u@exemplo.pt', pass: 'segredo', tls: 'true', from: 'geral@exemplo.pt', from_name: 'Administração' });
+  assert.strictEqual(postEmail.status, 302, 'email: guardar SMTP responde 302');
+  assert.strictEqual(postEmail.location, '/admin/config/email', 'email: guardar SMTP volta ao separador');
+  assert.deepStrictEqual(smtpGuardado, [{ host: 'smtp.exemplo.pt', port: '465', user: 'u@exemplo.pt', pass: 'segredo', tls: 'true', from: 'geral@exemplo.pt', fromName: 'Administração' }],
+    'email: guardar SMTP passa os campos ao mailer existente');
+
+  smtpTestado.length = 0;
+  postEmail = await enviar('/admin/config/email/smtp/testar', {});
+  assert.strictEqual(postEmail.location, '/admin/config/email', 'email: testar ligação volta ao separador');
+  assert.deepStrictEqual(smtpTestado, [true], 'email: testar ligação usa mailer.testarLigacao');
+
+  smtpEnviado.length = 0;
+  postEmail = await enviar('/admin/config/email/teste', { para: 'destino@exemplo.pt', assunto: 'Olá', mensagem: 'Teste' });
+  assert.strictEqual(postEmail.location, '/admin/config/email', 'email: envio de teste volta ao separador');
+  assert.strictEqual(smtpEnviado.length, 1, 'email: envio de teste usa mailer.enviarEmailTeste');
+  assert.strictEqual(smtpEnviado[0].para, 'destino@exemplo.pt', 'email: envio de teste leva o destinatário');
+  assert.strictEqual(smtpEnviado[0].condominioId, 1, 'email: envio de teste usa o condomínio ATIVO (nome do remetente)');
+  // Sem destinatário não se envia nada (e volta com erro, não rebenta).
+  smtpEnviado.length = 0;
+  postEmail = await enviar('/admin/config/email/teste', { para: '   ' });
+  assert.strictEqual(postEmail.location, '/admin/config/email', 'email: teste sem destinatário volta ao separador');
+  assert.deepStrictEqual(smtpEnviado, [], 'email: teste sem destinatário não envia');
+
+  // 5. Separador 5 — Auditoria (antes com entrada própria no menu principal)
   r = await pedir('/admin/config/auditoria');
   assert.strictEqual(r.status, 200, 'GET /admin/config/auditoria responde 200');
-  assert.ok(r.corpo.includes(`class="config-tab active" ${TAB4}`), 'auditoria: separador 4 ativo');
+  assert.ok(r.corpo.includes(`class="config-tab active" ${TAB5}`), 'auditoria: separador 5 ativo');
   assert.ok(r.corpo.includes('Administrador') && r.corpo.includes('criar_quota'), 'auditoria: registos listados');
   assert.ok(r.corpo.includes('Sem registos de auditoria.') === false, 'auditoria: com registos não mostra estado vazio');
   const menu = r.corpo.split('\n').filter((l) => /sidebar-item/.test(l) && /(config|auditoria)/.test(l)).map((l) => l.trim()).join(' | ');
@@ -263,14 +345,14 @@ const TAB4 = 'href="/admin/config/auditoria"';
   assert.strictEqual(antigo.status, 302, 'auditoria: endereço antigo responde 302', String(antigo.status));
   assert.strictEqual(antigo.location, '/admin/config/auditoria', 'auditoria: endereço antigo redireciona para o separador');
 
-  // 5. Navegação direta entre os quatro separadores, a partir de qualquer um
-  for (const url of ['/admin/config', '/admin/config/armazenamento', '/admin/config/automacoes', '/admin/config/auditoria']) {
+  // 6. Navegação direta entre os cinco separadores, a partir de qualquer um
+  for (const url of ['/admin/config', '/admin/config/armazenamento', '/admin/config/automacoes', '/admin/config/email', '/admin/config/auditoria']) {
     const x = await pedir(url);
-    assert.ok([TAB1, TAB2, TAB3, TAB4].every((t) => x.corpo.includes(t)), `navegação: 4 separadores a partir de ${url}`);
+    assert.ok([TAB1, TAB2, TAB3, TAB4, TAB5].every((t) => x.corpo.includes(t)), `navegação: 5 separadores a partir de ${url}`);
     assert.ok(x.corpo.includes('class="config-tab active"'), `navegação: um ativo em ${url}`);
   }
 
-  // 6. Destino de backups: operação da INSTALAÇÃO ⇒ só Super Admin (A6.1).
+  // 7. Destino de backups: operação da INSTALAÇÃO ⇒ só Super Admin (A6.1).
   // A interface só aceita o que o job consegue usar, e um admin de condomínio
   // não pode mexer no destino global.
   destinosGravados.length = 0;
@@ -323,19 +405,23 @@ const TAB4 = 'href="/admin/config/auditoria"';
     'desligar: liberta o destino dos backups quando não resta nenhuma ligação utilizável');
   registo.dropbox.desligar = desligarOriginal;
 
-  // 8. Rotas de gravação existentes mantêm-se
+  // 9. Rotas de gravação existentes mantêm-se
   const rotas = router.stack.filter((l) => l.route)
     .map((l) => Object.keys(l.route.methods).join(',').toUpperCase() + ' ' + l.route.path);
-  for (const esperada of ['GET /config', 'POST /config', 'GET /config/armazenamento', 'GET /config/automacoes', 'POST /config/automacoes', 'GET /config/auditoria', 'GET /auditoria', 'POST /config/armazenamento/provedor', 'GET /config/armazenamento/:provedor/ligar', 'GET /config/armazenamento/:provedor/callback', 'POST /config/armazenamento/:provedor/desligar', 'POST /config/armazenamento/:provedor/testar', 'POST /config/drive/opcoes', 'POST /config/drive/testar', 'POST /config/drive/estrutura', 'POST /config/drive/desligar', 'GET /config/drive/ligar', 'GET /config/drive/callback']) {
+  for (const esperada of ['GET /config', 'POST /config', 'GET /config/armazenamento', 'GET /config/automacoes', 'POST /config/automacoes', 'GET /config/email', 'POST /config/email/smtp', 'POST /config/email/smtp/testar', 'POST /config/email/teste', 'GET /config/auditoria', 'GET /auditoria', 'POST /config/armazenamento/provedor', 'GET /config/armazenamento/:provedor/ligar', 'GET /config/armazenamento/:provedor/callback', 'POST /config/armazenamento/:provedor/desligar', 'POST /config/armazenamento/:provedor/testar', 'POST /config/drive/opcoes', 'POST /config/drive/testar', 'POST /config/drive/estrutura', 'POST /config/drive/desligar', 'GET /config/drive/ligar', 'GET /config/drive/callback']) {
     assert.ok(rotas.includes(esperada), `rota preservada: ${esperada}`);
   }
   // Isolamento por condomínio/papel continua aplicado a nível do router.
+  // (As rotas novas de Email/SMTP NÃO acrescentam middleware próprio: herdam a
+  // guarda do router — `comCondominioAtivo` + `comPapel('admin')` — e por isso
+  // ficam fora do alcance do suporte diagnóstico, que não tem papel.)
   const middleware = router.stack.filter((l) => !l.route).length;
   assert.strictEqual(middleware, 2, 'isolamento: middleware de condomínio ativo e papel no router');
 
   models.UserCondominio.findOne = orig.userCondominioFindOne;
   models.BackupLog.findOne = orig.backupLogFindOne;
   models.AuditLog.findAll = orig.auditLogFindAll;
+  models.AuditLog.create = orig.auditLogCreate;
 
   console.log('✓ Testes dos separadores de Configurações passaram (sem base de dados).');
 })().catch((err) => {

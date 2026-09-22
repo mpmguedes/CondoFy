@@ -300,7 +300,11 @@ const MODULOS = [
   { ficheiro: 'documentos', rotas: ['/documentos'],
     fora: ['/documentos/nova', '/documentos/1/ficheiro', '/documentos/drive/pasta', '/documentos/1/email'] },
   { ficheiro: 'emails', rotas: ['/emails'],
-    fora: ['/emails/smtp', '/emails/teste'] },
+    // Escrita da Central de Emails (reenviar/cancelar/notificações): existe no
+    // módulo mas NÃO consta da allow-list — o suporte diagnostica, não opera.
+    // (A configuração SMTP e o envio de teste já não vivem neste módulo: foram
+    // para Configuração → Email/SMTP, fora de qualquer admissão de suporte.)
+    fora: ['/emails/notificacoes', '/emails/1/reenviar', '/emails/1/cancelar'] },
   { ficheiro: 'relatorios', rotas: ['/relatorios/financeiro'], fora: [] },
 ];
 

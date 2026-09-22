@@ -68,7 +68,7 @@ function testeSinaisIndividuais() {
     ['backup', { backupEstado: 'erro' }, '/admin/config/armazenamento', 0],
     ['backup', { backupEstado: 'local_copia_cloud_falhada' }, '/admin/config/armazenamento', 0],
     ['drive', { documentosLigado: false }, '/admin/config/armazenamento', 0],
-    ['smtp', { smtp: false }, '/admin/emails#smtp', 0],
+    ['smtp', { smtp: false }, '/admin/config/email', 0],
   ];
   for (const [id, extra, url, quantidade] of casos) {
     const sinais = sinaisDeAtencao({ ...CALMO, ...extra });

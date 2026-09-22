@@ -198,9 +198,12 @@ const LISTA = {
   //      email não saiu? foi enviado? qual o erro?». É o estado da fila que o
   //      diagnostica, e é isso que a rota serve.
   //   2. NÃO confere as capacidades normais de administração de Emails: o
-  //      suporte não reenvia, não cancela, não configura SMTP nem testa o
-  //      envio — a allow-list é de LEITURA (GET/HEAD, `somenteLeitura`) e as
-  //      rotas de escrita (`/emails/smtp`, `/emails/teste`, …) ficam fora.
+  //      suporte não reenvia nem cancela — a allow-list é de LEITURA (GET/HEAD,
+  //      `somenteLeitura`) e as rotas de escrita da fila (`/emails/notificacoes`,
+  //      `/emails/:id/reenviar`, `/emails/:id/cancelar`) ficam fora. A
+  //      configuração SMTP e o envio de teste NÃO vivem sequer neste módulo:
+  //      passaram para Configuração → Email / SMTP (`/admin/config/email`), num
+  //      router sem qualquer admissão de suporte.
   //   3. A vista de diagnóstico é deliberadamente MINIMIZADA
   //      (`views/admin/emails/index-suporte.handlebars`): sem corpo, sem
   //      anexos, sem configuração SMTP, e com o destinatário mascarado

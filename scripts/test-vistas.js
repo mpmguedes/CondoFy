@@ -8,6 +8,9 @@ const helpers = require('../helpers/handlebars-helpers');
 const { construirDocumento } = require('../helpers/convocatoria');
 // Interpretação do estado do último backup (módulo puro, sem BD).
 const backupEstado = require('../helpers/backup-estado');
+// Resolução do período da listagem de emails (módulo puro, sem BD): a vista é
+// exercitada com o MESMO objeto que a rota lhe entrega.
+const { resolverPeriodo, ATALHOS } = require('../helpers/periodo-filtro');
 
 const ROOT = path.join(__dirname, '..', 'views');
 
@@ -148,6 +151,8 @@ assert.ok(html.includes('class="config-tab active" href="/admin/config"'), 'conf
 assert.ok(html.includes('aria-current="page"'), 'config: estado ativo assinalado');
 assert.ok(html.includes('href="/admin/config/armazenamento"'), 'config: separador de armazenamento presente');
 assert.ok(html.includes('href="/admin/config/automacoes"'), 'config: separador de automações presente');
+assert.ok(html.includes('href="/admin/config/email"'), 'config: separador de Email/SMTP presente');
+assert.ok(html.includes('Email / SMTP'), 'config: separador de Email/SMTP identificado');
 assert.ok(html.includes('name="designacao"') && html.includes('name="iban_principal"'), 'config: campos do condomínio mantidos');
 assert.ok(html.includes('data-validar="nif"') && html.includes('data-validar="iban"'), 'config: validação fiscal mantida');
 assert.ok(html.includes('enctype="multipart/form-data"'), 'config: upload de logótipo mantido');
@@ -459,10 +464,12 @@ assert.ok(!html.includes('arrow_back'), 'automações: botão antigo de retroces
 assert.ok(html.includes('href="/admin/emails"'), 'automações: atalho para a central de emails');
 
 
-// 7. Central de Emails (vista)
+// 7. Central de Emails (vista) — módulo OPERACIONAL: fila + período + notificações.
+// A configuração SMTP e o envio de teste saíram daqui (Configuração → Email/SMTP).
 const emailsView = handlebars.compile(ler('admin/emails/index.handlebars'));
 const estadoSmtp = { configurado: true, servidor: 'smtp.gmail.com', porta: '587', utilizador: 'condominio@gmail.com', remetente: 'condominio@gmail.com', nomeRemetente: 'Administração', seguranca: 'STARTTLS (587)', temPassword: true };
 const preferencias = [{ evento: 'recibos', rotulo: 'Recibos', email: true, drive: false }, { evento: 'quotas_atraso', rotulo: 'Quotas em atraso', email: true, drive: false }];
+const periodoEmails = resolverPeriodo({}, new Date(2026, 8, 20)); // 20/09/2026
 html = emailsView({
   titulo: 'Emails',
   emails: [{
@@ -479,21 +486,40 @@ html = emailsView({
     aviso: null,
   }],
   filtro: 'pendentes',
+  tipo: 'todas',
+  origens: {},
   contagens: { total: 1, pendentes: 1, enviados: 0, erros: 0, cancelados: 0 },
   estadoSmtp,
   preferencias,
   estadosLabel: { pendente: 'Pendente', a_enviar: 'A enviar', enviado: 'Enviado', erro: 'Erro', cancelado: 'Cancelado' },
+  periodo: periodoEmails,
+  periodos: ATALHOS,
 });
 assert.ok(html.includes('joao@exemplo.pt'), 'emails: destinatário na lista');
-assert.ok(html.includes('smtp.gmail.com'), 'emails: SMTP visível');
-assert.ok(html.includes('Enviar email de teste'), 'emails: botão de teste');
 assert.ok(html.includes('reenviar'), 'emails: ação reenviar');
 assert.ok(html.includes('Notificações automáticas'), 'emails: secção notificações');
 assert.ok(html.includes('notif_recibos_email'), 'emails: preferência recibo');
+// Filtro por período: campos de data pré-preenchidos com o mês em curso e os
+// atalhos todos presentes.
+assert.ok(html.includes('name="de"') && html.includes('name="ate"'), 'emails: campos de data do período');
+assert.ok(html.includes('value="2026-09-01"') && html.includes('value="2026-09-20"'), 'emails: período por omissão = mês em curso até hoje');
+for (const a of ATALHOS) {
+  assert.ok(html.includes(`value="${a.id}"`), `emails: atalho de período «${a.rotulo}»`);
+}
+assert.ok(/value="este-mes"[^>]*btn-primary|btn-primary"[^>]*value="este-mes"/.test(html), 'emails: atalho «Este mês» assinalado como ativo');
+// O filtro de estado/origem PRESERVA o período (as ligações levam as datas).
+assert.ok(html.includes('de=2026-09-01&ate=2026-09-20'), 'emails: filtros de estado/origem preservam o período');
+// A configuração SMTP e o envio de teste JÁ NÃO VIVEM AQUI.
+assert.ok(!html.includes('name="host"') && !html.includes('name="from_name"'), 'emails: sem campos de configuração SMTP');
+assert.ok(!html.includes('/admin/emails/smtp') && !html.includes('/admin/emails/teste'), 'emails: sem rotas SMTP/teste no módulo');
+assert.ok(!html.includes('smtp.gmail.com'), 'emails: sem credenciais SMTP na Central');
 
-html = emailsView({ titulo: 'Emails', emails: [], filtro: 'todas', contagens: { total: 0, pendentes: 0, enviados: 0, erros: 0, cancelados: 0 }, estadoSmtp: { configurado: false, servidor: null, porta: null, utilizador: null, remetente: null, nomeRemetente: null, seguranca: 'Sem TLS', temPassword: false }, preferencias: [], estadosLabel: {} });
-assert.ok(html.includes('Sem emails neste filtro'), 'emails: estado vazio');
-assert.ok(html.includes('Não configurado'), 'emails: SMTP vazio');
+html = emailsView({ titulo: 'Emails', emails: [], filtro: 'todas', tipo: 'todas', origens: {}, contagens: { total: 0, pendentes: 0, enviados: 0, erros: 0, cancelados: 0 }, estadoSmtp: { configurado: false, servidor: null, porta: null, utilizador: null, remetente: null, nomeRemetente: null, seguranca: 'Sem TLS', temPassword: false }, preferencias: [], estadosLabel: {}, periodo: periodoEmails, periodos: ATALHOS });
+assert.ok(html.includes('Sem emails no período selecionado'), 'emails: estado vazio do período');
+assert.ok(html.includes('01/09/2026') && html.includes('20/09/2026'), 'emails: estado vazio indica o intervalo consultado');
+// Sem SMTP configurado: aviso com a ligação para onde se configura (já não há
+// formulário aqui).
+assert.ok(html.includes('href="/admin/config/email"'), 'emails: aviso aponta para Configuração → Email/SMTP');
 
 // 8. Navegação — novo item Emails
 html = layout({ body: 'ok', user: contexto.user, isAdmin: true, condominio: contexto.condominio, currentPath: '/admin/emails' });

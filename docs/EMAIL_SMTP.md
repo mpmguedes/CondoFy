@@ -7,12 +7,20 @@ fila de emails, retry, envio de teste e preferências de notificação.
 
 * A aplicação envia emails através de um servidor **SMTP** configurável.
 * A configuração pode estar no `.env` (fallback) ou ser guardada na base de
-  dados através da interface (**Emails → Configurar SMTP**). As definições da
-  base de dados têm prioridade quando existem.
+  dados através da interface (**Configuração → Email / SMTP**,
+  `/admin/config/email`). As definições da base de dados têm prioridade quando
+  existem.
 * Emails **normais/agendados** passam pela fila (`email_fila`), processada pelo
   agendador (`node-cron`, a cada 5 minutos).
 * O **email de teste** é enviado imediatamente, fora da fila — se o botão
-  mostrar sucesso, o SMTP está funcional.
+  mostrar sucesso, o SMTP está funcional. É uma **ação de validação** da
+  configuração guardada (não um campo dela), e vive na mesma página.
+
+> **Onde fica o quê.** A **Central de Emails** (`/admin/emails`) é a parte
+> *operacional*: fila de envio, histórico, reenvio, cancelamento e preferências
+> de notificação. A **configuração técnica** do serviço de email (servidor,
+> porta, credenciais, remetente) vive em **Configuração → Email / SMTP**. Há uma
+> única configuração: as duas páginas usam o mesmo `helpers/mailer.js`.
 
 ## Configuração no `.env` (fallback)
 
@@ -38,13 +46,14 @@ O Gmail **não aceita a palavra-passe normal** em SMTP. Use uma **App Password**
 2. Em **Segurança → Palavras-passe de aplicações** (App passwords), crie uma
    para “Correio”/“Mail”.
 3. Copie a palavra-passe de 16 caracteres gerada.
-4. Configure no GesCondu:
+4. Configure no GesCondu, em **Configuração → Email / SMTP**:
    * Servidor: `smtp.gmail.com`
    * Porta: `587`
    * Segurança: TLS ativo
    * Utilizador: o email Gmail completo
    * Password: a App Password (16 caracteres, sem espaços)
-5. Clique em **Testar ligação** e depois **Enviar email de teste**.
+5. Clique em **Guardar SMTP**, depois **Testar ligação** e, por fim,
+   **Enviar email de teste** (na área «Validação da configuração»).
 
 > Portas: `587` (STARTTLS) e `465` (SSL/TLS direto). Para outros fornecedores
 > use as credenciais e a porta indicadas pelo mesmo.
@@ -66,8 +75,15 @@ Estados:
 * Se o processo for interrompido com um email em `a_enviar`, este é reposto a
   `pendente` após 5 minutos (sem duplicar envios reais).
 * **Não envia duplicados**: só estados `pendente`/`erro` são lidos.
-* Na central **Emails** (`/admin/emails`) é possível filtrar (Todas,
-  Pendentes, Enviados, Erros, Cancelados), **Reenviar** e **Cancelar**.
+* Na central **Emails** (`/admin/emails`) é possível filtrar por **período** e
+  por estado (Todas, Pendentes, Enviados, Erros, Cancelados) e por origem, além
+  de **Reenviar** e **Cancelar**.
+* **Filtro por período**: ao entrar, o intervalo vem preenchido com o **mês em
+  curso até hoje**. Há atalhos (**Este mês**, **Mês anterior**, **Últimos 7
+  dias**, **Últimos 30 dias**, **Personalizado**) e campos de data para um
+  intervalo à escolha. O filtro é aplicado **à consulta** (não carrega o
+  histórico todo para o esconder depois) e é apenas de leitura — não altera nem
+  apaga emails.
 * **Isolamento multi-condomínio**: cada email guarda o condomínio a que pertence
   (`email_fila.condominio_id`, migração 064). A central, as contagens e as ações
   (reenviar/cancelar) mostram **apenas os emails do condomínio ativo** — um email

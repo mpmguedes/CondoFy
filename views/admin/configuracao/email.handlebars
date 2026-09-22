@@ -1,0 +1,135 @@
+{{!--
+  Configuração → Email / SMTP.
+
+  Duas ÁREAS DISTINTAS, deliberadamente separadas:
+    1. Configuração SMTP — os campos/opções do serviço de email (o que fica
+       guardado e é usado em TODOS os envios do condomínio);
+    2. Enviar email de teste — uma AÇÃO DE VALIDAÇÃO da configuração, não um
+       campo dela.
+
+  O envio de teste usa a configuração JÁ GUARDADA (`helpers/mailer.js`): não há
+  uma segunda configuração nem lógica duplicada.
+--}}
+{{> _config-tabs ativo='email'}}
+
+<div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <h1>Email / SMTP</h1>
+    <p class="subtitle">Servidor de email usado pelo condomínio para enviar recibos, avisos e documentos</p>
+  </div>
+  <a href="/admin/emails" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">mail</span>Central de emails</a>
+</div>
+
+{{!-- ══ ÁREA 1 — Configuração do serviço (campos guardados) ══ --}}
+<div class="section-title">Configuração do serviço de email</div>
+
+<div class="card" id="smtp">
+  <div class="card-header bg-white"><i class="bi bi-gear me-1"></i>Configuração SMTP</div>
+  <div class="card-body">
+    {{#if estadoSmtp.configurado}}
+    <p class="mb-1"><span class="badge text-bg-success">🟢 SMTP configurado</span></p>
+    {{else}}
+    <p class="mb-1"><span class="badge text-bg-danger">🔴 Não configurado</span></p>
+    {{/if}}
+    <dl class="row small mb-0">
+      <dt class="col-sm-4 col-lg-3">Servidor</dt><dd class="col-sm-8 col-lg-9">{{#if estadoSmtp.servidor}}{{estadoSmtp.servidor}}{{else}}—{{/if}}</dd>
+      <dt class="col-sm-4 col-lg-3">Porta</dt><dd class="col-sm-8 col-lg-9">{{#if estadoSmtp.porta}}{{estadoSmtp.porta}}{{else}}—{{/if}}</dd>
+      <dt class="col-sm-4 col-lg-3">Utilizador</dt><dd class="col-sm-8 col-lg-9">{{#if estadoSmtp.utilizador}}{{estadoSmtp.utilizador}}{{else}}—{{/if}}</dd>
+      <dt class="col-sm-4 col-lg-3">Remetente</dt><dd class="col-sm-8 col-lg-9">{{#if estadoSmtp.remetente}}{{estadoSmtp.remetente}}{{#if estadoSmtp.nomeRemetente}}<br />{{estadoSmtp.nomeRemetente}}{{/if}}{{else}}—{{/if}}</dd>
+      <dt class="col-sm-4 col-lg-3">Segurança</dt><dd class="col-sm-8 col-lg-9">{{estadoSmtp.seguranca}}</dd>
+      <dt class="col-sm-4 col-lg-3">Password</dt><dd class="col-sm-8 col-lg-9">{{#if estadoSmtp.temPassword}}Definida{{else}}Em falta{{/if}}</dd>
+    </dl>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-header bg-white"><i class="bi bi-sliders me-1"></i>Credenciais do servidor</div>
+  <div class="card-body">
+    <form action="/admin/config/email/smtp" method="POST">
+      <div class="row g-3">
+        <div class="col-12 col-md-8">
+          <label class="form-label small" for="smtp_host">Servidor SMTP</label>
+          <input type="text" class="form-control form-control-sm" id="smtp_host" name="host" value="{{estadoSmtp.servidor}}" placeholder="smtp.gmail.com" />
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label small" for="smtp_port">Porta</label>
+          <input type="text" class="form-control form-control-sm" id="smtp_port" name="port" value="{{estadoSmtp.porta}}" placeholder="587" />
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label small" for="smtp_tls">Segurança</label>
+          <select class="form-select form-select-sm" id="smtp_tls" name="tls">
+            <option value="true" selected>Usar TLS (587/465)</option>
+            <option value="false">Sem TLS</option>
+          </select>
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label small" for="smtp_user">Utilizador</label>
+          <input type="text" class="form-control form-control-sm" id="smtp_user" name="user" value="{{estadoSmtp.utilizador}}" autocomplete="off" />
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label small" for="smtp_pass">Password (deixe vazio para manter a atual)</label>
+          <input type="password" class="form-control form-control-sm" id="smtp_pass" name="pass" autocomplete="new-password" placeholder="••••••••" />
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label small" for="smtp_from">Email do remetente</label>
+          <input type="email" class="form-control form-control-sm" id="smtp_from" name="from" value="{{estadoSmtp.remetente}}" placeholder="condominio@gmail.com" />
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label small" for="smtp_from_name">Nome do remetente</label>
+          <input type="text" class="form-control form-control-sm" id="smtp_from_name" name="from_name" value="{{estadoSmtp.nomeRemetente}}" placeholder="Administração do Condomínio" />
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary mt-3" data-ajuda="Guarda as credenciais do servidor de email. Passam a ser usadas em todos os envios do condomínio." data-ajuda-titulo="Guardar SMTP"><i class="bi bi-check2 me-1"></i>Guardar SMTP</button>
+    </form>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-2">
+    <div class="small text-muted">
+      <i class="bi bi-plug me-1"></i>Verifica se o servidor responde com as credenciais <strong>já guardadas</strong>. Não envia nenhum email.
+    </div>
+    <form action="/admin/config/email/smtp/testar" method="POST">
+      <button type="submit" class="btn btn-outline-primary" data-ajuda="Confirma que o servidor SMTP responde com as credenciais atuais. Não envia nenhum email." data-ajuda-titulo="Testar ligação SMTP"><i class="bi bi-plug me-1"></i>Testar ligação</button>
+    </form>
+  </div>
+</div>
+
+{{!-- ══ ÁREA 2 — Validação (NÃO é um campo de configuração) ══ --}}
+<div class="section-title">Validação da configuração</div>
+
+<div class="card" id="teste">
+  <div class="card-header bg-white"><i class="bi bi-send-check me-1"></i>Enviar email de teste</div>
+  <div class="card-body">
+    <div class="alert alert-info small d-flex align-items-start gap-2">
+      <span class="material-symbols-outlined">info</span>
+      <div>
+        Este envio é uma <strong>ação de validação</strong>, não uma opção de configuração:
+        usa a configuração SMTP <strong>guardada acima</strong> e é enviado imediatamente,
+        fora da fila. Se o email chegar, o servidor está a funcionar.
+      </div>
+    </div>
+    <form action="/admin/config/email/teste" method="POST">
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          <label class="form-label small" for="teste_para">Para</label>
+          <input type="email" class="form-control form-control-sm" id="teste_para" name="para" required placeholder="voce@exemplo.pt" />
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label small" for="teste_assunto">Assunto</label>
+          <input type="text" class="form-control form-control-sm" id="teste_assunto" name="assunto" value="Teste SMTP — GesCondu" />
+        </div>
+        <div class="col-12">
+          <label class="form-label small" for="teste_mensagem">Mensagem</label>
+          <textarea class="form-control form-control-sm" id="teste_mensagem" name="mensagem" rows="2">Este é um email de teste do GesCondu.</textarea>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-success mt-3" {{#unless estadoSmtp.configurado}}disabled{{/unless}} data-ajuda="Envia um email de teste, imediatamente, para o endereço indicado. Serve para confirmar que o SMTP funciona." data-ajuda-titulo="Enviar email de teste">
+        <i class="bi bi-send-check me-1"></i>Enviar email de teste
+      </button>
+      {{#unless estadoSmtp.configurado}}
+      <div class="form-text">Guarde primeiro a configuração SMTP acima.</div>
+      {{/unless}}
+    </form>
+  </div>
+</div>
