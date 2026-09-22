@@ -14,8 +14,10 @@
 // Variáveis de ambiente (todas opcionais; os valores por omissão reproduzem o
 // comportamento histórico — um backup diário às 03:00):
 //   BACKUP_HOUR             hora (0–23) comum aos três ciclos. Por omissão 3.
-//   BACKUP_WEEKLY_DAY       dia da semana do ciclo semanal (SU…SA ou 0…6).
-//                           Por omissão SU (domingo).
+//   BACKUP_WEEKLY_DAY       dia da semana do ciclo semanal (0…6 ou SU…SA).
+//                           Por omissão 0 (domingo). Os nomes são aceites à
+//                           entrada e convertidos — a expressão sai SEMPRE
+//                           numérica (ver a nota do node-cron abaixo).
 //   BACKUP_MONTHLY_DAY      dia do mês do ciclo mensal (1–28). Por omissão 1.
 //   BACKUP_WEEKLY_ENABLED   `0`/`false` desliga o ciclo semanal.
 //   BACKUP_MONTHLY_ENABLED  `0`/`false` desliga o ciclo mensal.
@@ -24,12 +26,19 @@
 // Hora por omissão: a mesma do `BACKUP_HOUR` histórico (03:00).
 const HORA_PADRAO = 3;
 // Domingo — o dia de menor atividade na esmagadora dos condomínios.
-const DIA_SEMANAL_PADRAO = 'SU';
+// ⛔ NUMÉRICO de propósito: o node-cron 3.x valida o campo do dia da semana com
+// /^(?:\d+|\*|\*\/\d+)$/ e REJEITA os nomes de 3 letras — `cron.schedule`
+// lançava «SU is a invalid expression for week day», o que abortava o registo
+// das tarefas seguintes (o `mensal` nunca chegava a ser agendado).
+const DIA_SEMANAL_PADRAO = '0';
 // Dia 1 do mês.
 const DIA_MENSAL_PADRAO = 1;
 
-// node-cron: 0 = domingo … 6 = sábado (aceita também nomes de 3 letras).
-const DIAS_SEMANA = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+// node-cron: 0 = domingo … 6 = sábado. É ESTA a forma que a expressão usa.
+const DIAS_SEMANA = ['0', '1', '2', '3', '4', '5', '6'];
+// Nomes de 3 letras, aceites apenas à ENTRADA (`BACKUP_WEEKLY_DAY=SU`) e
+// convertidos para o número correspondente. Nunca chegam à expressão.
+const NOMES_DIAS_SEMANA = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 
 // ⛔ Máximo 28: os dias 29, 30 e 31 não existem em todos os meses, pelo que um
 // backup mensal agendado para 31 nunca corria em fevereiro (e o de 30 falhava
@@ -56,11 +65,14 @@ function normalizarHora(valor) {
   return Number.isInteger(n) && n >= 0 && n <= 23 ? n : HORA_PADRAO;
 }
 
-// `SU`…`SA` (aceita minúsculas) ou `0`…`6`; por omissão `SU`.
+// `0`…`6` ou `SU`…`SA` (aceita minúsculas); por omissão `0` (domingo).
+// ⛔ Devolve SEMPRE o número (`'0'`…`'6'`): é o único formato que o node-cron
+// aceita no campo do dia da semana.
 function normalizarDiaSemanal(valor) {
   const t = String(valor == null ? '' : valor).trim().toUpperCase();
   if (!t) return DIA_SEMANAL_PADRAO;
-  if (DIAS_SEMANA.includes(t)) return t;
+  const nome = NOMES_DIAS_SEMANA.indexOf(t);
+  if (nome >= 0) return DIAS_SEMANA[nome];
   const n = Number(t);
   if (Number.isInteger(n) && n >= 0 && n <= 6) return DIAS_SEMANA[n];
   return DIA_SEMANAL_PADRAO;

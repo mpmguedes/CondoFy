@@ -246,11 +246,22 @@ saem do próprio nome —, pelo que não foi preciso acrescentar uma coluna de n
 * **Retenções por tipo** (`BACKUP_WEEKLY_RETENTION`, `BACKUP_MONTHLY_RETENTION`) foram
   substituídas por retenções **por destino**. **Agendamento:** `diario`, `semanal` e `mensal`
   correm no cron (`jobs/scheduler.js`), com a decisão em `helpers/backup-agenda.js` —
-  `BACKUP_HOUR` (hora comum), `BACKUP_WEEKLY_DAY` (por omissão `SU`), `BACKUP_MONTHLY_DAY`
-  (1–28; por omissão 1) e `BACKUP_WEEKLY_ENABLED`/`BACKUP_MONTHLY_ENABLED` para desligar um
-  ciclo. O máximo **28** no dia mensal é deliberado: os dias 29–31 não existem em todos os
-  meses, pelo que um agendamento para 31 nunca correria em fevereiro. `manual` **não** é
-  agendado (dispara-se à mão em Administração global → Backups).
+  `BACKUP_HOUR` (hora comum), `BACKUP_WEEKLY_DAY` (por omissão **`0`** = domingo),
+  `BACKUP_MONTHLY_DAY` (1–28; por omissão 1) e
+  `BACKUP_WEEKLY_ENABLED`/`BACKUP_MONTHLY_ENABLED` para desligar um ciclo. O máximo **28** no
+  dia mensal é deliberado: os dias 29–31 não existem em todos os meses, pelo que um
+  agendamento para 31 nunca correria em fevereiro. `manual` **não** é agendado (dispara-se à
+  mão em Administração global → Backups).
+* **`BACKUP_WEEKLY_DAY` — nome ou número.** Aceita o **número** (`0` = domingo … `6` =
+  sábado) **ou** o nome de 3 letras (`SU`, `MO`, `TU`, `WE`, `TH`, `FR`, `SA`; minúsculas
+  também) e **normaliza sempre para o número** antes de construir a expressão; um valor
+  inválido (`7`, `XX`, vazio) cai no valor por omissão `0`. Assim, `BACKUP_WEEKLY_DAY=SU` e
+  `BACKUP_WEEKLY_DAY=0` produzem a **mesma** expressão, `0 3 * * 0`.
+  ⛔ **Porquê numérico:** o **node-cron 3.x** valida o campo do dia da semana com
+  `/^(?:\d+|\*|\*\/\d+)$/` e **rejeita os nomes** — `cron.schedule('0 3 * * SU', …)` lançava
+  «SU is a invalid expression for week day», o que **abortava** o registo das tarefas
+  seguintes (o ciclo `mensal` deixava de ser agendado) e, no arranque, derrubava o processo.
+  Os nomes são, por isso, aceites **apenas à entrada** e nunca chegam à expressão.
 * **Fora de âmbito (documentado, não corrigido):** a escolha do destino de backups
   (`POST /admin/config/armazenamento/backups`) e o disparo de um backup manual
   (`POST /admin/sistema/backup`) continuam acessíveis a um administrador de condomínio, embora
@@ -264,7 +275,7 @@ saem do próprio nome —, pelo que não foi preciso acrescentar uma coluna de n
 | Script | Cobre |
 |---|---|
 | `scripts/test-backup-estado.js` | os 5 estados, o fluxo local+cloud, a independência dos fornecedores, a retenção configurável e o âmbito da remoção |
-| `scripts/test-backup-agenda.js` | a **agenda**: validação dos valores de ambiente, o plano (diário/semanal/mensal, `manual` fora) e a ligação REAL ao `jobs/scheduler.js` (com `node-cron` substituído) — dispara cada tarefa e confirma o tipo chamado |
+| `scripts/test-backup-agenda.js` | a **agenda**: validação dos valores de ambiente, o plano (diário/semanal/mensal, `manual` fora), a **validade das três expressões para o `node-cron` real** (`cron.validate` + `cron.schedule`) e a ligação REAL ao `jobs/scheduler.js` (com `node-cron` substituído por um duplo) — dispara cada tarefa e confirma o tipo chamado |
 | `scripts/test-backup-retencao.js` | cenários **A–I e K**: sem cloud, cloud funcional, cloud indisponível, credenciais inválidas, falha local, retenção local, retenção cloud, métricas, eliminação manual, documentos separados |
 | `scripts/test-rotas-global-backups.js` | cenário **J**: isolamento administrativo (HTTP real), a página com os valores reais, o **espaço da conta cloud** (medido ou «não disponível») e a validação no servidor |
 | `scripts/test-storage-provedores.js` | a **remoção** (`apagarArquivo`) e a **medição de espaço** na Dropbox/OneDrive, com um interceptor do cliente HTTP (sem rede) |
