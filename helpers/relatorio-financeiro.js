@@ -250,13 +250,17 @@ async function carregarDados({ condominioId, dataInicio, dataFim, ymInicio, ymFi
       attributes: ['id', 'fracao_id', 'ano', 'mes', 'periodo', 'valor', 'valor_fcr', 'data_vencimento', 'estado'],
     }),
     ExtraQuota.findAll({
-      where: { ...ondeCond, estado: 'processada' },
+      // Só as quotas EXTRAORDINÁRIAS entram no total de extraordinárias do
+      // relatório. A tabela `extra_quotas` é partilhada com os ACERTOS (Q11,
+      // `tipo='acerto'`), que não são quotas extraordinárias nem geram
+      // parcelas; sem este filtro um acerto processado seria contado aqui.
+      where: { ...ondeCond, tipo: 'extraordinaria', estado: 'processada' },
       attributes: ['id', 'designacao', 'valor_total', 'ano_inicio', 'mes_inicio', 'numero_parcelas', 'periodicidade', 'estado'],
     }),
     ExtraQuotaParcela.findAll({
       where: { estado: { [Op.ne]: 'anulada' } },
       attributes: ['id', 'extra_quota_id', 'fracao_id', 'parcela_numero', 'valor', 'data_vencimento', 'estado'],
-      include: [{ model: ExtraQuota, as: 'extra_quota', attributes: ['id', 'condominio_id', 'designacao'], where: { condominio_id: condominioId, estado: 'processada' }, required: true }],
+      include: [{ model: ExtraQuota, as: 'extra_quota', attributes: ['id', 'condominio_id', 'designacao'], where: { condominio_id: condominioId, tipo: 'extraordinaria', estado: 'processada' }, required: true }],
     }),
     ContaBancaria.findAll({ where: ondeCond, order: [['nome', 'ASC'], ['id', 'ASC']] }),
     MovimentoBancario.findAll({

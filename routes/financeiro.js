@@ -29,7 +29,7 @@ const {
 } = require('../models');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
-const { toCents, fromCents, toNumber } = require('../helpers/money');
+const { toCents, fromCents, toNumber, formatEURCents } = require('../helpers/money');
 const { MESES, monthName, currentYear } = require('../helpers/dates');
 const { resumoCondominio, resumoFracao, estadoEfetivo } = require('../helpers/saldos');
 const { getCondominio } = require('../helpers/condominio');
@@ -41,6 +41,12 @@ const quotaModulo = require('./quotas-modulo');
 const { uploadComprovativo, apagarComprovativo } = require('../helpers/comprovativos');
 const { sincronizarMovimentoDespesa } = require('../helpers/movimentos');
 const extrato = require('../helpers/extrato');
+// R10 — imutabilidade financeira de uma quota emitida (lógica pura).
+const {
+  estaEmitida, alteracoesCongeladas, invarianteOk, isoData,
+} = require('../helpers/quota-imutabilidade');
+// Q9 — pré-visualização da configuração de quotas (só leitura).
+const { previsaoRecalculo } = require('../helpers/quotas-previsao');
 // Lê e valida os filtros do extrato a partir da query string (nunca o
 // condomínio — esse vem sempre da sessão).
 const lerFiltrosExtrato = extrato.lerFiltros;
@@ -906,49 +912,54 @@ router.post('/quotas/config', async (req, res) => {
 
   await setQuotaConfig(req.condominioId, { valorPor1000, fcrPercentagem });
 
-  // Recalcular quotas futuras não pagas (se pedido)
+  // ── R10 / Q9 — PRÉ-VISUALIZAÇÃO, NUNCA ESCRITA ─────────────────────
+  //
+  // Antes, `recalcular=futuras` fazia `q.update(...)` sobre as quotas
+  // `pendente`/`vencida` com vencimento futuro — incluindo quotas JÁ EMITIDAS.
+  // Isso reescrevia documentos já entregues ao condómino e desligava-os do
+  // valor que o orçamento aprovou.
+  //
+  // Agora o recálculo é apenas uma PRÉ-VISUALIZAÇÃO: calcula o impacto e
+  // mostra-o, sem gravar uma única quota. A configuração nova produz efeitos
+  // só nas GERAÇÕES FUTURAS de quotas (`POST /quotas/gerar`), nunca sobre
+  // quotas que já existam — emitidas ou não.
+  //
+  // A fronteira de imutabilidade é `data_emissao` (R10), nunca `estado` nem
+  // `data_vencimento`: `estado` é DERIVADO dos pagamentos (uma quota `pendente`
+  // pode já estar emitida) e `data_vencimento` é uma data de calendário —
+  // nenhum dos dois distingue um documento de um rascunho.
+  let previa = null;
   if (req.body.recalcular === 'futuras') {
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-    // P19 — só quotas SEM pagamento aplicado.
-    //
-    // Uma quota `parcialmente_paga` já tem dinheiro aplicado: recalcular-lhe o
-    // `valor` mudaria a dívida de quem já pagou parte (o que foi pago deixaria
-    // de ser proporcional ao novo total) e o recálculo nunca reverte o
-    // pagamento. A própria vista promete «Quotas já pagas nunca são alteradas»
-    // (views/admin/quotas/listar.handlebars) — incluir aqui as parcialmente
-    // pagas contradizia essa promessa.
-    //
-    // `vencida` entra por convenção do projeto nos filtros de «não paga»: é um
-    // estado DERIVADO de `data_vencimento` (nunca gravado — ver
-    // `helpers/saldos.js:estadoEfetivo`), mas as consultas defensivas do
-    // projeto incluem-no (ex.: `helpers/dashboard.js`, `routes/condomino.js`).
-    const futuras = await Quota.findAll({
-      where: {
-        estado: { [Op.in]: ['pendente', 'vencida'] },
-        data_vencimento: { [Op.gte]: hoje },
-        condominio_id: req.condominioId,
-      },
+    previa = await previsaoRecalculo({
+      condominioId: req.condominioId,
+      valorPor1000,
+      fcrPercentagem,
     });
-    for (const q of futuras) {
-      const fracao = await Fracao.findByPk(q.fracao_id);
-      if (!fracao) continue;
-      const calc = calcularQuota(fracao.permilagem, valorPor1000, fcrPercentagem);
-      await q.update({
-        valor_base: calc.base,
-        valor_fcr: calc.fcr,
-        valor: calc.total,
-        valor_por_1000: calc.valorPor1000,
-        permilagem_aplicada: calc.permilagem,
-        fcr_percentagem: calc.fcrPercentagem,
-      });
-    }
-    req.flash('success_msg', `Configuração guardada e ${futuras.length} quota(s) futura(s) recalculada(s).`);
+    req.flash(
+      'success_msg',
+      `Configuração guardada. Pré-visualização: ${previa.nAfetadas} quota(s) não emitida(s) `
+      + `seriam calculadas com a nova configuração (${previa.nMudam} com valor diferente); `
+      + `${previa.nProtegidas} quota(s) já emitida(s) mantêm-se intactas. `
+      + 'Nenhuma quota existente foi alterada — a nova configuração aplica-se às próximas gerações.'
+    );
   } else {
     req.flash('success_msg', 'Configuração guardada (aplica-se a quotas futuras ainda não geradas).');
   }
 
-  await audit({ userId: req.user.id, acao: 'configurar_quotas', entidade: 'Configuracao', detalhes: { valorPor1000, fcrPercentagem } });
+  await audit({
+    userId: req.user.id,
+    acao: 'configurar_quotas',
+    entidade: 'Configuracao',
+    detalhes: {
+      valorPor1000,
+      fcrPercentagem,
+      // R10/Q9 — a pré-visualização fica registada (o que foi mostrado), sem
+      // que nenhuma quota tenha sido tocada.
+      previsao: previa
+        ? { nAfetadas: previa.nAfetadas, nMudam: previa.nMudam, nProtegidas: previa.nProtegidas }
+        : null,
+    },
+  });
   res.redirect('/admin/quotas');
 });
 
@@ -1460,27 +1471,174 @@ router.get('/quotas/:id/editar', async (req, res) => {
   res.render('admin/quotas/form', { titulo: 'Editar quota', quota });
 });
 
+// R10 — edição de uma quota.
+//
+// Uma quota EMITIDA é um documento: os seus elementos financeiros e
+// identificadores estão congelados e NÃO existe exceção administrativa. A única
+// coisa que esta rota pode mudar numa quota emitida são as `observacoes`.
+//
+// A correção de um valor emitido faz-se com um ACERTO — um documento NOVO
+// (`ExtraQuota` com `tipo='acerto'`, que referencia a quota sem a alterar).
 router.post('/quotas/:id', async (req, res) => {
   const quota = await Quota.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
   if (!quota) return res.redirect('/admin/quotas');
   const { valor, data_emissao, data_vencimento, observacoes } = req.body;
-  await quota.update({
+
+  // O que esta edição está a PROPOR (só os campos que o formulário envia).
+  //
+  // ⛔ `data_emissao` NÃO é mascarada quando vem vazia. Se fosse
+  // (`data_emissao || quota.data_emissao`), uma tentativa de LIMPAR a emissão
+  // nunca apareceria como «alteração» e a regra de R10 deixá-la-ia passar em
+  // silêncio — a porta para «des-emitir» uma quota ficaria aberta por omissão.
+  // Aqui, um valor vazio é uma proposta de limpeza (`null`); só a AUSÊNCIA do
+  // campo (`undefined`) significa «não proponho nada».
+  const propostas = {
     valor: toNumber(valor),
-    data_emissao: data_emissao || quota.data_emissao,
     data_vencimento: data_vencimento || quota.data_vencimento,
+  };
+  if (data_emissao !== undefined) propostas.data_emissao = data_emissao || null;
+
+  if (estaEmitida(quota)) {
+    // 1. A ÂNCORA da imutabilidade: `data_emissao` identifica o documento.
+    //    Limpá-la faria a quota «voltar» a rascunho e cair no ramo não-emitido
+    //    abaixo, onde o valor voltaria a ser editável — é o contorno de R10.
+    //    Recusa-se explicitamente (com mensagem própria), antes da regra geral.
+    if ('data_emissao' in propostas && isoData(propostas.data_emissao) !== isoData(quota.data_emissao)) {
+      req.flash(
+        'error_msg',
+        'A data de emissão de uma quota emitida não pode ser alterada nem removida — '
+        + 'é ela que identifica o documento. Para corrigir um valor já emitido, registe um ACERTO '
+        + '(documento novo, que não altera a quota original).'
+      );
+      return res.redirect('/admin/quotas');
+    }
+
+    // 2. Elementos financeiros e identificadores: congelados por R10.
+    const congeladas = alteracoesCongeladas(quota, propostas);
+    if (congeladas.length > 0) {
+      req.flash(
+        'error_msg',
+        `Quota emitida não pode ser reescrita (${congeladas.map((c) => c.campo).join(', ')}). `
+        + 'Os valores de uma quota emitida são imutáveis: uma correção exige um ACERTO, '
+        + 'que é um documento novo e não altera a quota original.'
+      );
+      return res.redirect('/admin/quotas');
+    }
+
+    // 3. `data_vencimento` de um documento emitido: exige operação própria,
+    //    explícita e auditada — não é um campo livremente editável.
+    if (isoData(propostas.data_vencimento) !== isoData(quota.data_vencimento)) {
+      req.flash(
+        'error_msg',
+        'A data de vencimento de uma quota emitida não é editável por aqui: '
+        + 'exige uma operação própria e auditada.'
+      );
+      return res.redirect('/admin/quotas');
+    }
+
+    // 4. Só as observações podem mudar.
+    await quota.update({ observacoes });
+    await audit({
+      userId: req.user.id,
+      acao: 'editar_quota',
+      entidade: 'Quota',
+      entidadeId: quota.id,
+      detalhes: { emitida: true, alterados: ['observacoes'] },
+    });
+    req.flash('success_msg', 'Observações atualizadas (os valores de uma quota emitida são imutáveis).');
+    return res.redirect('/admin/quotas');
+  }
+
+  // ── Quota ainda NÃO emitida (rascunho) ────────────────────────────
+  // O valor pode ser corrigido, mas a edição não pode deixar o total incoerente
+  // com as suas componentes (invariante I-4: valor = valor_base + valor_fcr).
+  // Só se verifica quando o valor MUDA: uma quota histórica já incoerente
+  // continua a poder receber correções de observações (Q10 — detetar/reportar,
+  // nunca normalizar).
+  const mudaValor = toCents(propostas.valor) !== toCents(quota.valor);
+  if (mudaValor && !invarianteOk({
+    valor: propostas.valor,
+    valor_base: quota.valor_base,
+    valor_fcr: quota.valor_fcr,
+  })) {
+    req.flash(
+      'error_msg',
+      `A edição deixaria o total (${propostas.valor} €) diferente de base + FCR `
+      + `(${quota.valor_base} € + ${quota.valor_fcr} €). Corrija pela configuração de quotas `
+      + 'ou por um acerto, para o total continuar a ser a soma das componentes.'
+    );
+    return res.redirect('/admin/quotas');
+  }
+
+  // Este ramo só é alcançável quando `quota.data_emissao` é NULL (a quota não é
+  // um documento). É o único sítio que pode ESCREVER `data_emissao` por edição:
+  // promove um rascunho a emitido. Nunca a limpa — uma quota já emitida não
+  // chega aqui (foi recusada acima), logo o contorno «des-emitir para editar»
+  // não tem porta de entrada.
+  await quota.update({
+    valor: propostas.valor,
+    data_emissao: propostas.data_emissao === undefined ? quota.data_emissao : propostas.data_emissao,
+    data_vencimento: propostas.data_vencimento,
     observacoes,
   });
-  await audit({ userId: req.user.id, acao: 'editar_quota', entidade: 'Quota', entidadeId: quota.id });
+  await audit({
+    userId: req.user.id,
+    acao: 'editar_quota',
+    entidade: 'Quota',
+    entidadeId: quota.id,
+    detalhes: { emitida: false },
+  });
   req.flash('success_msg', 'Quota atualizada.');
   res.redirect('/admin/quotas');
 });
 
+// P6 / R10 — anulação de uma quota.
+//
+// Uma quota com PAGAMENTO CONFIRMADO aplicado não pode ser anulada por esta
+// via: a anulação não reverte o pagamento e deixaria dinheiro aplicado sobre
+// uma quota anulada (a dívida desaparecia, o dinheiro não). Reverter exige
+// anular primeiro o pagamento. Quotas sem pagamento confirmado continuam a
+// poder ser anuladas como antes.
 router.post('/quotas/:id/anular', async (req, res) => {
   const quota = await Quota.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
-  if (quota) {
-    await quota.update({ estado: 'anulada' });
-    await audit({ userId: req.user.id, acao: 'anular_quota', entidade: 'Quota', entidadeId: quota.id });
+  if (!quota) {
+    req.flash('error_msg', 'Quota não encontrada.');
+    return res.redirect('/admin/quotas');
   }
+
+  const aplicacoes = await PagamentoQuota.findAll({
+    where: { quota_id: quota.id },
+    include: [
+      { model: Pagamento, as: 'pagamento', where: { estado: 'confirmado' }, required: false },
+    ],
+    order: [['id', 'ASC']],
+  });
+  const pagoC = aplicacoes
+    .filter((a) => a.pagamento && a.pagamento.estado === 'confirmado')
+    .reduce((s, a) => s + toCents(a.valor_aplicado), 0);
+
+  if (pagoC > 0) {
+    req.flash(
+      'error_msg',
+      `Esta quota tem ${formatEURCents(pagoC)} de pagamento confirmado aplicado e não pode ser anulada. `
+      + 'Anule primeiro o pagamento que a liquidou.'
+    );
+    return res.redirect('/admin/quotas');
+  }
+
+  if (quota.estado === 'anulada') {
+    req.flash('error_msg', 'Esta quota já está anulada.');
+    return res.redirect('/admin/quotas');
+  }
+
+  await quota.update({ estado: 'anulada' });
+  await audit({
+    userId: req.user.id,
+    acao: 'anular_quota',
+    entidade: 'Quota',
+    entidadeId: quota.id,
+    detalhes: { pagamentoAplicadoC: 0 },
+  });
   req.flash('success_msg', 'Quota anulada.');
   res.redirect('/admin/quotas');
 });

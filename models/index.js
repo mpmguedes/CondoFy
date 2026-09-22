@@ -341,6 +341,12 @@ ExtraQuotaParcela.belongsTo(ExtraQuota, { foreignKey: 'extra_quota_id', as: 'ext
 ExtraQuotaParcela.belongsTo(Fracao, { foreignKey: 'fracao_id', as: 'fracao' });
 Fracao.hasMany(ExtraQuotaParcela, { foreignKey: 'fracao_id', as: 'parcelas_extra' });
 
+// Q11/R10 — vínculos de um ACERTO. `quota_origem` é a quota corrigida: o acerto
+// referencia-a, nunca a reescreve (`onDelete: SET NULL` na migration garante que
+// apagar a quota não apaga o documento de acerto).
+ExtraQuota.belongsTo(Orcamento, { foreignKey: 'orcamento_id', as: 'orcamento' });
+ExtraQuota.belongsTo(Quota, { foreignKey: 'quota_id', as: 'quota_origem' });
+
 // Itens da ordem de trabalhos
 Assembleia.hasMany(AgendaItem, { foreignKey: 'assembleia_id', as: 'agenda_itens' });
 AgendaItem.belongsTo(Assembleia, { foreignKey: 'assembleia_id', as: 'assembleia' });

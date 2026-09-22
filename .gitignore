@@ -4,6 +4,9 @@ node_modules/
 *.log
 # Artefactos de verificação local (harnesses, imagens, rasters) — não versionar
 .verify/
+# Resíduos dos harnesses de mutação (backup do alvo + marcador `.alvo`).
+# NUNCA versionar: são cópias temporárias de ficheiros do repositório.
+.mutation-backup-*
 public/uploads/*
 !public/uploads/.gitkeep
 backups/local/

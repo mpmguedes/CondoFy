@@ -60,14 +60,29 @@ const PERIODICIDADE_LABEL = {
 };
 
 // Guarda uma quota extra do condomínio ativo (bloqueia IDOR).
+//
+// ⛔ `tipo: 'extraordinaria'` é OBRIGATÓRIO em TODAS as leituras deste módulo:
+// `extra_quotas` guarda também os ACERTOS de quota (`tipo='acerto'`, Q11), que
+// são documentos de natureza diferente e têm fluxo próprio. Sem este filtro, um
+// acerto era carregado por aqui e podia ser aprovado/processado/anulado como se
+// fosse uma quota extraordinária — passando a contar como tal nos relatórios e
+// ficando elegível para cobrança pelo fluxo errado. Um acerto não pertence a
+// este módulo.
 function carregarExtra(req) {
-  return ExtraQuota.findOne({ where: { id: req.params.id, condominio_id: req.condominioId } });
+  return ExtraQuota.findOne({
+    where: { id: req.params.id, condominio_id: req.condominioId, tipo: 'extraordinaria' },
+  });
 }
 
 // Guarda uma parcela cuja quota extra pertence ao condomínio ativo.
 async function carregarParcela(req) {
   const parcela = await ExtraQuotaParcela.findByPk(req.params.id, {
-    include: [{ model: ExtraQuota, as: 'extra_quota', where: { condominio_id: req.condominioId }, required: true }],
+    include: [{
+      model: ExtraQuota,
+      as: 'extra_quota',
+      where: { condominio_id: req.condominioId, tipo: 'extraordinaria' },
+      required: true,
+    }],
   });
   return parcela;
 }
@@ -102,7 +117,12 @@ async function resumoExtra(extra) {
 // LISTA
 // ═══════════════════════════════════════════════════════════════════
 router.get('/quotas-extra', async (req, res) => {
-  const extras = await ExtraQuota.findAll({ where: { condominio_id: req.condominioId }, order: [['created_at', 'DESC']] });
+  // Só quotas EXTRAORDINÁRIAS: os acertos (`tipo='acerto'`) não são quotas
+  // extraordinárias e não podem aparecer nesta lista (ver `carregarExtra`).
+  const extras = await ExtraQuota.findAll({
+    where: { condominio_id: req.condominioId, tipo: 'extraordinaria' },
+    order: [['created_at', 'DESC']],
+  });
   const linhas = [];
   for (const e of extras) {
     const r = await resumoExtra(e);
@@ -198,6 +218,11 @@ router.post('/quotas-extra', async (req, res) => {
         ano_inicio: anoInicio,
         numero_parcelas: numeroParcelas,
         periodicidade,
+        // Este módulo cria SEMPRE quotas extraordinárias. `tipo` é EXPLÍCITO (e
+        // não herdado do DEFAULT da coluna) para que um acerto — que nasce no
+        // seu próprio fluxo (`helpers/quota-acerto.js`) — nunca apareça criado
+        // por aqui, mesmo que o DEFAULT venha a mudar.
+        tipo: 'extraordinaria',
         // Criada → fica PENDENTE de aprovação (nunca cobrável de imediato).
         estado: 'pendente',
       },

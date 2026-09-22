@@ -11,6 +11,9 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+// Símbolos reais do Sequelize: os dublês que honram o `where` comparam com o
+// MESMO símbolo que o motor usa (`{ [Op.ne]: 'anulada' }`), não com uma cópia.
+const { Op } = require('sequelize');
 
 const modelos = require('../models');
 const {
@@ -72,6 +75,53 @@ function comDados(dados, fn) {
     .finally(() => {
       for (const [alvo, metodo, valor] of originais) alvo[metodo] = valor;
     });
+}
+
+// Comparador mínimo que imita o Sequelize num `where` raso:
+//   undefined  → não filtra
+//   { [Op.ne]: x } → valor ≠ x
+//   valor      → igualdade estrita
+function corresponde(valor, cond) {
+  if (cond === undefined) return true;
+  if (cond && typeof cond === 'object' && Object.prototype.hasOwnProperty.call(cond, Op.ne)) {
+    return valor !== cond[Op.ne];
+  }
+  return valor === cond;
+}
+
+// Dublê que HONRA o `where` das quotas extraordinárias. É indispensável para
+// provar o filtro `tipo='extraordinaria'`: um dublê que devolve sempre o mesmo
+// array passa com e sem filtro (falso verde). Aqui as consultas aplicam
+// `condominio_id`/`tipo`/`estado` (e o `where` do `include`, com semântica
+// `required: true` — parcelas cujo pai não corresponde são excluídas).
+function comDadosFiltrados(dados, fn) {
+  return comDados(dados, () => {
+    const paiDe = (p) => (dados.extras || []).find((e) => Number(e.id) === Number(p.extra_quota_id));
+
+    modelos.ExtraQuota.findAll = async ({ where } = {}) =>
+      (dados.extras || []).filter((e) => corresponde(e.condominio_id, where && where.condominio_id)
+        && corresponde(e.tipo, where && where.tipo)
+        && corresponde(e.estado, where && where.estado));
+
+    modelos.ExtraQuotaParcela.findAll = async ({ where, include } = {}) => {
+      const doPai = ((include || []).find((i) => i.as === 'extra_quota') || {}).where || {};
+      return (dados.parcelas || [])
+        .filter((p) => {
+          if (!corresponde(p.estado, where && where.estado)) return false;
+          const pai = paiDe(p);
+          return Boolean(pai)
+            && corresponde(pai.condominio_id, doPai.condominio_id)
+            && corresponde(pai.tipo, doPai.tipo)
+            && corresponde(pai.estado, doPai.estado);
+        })
+        .map((p) => {
+          const pai = paiDe(p);
+          return { ...p, extra_quota: { id: pai.id, condominio_id: pai.condominio_id, designacao: pai.designacao } };
+        });
+    };
+
+    return fn();
+  });
 }
 
 const C = (v) => Math.round(Number(v) * 100); // euros → cêntimos
@@ -431,7 +481,7 @@ async function cenarioDetalheEObservacoes() {
 // ── Quotas extraordinárias (lançado/recebido/em dívida por rubrica) ──
 async function cenarioQuotaExtra() {
   await comDados(cenarioBase({
-    extras: [{ id: 80, condominio_id: 1, designacao: 'Obras de fachada', valor_total: '600.00', ano_inicio: 2026, mes_inicio: 3, numero_parcelas: 2, periodicidade: 'mensal', estado: 'processada' }],
+    extras: [{ id: 80, condominio_id: 1, tipo: 'extraordinaria', designacao: 'Obras de fachada', valor_total: '600.00', ano_inicio: 2026, mes_inicio: 3, numero_parcelas: 2, periodicidade: 'mensal', estado: 'processada' }],
     parcelas: [
       { id: 90, extra_quota_id: 80, fracao_id: 1, parcela_numero: 1, valor: '300.00', data_vencimento: '2026-03-08', estado: 'paga', extra_quota: { id: 80, condominio_id: 1, designacao: 'Obras de fachada' } },
       { id: 91, extra_quota_id: 80, fracao_id: 1, parcela_numero: 2, valor: '300.00', data_vencimento: '2026-09-08', estado: 'pendente', extra_quota: { id: 80, condominio_id: 1, designacao: 'Obras de fachada' } },
@@ -459,6 +509,56 @@ async function cenarioQuotaExtra() {
     assert.strictEqual(linhaAnual.orcamentadoC, C(600), 'no ano completo o orçamentado é o valor total aprovado');
     assert.strictEqual(linhaAnual.emDividaC, C(300), 'em dívida = 600 − 300');
     assert.strictEqual(anual.sintese.dividaCondominosC, C(300), 'dívida acumulada igual');
+  });
+}
+
+// ── Extraordinárias × ACERTO (Q11): o acerto não é uma extraordinária ─
+// `extra_quotas` guarda DOIS tipos de documento: 'extraordinaria' (módulo de
+// quotas extraordinárias) e 'acerto' (Q11, helpers/quota-acerto.js). Um acerto
+// nunca cria `ExtraQuotaParcela`; ainda assim, se o filtro `tipo` faltasse, um
+// acerto em `processada` seria contabilizado como quota extraordinária. Este
+// cenário põe as duas linhas na mesma tabela, ambas processadas, e uma parcela
+// FABRICADA à mão sobre o acerto — que só entra se o filtro não existir.
+async function cenarioAcertoNaoContaComoExtra() {
+  const dados = cenarioBase({
+    extras: [
+      { id: 80, condominio_id: 1, tipo: 'extraordinaria', designacao: 'Obras de fachada', valor_total: '600.00', ano_inicio: 2026, mes_inicio: 3, numero_parcelas: 2, periodicidade: 'mensal', estado: 'processada' },
+      { id: 85, condominio_id: 1, tipo: 'acerto', designacao: 'Acerto da quota de janeiro', valor_total: '150.00', ano_inicio: 2026, mes_inicio: 1, numero_parcelas: 1, periodicidade: 'unica', estado: 'processada' },
+    ],
+    parcelas: [
+      { id: 90, extra_quota_id: 80, fracao_id: 1, parcela_numero: 1, valor: '300.00', data_vencimento: '2026-03-08', estado: 'paga' },
+      { id: 91, extra_quota_id: 80, fracao_id: 1, parcela_numero: 2, valor: '300.00', data_vencimento: '2026-09-08', estado: 'pendente' },
+      // Parcela impossível em produção (um acerto não gera parcelas): existe
+      // só para provar que, sem o filtro `tipo`, ela entraria no total.
+      { id: 92, extra_quota_id: 85, fracao_id: 1, parcela_numero: 1, valor: '150.00', data_vencimento: '2026-01-08', estado: 'pendente' },
+    ],
+    aplicacoesParcela: [{ extra_quota_parcela_id: 90, valor_aplicado: '300.00' }],
+    pagamentos: [{ id: 41, fracao_id: 1, valor: '300.00', data_pagamento: '2026-03-08', estado: 'confirmado' }],
+  });
+
+  await comDadosFiltrados(dados, async () => {
+    const r = await balanceteFinanceiro({ condominioId: 1, dataInicio: '2026-01-01', dataFim: '2026-12-31' });
+
+    // 1) Nenhuma rubrica nasce do acerto: só a extraordinária tem rubrica.
+    const linhasExtra = r.receitas.rubricas.filter((x) => x.tipo === 'quota_extra');
+    assert.strictEqual(linhasExtra.length, 1, 'o acerto processado não gera rubrica de quota extraordinária');
+    assert.ok(linhasExtra[0].designacao.includes('Obras de fachada'), 'a única rubrica é a da extraordinária');
+    assert.ok(!r.receitas.rubricas.some((x) => String(x.designacao).includes('Acerto')), 'nenhuma rubrica com o acerto');
+
+    // 2) Totais: só a extraordinária (600). Com o acerto seriam 750.
+    assert.strictEqual(r.receitas.totais.lancadoC, C(600), 'lançado = 600 (só a extraordinária), não 750');
+    assert.strictEqual(r.receitas.totais.recebidoC, C(300), 'recebido = 1.ª parcela da extraordinária');
+    assert.strictEqual(r.receitas.totais.emDividaC, C(300), 'em dívida = 2.ª parcela da extraordinária');
+
+    // 3) Dívida por fração: a parcela fabricada do acerto não entra (seria 450).
+    assert.strictEqual(r.sintese.dividaCondominosC, C(300), 'dívida de condóminos = 300, sem os 150 do acerto');
+    assert.strictEqual(r.dividasCondominos.nFracoesEmDivida, 1, 'uma fração em dívida');
+
+    // 4) O filtro existe MESMO no código (não é a estrutura que o salva): se
+    //    alguém o remover, as asserções acima ficam vermelhas — provado por
+    //    mutação em scripts/test-mutacao-*.js.
+    assert.ok(/ExtraQuota\.findAll\(\{[\s\S]{0,400}?tipo:\s*'extraordinaria'/.test(codigoMotor), 'contabilização de extraordinárias filtra tipo=extraordinaria');
+    assert.ok(/as:\s*'extra_quota'[\s\S]{0,300}?tipo:\s*'extraordinaria'/.test(codigoMotor), 'parcelas filtram a quota pai por tipo=extraordinaria');
   });
 }
 
@@ -642,6 +742,7 @@ function testesIsolamentoEIntegracao() {
   await cenarioPeriodoParcial();
   await cenarioDetalheEObservacoes();
   await cenarioQuotaExtra();
+  await cenarioAcertoNaoContaComoExtra();
   await cenarioDoisCondominios();
   testesPuros();
   await testesPdf();

@@ -1,11 +1,14 @@
 // ═══════════════════════════════════════════════════════════════════
-// Pendências de quotas: recálculo (P19) e fecho do plano (P22).
+// Pendências de quotas: recálculo de configuração (R10/Q9) e fecho do plano (P22).
 //
-// P19 — O recálculo em massa (POST /admin/quotas/config com `recalcular=futuras`)
-//       só pode tocar em quotas SEM pagamento aplicado. Uma quota
-//       `parcialmente_paga` já tem dinheiro aplicado: recalcular-lhe o `valor`
-//       mudaria a dívida de quem já pagou parte, e o recálculo nunca reverte o
-//       pagamento. A vista promete «Quotas já pagas nunca são alteradas».
+// R10 — O recálculo em massa (POST /admin/quotas/config com `recalcular=futuras`)
+//       deixou de ser um recálculo: passou a PRÉ-VISUALIZAÇÃO SEM ESCRITA (Q9).
+//       Uma quota EMITIDA (`data_emissao` preenchida) é um DOCUMENTO e os seus
+//       valores são imutáveis: nenhuma configuração, recálculo ou edição os
+//       altera. O antigo filtro P19 (por `estado` + `data_vencimento`) era um
+//       SUBCONJUNTO ESTRITO desta regra — protegia o dinheiro aplicado, mas
+//       deixava passar o documento emitido ainda `pendente` e protegia «por
+//       acidente» as quotas com vencimento no passado.
 //
 // P22 — `calcularPlano` fecha ao cêntimo com o orçamento. O `dividirEm` antigo
 //       (`Math.round(totalC / n)` repetido n vezes) multiplicava o erro de
@@ -160,32 +163,84 @@ function testesDoPlano() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// B. P19 — o recálculo só toca em quotas sem pagamento aplicado
+// B. R10 — o recálculo de configuração é PRÉ-VISUALIZAÇÃO: não escreve nada
+//
+// O contrato antigo (P19) protegia o DINHEIRO aplicado filtrando por `estado`
+// e por `data_vencimento`. Era um SUBCONJUNTO ESTRITO de R10: deixava passar o
+// DOCUMENTO emitido ainda `pendente`, e protegia «por acidente» as quotas com
+// vencimento no passado. O contrato passou a ser:
+//
+//   `data_emissao` determina a imutabilidade financeira;
+//   o estado de pagamento determina apenas o estado DERIVADO.
+//
+// Consequência direta: `POST /admin/quotas/config` com `recalcular=futuras`
+// deixou de fazer `q.update(...)` sobre quotas existentes. Calcula o impacto e
+// mostra-o (pré-visualização, Q9); a nova configuração só produz efeitos nas
+// gerações FUTURAS de quotas (`POST /quotas/gerar`), nunca reescrevendo o que
+// já existe — emitido ou não.
 // ═══════════════════════════════════════════════════════════════════
 async function testeDoRecalculo() {
   const FRACOES = [
     { id: 21, permilagem: '500', estado: 'ativo', condominio_id: 1 },
     { id: 22, permilagem: '500', estado: 'ativo', condominio_id: 1 },
   ];
-  // Estado, vencimento e o que se espera do recálculo.
+  // EMITIDAS (com `data_emissao`) — documentos: congeladas por R10, seja qual
+  // for o estado ou a data de vencimento.
+  const emitida = (id, fracaoId, mes, estado, vencimento) => ({
+    id,
+    fracao_id: fracaoId,
+    ano: 2026,
+    mes,
+    estado,
+    data_emissao: dias(-5),
+    data_vencimento: vencimento,
+    valor: '110.00',
+    valor_base: '100.00',
+    valor_fcr: '10.00',
+    valor_por_1000: '110.0000',
+    permilagem_aplicada: '500.00',
+    fcr_percentagem: '10.00',
+  });
   const QUOTAS = [
-    { id: 1, fracao_id: 21, ano: 2026, mes: 1, estado: 'pendente', data_vencimento: dias(+30), valor: '110.00' },
-    { id: 2, fracao_id: 22, ano: 2026, mes: 1, estado: 'parcialmente_paga', data_vencimento: dias(+30), valor: '110.00' },
-    { id: 3, fracao_id: 21, ano: 2026, mes: 2, estado: 'paga', data_vencimento: dias(+30), valor: '110.00' },
-    { id: 4, fracao_id: 22, ano: 2026, mes: 2, estado: 'pendente', data_vencimento: dias(-30), valor: '110.00' },
-    { id: 5, fracao_id: 21, ano: 2026, mes: 3, estado: 'vencida', data_vencimento: dias(+30), valor: '110.00' },
-    { id: 6, fracao_id: 22, ano: 2026, mes: 3, estado: 'anulada', data_vencimento: dias(+30), valor: '110.00' },
+    emitida(1, 21, 1, 'pendente', dias(+30)),          // emitida, por pagar
+    emitida(2, 22, 1, 'parcialmente_paga', dias(+30)), // emitida, dinheiro aplicado
+    emitida(3, 21, 2, 'paga', dias(+30)),              // emitida, paga
+    emitida(4, 22, 2, 'pendente', dias(-30)),          // emitida, vencimento no PASSADO
+    emitida(5, 21, 3, 'vencida', dias(+30)),           // emitida, estado derivado
+    emitida(6, 22, 3, 'anulada', dias(+30)),           // emitida, anulada (fora do âmbito)
+    // NÃO emitida — a única classe que uma nova configuração pode vir a
+    // calcular, e fá-lo-á na GERAÇÃO SEGUINTE (não reescrevendo esta linha).
+    {
+      id: 7,
+      fracao_id: 21,
+      ano: 2026,
+      mes: 4,
+      estado: 'pendente',
+      data_emissao: null,
+      data_vencimento: dias(+30),
+      valor: '110.00',
+      valor_base: '100.00',
+      valor_fcr: '10.00',
+      valor_por_1000: '110.0000',
+      permilagem_aplicada: '500.00',
+      fcr_percentagem: '10.00',
+    },
   ];
   const ATUALIZADAS = [];
 
   const comToJSON = (o) => Object.assign(Object.create({ toJSON() { return { ...this }; } }), o);
 
   // Duplo de findAll que INTERPRETA o `where` real da rota (mesmos `Op`).
+  // Honrar o `where` é o que faz o teste morder: se a consulta da rota mudar, o
+  // universo medido muda com ela.
   const aplicarWhere = (linhas, where = {}) => linhas.filter((q) => {
     if (where.condominio_id !== undefined && q.condominio_id !== undefined
       && q.condominio_id !== where.condominio_id) return false;
     const est = where.estado && where.estado[Op.in];
     if (est && !est.includes(q.estado)) return false;
+    const estNe = where.estado && where.estado[Op.ne];
+    if (estNe !== undefined && q.estado === estNe) return false;
+    if (where.data_emissao === null && q.data_emissao) return false;
     const gte = where.data_vencimento && where.data_vencimento[Op.gte];
     if (gte && !(new Date(q.data_vencimento) >= gte)) return false;
     return true;
@@ -198,6 +253,12 @@ async function testeDoRecalculo() {
     aggregate: async () => null,
   }, over);
 
+  // Aplicações confirmadas — só para provar que o PAGAMENTO continua a
+  // atualizar apenas o estado DERIVADO, nunca um valor (R10).
+  const APLICACOES = [
+    { id: 1, quota_id: 1, valor_aplicado: '110.00', pagamento_estado: 'confirmado' },
+  ];
+
   const MODELS = new Proxy({}, {
     get: (_t, nome) => {
       if (nome === 'sequelize') return {};
@@ -205,11 +266,36 @@ async function testeDoRecalculo() {
         return modelo({ findByPk: async (id) => FRACOES.find((f) => f.id === Number(id)) || null });
       }
       if (nome === 'Quota') {
+        // Cada linha devolve um `update` que REGISTA a escrita (é o instrumento
+        // que mede o defeito) e a aplica ao fixture, para o estado final poder
+        // ser lido depois.
+        const linha = (q) => comToJSON({
+          ...q,
+          update: async (campos) => {
+            ATUALIZADAS.push({ id: q.id, estado: q.estado, campos });
+            Object.assign(q, campos);
+          },
+        });
         return modelo({
-          findAll: async (opts) => aplicarWhere(QUOTAS, opts && opts.where).map((q) => comToJSON({
-            ...q,
-            update: async (campos) => { ATUALIZADAS.push({ id: q.id, estado: q.estado, campos }); },
-          })),
+          findAll: async (opts) => aplicarWhere(QUOTAS, opts && opts.where).map(linha),
+          findByPk: async (id) => {
+            const achada = QUOTAS.find((q) => Number(q.id) === Number(id));
+            return achada ? linha(achada) : null;
+          },
+        });
+      }
+      if (nome === 'PagamentoQuota') {
+        return modelo({
+          findAll: async (opts) => {
+            const where = (opts && opts.where) || {};
+            const alvo = where.quota_id;
+            const ids = Array.isArray(alvo) ? alvo.map(Number)
+              : alvo === undefined ? null : [Number(alvo)];
+            return APLICACOES
+              .filter((a) => ids === null || ids.includes(Number(a.quota_id)))
+              // O helper real lê `a.pagamento.estado` — o duplo honra essa forma.
+              .map((a) => ({ ...a, pagamento: { estado: a.pagamento_estado } }));
+          },
         });
       }
       return modelo();
@@ -279,26 +365,68 @@ async function testeDoRecalculo() {
     assert.ok(GRAVADO, 'a configuração foi gravada no âmbito do condomínio ativo');
     assert.strictEqual(GRAVADO.id, 1, 'a configuração é gravada no condomínio ativo (âmbito explícito)');
 
+    // ── B1. O recálculo de configuração não escreve em quota nenhuma ──
     const ids = ATUALIZADAS.map((a) => a.id).sort((a, b) => a - b);
-    assert.deepStrictEqual(ids, [1, 5],
-      'P19: só são recalculadas as quotas SEM pagamento aplicado e com vencimento futuro ' +
-      `(esperado [1, 5]; obtido [${ids.join(', ')}])`);
+    assert.deepStrictEqual(ids, [],
+      'R10/Q9: `recalcular=futuras` é PRÉ-VISUALIZAÇÃO e não pode gravar nenhuma quota '
+      + `(esperado: nenhuma; obtido: [${ids.join(', ')}])`);
+    console.log('  ✓ B1. `recalcular=futuras` não escreve em quota nenhuma (pré-visualização, Q9)');
 
-    // O motivo, quota a quota — para a falha ser legível.
-    for (const id of [2, 3, 4, 6]) {
-      const q = QUOTAS.find((x) => x.id === id);
-      assert.ok(!ids.includes(id), `quota ${id} (${q.estado}) NÃO pode ser recalculada`);
+    // ── B2. As quotas EMITIDAS mantêm os snapshots intactos ──
+    // A fronteira é `data_emissao`: estado e vencimento não decidem nada.
+    const CAMPOS = ['valor', 'valor_base', 'valor_fcr', 'valor_por_1000', 'permilagem_aplicada', 'fcr_percentagem'];
+    const ESPERADO = {
+      valor: '110.00', valor_base: '100.00', valor_fcr: '10.00',
+      valor_por_1000: '110.0000', permilagem_aplicada: '500.00', fcr_percentagem: '10.00',
+    };
+    const emitidas = QUOTAS.filter((q) => q.data_emissao);
+    assert.strictEqual(emitidas.length, 6, 'pré-condição: 6 quotas emitidas no fixture');
+    for (const q of emitidas) {
+      for (const c of CAMPOS) {
+        assert.strictEqual(String(q[c]), ESPERADO[c],
+          `quota emitida #${q.id} (${q.estado}): o campo ${c} tem de ficar intacto (R10)`);
+      }
     }
+    // Os dois casos que o antigo filtro P19 deixava passar / protegia por acidente:
+    assert.strictEqual(QUOTAS.find((q) => q.id === 1).valor, '110.00',
+      'a quota emitida e ainda `pendente` (#1) fica intacta — P19 deixava-a passar');
+    assert.strictEqual(QUOTAS.find((q) => q.id === 4).valor, '110.00',
+      'a quota emitida com vencimento no PASSADO (#4) fica intacta pela razão certa (estar emitida)');
+    console.log('  ✓ B2. quotas emitidas (pendentes, pagas, parciais e vencidas) mantêm os snapshots');
 
-    // A quota recalculada recebe as componentes do motor real (D1: base + FCR = total).
-    const q1 = ATUALIZADAS.find((a) => a.id === 1);
-    assert.strictEqual(Number(q1.campos.valor), 55,
-      'quota 500‰ a 110 €/1000‰ → total 55 € (o total já contém o FCR)');
-    assert.strictEqual(Number(q1.campos.valor_base), 50, 'base = 50 €');
-    assert.strictEqual(Number(q1.campos.valor_fcr), 5, 'FCR = 5 €');
-    assert.strictEqual(Number(q1.campos.valor_base) + Number(q1.campos.valor_fcr), Number(q1.campos.valor),
-      'base + FCR = total na quota recalculada');
-    console.log('  ✓ B1. recálculo restrito a quotas sem pagamento aplicado (parcial/paga intactas)');
+    // ── B3. As quotas NÃO emitidas são o universo da pré-visualização ──
+    // Continuam a poder ser CALCULADAS (é o que a pré-visualização mostra), mas
+    // não são reescritas: a nova configuração aplica-se à geração seguinte.
+    const { previsaoRecalculo } = require('../helpers/quotas-previsao');
+    const previa = await previsaoRecalculo({
+      condominioId: 1, valorPor1000: '110.0000', fcrPercentagem: '10',
+    });
+    assert.deepStrictEqual(previa.afetadas.map((a) => a.id), [7],
+      'só a quota NÃO emitida (#7) é candidata a cálculo com a nova configuração');
+    assert.strictEqual(previa.afetadas[0].para, 55,
+      'a pré-visualização mostra o valor que a nova configuração produziria (500‰ a 110 €/1000‰ → 55 €)');
+    assert.deepStrictEqual(previa.protegidas.map((p) => p.id).sort((a, b) => a - b), [1, 2, 3, 4, 5],
+      'as 5 quotas emitidas não anuladas são reportadas como PROTEGIDAS (R10)');
+    assert.strictEqual(QUOTAS.find((q) => q.id === 7).valor, '110.00',
+      'a pré-visualização NÃO reescreve a quota não emitida (só mostra o impacto)');
+    console.log('  ✓ B3. pré-visualização: não emitidas calculadas e mostradas, sem escrita');
+
+    // ── B4. O pagamento continua a atualizar APENAS o estado derivado ──
+    const { recalcularEstadoQuota } = require('../helpers/pagamentos');
+    const antes4 = { ...QUOTAS.find((q) => q.id === 1) };
+    await recalcularEstadoQuota(1, {});
+    const q1 = QUOTAS.find((q) => q.id === 1);
+    assert.strictEqual(q1.estado, 'paga',
+      'com 110 € confirmados sobre 110 €, o estado derivado é `paga`');
+    for (const c of CAMPOS) {
+      assert.strictEqual(String(q1[c]), String(antes4[c]),
+        `o pagamento não pode tocar no campo ${c} (só o estado derivado muda)`);
+    }
+    assert.ok(
+      ATUALIZADAS.every((a) => Object.keys(a.campos).join(',') === 'estado'),
+      'a única escrita que o pagamento pode fazer é `estado`'
+    );
+    console.log('  ✓ B4. pagamento atualiza apenas o estado derivado (nenhum valor é tocado)');
   } finally {
     await new Promise((resolve) => servidor.close(resolve));
   }
@@ -439,7 +567,7 @@ function testesDeQuotasExtra() {
 
 // ═══════════════════════════════════════════════════════════════════
 (async () => {
-  console.log('Pendências de quotas — recálculo (P19) e fecho do plano (P22)');
+  console.log('Pendências de quotas — recálculo de configuração (R10/Q9) e fecho do plano (P22)');
   testesDoPlano();
   testesDeDeterminismo();
   testesDeQuotasExtra();
