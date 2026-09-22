@@ -620,10 +620,12 @@ Tudo o que se segue foi **corrigido e provado nesta árvore** (frentes A1–A8, 
 
 **Continua aberto, com evidência:** **P4**, **P5** (remoção adiada com plano fechado de 4 edições), **P6**, **P9/P10**, **P17**, **P18**, **P21**, **P23**, **P30**, **P31** (C2 e C4), **P33**, **P35**, **P39/P40**, **P42**, **P43**, **P49** (não existe `scripts/test-mutacao-tips.js`) e **P53**.
 
-> **Lacuna registada pelo A9:** `scripts/test-mutacao-despesa-transacao.js` (harness do **P16**, frente A7)  
-> **existe na árvore mas não está ligado à cadeia `test:offline`** — o A9 integrou-o no commit mas **não  
-> alterou a cadeia** sem o correr nesta frente (o orçamento de eliminações do turno foi gasto na cadeia  
-> completa, 104/104). Mesma família do **P49**: decide-se no próximo ciclo se entra na cadeia.
+> **Lacuna registada pelo A9 (2 harnesses):** existem na árvore **dois** harnesses de mutação que **não  
+> estão ligados à cadeia `test:offline`** — `scripts/test-mutacao-despesa-transacao.js` (**P16**, frente A7)  
+> e `scripts/test-mutacao-exportacao.js` (**P37**, frente A8, já commitado em `f9f63f6`; os restantes 5  
+> harnesses estão ligados). O A9 **integrou/verificou os ficheiros mas não alterou a cadeia** sem os correr  
+> nesta frente — o orçamento de eliminações do turno foi consumido pela cadeia completa (104/104). Mesma  
+> família do **P49**: decide-se no próximo ciclo se entram na cadeia.
 
 #### Decisões que permanecem do utilizador (NÃO tomadas neste ciclo)
 
