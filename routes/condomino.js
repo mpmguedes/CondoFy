@@ -27,6 +27,9 @@ const contaCorrente = require('../helpers/conta-corrente');
 const { getCondominio } = require('../helpers/condominio');
 const { gerarReciboPDF } = require('../helpers/pdf');
 const cabecalhos = require('../helpers/cabecalhos-ficheiro');
+// Comprovativos de pagamento: vivem em `storage/comprovativos` (local), fora da
+// fachada de armazenamento — não há chamada a nenhum provedor (ver P23).
+const comprovativos = require('../helpers/comprovativos');
 const recibosHelper = require('../helpers/recibos');
 const { mapaPastas } = require('../helpers/documento-pastas');
 const recomendacoesHelper = require('../helpers/recomendacoes');
@@ -696,6 +699,60 @@ router.get('/recibos/:id/pdf', async (req, res) => {
   return res.send(buffer);
 });
 
+// ── Comprovativo de um pagamento próprio (P31/C1) ───────────────────
+// O condómino SUBMETE o comprovativo (é ele que o carrega no registo do
+// pagamento), mas até aqui não o podia voltar a consultar: a única rota que o
+// servia vivia no backoffice (`GET /admin/pagamentos/:id/comprovativo`).
+//
+// Esta rota revalida, em CADA pedido, a mesma fronteira de isolamento das
+// quotas e dos recibos — condomínio ativo + frações com titularidade em vigor
+// (`contextoFracoes`, que respeita a titularidade temporal) — e nunca revela a
+// existência de um pagamento alheio: responde SEMPRE 404, mesmo quando o
+// pagamento existe noutra fração ou noutro condomínio. Distinguir 403 de 404 já
+// seria informação sobre dados de terceiros.
+//
+// O ficheiro é servido pelo backend a partir de `storage/comprovativos`
+// (local, fora da fachada de armazenamento — ver P23): não há chamada a nenhum
+// provedor e nunca se devolve um link do fornecedor. O `Content-Type` só é o
+// tipo declarado no upload quando esse tipo consta da allow-list do PRÓPRIO
+// upload; qualquer outro valor sai como download genérico, para que um valor
+// inesperado na coluna não se torne conteúdo ativo no browser (o
+// `X-Content-Type-Options: nosniff` global é a segunda linha de defesa).
+router.get('/pagamentos/:id/comprovativo', async (req, res) => {
+  const idPagamento = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(idPagamento) || idPagamento <= 0) {
+    return res.status(404).send('Comprovativo não encontrado.');
+  }
+  const { fracoes } = await contextoFracoes(req);
+  const ids = fracoes.map((f) => f.id);
+  const pagamento = await Pagamento.findOne({
+    where: {
+      id: idPagamento,
+      condominio_id: req.condominioId,
+      fracao_id: { [Op.in]: ids.length ? ids : [-1] },
+    },
+  });
+  if (!pagamento || !pagamento.comprovativo_ficheiro) {
+    return res.status(404).send('Comprovativo não encontrado.');
+  }
+  if (!comprovativos.existeComprovativo(pagamento)) {
+    return res.status(404).send('Comprovativo não encontrado.');
+  }
+  const mime = String(pagamento.comprovativo_mime || '').toLowerCase();
+  const permitido = comprovativos.MIME_PERMITIDOS.has(mime);
+  const descarregar = req.query.download === '1' || !permitido;
+  res.setHeader('Content-Type', permitido ? cabecalhos.tipoSeguro(mime) : 'application/octet-stream');
+  res.setHeader(
+    'Content-Disposition',
+    cabecalhos.disposicao(pagamento.comprovativo_nome || 'comprovativo.pdf', descarregar ? 'attachment' : 'inline', 'comprovativo.pdf')
+  );
+  return res.sendFile(comprovativos.caminhoComprovativo(pagamento), (err) => {
+    // O ficheiro foi confirmado um instante antes; se desaparecer entretanto, a
+    // resposta é a mesma de «não existe» — nunca um 500 nem um corpo a meio.
+    if (err && !res.headersSent) res.status(404).send('Comprovativo não encontrado.');
+  });
+});
+
 function pessoaNomeDoUser(req) {
   return req.user ? req.user.nome : null;
 }
@@ -1011,6 +1068,24 @@ router.get('/orcamento', async (req, res) => {
   const anoAtual = new Date().getFullYear();
   const ano = parseInt(req.query.ano, 10) || anoAtual;
 
+  // Anos que fazem sentido no seletor (P31/C5): os que têm orçamento publicado
+  // (não anulado) neste condomínio — a mesma matéria-prima que o filtro de
+  // /quotas usa — mais o ano PEDIDO e o ano em curso. Assim o seletor nunca
+  // «perde» a página que está a ser mostrada (o ano pedido pode não ter
+  // orçamento) nem o atalho para o ano atual, e não inventa anos que o
+  // condomínio não conhece.
+  const anosOrcamento = await Orcamento.findAll({
+    attributes: [[require('sequelize').fn('DISTINCT', require('sequelize').col('ano')), 'ano']],
+    where: { condominio_id: req.condominioId, estado: { [Op.ne]: 'anulado' } },
+    order: [['ano', 'DESC']],
+    raw: true,
+  });
+  const anos = Array.from(new Set([
+    ...anosOrcamento.map((a) => Number(a.ano)).filter((n) => Number.isInteger(n) && n > 0),
+    ano,
+    anoAtual,
+  ])).sort((a, b) => b - a);
+
   const orcamento = await Orcamento.findOne({
     // Orçamentos anulados não são apresentados ao condomínio como correntes.
     where: { condominio_id: req.condominioId, ano, estado: { [Op.ne]: 'anulado' } },
@@ -1118,6 +1193,7 @@ router.get('/orcamento', async (req, res) => {
     acesso,
     ano,
     anoAtual,
+    anos,
     orcamento: orcamento ? orcamento.toJSON() : null,
     linhas,
     totais,

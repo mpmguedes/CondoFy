@@ -126,8 +126,9 @@
 {{!-- Desktop: a tabela detalhada, com a mesma informação. --}}
 <div class="card portal-quota-tabela"><div class="table-responsive">
   <table class="table table-hover align-middle mb-0">
+    <caption class="visually-hidden">Quotas da sua fração: fração, período, valor, vencimento, estado, valor pago, data de pagamento e referência</caption>
     <thead class="table-light">
-      <tr><th>Fração</th><th>Período</th><th>Valor</th><th>Vencimento</th><th>Estado</th><th>Pago</th><th>Data de pagamento</th><th>Referência</th></tr>
+      <tr><th scope="col">Fração</th><th scope="col">Período</th><th scope="col">Valor</th><th scope="col">Vencimento</th><th scope="col">Estado</th><th scope="col">Pago</th><th scope="col">Data de pagamento</th><th scope="col">Referência</th></tr>
     </thead>
     <tbody>
       {{#each linhas}}
@@ -184,7 +185,8 @@
 
 <div class="card portal-quota-tabela"><div class="table-responsive">
   <table class="table table-sm align-middle mb-0">
-    <thead class="table-light"><tr><th>Designação</th><th>Fração</th><th>Parcela</th><th>Valor</th><th>Vencimento</th><th>Estado</th><th>Pago</th></tr></thead>
+    <caption class="visually-hidden">Quotas extraordinárias da sua fração: designação, fração, parcela, valor, vencimento, estado e valor pago</caption>
+    <thead class="table-light"><tr><th scope="col">Designação</th><th scope="col">Fração</th><th scope="col">Parcela</th><th scope="col">Valor</th><th scope="col">Vencimento</th><th scope="col">Estado</th><th scope="col">Pago</th></tr></thead>
     <tbody>
       {{#each extras}}
       <tr>

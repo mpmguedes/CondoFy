@@ -69,6 +69,43 @@ const EXTRAS = [
   { id: 301, extra_quota_id: 1, fracao_id: 5, parcela_numero: 2, valor: 165, valor_pago: 0, data_vencimento: '2026-12-01', estado: 'cobrada', extra_quota: { id: 1, designacao: 'Impermeabilização', estado: 'processada' }, fracao: fracaoInst(FRACAO_A), toJSON() { return { id: this.id, fracao_id: this.fracao_id, parcela_numero: this.parcela_numero, valor: this.valor, valor_pago: this.valor_pago, data_vencimento: this.data_vencimento, estado: this.estado }; } },
 ];
 
+// ── Comprovativos de pagamento (P31/C1) ────────────────────────────
+// O utilizador de exemplo tem as frações 5 e 6. Um pagamento de OUTRA fração
+// (99) ou de OUTRO condomínio (2) existe na base de dados, mas não é dele.
+const PAGAMENTOS_COMPROVATIVO = [
+  // Da própria fração, com comprovativo → servido.
+  { id: 501, condominio_id: 1, fracao_id: 5, comprovativo_ficheiro: '1710000000_abc_comprovativo.pdf', comprovativo_nome: 'comprovativo.pdf', comprovativo_mime: 'application/pdf' },
+  // Da própria fração, mas sem comprovativo associado → 404 (e sem ligação na lista).
+  { id: 502, condominio_id: 1, fracao_id: 5, comprovativo_ficheiro: null, comprovativo_nome: null, comprovativo_mime: null },
+  // Da própria fração, com comprovativo registado mas ficheiro em FALTA → 404.
+  { id: 503, condominio_id: 1, fracao_id: 5, comprovativo_ficheiro: '1710000000_xyz_em-falta.pdf', comprovativo_nome: 'em-falta.pdf', comprovativo_mime: 'application/pdf' },
+  // De OUTRA fração (99, que não é do utilizador) → 404, nunca 403.
+  { id: 504, condominio_id: 1, fracao_id: 99, comprovativo_ficheiro: '1710000000_outro.pdf', comprovativo_nome: 'outro.pdf', comprovativo_mime: 'application/pdf' },
+  // De OUTRO condomínio (2), ainda que com a mesma fração → 404.
+  { id: 505, condominio_id: 2, fracao_id: 5, comprovativo_ficheiro: '1710000000_outro-cond.pdf', comprovativo_nome: 'outro-cond.pdf', comprovativo_mime: 'application/pdf' },
+  // Da própria fração, mas com um tipo DECLARADO que não consta da allow-list do
+  // upload → sai como download genérico, nunca inline.
+  { id: 506, condominio_id: 1, fracao_id: 5, comprovativo_ficheiro: '1710000000_estranho.pdf', comprovativo_nome: 'estranho.pdf', comprovativo_mime: 'text/html' },
+];
+
+// Ficheiros que o duplo de `helpers/comprovativos` considera existentes (o
+// caminho real devolvido é um ficheiro que existe mesmo no repositório: este
+// teste prova a AUTORIZAÇÃO e os CABEÇALHOS, não o conteúdo do ficheiro — e não
+// escreve nem apaga nada).
+const COMPROVATIVOS_EXISTENTES = new Set([501, 506]);
+
+// O módulo REAL é carregado aqui, antes de o duplo ser instalado: a allow-list
+// de formatos do upload é a mesma que a rota tem de respeitar.
+const comprovativosReais = require('../helpers/comprovativos');
+
+// Titularidade atual — configurável pelo teste, para provar que uma relação
+// CESSADA retira o acesso (a rota decide pelo mesmo `contextoFracoes` que as
+// quotas e os recibos usam, que respeita a vigência temporal).
+let titularidadeAtual = () => ({
+  fracoes: [{ fracao: FRACAO_A, vinculo: 'proprietario' }, { fracao: FRACAO_C, vinculo: 'proprietario' }],
+  terminadas: [],
+});
+
 // Contas bancárias e orçamento do condomínio (duplos dos modelos usados pelas
 // consultas dos ajudantes substituídos neste teste).
 const CONTAS = [
@@ -127,7 +164,11 @@ require.cache[modelsPath] = {
           .map((a) => ({ valor: a.valor_aplicado / 100, data_pagamento: a.pagamento.data_pagamento, estado: 'confirmado', condominio_id: 1 }));
         return filtroSimples(linhas, o.where);
       },
-      findOne: async () => null,
+      findOne: async (o = {}) => {
+        consultasPagamentoFindOne += 1;
+        ultimoWherePagamento = o.where || null;
+        return filtroSimples(PAGAMENTOS_COMPROVATIVO, o.where)[0] || null;
+      },
       sum: async () => 0,
     },
     PagamentoQuota: { findAll: async () => APLICACOES },
@@ -220,9 +261,21 @@ const stubs = {
     listaFracoes: async () => [],
   },
   '../helpers/titularidades': {
-    fracoesDoUtilizador: async () => ({ fracoes: [{ fracao: FRACAO_A, vinculo: 'proprietario' }, { fracao: FRACAO_C, vinculo: 'proprietario' }], terminadas: [] }),
+    // A titularidade é decidida em cada pedido (configurável pelo teste): é
+    // assim que se prova que uma relação CESSADA retira o acesso.
+    fracoesDoUtilizador: async () => titularidadeAtual(),
     historicoDaPessoa: async () => [],
     estaAtiva: () => true,
+  },
+  // Duplo do módulo de comprovativos: o teste controla o que «existe» no disco
+  // e onde. A rota real é exercitada; só o acesso ao ficheiro é simulado.
+  '../helpers/comprovativos': {
+    MIME_PERMITIDOS: comprovativosReais.MIME_PERMITIDOS,
+    existeComprovativo: (p) => COMPROVATIVOS_EXISTENTES.has(Number(p && p.id)),
+    // Um ficheiro que existe mesmo (sem escrever nem apagar nada): o que está em
+    // causa é a autorização e os cabeçalhos, não o conteúdo.
+    caminhoComprovativo: () => path.join(RAIZ, 'package.json'),
+    DIR_COMPROVATIVOS: path.join(RAIZ, 'storage', 'comprovativos'),
   },
   // Área pessoal: a lista de condomínios vem das associações do próprio. Aqui o
   // duplo serve as duas páginas do portal que a usam (perfil e condomínios); o
@@ -335,7 +388,7 @@ function pedir(caminho) {
       http.get({ host: '127.0.0.1', port: servidor.address().port, path: caminho }, (res) => {
         let corpo = '';
         res.on('data', (d) => { corpo += d; });
-        res.on('end', () => { servidor.close(); resolve({ status: res.statusCode, html: corpo }); });
+        res.on('end', () => { servidor.close(); resolve({ status: res.statusCode, html: corpo, headers: res.headers }); });
       }).on('error', (e) => { servidor.close(); reject(e); });
     });
   });
@@ -457,6 +510,112 @@ const PAGINAS = [
     'quotas: `hoje` é declarado no handler da rota (regressão do ReferenceError)');
   assert.ok(!/router\.post|\.create\(|\.update\(|\.destroy\(/.test(rotaQuotas),
     'quotas: a rota continua só de leitura');
+
+  // 9. Comprovativo de pagamento no portal (P31/C1).
+  //
+  // O condómino SUBMETE o comprovativo; até aqui só o backoffice o servia. A
+  // rota nova tem de revalidar, em cada pedido, o condomínio ativo E a fração —
+  // e responder 404 (nunca 403) a tudo o que não seja dele: distinguir os dois
+  // casos já revelaria a existência de dados de terceiros.
+  console.log('\n── Comprovativo de pagamento no portal');
+  {
+    // A allow-list de formatos é a do PRÓPRIO upload (não uma lista inventada
+    // na rota): se o upload aceitar um formato novo, a rota acompanha.
+    assert.ok(comprovativosReais.MIME_PERMITIDOS.has('application/pdf')
+      && comprovativosReais.MIME_PERMITIDOS.has('image/jpeg')
+      && comprovativosReais.MIME_PERMITIDOS.has('image/png'),
+      'comprovativo: a allow-list real do upload inclui PDF/JPG/PNG');
+    for (const proibido of ['text/html', 'image/svg+xml', 'application/javascript']) {
+      assert.ok(!comprovativosReais.MIME_PERMITIDOS.has(proibido),
+        `comprovativo: ${proibido} não é servido inline`);
+    }
+
+    // (a) O comprovativo da PRÓPRIA fração é servido, com o tipo declarado.
+    consultasPagamentoFindOne = 0;
+    const proprio = await pedir('/condomino/pagamentos/501/comprovativo');
+    assert.strictEqual(proprio.status, 200, 'comprovativo: o pagamento da própria fração é servido');
+    assert.strictEqual(consultasPagamentoFindOne, 1,
+      'comprovativo: uma só consulta por pedido (sem consultas extra)');
+    assert.strictEqual(ultimoWherePagamento && ultimoWherePagamento.condominio_id, 1,
+      'comprovativo: a consulta filtra pelo condomínio ativo');
+    assert.ok(ultimoWherePagamento && ultimoWherePagamento.fracao_id
+      && Array.isArray(ultimoWherePagamento.fracao_id[Op.in])
+      && ultimoWherePagamento.fracao_id[Op.in].includes(5),
+      'comprovativo: a consulta limita às frações do próprio');
+    assert.strictEqual(proprio.headers['content-type'], 'application/pdf',
+      'comprovativo: o tipo declarado no upload é respeitado');
+    assert.ok(/^inline;/.test(proprio.headers['content-disposition'] || ''),
+      'comprovativo: um PDF abre no browser (inline)');
+
+    // (b) Sem comprovativo associado → 404.
+    const semAnexo = await pedir('/condomino/pagamentos/502/comprovativo');
+    assert.strictEqual(semAnexo.status, 404, 'comprovativo: pagamento sem comprovativo responde 404');
+
+    // (c) Comprovativo registado mas ficheiro em falta → 404 (não 500).
+    const emFalta = await pedir('/condomino/pagamentos/503/comprovativo');
+    assert.strictEqual(emFalta.status, 404, 'comprovativo: ficheiro em falta responde 404');
+
+    // (d) Pagamento de OUTRA fração → 404 (o isolamento é por fração).
+    const outraFracao = await pedir('/condomino/pagamentos/504/comprovativo');
+    assert.strictEqual(outraFracao.status, 404, 'comprovativo: pagamento de outra fração responde 404');
+
+    // (e) Pagamento de OUTRO condomínio → 404 (o isolamento é por condomínio).
+    const outroCondominio = await pedir('/condomino/pagamentos/505/comprovativo');
+    assert.strictEqual(outroCondominio.status, 404, 'comprovativo: pagamento de outro condomínio responde 404');
+
+    // (f) Identificador inválido → 404 SEM tocar na base de dados.
+    consultasPagamentoFindOne = 0;
+    for (const invalido of ['abc', '0', '-3']) {
+      const r = await pedir(`/condomino/pagamentos/${invalido}/comprovativo`);
+      assert.strictEqual(r.status, 404, `comprovativo: identificador inválido (${invalido}) responde 404`);
+    }
+    assert.strictEqual(consultasPagamentoFindOne, 0,
+      'comprovativo: um identificador inválido é recusado sem consultar a base de dados');
+
+    // (g) Tipo declarado fora da allow-list → download genérico, nunca inline.
+    const estranho = await pedir('/condomino/pagamentos/506/comprovativo');
+    assert.strictEqual(estranho.status, 200, 'comprovativo: o ficheiro com tipo estranho ainda é servido');
+    assert.strictEqual(estranho.headers['content-type'], 'application/octet-stream',
+      'comprovativo: tipo fora da allow-list sai como application/octet-stream');
+    assert.ok(/^attachment;/.test(estranho.headers['content-disposition'] || ''),
+      'comprovativo: tipo fora da allow-list obriga a download (nunca inline)');
+
+    // (h) `?download=1` força o descarregamento mesmo num tipo permitido.
+    const descarregar = await pedir('/condomino/pagamentos/501/comprovativo?download=1');
+    assert.ok(/^attachment;/.test(descarregar.headers['content-disposition'] || ''),
+      'comprovativo: ?download=1 descarrega em vez de abrir');
+
+    // (i) TITULARIDADE CESSADA: sem frações em vigor, o mesmo pagamento deixa
+    // de ser alcançável. O acesso é decidido pela titularidade ATUAL — não por
+    // uma sessão antiga nem pelo histórico.
+    const anterior = titularidadeAtual;
+    titularidadeAtual = () => ({ fracoes: [], terminadas: [{ fracao: FRACAO_A, data_fim: '2026-06-30' }] });
+    const cessada = await pedir('/condomino/pagamentos/501/comprovativo');
+    titularidadeAtual = anterior;
+    assert.strictEqual(cessada.status, 404,
+      'comprovativo: titularidade cessada retira o acesso ao comprovativo');
+    const reposto = await pedir('/condomino/pagamentos/501/comprovativo');
+    assert.strictEqual(reposto.status, 200, 'comprovativo: a titularidade em vigor volta a dar acesso');
+  }
+
+  // 10. A rota nova não abre exceções à fronteira do portal: continua só de
+  // leitura, filtra pelo condomínio ativo e pelas frações do próprio, e o
+  // ficheiro é servido pelo backend (nunca por link do fornecedor).
+  {
+    const fonteComprovativo = fs.readFileSync(path.join(RAIZ, 'routes', 'condomino.js'), 'utf8');
+    const rota = fonteComprovativo.slice(
+      fonteComprovativo.indexOf("router.get('/pagamentos/:id/comprovativo'"),
+      fonteComprovativo.indexOf('function pessoaNomeDoUser'),
+    );
+    assert.ok(/router\.get\('\/pagamentos\/:id\/comprovativo'/.test(rota), 'comprovativo: a rota existe');
+    assert.ok(!/router\.(post|put|patch|delete)\(/.test(rota), 'comprovativo: a rota é só de leitura');
+    assert.ok(/condominio_id: req\.condominioId/.test(rota), 'comprovativo: filtra pelo condomínio ativo');
+    assert.ok(/fracao_id: \{ \[Op\.in\]:/.test(rota), 'comprovativo: limita às frações do próprio');
+    assert.ok(/comprovativos\.existeComprovativo/.test(rota) && /comprovativos\.caminhoComprovativo/.test(rota),
+      'comprovativo: o ficheiro vem do backend, pelo caminho do helper');
+    assert.ok(!/drive|onedrive|dropbox|storage\./i.test(rota),
+      'comprovativo: não delega em nenhum provedor de armazenamento (é local)');
+  }
 
   console.log('✓ Testes das rotas do condómino passaram (execução real dos handlers, sem base de dados).');
 })().catch((err) => {

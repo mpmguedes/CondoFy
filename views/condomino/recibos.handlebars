@@ -43,11 +43,12 @@
 {{!-- Desktop: tabela compacta com a mesma informação. --}}
 <div class="card portal-quota-tabela"><div class="table-responsive">
   <table class="table table-hover align-middle mb-0">
+    <caption class="visually-hidden">Recibos emitidos para a sua fração: número, data, período, valor, estado e acesso ao PDF</caption>
     <thead class="table-light">
       <tr>
-        <th>Recibo</th><th>Data</th>
-        {{#if temVariasFracoes}}<th>Fração</th>{{/if}}
-        <th>Período(s)</th><th>Valor</th><th>Estado</th><th class="text-end">Ações</th>
+        <th scope="col">Recibo</th><th scope="col">Data</th>
+        {{#if temVariasFracoes}}<th scope="col">Fração</th>{{/if}}
+        <th scope="col">Período(s)</th><th scope="col">Valor</th><th scope="col">Estado</th><th scope="col" class="text-end">Ações</th>
       </tr>
     </thead>
     <tbody>

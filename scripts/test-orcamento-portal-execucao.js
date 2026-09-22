@@ -165,7 +165,11 @@ function montarModelos(rubricas) {
       const w = o.where || {};
       if (w.condominio_id !== undefined && Number(w.condominio_id) !== 1) return null;
       return ORC;
-    }, findAll: async () => [ORC], count: async () => 1 },
+    },
+    // Anos com orçamento publicado neste condomínio (alimenta o seletor de ano,
+    // P31/C5). O duplo imita o `DISTINCT ano` da consulta real.
+    findAll: async () => [ORC, { ...ORC, ano: 2025 }],
+    count: async () => 2 },
     OrcamentoRubrica: { findAll: async () => rubricas, findOne: async () => rubricas[0], count: async () => rubricas.length },
     Categoria: { findAll: async () => [], findByPk: async () => null },
     AgendaItem: { findAll: async () => [] },
@@ -462,6 +466,36 @@ function ok(nome) { resultados.push(nome); console.log(`  ✓ ${nome}`); }
   assert.strictEqual(registo.consultas, 1,
     `a página faz UMA consulta às despesas, não uma por rubrica (fez ${registo.consultas})`);
   ok('1 consulta às despesas (antes: 1 por rubrica ativa)');
+
+  // ── 12. Seletor de ano (P31/C5) ─────────────────────────────────
+  titulo('12. Seletor de ano');
+  // A página já aceitava `?ano=`, mas a única forma de mudar de ano era um botão
+  // «Ano atual» — não havia lista de anos (ao contrário de /quotas). O contexto
+  // tem de trazer os anos que fazem sentido: os que têm orçamento publicado, o
+  // ano em curso e o ano pedido.
+  const capturaAnos = {};
+  await pedir(construirApp(RUBRICAS, capturaAnos), '/condomino/orcamento');
+  const anos = capturaAnos.ctx.anos;
+  assert.ok(Array.isArray(anos), 'seletor: o contexto traz uma lista de anos');
+  assert.ok(anos.includes(2026), 'seletor: inclui o ano com orçamento publicado');
+  assert.ok(anos.includes(2025), 'seletor: inclui o outro ano com orçamento publicado');
+  assert.ok(anos.includes(new Date().getFullYear()), 'seletor: inclui o ano em curso');
+  assert.strictEqual(new Set(anos).size, anos.length, 'seletor: sem anos repetidos');
+  assert.deepStrictEqual(anos, [...anos].sort((a, b) => b - a), 'seletor: anos por ordem decrescente');
+  ok(`anos apresentados: ${anos.join(', ')}`);
+
+  // O ano PEDIDO entra sempre na lista — mesmo sem orçamento publicado — para o
+  // seletor nunca «perder» a página que está a ser mostrada.
+  const captura2031 = {};
+  await pedir(construirApp(RUBRICAS, captura2031), '/condomino/orcamento?ano=2031');
+  assert.ok(captura2031.ctx.anos.includes(2031), 'seletor: o ano pedido entra na lista');
+  assert.strictEqual(captura2031.ctx.ano, 2031, 'seletor: o ano pedido é o ano apresentado');
+  assert.deepStrictEqual(captura2031.ctx.anos, [...captura2031.ctx.anos].sort((a, b) => b - a),
+    'seletor: a ordem mantém-se com o ano pedido');
+  // E o ano pedido não arrasta dados do orçamento de outro ano.
+  const lin2031 = (captura2031.ctx.linhas || []).reduce((s, l) => s + (Number(l.executado) || 0), 0);
+  assert.strictEqual(lin2031, 0, 'seletor: o ano pedido sem execução não mostra execução de outro ano');
+  ok('o ano pedido entra no seletor sem quebrar a ordem nem arrastar dados');
 
   console.log(`\n✓ Execução orçamental do portal: ${resultados.length} verificações passaram (sem BD).`);
 })().catch((e) => {

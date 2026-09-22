@@ -3,9 +3,20 @@
     <h1>Orçamento {{ano}}</h1>
     <p class="subtitle">Acompanhamento da execução orçamental do condomínio</p>
   </div>
-  <div class="d-flex gap-2">
-    <a href="/condomino/orcamento?ano={{inc anoAtual}}" class="btn btn-sm btn-outline-secondary">Ano atual</a>
-  </div>
+  {{!-- Seletor de ano (P31/C5): a página já aceitava `?ano=`, mas a única
+       navegação era o botão «Ano atual». Com a lista de anos com orçamento
+       publicado — mais o ano em curso — o condómino pode recuar no histórico
+       sem editar o endereço. Formulário GET simples: funciona sem JavaScript e
+       o botão submete sempre (não depende de `onchange`). --}}
+  <form method="GET" class="d-flex gap-2 align-items-end">
+    <div>
+      <label class="form-label mb-1 small text-muted" for="filtroAnoOrcamento">Ano</label>
+      <select class="form-select form-select-sm" id="filtroAnoOrcamento" name="ano">
+        {{#each anos}}<option value="{{this}}" {{#if (eq this ../ano)}}selected{{/if}}>{{this}}</option>{{/each}}
+      </select>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary portal-btn">Ver</button>
+  </form>
 </div>
 
 {{#if acesso}}
@@ -25,7 +36,8 @@
 
 <div class="card"><div class="table-responsive">
   <table class="table table-hover align-middle mb-0">
-    <thead class="table-light"><tr><th>Categoria</th><th class="text-end">Orçamentado</th><th class="text-end">Realizado</th><th style="width:180px">Execução</th></tr></thead>
+    <caption class="visually-hidden">Execução do orçamento de {{ano}} por categoria: valor orçamentado, valor realizado e percentagem de execução</caption>
+    <thead class="table-light"><tr><th scope="col">Categoria</th><th scope="col" class="text-end">Orçamentado</th><th scope="col" class="text-end">Realizado</th><th scope="col" style="width:180px">Execução</th></tr></thead>
     <tbody>
       {{#each linhas}}
       <tr>

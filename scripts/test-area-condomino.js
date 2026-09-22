@@ -576,7 +576,7 @@ function testePaginaRecibos() {
 
   // Uma só fração: a designação não se repete em cada recibo.
   assert.ok(!/Recibo 2026\/000121 · /.test(um), 'uma fração: não repete a designação em cada recibo');
-  assert.ok(!/<th>Fração<\/th>/.test(um), 'uma fração: a tabela não tem coluna de fração');
+  assert.ok(!/<th[^>]*>Fração<\/th>/.test(um), 'uma fração: a tabela não tem coluna de fração');
 
   // Várias frações: a fração aparece em cada recibo e na tabela.
   const multi = paginaRecibos([
@@ -585,7 +585,7 @@ function testePaginaRecibos() {
   ], { temVariasFracoes: true });
   assert.ok(/Recibo 2026\/000201 · 1\.º Esq/.test(multi) && /Recibo 2026\/000202 · 2\.º Dto/.test(multi),
     'multi-fração: cada recibo identifica a sua fração');
-  assert.ok(/<th>Fração<\/th>/.test(multi), 'multi-fração: a tabela mostra a coluna de fração');
+  assert.ok(/<th[^>]*>Fração<\/th>/.test(multi), 'multi-fração: a tabela mostra a coluna de fração');
   assert.ok(/1\.º Esq/.test(multi) && /2\.º Dto/.test(multi), 'multi-fração: as duas frações identificadas');
 
   // Recibo anulado: estado próprio, não «Emitido» nem mensagem de erro.
@@ -1209,6 +1209,107 @@ function testeRouterConta() {
   assert.ok(!/estado: 'ativo'/.test(fonte), 'conta: não reativa associações (estado passado à mão)');
 }
 
+// ── 8. Acessibilidade das tabelas do portal (P32) ─────────────────
+// As 6 tabelas do portal (quotas ×2, recibos, pagamentos, assembleias,
+// orçamento) não tinham NENHUM nome acessível e nenhum dos 39 cabeçalhos
+// declarava o âmbito: um leitor de ecrã anunciava «tabela» sem dizer de quê, e
+// cada célula sem a coluna a que pertence. Verifica-se na FONTE de todas as
+// vistas do portal (não numa lista à mão — uma tabela nova tem de cumprir).
+function testeAcessibilidadeTabelas() {
+  const ficheiros = fs.readdirSync(path.join(RAIZ, 'views', 'condomino'))
+    .filter((f) => f.endsWith('.handlebars'));
+  let tabelas = 0;
+  let cabecalhos = 0;
+
+  for (const ficheiro of ficheiros) {
+    const src = ler(`views/condomino/${ficheiro}`);
+
+    for (const m of src.matchAll(/<table\b[^>]*>/g)) {
+      tabelas += 1;
+      const resto = src.slice(m.index);
+      const ateFecho = resto.slice(0, resto.indexOf('</table>') + 1);
+      assert.ok(/<caption\b/.test(ateFecho) || /aria-label=/.test(m[0]),
+        `${ficheiro}: cada tabela tem um nome acessível (<caption> ou aria-label)`);
+      if (/<caption\b/.test(ateFecho)) {
+        // O <caption> tem de ser o primeiro filho da tabela (exigência do HTML).
+        assert.ok(resto.slice(m[0].length).trimStart().startsWith('<caption'),
+          `${ficheiro}: o <caption> é o primeiro filho da tabela`);
+        assert.ok(/<caption class="visually-hidden">\s*\S/.test(ateFecho),
+          `${ficheiro}: o <caption> tem texto (escondido visualmente, presente para leitores de ecrã)`);
+      }
+    }
+
+    for (const m of src.matchAll(/<th\b([^>]*)>/g)) {
+      cabecalhos += 1;
+      assert.ok(/scope="col"/.test(m[1]),
+        `${ficheiro}: todos os <th> declaram scope="col" (offset ${m.index})`);
+    }
+    assert.ok(!/<th>/.test(src), `${ficheiro}: nenhum <th> sem scope`);
+  }
+
+  // Prova de cobertura: as 6 tabelas e os 39 cabeçalhos do portal.
+  assert.strictEqual(tabelas, 6, `acessibilidade: as 6 tabelas do portal foram verificadas (${tabelas})`);
+  assert.strictEqual(cabecalhos, 39, `acessibilidade: os 39 cabeçalhos do portal foram verificados (${cabecalhos})`);
+}
+
+// ── 8b. Seletor de ano no orçamento (P31/C5) ─────────────────────
+function testeSeletorAno() {
+  const html = render('views/condomino/orcamento.handlebars', {
+    pessoa: { id: 10 },
+    ano: 2025,
+    anoAtual: 2026,
+    anos: [2026, 2025, 2024],
+    orcamento: { ano: 2025 },
+    linhas: [{ nome: 'Elevadores', orcamentado: 1000, executado: 300, percentagem: 30 }],
+    totais: { orcamentado: 1000, executado: 300, saldo: 700, percentagem: 30 },
+  });
+
+  assert.ok(/<select[^>]*name="ano"/.test(html), 'orçamento: seletor de ano presente na página');
+  assert.ok(/<select[^>]*id="filtroAnoOrcamento"/.test(html), 'orçamento: o seletor tem rótulo associado');
+  assert.ok(/<label[^>]*for="filtroAnoOrcamento"/.test(html), 'orçamento: o rótulo aponta para o seletor');
+  for (const a of [2026, 2025, 2024]) {
+    assert.ok(new RegExp(`<option value="${a}"`).test(html), `orçamento: o ano ${a} está na lista`);
+  }
+  assert.strictEqual((html.match(/selected/g) || []).length, 1,
+    'orçamento: exatamente um ano fica selecionado (o que está a ser apresentado)');
+  assert.ok(/<option value="2025" selected>/.test(html), 'orçamento: o ano apresentado é o selecionado');
+  // Sem JavaScript: o botão submete o formulário.
+  assert.ok(/<form method="GET"/.test(html) && /<button[^>]*>Ver<\/button>/.test(html),
+    'orçamento: o seletor submete sem depender de JavaScript');
+  // O ano em curso continua alcançável (o botão «Ano atual» foi substituído pelo
+  // seletor, que inclui sempre o ano em curso).
+  assert.ok(/<option value="2026"/.test(html), 'orçamento: o ano em curso continua alcançável');
+  // A tabela do orçamento mantém-se acessível (P32) e com as linhas entregues.
+  assert.ok(/<caption class="visually-hidden">/.test(html) && /scope="col"/.test(html),
+    'orçamento: a tabela mantém nome acessível e âmbito nos cabeçalhos');
+  assert.ok(/Elevadores/.test(html) && html.includes('1.000,00 €'),
+    'orçamento: as linhas entregues são apresentadas');
+}
+
+// ── 8c. Comprovativo na lista de pagamentos (P31/C1) ─────────────
+function testeComprovativoNaLista() {
+  const com = render('views/condomino/pagamentos.handlebars', {
+    pessoa: { id: 10 },
+    listaTruncada: false,
+    linhas: [
+      { id: 501, data_pagamento: '2026-09-01', fracaoDesignacao: '1.º Esq', valor: 75, periodos: 'Agosto 2026', metodoNome: 'Transferência', referencia: 'TRF-1', comprovativo_ficheiro: '1710000000_abc.pdf' },
+      { id: 502, data_pagamento: '2026-08-01', fracaoDesignacao: '1.º Esq', valor: 75, periodos: 'Julho 2026', metodoNome: null, referencia: null, comprovativo_ficheiro: null },
+    ],
+  });
+
+  assert.ok(/href="\/condomino\/pagamentos\/501\/comprovativo"/.test(com),
+    'pagamentos: ligação ao comprovativo quando o pagamento tem um');
+  assert.ok(!/href="\/condomino\/pagamentos\/502\/comprovativo"/.test(com),
+    'pagamentos: sem ligação quando o pagamento não tem comprovativo');
+  assert.ok(/aria-label="Ver comprovativo do pagamento de/.test(com),
+    'pagamentos: a ligação tem rótulo acessível (não é um ícone mudo)');
+  // O comprovativo não se confunde com o recibo: o PDF do recibo é outra rota.
+  assert.ok(!/href="\/condomino\/recibos\/501\/pdf"/.test(com),
+    'pagamentos: a lista não inventa ligações para recibos');
+  // A coluna nova não quebra a tabela (7 cabeçalhos de coluna, todos com âmbito).
+  assert.strictEqual((com.match(/scope="col"/g) || []).length, 7, 'pagamentos: 7 colunas no cabeçalho');
+}
+
 testeBarraInferior();
 testeInicio();
 testeInicioMultiFraccao();
@@ -1224,4 +1325,7 @@ testeIntegridade();
 testeRecomendacaoNoInicio();
 testeContaPerfilCondominios();
 testeRouterConta();
+testeAcessibilidadeTabelas();
+testeSeletorAno();
+testeComprovativoNaLista();
 console.log('✓ Testes da área do condómino passaram (mobile-first, sem base de dados).');
