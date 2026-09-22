@@ -37,7 +37,7 @@ const {
   Fracao,
   ContactoPessoa,
 } = require('../models');
-const { toCents, formatEUR } = require('./money');
+const { toCents, formatEUR, formatEURCents } = require('./money');
 const { pagoPorQuota } = require('./recibos');
 const { estadoEfetivo } = require('./saldos');
 const comprovativos = require('./comprovativos');
@@ -51,8 +51,15 @@ const { VINCULO_LABEL } = require('./titularidades');
 const MAX_FICHEIROS_DOCUMENTOS = 40;
 const MAX_BYTES_DOCUMENTO = 8 * 1024 * 1024;
 
+// Data LOCAL, não UTC. `toISOString()` é UTC: às 00h30 em Lisboa (UTC+1 no
+// verão) devolveria o dia ANTERIOR, e o MANIFEST — um documento de RGPD —
+// diria que a exportação foi gerada no dia errado (mesma armadilha que
+// `helpers/dates.js` documenta em `asDateLocal`). Aritmética local.
 function hojeISO() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mes}-${dia}`;
 }
 
 function slug(texto, max = 40) {
@@ -68,7 +75,9 @@ function slug(texto, max = 40) {
 function csv(cabecalho, linhas) {
   const escapar = (valor) => {
     const texto = valor === null || valor === undefined ? '' : String(valor);
-    return /[";\n]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
+    // `\r` incluído: uma mensagem de aviso colada de outro programa pode trazer
+    // CR sozinho e, sem aspas, partiria a linha do CSV a meio.
+    return /[";\r\n]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
   };
   const corpo = [cabecalho, ...linhas].map((linha) => linha.map(escapar).join(';')).join('\r\n');
   return Buffer.from(`\ufeff${corpo}\r\n`, 'utf8');
@@ -189,8 +198,8 @@ async function construirExportacao({ condominioId, condominio = null, utilizador
             const valorC = toCents(q.valor);
             const pagoC = pagoQ.get(q.id) || 0;
             return [
-              nomeFracao(q.fracao_id), q.ano, q.mes, formatEUR(valorC), formatEUR(pagoC),
-              formatEUR(Math.max(0, valorC - pagoC)), q.data_vencimento || '', estadoEfetivo(q) || q.estado,
+              nomeFracao(q.fracao_id), q.ano, q.mes, formatEURCents(valorC), formatEURCents(pagoC),
+              formatEURCents(Math.max(0, valorC - pagoC)), q.data_vencimento || '', estadoEfetivo(q) || q.estado,
             ];
           })
         ),
@@ -210,7 +219,7 @@ async function construirExportacao({ condominioId, condominio = null, utilizador
           ['Quota extraordinária', 'Fração', 'Parcela', 'Valor', 'Vencimento', 'Estado'],
           parcelas.map((p) => [
             p.extra_quota ? p.extra_quota.designacao : '', nomeFracao(p.fracao_id), p.parcela_numero,
-            formatEUR(toCents(p.valor)), p.data_vencimento || '', p.estado,
+            formatEUR(p.valor), p.data_vencimento || '', p.estado,
           ])
         ),
       });
@@ -227,7 +236,7 @@ async function construirExportacao({ condominioId, condominio = null, utilizador
         conteudo: csv(
           ['Fração', 'Documento', 'Data', 'Valor', 'Referência', 'Estado', 'Comprovativo'],
           pagamentos.map((p) => [
-            nomeFracao(p.fracao_id), p.numero_documento || '', p.data_pagamento || '', formatEUR(toCents(p.valor)),
+            nomeFracao(p.fracao_id), p.numero_documento || '', p.data_pagamento || '', formatEUR(p.valor),
             p.referencia || '', p.estado, p.comprovativo_nome || (comprovativos.existeComprovativo(p) ? 'anexado' : ''),
           ])
         ),
@@ -260,7 +269,7 @@ async function construirExportacao({ condominioId, condominio = null, utilizador
         conteudo: csv(
           ['Código', 'Fração', 'Ano', 'Tipo', 'Valor', 'Emitido em', 'Estado'],
           recibos.map((r) => [
-            r.codigo, nomeFracao(r.fracao_id), r.ano, r.tipo, formatEUR(toCents(r.valor)), r.data_emissao || '', r.estado,
+            r.codigo, nomeFracao(r.fracao_id), r.ano, r.tipo, formatEUR(r.valor), r.data_emissao || '', r.estado,
           ])
         ),
       });

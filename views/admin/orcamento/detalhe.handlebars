@@ -36,8 +36,11 @@
     <form action="/admin/orcamento/{{orcamento.id}}/aprovar" method="POST">
       <button class="btn btn-success" data-ajuda="Aprova o orçamento deste ano. Só depois de aprovado é possível gerar quotas a partir dele e os valores ficam bloqueados para edição." data-ajuda-titulo="Aprovar orçamento"><i class="bi bi-check-lg me-1"></i>Aprovar orçamento</button>
     </form>
-    <form action="/admin/orcamento/{{orcamento.id}}/eliminar" method="POST" data-confirmar="Eliminar este rascunho? Esta ação não pode ser revertida." data-confirmar-perigo="1">
-      <button class="btn btn-outline-danger" data-ajuda="Elimina definitivamente este rascunho, com as rubricas e o plano de quotas associados. Só é possível enquanto não tiver quotas geradas." data-ajuda-titulo="Eliminar rascunho"><i class="bi bi-trash me-1"></i>Eliminar rascunho</button>
+    {{!-- A confirmação nomeia TUDO o que a rota apaga (rubricas, distribuição,
+         plano de quotas e histórico): antes dizia só «Eliminar este rascunho?»
+         e o utilizador apagava mais do que pensava (P3). --}}
+    <form action="/admin/orcamento/{{orcamento.id}}/eliminar" method="POST" data-confirmar="Eliminar este rascunho? São apagadas as rubricas, a distribuição, o plano de quotas e o histórico de alterações associados. Esta ação não pode ser revertida." data-confirmar-perigo="1">
+      <button class="btn btn-outline-danger" data-ajuda="Elimina definitivamente este rascunho, com as rubricas, a distribuição, o plano de quotas e o histórico associados. Só é possível enquanto não tiver quotas geradas." data-ajuda-titulo="Eliminar rascunho"><i class="bi bi-trash me-1"></i>Eliminar rascunho</button>
     </form>
     {{/if}}
     {{#if (eq orcamento.estado 'aprovado')}}

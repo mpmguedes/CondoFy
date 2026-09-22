@@ -26,6 +26,13 @@ const fs = require('fs');
 const path = require('path');
 
 const RAIZ = path.join(__dirname, '..');
+// Leitura NORMALIZADA para LF (dívida P38): as asserções deste ficheiro
+// comparam CÓDIGO-FONTE com `\n` literal (ex.: `/MovimentoBancario,\n\} = require\(/`)
+// e delimitam blocos com `[\s\S]*?\n    \}\);`. Com CRLF no disco — checkout
+// feito com `core.autocrlf=true` — o `\r` a mais fazia a regex não casar e o
+// teste acusava uma regressão inexistente. Normalizar aqui torna-o
+// independente da política de fim-de-linha do clone.
+const ler = (rel) => fs.readFileSync(path.join(RAIZ, rel), 'utf8').replace(/\r\n/g, '\n');
 let nPassos = 0;
 function ok(descricao) {
   nPassos += 1;
@@ -61,7 +68,7 @@ function blocosCriarMovimento(fonte) {
 }
 
 {
-  const pag = fs.readFileSync(path.join(RAIZ, 'helpers', 'pagamentos.js'), 'utf8');
+  const pag = ler('helpers/pagamentos.js');
   const blocos = blocosCriarMovimento(pag);
   assert.strictEqual(blocos.length, 3, 'helpers/pagamentos.js deve ter 3 criarMovimento');
   for (const b of blocos) {
@@ -69,7 +76,7 @@ function blocosCriarMovimento(fonte) {
   }
   ok('helpers/pagamentos.js: 3/3 criarMovimento passam condominioId');
 
-  const mov = fs.readFileSync(path.join(RAIZ, 'helpers', 'movimentos.js'), 'utf8');
+  const mov = ler('helpers/movimentos.js');
   // O criarMovimento de sincronizarMovimentoDespesa (o par de transferência usa `condominioId,` shorthand).
   assert.ok(/condominioId: cid/.test(mov), 'sincronizarMovimentoDespesa passa condominioId (cid)');
   ok('helpers/movimentos.js: sincronizarMovimentoDespesa passa condominioId');
@@ -90,7 +97,7 @@ function blocosCriarMovimento(fonte) {
 grupo('2. Transferências continuam TRANSF e com condomínio');
 
 {
-  const mov = fs.readFileSync(path.join(RAIZ, 'helpers', 'movimentos.js'), 'utf8');
+  const mov = ler('helpers/movimentos.js');
   // Contar apenas no código: os comentários explicativos citam a própria string.
   const movCodigo = mov
     .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -109,7 +116,7 @@ grupo('2. Transferências continuam TRANSF e com condomínio');
   ok('saída e entrada da transferência recebem condominioId');
 
   // Os dois fluxos do FCR continuam a passar condominioId (não foram tocados).
-  const fcr = fs.readFileSync(path.join(RAIZ, 'helpers', 'fcr.js'), 'utf8');
+  const fcr = ler('helpers/fcr.js');
   const chamadas = fcr.match(/await registarTransferencia\(\{[\s\S]*?\n    \}\);/g) || [];
   assert.ok(chamadas.length >= 2, 'fcr.js chama registarTransferencia nos dois sentidos');
   for (const c of chamadas) {
@@ -126,7 +133,7 @@ grupo('3. Não há fallback condominio_id IS NULL em helpers/routes');
 {
   const ficheiros = ['helpers/fcr.js', 'helpers/movimentos.js', 'helpers/pagamentos.js', 'helpers/saldos.js'];
   for (const f of ficheiros) {
-    const src = fs.readFileSync(path.join(RAIZ, f), 'utf8');
+    const src = ler(f);
     // Remove comentários antes de procurar, para não acusar a documentação.
     const semComentarios = src
       .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -138,7 +145,7 @@ grupo('3. Não há fallback condominio_id IS NULL em helpers/routes');
   }
   ok('nenhum filtro condominio_id: null no código dos helpers');
 
-  const fcr = fs.readFileSync(path.join(RAIZ, 'helpers', 'fcr.js'), 'utf8');
+  const fcr = ler('helpers/fcr.js');
   const codigo = fcr.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   assert.ok(!/\[Op\.or\][\s\S]{0,80}condominio_id/.test(codigo),
     'fcr.js não deve ter [Op.or] com condominio_id em código');
@@ -238,7 +245,7 @@ grupo('5. Migração de backfill — comportamento');
   assert.ok(fs.existsSync(caminho), 'a migração de backfill existe');
   ok('migração 20260101000076 existe');
 
-  const src = fs.readFileSync(caminho, 'utf8');
+  const src = ler(path.join('migrations', '20260101000076-backfill-movimentos-condominio.js'));
 
   // Só escreve a coluna condominio_id.
   assert.ok(/SET mb\.condominio_id = cb\.condominio_id/.test(src),
@@ -277,7 +284,7 @@ grupo('5. Migração de backfill — comportamento');
 grupo('6. Eliminação de conta bancária');
 
 {
-  const src = fs.readFileSync(path.join(RAIZ, 'routes', 'financeiro.js'), 'utf8');
+  const src = ler('routes/financeiro.js');
   const inicio = src.indexOf("'/contas/:id(\\\\d+)/eliminar'");
   assert.ok(inicio > 0, 'a rota de eliminação existe');
   const corpo = src.slice(inicio, inicio + 2000);
@@ -310,7 +317,7 @@ grupo('6. Eliminação de conta bancária');
 grupo('7. Isolamento por condomínio nos filtros');
 
 {
-  const fcr = fs.readFileSync(path.join(RAIZ, 'helpers', 'fcr.js'), 'utf8');
+  const fcr = ler('helpers/fcr.js');
   const codigo = fcr.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
   // fcrTransferidoC: movimentos filtrados por condominio_id explícito.

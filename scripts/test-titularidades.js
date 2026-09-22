@@ -323,14 +323,22 @@ async function cenarioG() {
     originais[modelo] = modelos[modelo].findAll;
     modelos[modelo].findAll = async () => valor;
   };
-  substituir('Quota', [
-    { id: 1, fracao_id: 10, ano: 2026, mes: 1, valor: '61.22', data_vencimento: '2026-01-08', estado: 'paga' },
-    { id: 2, fracao_id: 99, ano: 2026, mes: 1, valor: '999.00', data_vencimento: '2026-01-08', estado: 'paga' }, // outra fração
+  // Alguns modelos têm de HONRAR o `where`: sem isso, a linha da outra fração
+  // apareceria na exportação e a asserção de isolamento passaria (ou falharia)
+  // por acidente, sem testar nada. As linhas levam `condominio_id` porque a
+  // exportação filtra por ele.
+  const substituirFiltrando = (modelo, linhas) => {
+    originais[modelo] = modelos[modelo].findAll;
+    modelos[modelo].findAll = async ({ where } = {}) => linhas.filter((l) => corresponde(l, where));
+  };
+  substituirFiltrando('Quota', [
+    { id: 1, condominio_id: 1, fracao_id: 10, ano: 2026, mes: 1, valor: '61.22', data_vencimento: '2026-01-08', estado: 'paga' },
+    { id: 2, condominio_id: 1, fracao_id: 99, ano: 2026, mes: 1, valor: '999.00', data_vencimento: '2026-01-08', estado: 'paga' }, // outra fração
   ]);
-  substituir('Pagamento', [
-    { id: 50, fracao_id: 10, numero_documento: 'PAG-1', data_pagamento: '2026-01-05', valor: '61.22', referencia: 'x', estado: 'confirmado', comprovativo_nome: null },
+  substituirFiltrando('Pagamento', [
+    { id: 50, condominio_id: 1, fracao_id: 10, numero_documento: 'PAG-1', data_pagamento: '2026-01-05', valor: '61.22', referencia: 'x', estado: 'confirmado', comprovativo_nome: null },
   ]);
-  substituir('Recibo', [{ id: 80, fracao_id: 10, codigo: 'RCP-2026-0001', ano: 2026, tipo: 'ordinario', valor: '61.22', data_emissao: '2026-01-06', estado: 'emitido' }]);
+  substituirFiltrando('Recibo', [{ id: 80, condominio_id: 1, fracao_id: 10, codigo: 'RCP-2026-0001', ano: 2026, tipo: 'ordinario', valor: '61.22', data_emissao: '2026-01-06', estado: 'emitido' }]);
   substituir('ExtraQuotaParcela', []);
   // `pagoPorQuota` consulta as aplicações confirmadas: sem aplicações no cenário.
   originais.PagamentoQuota = modelos.PagamentoQuota.findAll;
@@ -371,6 +379,9 @@ async function cenarioG() {
     const quotas = entradas.find((e) => e.nome === 'Quotas/quotas.csv').conteudo.toString('utf8');
     assert.ok(quotas.includes('1.º Esq'), 'G: as quotas da fração do titular estão no ficheiro');
     assert.ok(!quotas.includes('999,00'), 'G: as quotas de OUTRA fração não entram na exportação');
+    // Prova direta do isolamento: cabeçalho + uma única linha (a fração 10).
+    assert.strictEqual(quotas.replace(/^\ufeff/, '').trim().split('\r\n').length, 2,
+      'G: o CSV de quotas tem só a linha do titular');
     assert.ok(quotas.startsWith('\ufeff'), 'G: CSV em UTF-8 com BOM (abre corretamente no Excel)');
 
     const pessoais = entradas.find((e) => e.nome === 'Dados pessoais/dados-pessoais.txt').conteudo.toString('utf8');
@@ -406,6 +417,86 @@ async function cenarioG() {
     assert.ok(fracoesCsv.includes('2024-01-01') && fracoesCsv.includes('2026-06-30'), 'G: o período (início e fim) consta do histórico');
     assert.ok(entradasAntigo.some((e) => e.nome === 'Fracoes/titularidades.csv'), 'G: períodos de titularidade incluídos');
     assert.ok(!entradasAntigo.some((e) => e.nome === 'Quotas/quotas.csv'), 'G: sem frações em vigor não se exportam quotas de terceiros');
+  } finally {
+    comprovativos.existeComprovativo = originalExiste;
+    for (const [modelo, original] of Object.entries(originais)) modelos[modelo].findAll = original;
+  }
+}
+
+// ── K. Exportação: os VALORES monetários dos CSV (P37) ─────────────
+// Regressão do defeito P37: `formatEUR(toCents(x))` (e `formatEUR(<cêntimos>)`)
+// convertia duas vezes e saía 100× maior. Este cenário afirma a LINHA COMPLETA
+// de cada CSV — valor, pago e em dívida — e recusa explicitamente os valores
+// inflacionados, para que o defeito não possa voltar em silêncio.
+async function cenarioK() {
+  const { construirExportacao } = require('../helpers/exportacao-dados');
+  const { lerZip } = require('../helpers/zip');
+  const comprovativos = require('../helpers/comprovativos');
+
+  const originalExiste = comprovativos.existeComprovativo;
+  comprovativos.existeComprovativo = () => false;
+
+  const modelos = require('../models');
+  const originais = {};
+  const substituir = (modelo, valor) => {
+    originais[modelo] = modelos[modelo].findAll;
+    modelos[modelo].findAll = async () => valor;
+  };
+
+  substituir('Quota', [
+    { id: 1, fracao_id: 10, ano: 2026, mes: 1, valor: '61.22', data_vencimento: '2026-01-08', estado: 'paga' },
+    // Vencimento longínquo: o estado efetivo não pode depender da data de hoje.
+    { id: 2, fracao_id: 10, ano: 2026, mes: 2, valor: '1234.56', data_vencimento: '2099-12-31', estado: 'parcialmente_paga' },
+  ]);
+  // 34,56 € aplicados à quota 2 ⇒ em dívida 1.200,00 €.
+  originais.PagamentoQuota = modelos.PagamentoQuota.findAll;
+  modelos.PagamentoQuota.findAll = async () => [{ quota_id: 2, valor_aplicado: '34.56' }];
+  substituir('Pagamento', [
+    { id: 50, fracao_id: 10, numero_documento: 'PAG-1', data_pagamento: '2026-02-05', valor: '34.56', referencia: 'REF-X', estado: 'confirmado', comprovativo_nome: null },
+  ]);
+  substituir('Recibo', [
+    { id: 80, fracao_id: 10, codigo: 'RCP-2026-0001', ano: 2026, tipo: 'ordinario', valor: '1234.56', data_emissao: '2026-02-06', estado: 'emitido' },
+  ]);
+  substituir('ExtraQuotaParcela', [
+    { id: 300, fracao_id: 10, parcela_numero: 2, valor: '250.00', data_vencimento: '2026-03-01', estado: 'pendente', extra_quota: { designacao: 'Obras do telhado' } },
+  ]);
+  substituir('Documento', []);
+  substituir('Assembleia', []);
+  substituir('AssembleiaParticipante', []);
+  substituir('Aviso', []);
+  substituir('FracaoTitularidade', []);
+  substituir('ContactoPessoa', []);
+
+  try {
+    const { buffer } = await construirExportacao({
+      condominioId: 1,
+      condominio: { id: 1, designacao: 'Condomínio Jardins do Tejo' },
+      utilizador: { id: 1, nome: 'João Almeida', email: 'joao@exemplo.pt' },
+      pessoa: { id: 100, nome: 'João Almeida', nif: '123456789', email: 'joao@exemplo.pt' },
+      fracoes: [{ id: 10, designacao: '1.º Esq', permilagem: '125.00', vinculoAtual: 'proprietario' }],
+    });
+
+    const entradas = lerZip(buffer);
+    const conteudoDe = (nome) => entradas.find((e) => e.nome === nome).conteudo.toString('utf8');
+    const linhas = (nome) => conteudoDe(nome).replace(/^\ufeff/, '').split('\r\n').filter(Boolean);
+
+    // Quotas: valor, pago e em dívida, exatamente como estão em euros.
+    const quotas = linhas('Quotas/quotas.csv');
+    assert.strictEqual(quotas[0], 'Fração;Ano;Mês;Valor;Pago;Em dívida;Vencimento;Estado', 'K: cabeçalho das quotas');
+    assert.strictEqual(quotas[1], '1.º Esq;2026;1;61,22 €;0,00 €;61,22 €;2026-01-08;paga', 'K: quota paga — valores em euros');
+    assert.strictEqual(quotas[2], '1.º Esq;2026;2;1.234,56 €;34,56 €;1.200,00 €;2099-12-31;parcialmente_paga', 'K: quota parcial — pago e em dívida corretos');
+
+    // Pagamentos, recibos e parcelas: o valor não pode sair multiplicado por 100.
+    assert.strictEqual(linhas('Pagamentos/pagamentos.csv')[1], '1.º Esq;PAG-1;2026-02-05;34,56 €;REF-X;confirmado;', 'K: pagamento — valor em euros');
+    assert.strictEqual(linhas('Recibos/recibos.csv')[1], 'RCP-2026-0001;1.º Esq;2026;ordinario;1.234,56 €;2026-02-06;emitido', 'K: recibo — valor em euros');
+    assert.strictEqual(linhas('Quotas extraordinarias/parcelas.csv')[1], 'Obras do telhado;1.º Esq;2;250,00 €;2026-03-01;pendente', 'K: parcela extra — valor em euros');
+
+    // Contraprova explícita: os valores que o defeito P37 produzia (100× maior)
+    // não podem aparecer em lado nenhum da exportação.
+    const tudo = entradas.map((e) => e.conteudo.toString('utf8')).join('\n');
+    for (const inflacionado of ['6.122,00 €', '123.456,00 €', '3.456,00 €', '25.000,00 €', '120.000,00 €']) {
+      assert.ok(!tudo.includes(inflacionado), `K: valor 100× maior não pode aparecer (${inflacionado})`);
+    }
   } finally {
     comprovativos.existeComprovativo = originalExiste;
     for (const [modelo, original] of Object.entries(originais)) modelos[modelo].findAll = original;
@@ -523,6 +614,39 @@ function testesMudancaProprietario() {
   // Só o administrador do condomínio ativo chega a estas rotas.
   assert.ok(/router\.use\(tenant\.comCondominioAtivo\)/.test(admin), 'admin: condomínio ativo obrigatório');
   assert.ok(/router\.use\(comPapel\('admin'\)\)|comPapel\('admin'\)/.test(admin), 'admin: papel de administrador obrigatório');
+}
+
+// ── L. Exportação: data local e escape de CR no CSV ────────────────
+// Dois pormenores do documento de RGPD que a revisão da exportação levantou:
+//   · `hojeISO()` era `new Date().toISOString().slice(0,10)` — UTC. Às 00h30 em
+//     Lisboa (UTC+1 no verão) o MANIFEST datava a exportação no dia ANTERIOR;
+//   · o escape do CSV só reagia a `"`, `;` e `\n`: um `\r` sozinho (mensagem de
+//     aviso colada de outro programa) partia a linha a meio.
+function cenarioL() {
+  const { csv, hojeISO } = require('../helpers/exportacao-dados');
+
+  // 1. Data LOCAL, coerente com o calendário do utilizador.
+  const agora = new Date();
+  const local = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(agora.getDate()).padStart(2, '0')}`;
+  assert.strictEqual(hojeISO(), local, 'L: hojeISO usa a data LOCAL');
+  assert.match(hojeISO(), /^\d{4}-\d{2}-\d{2}$/, 'L: hojeISO devolve YYYY-MM-DD');
+  // Estrutural: `toISOString()` não pode voltar (é a causa do desvio de dia).
+  const fonte = ler('helpers/exportacao-dados.js');
+  const corpoHoje = /function hojeISO\(\) \{([\s\S]*?)\n\}/.exec(fonte);
+  assert.ok(corpoHoje, 'L: existe a função hojeISO');
+  assert.ok(!/toISOString/.test(corpoHoje[1]), 'L: hojeISO não usa toISOString (UTC)');
+
+  // 2. Escape: CR sozinho, CRLF, `"`, `;` e `\n` têm de ficar entre aspas.
+  //    (Não se divide o conteúdo por `\r\n`: um campo entre aspas pode conter
+  //    CRLF — é precisamente o caso que se quer provar.)
+  const conteudo = csv(['A'], [['x\ry'], ['a;b'], ['c"d'], ['e\nf'], ['g\r\nh'], ['sem problema']]).toString('utf8');
+  assert.ok(conteudo.startsWith('\ufeffA\r\n'), 'L: BOM presente e cabeçalho na 1.ª linha');
+  assert.ok(conteudo.includes('"x\ry"'), 'L: CR sozinho é escapado com aspas');
+  assert.ok(conteudo.includes('"a;b"'), 'L: ponto e vírgula é escapado');
+  assert.ok(conteudo.includes('"c""d"'), 'L: aspas duplicadas');
+  assert.ok(conteudo.includes('"e\nf"'), 'L: newline é escapado');
+  assert.ok(conteudo.includes('"g\r\nh"'), 'L: CRLF é escapado');
+  assert.ok(conteudo.trimEnd().endsWith('sem problema'), 'L: valor simples não é alterado');
 }
 
 // ── I. Comunicações deixam de ir para quem já não é titular ────────
@@ -1270,6 +1394,8 @@ function testesEstruturais() {
   passo = 'H'; cenarioH();
   passo = 'escrita'; await testesDeEscrita();
   passo = 'G'; await cenarioG();
+  passo = 'K (valores monetários da exportação)'; await cenarioK();
+  passo = 'L (data local e escape do CSV)'; cenarioL();
   passo = 'I'; await cenarioI();
   passo = 'J (regra de autorização)'; await cenarioJ();
   passo = 'saída'; testesFluxoSaida();

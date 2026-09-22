@@ -18,30 +18,49 @@ function ler(relativa) {
   return fs.readFileSync(path.join(ROOT, relativa), 'utf8');
 }
 
+// Percorre a árvore de vistas. Serve a guarda dos parciais (abaixo): qualquer
+// ficheiro `.handlebars` sob `views/` pode invocar um parcial.
+function vistasHandlebar(dir) {
+  const saida = [];
+  for (const entrada of fs.readdirSync(dir, { withFileTypes: true })) {
+    const caminho = path.join(dir, entrada.name);
+    if (entrada.isDirectory()) saida.push(...vistasHandlebar(caminho));
+    else if (entrada.name.endsWith('.handlebars')) saida.push(caminho);
+  }
+  return saida;
+}
+
 Object.keys(helpers).forEach((k) => handlebars.registerHelper(k, helpers[k]));
 
-const parciais = {
-  '_flash': ler('partials/_flash.handlebars'),
-  '_empty-state': ler('partials/_empty-state.handlebars'),
-  '_convocatoria-documento': ler('partials/_convocatoria-documento.handlebars'),
-  '_convocatoria-editor': ler('partials/_convocatoria-editor.handlebars'),
-  '_condominio-seletor': ler('partials/_condominio-seletor.handlebars'),
-  '_bottom-bar': ler('partials/_bottom-bar.handlebars'),
-  '_tema-toggle': ler('partials/_tema-toggle.handlebars'),
-  '_quotas-tabs': ler('partials/_quotas-tabs.handlebars'),
-  '_condomino-quotas-tabs': ler('partials/_condomino-quotas-tabs.handlebars'),
-  '_assembleias-tabs': ler('partials/_assembleias-tabs.handlebars'),
-  '_config-tabs': ler('partials/_config-tabs.handlebars'),
-  '_modal-confirmar': ler('partials/_modal-confirmar.handlebars'),
-  // Início do portal: itens de lista e recomendação contextual (Fase 2G).
-  '_portal-item': ler('partials/_portal-item.handlebars'),
-  '_portal-recomendacao': ler('partials/_portal-recomendacao.handlebars'),
-  // Tips contextuais (motor único `helpers/tips.js`). A lista de parciais é
-  // explícita, pelo que um parcial novo tem de ser registado aqui — caso
-  // contrário a vista que o inclui não renderiza (é o que este teste deteta).
-  '_tips': ler('partials/_tips.handlebars'),
-};
+// ── Parciais: registo AUTOMÁTICO a partir de `views/partials/` (P36) ──
+// A lista era EXPLÍCITA: um parcial novo só era registado se alguém se
+// lembrasse de o acrescentar aqui, e a vista que o incluísse rebentava com
+// «The partial X could not be found» (500 em runtime, não neste teste). Passa
+// a ser lida do disco — um parcial novo entra sem edição deste ficheiro.
+const DIR_PARCIAIS = path.join(ROOT, 'partials');
+const parciais = {};
+for (const ficheiro of fs.readdirSync(DIR_PARCIAIS).sort()) {
+  if (!ficheiro.endsWith('.handlebars')) continue;
+  parciais[path.basename(ficheiro, '.handlebars')] = ler(path.join('partials', ficheiro));
+}
+assert.ok(Object.keys(parciais).length >= 20,
+  `há parciais em views/partials (encontrados: ${Object.keys(parciais).length})`);
 Object.keys(parciais).forEach((k) => handlebars.registerPartial(k, parciais[k]));
+
+// A propriedade que a lista explícita estava a tentar proteger — agora provada
+// a sério: TODO o parcial INVOCADO nas vistas (incluindo blocos `{{#> x}}`) tem
+// de existir em `views/partials/`. Uma invocação de um parcial inexistente
+// rebenta em runtime; sem esta guarda, só se descobria ao abrir a página.
+// `{{> @partial-block}}` fica de fora por construção (o nome começa em `@`).
+const invocados = new Set();
+for (const caminho of vistasHandlebar(ROOT)) {
+  for (const m of fs.readFileSync(caminho, 'utf8').matchAll(/\{\{(?:#)?>\s*([A-Za-z0-9_-]+)/g)) {
+    invocados.add(m[1]);
+  }
+}
+const semFicheiro = [...invocados].filter((n) => !(n in parciais)).sort();
+assert.deepStrictEqual(semFicheiro, [],
+  `parciais invocados sem ficheiro em views/partials: ${semFicheiro.join(', ')}`);
 
 const layout = handlebars.compile(ler('layouts/main.handlebars'));
 const nova = handlebars.compile(ler('admin/convocatorias/nova.handlebars'));
@@ -767,6 +786,35 @@ const appJsFonte = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'a
 assert.ok(appJsFonte.includes('modalConfirmarGesCondu') && appJsFonte.includes('data-confirmar'), 'app.js trata as confirmações da aplicação');
 assert.ok(appJsFonte.includes('GesConduConfirmar'), 'app.js expõe confirmação para mensagens dinâmicas');
 assert.ok(!fontePainel.includes('Google Drive'), 'painel: sem "Google Drive" fixo');
+
+// 17.3 A confirmação da eliminação do rascunho nomeia TUDO o que a rota apaga
+// (P3). O texto dizia apenas «Eliminar este rascunho? Esta ação não pode ser
+// revertida.», mas o handler apaga as rubricas, a distribuição, o plano de
+// quotas e o histórico — o utilizador apagava mais do que pensava. A prova é
+// ACOPLADA ao código da rota: para cada modelo destruído no handler, a
+// mensagem da modal tem de conter a palavra correspondente. Acrescentar um
+// `destroy` novo sem o dizer na confirmação faz este teste falhar.
+const PALAVRA_DO_MODELO_APAGADO = {
+  OrcamentoAlteracao: 'histórico',
+  OrcamentoDistribuicao: 'distribui',
+  OrcamentoRubrica: 'rubrica',
+  PlanoQuota: 'plano',
+};
+const fonteRotaOrcamento = fs.readFileSync(path.join(__dirname, '..', 'routes', 'orcamento.js'), 'utf8');
+const handlerEliminarRascunho = /router\.post\('\/orcamento\/:id\/eliminar'[\s\S]*?\n\}\);/.exec(fonteRotaOrcamento);
+assert.ok(handlerEliminarRascunho, 'existe o handler POST /orcamento/:id/eliminar');
+const formEliminarRascunho =
+  /<form action="\/admin\/orcamento\/\{\{orcamento\.id\}\}\/eliminar"[^>]*data-confirmar="([^"]+)"/.exec(ler('admin/orcamento/detalhe.handlebars'));
+assert.ok(formEliminarRascunho, 'a vista do orçamento tem a confirmação da eliminação do rascunho');
+const apagadosPeloHandler = Object.keys(PALAVRA_DO_MODELO_APAGADO)
+  .filter((modelo) => new RegExp(`\\b${modelo}\\.destroy\\(`).test(handlerEliminarRascunho[0]));
+assert.strictEqual(apagadosPeloHandler.length, 4,
+  `o handler apaga os 4 registos associados (encontrados: ${apagadosPeloHandler.join(', ') || 'nenhum'})`);
+const confirmacaoRascunho = formEliminarRascunho[1].toLowerCase();
+for (const modelo of apagadosPeloHandler) {
+  assert.ok(confirmacaoRascunho.includes(PALAVRA_DO_MODELO_APAGADO[modelo]),
+    `a confirmação da eliminação do rascunho tem de mencionar «${PALAVRA_DO_MODELO_APAGADO[modelo]}» — a rota apaga ${modelo}`);
+}
 
 // 18. Área do Condómino — páginas de consulta (Fase 1)
 const baseCond = { pessoa: {}, linhas: [], extras: [], anos: [], filtros: { ano: '', estado: '' }, avisos: [], assembleiasProximas: [], documentosRecentes: [], resumo: { saldoContas: 0, fundoReserva: 0, receitas: 0, despesas: 0, contas: [] }, orcamento: { ano: 2026, orcamentado: 0, executado: 0, percentagem: 0 }, pastas: {}, documentos: null, agrupados: [] };

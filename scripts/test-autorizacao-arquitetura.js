@@ -22,7 +22,13 @@ const Sequelize = require('sequelize');
 const Handlebars = require('handlebars');
 
 const RAIZ = path.join(__dirname, '..');
-const ler = (rel) => require('fs').readFileSync(path.join(RAIZ, rel), 'utf8');
+// Leitura NORMALIZADA para LF (dívida P38): as asserções deste ficheiro
+// comparam CÓDIGO-FONTE com `\n` literal (ex.: `/const ROUTERS = \{([\s\S]*?)\n\};/`)
+// e dividem linhas com `.split('\n')`. Com CRLF no disco — checkout feito com
+// `core.autocrlf=true` — o `\r` a mais fazia a regex não casar e deixava `\r`
+// no fim de cada linha. Normalizar aqui torna o teste independente da política
+// de fim-de-linha do clone, em vez de depender de o repositório estar em LF.
+const ler = (rel) => require('fs').readFileSync(path.join(RAIZ, rel), 'utf8').replace(/\r\n/g, '\n');
 
 let nTestes = 0;
 const feito = (nome) => {

@@ -88,7 +88,12 @@ npm run db:migrate:undo   # uma migração de cada vez, da 066 para a 056
   de junção como `pagamento_quotas`/`recibo_quotas`/`documento_categorias` ficam
   órfãs — simplificação conhecida).
 - **Autorização**: os módulos usam o papel **por condomínio ativo** (`comPapel`
-  admin/gestor) e o Super Admin em suporte tem papel `admin`.
+  admin/gestor). Um acesso de suporte **não é um papel de condomínio**:
+  `helpers/suporte.js` garante que `req.papelCondominio` fica a **`null`** durante
+  o suporte e a via de leitura passa a ser a **allow-list**
+  (`helpers/suporte-allowlist.js`), com auditoria por consulta. *(A redação
+  anterior — «o Super Admin em suporte tem papel `admin`» — estava errada e
+  contradizia o invariante central do suporte; corrigida em P45.)*
 
 ---
 

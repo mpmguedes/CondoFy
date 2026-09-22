@@ -24,14 +24,23 @@ function toNumber(value) {
 }
 
 // Formato PT-PT: 1.234,56 €
-function formatEUR(value) {
-  const cents = toCents(value);
-  const neg = cents < 0;
-  const abs = Math.abs(cents);
+// ── Unidades, explicitamente ────────────────────────────────────────
+// `formatEUR(x)` espera EUROS (aceita número ou o texto da BD). Passar-lhe
+// CÊNTIMOS produz um valor 100× maior — foi o defeito P37, que saiu nos CSV da
+// exportação RGPD. Quando o valor já está em cêntimos (aritmética interna),
+// usar `formatEURCents`, que não converte nada.
+function formatEURCents(cents) {
+  const n = Math.round(Number(cents) || 0);
+  const neg = n < 0;
+  const abs = Math.abs(n);
   const eur = Math.floor(abs / 100);
   const cent = String(abs % 100).padStart(2, '0');
   const eurStr = String(eur).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return `${neg ? '-' : ''}${eurStr},${cent} €`;
+}
+
+function formatEUR(value) {
+  return formatEURCents(toCents(value));
 }
 
 // Aceita input do formulário ("1234,56" ou "1234.56") e devolve valor em cêntimos
@@ -39,4 +48,4 @@ function parseInputToCents(value) {
   return toCents(value);
 }
 
-module.exports = { toCents, fromCents, toNumber, formatEUR, parseInputToCents };
+module.exports = { toCents, fromCents, toNumber, formatEUR, formatEURCents, parseInputToCents };

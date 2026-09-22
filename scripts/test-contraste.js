@@ -21,8 +21,15 @@ const fs = require('fs');
 const path = require('path');
 
 const RAIZ = path.join(__dirname, '..');
-const css = fs.readFileSync(path.join(RAIZ, 'public', 'css', 'styles.css'), 'utf8');
-const cssHome = fs.readFileSync(path.join(RAIZ, 'public', 'css', 'home.css'), 'utf8');
+// Leitura NORMALIZADA para LF (dívida P38): a análise de regras CSS divide
+// seletores com `.split('\n')` (ver `regra[1].trim().split('\n').pop()`) e casa
+// `([^{}]+)\{([^}]*)\}` bloco a bloco. Com CRLF no disco — checkout feito com
+// `core.autocrlf=true` — o `\r` sobrevivia ao `trim()` em posições internas e o
+// seletor comparado deixava de bater certo. Normalizar aqui torna a medição
+// independente da política de fim-de-linha do clone.
+const lerCss = (nome) => fs.readFileSync(path.join(RAIZ, 'public', 'css', nome), 'utf8').replace(/\r\n/g, '\n');
+const css = lerCss('styles.css');
+const cssHome = lerCss('home.css');
 
 // ── Tokens do design system ─────────────────────────────────────────
 function bloco(seletor) {
