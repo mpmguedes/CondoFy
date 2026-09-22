@@ -20,6 +20,8 @@ const { validarNif, validarIban } = require('../public/js/validacao-fiscal');
 // condomínio (não operação da fila) — vive neste router. O envio do email de
 // teste reutiliza o MESMO mailer: não existe uma segunda configuração.
 const mailer = require('../helpers/mailer');
+// Tips contextuais da área de armazenamento (motor único: helpers/tips.js).
+const { tipsDaPagina } = require('../helpers/tips/contexto');
 
 const router = express.Router();
 // Isolamento: a configuração edita o condomínio ATIVO (sessão).
@@ -122,9 +124,31 @@ router.get('/config', async (req, res) => {
 
 // ── Separador 2: Armazenamento e Backups ───────────────────────────
 router.get('/config/armazenamento', async (req, res) => {
+  const dados = await dadosArmazenamento(req.condominioId);
+
+  // ── Tips contextuais (orientação, distinta dos sinais) ────────────
+  // A área é `armazenamento`: o motor só apresenta os tips registados para
+  // esta página, e só quando a situação descrita existe mesmo (destino sem
+  // ligação, backup falhado, retenção no mínimo...). Tolerante a falha: um tip
+  // que não se consegue avaliar simplesmente não aparece.
+  let contextoDeTips = { apresentar: [], total: 0, outras: [], limite: 0 };
+  try {
+    contextoDeTips = await tipsDaPagina({
+      area: 'armazenamento',
+      condominioId: req.condominioId,
+      userId: req.user.id,
+      papel: req.papelCondominio,
+      dados,
+    });
+  } catch (err) {
+    console.error('[tips] armazenamento:', err.message);
+  }
+
   res.render('admin/configuracao/armazenamento', {
     titulo: 'Armazenamento e Backups',
-    ...(await dadosArmazenamento(req.condominioId)),
+    ...dados,
+    // `voltar` diz à rota de dispensa para onde regressar (validado no servidor).
+    tips: { ...contextoDeTips, voltar: '/admin/config/armazenamento' },
   });
 });
 

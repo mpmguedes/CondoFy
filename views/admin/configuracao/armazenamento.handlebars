@@ -24,6 +24,19 @@
 </div>
 {{/unless}}
 
+{{!-- SUGESTÕES (tips contextuais da área de armazenamento)
+
+     Orientação, não alarme. Só aparece o que a situação real justifica: o
+     motor `helpers/tips.js` avalia o destino dos backups, as ligações, o
+     estado do último backup e o histórico de dispensa desta conta. Aqui só se
+     apresenta — este parcial não contém uma única condição.
+
+     A área é o que impede estes tips de aparecerem no resto do backoffice: os
+     tips de administração declaram `areas: ['armazenamento']` e o restante
+     (`backup_sem_copia_externa`) só aqui encontra o dado que a sua condição
+     exige (`ctx.backup`), pelo que não aparece em mais lado nenhum. --}}
+{{> _tips}}
+
 {{!-- ── 1. Ligações aos serviços (estado + conta) ───────────────────── --}}
 <h2 class="h6 mt-3 mb-2">Ligações aos serviços</h2>
 <div class="row g-3">

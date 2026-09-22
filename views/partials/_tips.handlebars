@@ -1,0 +1,82 @@
+{{!-- Tips contextuais do backoffice — APRESENTAÇÃO.
+
+     Este parcial NÃO decide nada: mostra o que o motor `helpers/tips.js`
+     considerou elegível (a situação descrita tem de existir mesmo, no momento
+     do pedido). Não contém uma única condição e a ação vem sempre da definição
+     do tip, nunca do browser.
+
+     Linguagem visual — ORIENTAÇÃO, não alarme:
+       · cada tip é um cartão discreto, com filete de acento à esquerda;
+       · cantos e elevação do design system (--radius, --elev-1/--elev-2), os
+         mesmos dos restantes cartões — nada de um visual próprio;
+       · o TIPO (`risco`, `conclusao`, `compreensao`, `descoberta`) escolhe a
+         cor do acento, mas o tipo é SEMPRE dito por palavras no rótulo: a cor
+         é reforço, nunca a única informação;
+       · hierarquia fixa: rótulo (tipo) → título → explicação → ação;
+       · sem popup e sem modal: nada bloqueia o conteúdo do painel.
+
+     Acessibilidade:
+       · a secção é uma região nomeada (`aria-labelledby` → «Sugestões»);
+       · cada tip tem um título próprio (h3), pelo que se navega por títulos;
+       · o X de dispensa é um botão de submissão com nome acessível completo
+         («Dispensar a sugestão «…»») — um ícone sozinho nunca é lido;
+       · todos os ícones decorativos estão `aria-hidden`;
+       · alvos de toque ≥ 44×44px (o X e o CTA).
+
+     Formas de sair do tip:
+       · resolver a situação → deixa de ser elegível e desaparece sozinho;
+       · dispensar (X, quando `dismissivel`) → escondido pelo intervalo
+         definido e reapresentado se a situação se mantiver.
+
+     O ícone vem do motor (`icone`), que é quem conhece cada tip; o conjunto
+     «Material Symbols» já é incluído pelo layout. O parcial usa APENAS
+     construções nativas do Handlebars (nenhum helper da aplicação), para poder
+     ser renderizado — e testado — de forma isolada.
+
+     O destino de regresso (`tips.voltar`) é opcional: quando a página o indica,
+     o X devolve o utilizador à página onde estava em vez de o atirar para o
+     painel. É a página que o define, e a rota de dispensa valida-o contra uma
+     lista de destinos permitidos.
+
+     `public/js/tips.js` traz a melhoria progressiva (estado de carregamento e
+     defesa contra duplo envio). Sem JavaScript o X continua a funcionar: é um
+     formulário POST normal. --}}
+{{#if tips.apresentar.length}}
+<section class="gc-tips-bloco" aria-labelledby="gc-tips-titulo">
+  <h2 class="section-title gc-tips-seccao" id="gc-tips-titulo">Sugestões</h2>
+  <ul class="gc-tips-lista">
+    {{#each tips.apresentar}}
+    <li class="card gc-tip gc-tip-{{tipo}}" data-tip="{{id}}">
+      <div class="gc-tip-topo">
+        <span class="gc-tip-icone" aria-hidden="true">
+          <span class="material-symbols-outlined">{{#if icone}}{{icone}}{{else}}lightbulb{{/if}}</span>
+        </span>
+        <div class="gc-tip-conteudo">
+          {{#if rotulo}}<p class="gc-tip-rotulo">{{rotulo}}</p>{{/if}}
+          <h3 class="gc-tip-titulo" id="gc-tip-{{id}}-titulo">{{titulo}}</h3>
+          <p class="gc-tip-mensagem">{{mensagem}}</p>
+        </div>
+        {{#if dismissivel}}
+        <form class="gc-tip-dispensar" action="/admin/tips/{{id}}/dispensar" method="POST">
+          {{!-- Para onde voltar depois de dispensar. Vem do SERVIDOR (o motor
+               não o define; a página passa-o em `tips.voltar`) e é validado
+               contra uma lista de destinos permitidos na rota de dispensa —
+               um valor manipulado no browser nunca é seguido. --}}
+          {{#if ../tips.voltar}}<input type="hidden" name="voltar" value="{{../tips.voltar}}">{{/if}}
+          <button type="submit" class="gc-tip-x" aria-label="Dispensar a sugestão «{{titulo}}»" title="Dispensar">
+            <span class="material-symbols-outlined" aria-hidden="true">close</span>
+          </button>
+        </form>
+        {{/if}}
+      </div>
+      {{#if acao}}
+      <div class="gc-tip-acoes">
+        <a class="btn btn-primary gc-tip-cta" href="{{acao.url}}">{{acao.texto}}</a>
+      </div>
+      {{/if}}
+    </li>
+    {{/each}}
+  </ul>
+</section>
+<script src="/js/tips.js?v=20260921a" defer></script>
+{{/if}}

@@ -135,6 +135,17 @@
   </div>
 </div>
 
+{{!-- SUGESTÕES (tips contextuais)
+
+     Orientação, não alarme: distinto de «Precisa de atenção» acima. Os sinais
+     são factos operacionais que exigem decisão hoje; os tips explicam o que
+     pode não ser óbvio (como se calcula a permilagem, porque é que a conta do
+     Fundo de Reserva faz falta, o que muda com uma cópia externa dos backups).
+
+     Só aparece o que a situação real justifica — a decisão é do motor
+     `helpers/tips.js` (lógica pura, testada offline); aqui só se apresenta. --}}
+{{> _tips}}
+
 {{!-- TOP DEVEDORES + EVOLUÇÃO --}}
 <div class="row g-3 mb-3">
   <div class="col-12 col-lg-5">

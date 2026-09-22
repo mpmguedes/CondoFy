@@ -22,6 +22,13 @@
 // Este ficheiro é PURO (sem base de dados, sem rede) — a persistência da
 // dispensa está em `carregarDispensas`/`registarDispensa`, que são as únicas
 // funções que falam com o modelo. Os testes exercitam o motor sem base de dados.
+//
+// ⛔ SEM `condominio_id`. A tabela `recomendacao_estados` (migração
+// 20260101000073) não tem essa coluna, de propósito: a recomendação do portal é
+// sobre a CONTA, pelo que mudar de condomínio não deve reabrir nem esconder o
+// que já foi dispensado. Os Tips da administração — que SÃO por condomínio —
+// usam o mesmo mecanismo com a chave qualificada (`tip:<id>@c<id>`), resolvida
+// em `helpers/tips.js`; o índice único `(user_id, recomendacao)` serve os dois.
 // ─────────────────────────────────────────────────────────────────────
 const { RecomendacaoEstado } = require('../models');
 
@@ -186,6 +193,11 @@ function podeDispensar(id) {
 //   · quando (auditoria);
 //   · até quando (controlo da reapresentação).
 // Nada de «concluída»: isso lê-se de `users.two_fa_ativo`.
+//
+// ⛔ A consulta usa APENAS `user_id` (e `recomendacao`, na escrita). Não existe
+// — nem pode passar a existir — um `where` sobre `condominio_id`: essa coluna
+// não existe na tabela. Um `where` sobre uma coluna inexistente rebenta com
+// ER_BAD_FIELD_ERROR na BD real (e a rota do portal não tem try/catch).
 async function carregarDispensas(userId) {
   if (!userId) return {};
   const linhas = await RecomendacaoEstado.findAll({ where: { user_id: userId }, raw: true });
@@ -195,6 +207,8 @@ async function carregarDispensas(userId) {
 }
 
 // Regista (ou renova) a dispensa de uma recomendação para esta conta.
+// `recomendacao` é a CHAVE de dispensa tal como o motor a define — para o
+// portal é o id simples, para os Tips da administração é `tip:<id>@c<id>`.
 async function registarDispensa({ userId, recomendacao, dias = DIAS_REAPRESENTACAO_PADRAO, agora = Date.now() }) {
   const id = String(recomendacao == null ? '' : recomendacao);
   if (!userId || !podeDispensar(id)) return { ok: false, motivo: 'recomendacao_invalida' };

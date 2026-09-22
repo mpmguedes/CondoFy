@@ -1379,6 +1379,182 @@ a.portal-item:hover .portal-item-titulo { text-decoration: underline; }
   .portal-recomendacao-acoes .portal-btn { flex: 0 0 auto; }
 }
 
+/* ── Tips contextuais do painel — ORIENTAÇÃO, não alarme ──────────
+   Cada tip é um cartão discreto, com filete de acento à esquerda e os cantos e
+   a elevação do design system (--radius, --elev-1/--elev-2) — a mesma
+   linguagem dos restantes cartões, para o tip parecer parte da aplicação e não
+   um alerta genérico. Distinto de «Precisa de atenção» (`sinais`): os sinais
+   são factos operacionais que exigem decisão hoje, os tips explicam o que pode
+   não ser óbvio.
+
+   O TIPO (`risco`, `conclusao`, `compreensao`, `descoberta`) escolhe a cor do
+   acento. A cor é REFORÇO, nunca a única informação: o tipo é sempre dito por
+   palavras no rótulo (`.gc-tip-rotulo`).
+
+   Todos os tamanhos de texto acompanham a escala de acessibilidade
+   (--font-scale); só as dimensões de layout ficam em px, como no resto da
+   folha. */
+.gc-tips-bloco { margin-bottom: var(--sp-3); }
+.gc-tips-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gc-tip {
+  /* Acento por omissão: a cor da marca. NÃO se usa --c-accent (o ciano): sobre
+     a superfície do cartão, em tema claro, dá 1.85:1 — abaixo dos 3:1 exigidos
+     a um objeto não textual. --c-primary dá 7.05:1 no claro e 7.39:1 no escuro.
+     (Valores medidos; o teste test-tips-vistas.js recalcula-os.) */
+  --tip-accent: var(--c-primary);
+  --tip-accent-soft: var(--c-accent-soft);
+  --tip-accent-forte: var(--c-primary-dark);
+  border: 1px solid var(--c-border);
+  border-left: 4px solid var(--tip-accent);
+  border-radius: var(--radius);
+  background: var(--c-surface);
+  box-shadow: var(--elev-1);
+  padding: 12px 14px;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  /* Entrada discreta: o tip integra-se na página em vez de aparecer de golpe.
+     Com `prefers-reduced-motion` a animação é desligada (ver abaixo) e o
+     cartão fica simplesmente visível — nunca invisível. */
+  animation: gc-tip-entrada 0.18s ease-out both;
+}
+.gc-tip:hover { box-shadow: var(--elev-2); }
+/* Quem navega por teclado vê em que cartão está: o foco dentro do tip
+   destaca-o, sem depender de :hover. */
+.gc-tip:focus-within { box-shadow: var(--elev-2); border-color: var(--tip-accent); }
+.gc-tip:nth-child(2) { animation-delay: 40ms; }
+.gc-tip:nth-child(3) { animation-delay: 80ms; }
+
+/* Acerto por tipo. Só `risco` («Atenção ao cálculo») muda o acento: é o único
+   tipo que pede um aviso visual, e o âmbar distingue-se do azul nos DOIS temas
+   (5.14:1 no claro, 8.64:1 no escuro, sobre a superfície do cartão).
+   Os restantes tipos (`.gc-tip-conclusao`, `.gc-tip-compreensao`,
+   `.gc-tip-descoberta`) partilham o acento da marca de propósito: no tema
+   escuro os tokens de informação colapsam todos no mesmo ciano, pelo que um
+   matiz por tipo não seria sequer percetível. A diferença entre eles é dita
+   pelo ícone e pelo rótulo escrito — nunca só pela cor. As classes ficam no
+   markup como gancho semântico (e para o ícone), sem regra de cor própria. */
+.gc-tip-risco {
+  --tip-accent: var(--c-warning-text);
+  --tip-accent-soft: var(--c-warning-bg);
+  --tip-accent-forte: var(--c-warning-text);
+}
+
+.gc-tip-topo { display: flex; align-items: flex-start; gap: 10px; }
+.gc-tip-icone {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tip-accent-soft);
+  color: var(--tip-accent-forte);
+}
+.gc-tip-icone .material-symbols-outlined { font-size: calc(19px * var(--font-scale)); }
+.gc-tip-conteudo { min-width: 0; flex: 1 1 auto; }
+.gc-tip-rotulo {
+  margin: 0;
+  color: var(--c-text-muted);
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.gc-tip-titulo {
+  margin: 2px 0 0;
+  font-size: calc(15px * var(--font-scale));
+  font-weight: 700;
+  color: var(--c-text);
+  overflow-wrap: anywhere;
+}
+.gc-tip-mensagem {
+  margin: 4px 0 0;
+  color: var(--c-text-muted);
+  font-size: calc(13px * var(--font-scale));
+  line-height: 1.45;
+  max-width: 78ch;
+}
+.gc-tip-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.gc-tip-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Alvo de toque confortável (Bootstrap sozinho ficaria abaixo dos 44px). */
+  min-height: 44px;
+}
+
+/* X de dispensa: botão de submissão (funciona sem JavaScript). O alvo é de
+   44×44px, mas o ícone mantém-se discreto; a margem negativa encosta-o ao
+   canto sem empurrar o texto. */
+.gc-tip-dispensar { flex: none; margin: 0; }
+.gc-tip-x {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: -6px -6px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--c-text-muted);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.gc-tip-x .material-symbols-outlined { font-size: calc(20px * var(--font-scale)); }
+.gc-tip-x:hover { background: var(--c-surface-2); color: var(--c-text); }
+.gc-tip-x:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+
+/* Estado de carregamento (melhoria progressiva — public/js/tips.js). Enquanto
+   a dispensa está a ser enviada, o cartão fica inerte e o X dá lugar a um
+   indicador. Sem JavaScript nada disto se aplica: o formulário POST continua a
+   ser a via real. */
+.gc-tip[aria-busy="true"] { opacity: 0.75; }
+.gc-tip[aria-busy="true"] .gc-tip-acoes,
+.gc-tip[aria-busy="true"] .gc-tip-x { pointer-events: none; }
+.gc-tip[aria-busy="true"] .gc-tip-x .material-symbols-outlined { visibility: hidden; }
+.gc-tip[aria-busy="true"] .gc-tip-x::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--tip-accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: gc-tip-girar 0.7s linear infinite;
+}
+
+@keyframes gc-tip-entrada {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes gc-tip-girar {
+  to { transform: rotate(360deg); }
+}
+
+/* No telemóvel a ação ocupa a largura do cartão (alvo grande, sem toques
+   errados); a partir de 576px volta ao tamanho natural. */
+@media (max-width: 575.98px) {
+  .gc-tip-acoes .gc-tip-cta { flex: 1 1 100%; }
+}
+
+/* Movimento reduzido: sem entrada animada e sem rotação do indicador. O estado
+   de carregamento continua legível (opacidade + anel visível). */
+@media (prefers-reduced-motion: reduce) {
+  .gc-tip { animation: none; }
+  .gc-tip[aria-busy="true"] .gc-tip-x::after { animation: none; }
+}
+
 /* Painel — faixas horizontais agrupadas (sem um card por número) */
 .painel-strip {
   display: flex;

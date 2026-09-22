@@ -49,6 +49,11 @@ const convites = require('../helpers/convites');
 // Admin. As restantes rotas deste router ignoram-no por completo.
 const suporte = require('../helpers/suporte');
 const background = require('../helpers/background-jobs');
+// Tips contextuais do painel: orientação (o que pode não ser óbvio), distinta
+// dos sinais de atenção (factos operacionais). A decisão é do motor puro.
+const tips = require('../helpers/tips');
+// Regra real da permilagem (a soma tem de fechar 1000‰) — uma só implementação.
+const { validarPermilagem } = require('../helpers/permilagem');
 const { sincronizarContactosPessoa, parseContactosForm, validarContactos, contactosParaForm } = require('../helpers/contactos');
 
 const router = express.Router();
@@ -256,7 +261,9 @@ router.get('/', async (req, res) => {
   const categoriasTop = Object.entries(porCategoria).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
   // TOP DEVEDORES (Painel): agrupado por fração, quotas não pagas.
-  const fracoesTodas = await Fracao.findAll({ attributes: ['id', 'designacao'], where: onde(req) });
+  // `permilagem` é lida aqui (a mesma consulta) para os tips de estrutura
+  // avaliarem a soma real sem uma segunda passagem à tabela.
+  const fracoesTodas = await Fracao.findAll({ attributes: ['id', 'designacao', 'permilagem'], where: onde(req) });
   const nomeFracao = new Map(fracoesTodas.map((f) => [f.id, f.designacao]));
   const mapaDivida = new Map();
   for (const q of quotas) {
@@ -332,6 +339,70 @@ router.get('/', async (req, res) => {
     smtp: smtpConfigured(),
   });
 
+  // ── Tips contextuais (orientação, distinta dos sinais) ─────────────
+  // Reúne os factos que o motor precisa e deixa-o decidir. Tolerante a falha:
+  // um tip que não se consegue avaliar simplesmente não aparece — nunca se
+  // inventa uma situação a partir de um erro.
+  let contextoDeTips = { apresentar: [], total: 0, outras: [], limite: 0 };
+  try {
+    const [semTitular, contas, realizadasSemAta, dispensas] = await Promise.all([
+      // Frações sem nenhuma titularidade em vigor: existe fração e não há
+      // ninguém a quem dirigir quotas, avisos ou contactos.
+      (async () => {
+        const ids = fracoesTodas.map((f) => f.id);
+        if (!ids.length) return 0;
+        const comTitular = await FracaoTitularidade.findAll({
+          attributes: ['fracao_id'],
+          where: { condominio_id: req.condominioId, estado: 'ativa', fracao_id: { [Op.in]: ids } },
+          raw: true,
+        });
+        const comTitularIds = new Set(comTitular.map((t) => Number(t.fracao_id)));
+        return ids.filter((id) => !comTitularIds.has(Number(id))).length;
+      })(),
+      ContaBancaria.findAll({ attributes: ['tipo'], where: { condominio_id: req.condominioId }, raw: true }),
+      Assembleia.count({
+        where: { condominio_id: req.condominioId, estado: 'realizada', ata_texto: null, ata_documento_id: null },
+      }),
+      tips.carregarDispensas(req.user.id),
+    ]);
+
+    // A mesma regra da página de quotas (`helpers/permilagem.js`): a soma das
+    // permilagens tem de fechar 1000‰.
+    const permilagem = validarPermilagem(fracoesTodas);
+    contextoDeTips = tips.escolher(
+      {
+        condominioId: req.condominioId,
+        papel: req.papelCondominio,
+        // Área do PAINEL: os tips que declaram `areas` para outra página (ex.:
+        // armazenamento) não aparecem aqui. O painel mostra os tips de âmbito
+        // geral — de condomínio e de instalação.
+        area: 'inicio',
+        ambito: [tips.AMBITOS.condominio, tips.AMBITOS.instalacao],
+        fracoes: {
+          n: fracoesTodas.length,
+          permilagemTotal: permilagem.total,
+          permilagemOk: permilagem.ok,
+          semTitular,
+        },
+        contas: {
+          n: contas.length,
+          fundoReserva: contas.filter((c) => c.tipo === 'fundo_reserva').length,
+        },
+        assembleias: { realizadasSemAta },
+        // Backups: o destino é da INSTALAÇÃO; `origem` indica se há alguma
+        // ligação utilizável. Sem ligações, a página de armazenamento já
+        // explica como ligar um serviço — o tip não repete isso.
+        backup: {
+          destino: destinoBackup || null,
+          temLigacoes: Boolean(ligacaoBackup && ligacaoBackup.origem),
+        },
+      },
+      dispensas
+    );
+  } catch (err) {
+    console.error('[tips] painel:', err.message);
+  }
+
   res.render('admin/dashboard', {
     titulo: 'Painel de administração',
     nFracoes,
@@ -353,6 +424,9 @@ router.get('/', async (req, res) => {
     orcamentoAno: orcamentoAno,
     // Fase 2H.2 — o que exige decisão hoje + o que aconteceu recentemente.
     sinais,
+    // Tips contextuais (orientação): só aparece o que a situação real justifica.
+    // `voltar` é o destino de regresso da dispensa (validado na rota).
+    tips: { ...contextoDeTips, voltar: '/admin' },
     proximasAssembleias: proximasAssembleias.map((a) => ({ ...a.toJSON() })),
     atividade: dashboardHelpers.atividadeRecente(
       registosAuditoria.map((r) => ({ ...r.toJSON(), utilizador: r.user ? { nome: r.user.nome } : null })),

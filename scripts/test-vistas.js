@@ -36,6 +36,10 @@ const parciais = {
   // Início do portal: itens de lista e recomendação contextual (Fase 2G).
   '_portal-item': ler('partials/_portal-item.handlebars'),
   '_portal-recomendacao': ler('partials/_portal-recomendacao.handlebars'),
+  // Tips contextuais (motor único `helpers/tips.js`). A lista de parciais é
+  // explícita, pelo que um parcial novo tem de ser registado aqui — caso
+  // contrário a vista que o inclui não renderiza (é o que este teste deteta).
+  '_tips': ler('partials/_tips.handlebars'),
 };
 Object.keys(parciais).forEach((k) => handlebars.registerPartial(k, parciais[k]));
 

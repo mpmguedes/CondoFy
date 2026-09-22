@@ -291,6 +291,10 @@ app.use('/admin', require('./routes/documentos'));
 app.use('/admin', require('./routes/avisos'));
 app.use('/admin', require('./routes/emails'));
 app.use('/admin', require('./routes/configuracao'));
+// Tips contextuais do backoffice (dispensa). Router próprio: a elegibilidade
+// vive no motor (helpers/tips.js) e o painel não tem escrita nenhuma. O âmbito
+// é o condomínio ativo (chave de dispensa com o condomínio).
+app.use('/admin', require('./routes/admin-tips'));
 app.use('/admin', require('./routes/sistema'));
 app.use('/admin', require('./routes/fornecedores'));
 // Relatórios do condomínio (Relatório Financeiro / balancete) — ver
