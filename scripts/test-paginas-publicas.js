@@ -74,7 +74,13 @@ const pedir = (url) => new Promise((resolve, reject) => {
 // Ligações internas declaradas nas páginas (só estas são permitidas).
 // Ficam de fora os recursos estáticos (folhas de estilo, scripts, imagens),
 // que são ficheiros e não rotas.
-const LIGACOES_PERMITIDAS = new Set(['/', '/politica-privacidade', '/termos', '/login']);
+//
+// `/pedir-acesso` entrou com o cabeçalho/rodapé da homepage: as páginas legais
+// passaram a mostrar a MESMA navegação pública do GesCondu (o cabeçalho tem o
+// botão «Pedir acesso» e o rodapé liga-o). Não é uma ligação nova na aplicação —
+// a rota já existia e já era usada pela homepage (ver test-homepage.js); o que
+// mudou é que agora também aparece a partir das páginas legais.
+const LIGACOES_PERMITIDAS = new Set(['/', '/politica-privacidade', '/termos', '/login', '/pedir-acesso']);
 const RECURSO_ESTATICO = /^\/(css|js|img)\/|\.(css|js|png|jpe?g|svg|webp|ico|woff2?)(\?|$)/i;
 
 function ligacoesInternas(html) {
@@ -92,7 +98,47 @@ async function main() {
     r.corpo.includes('<title>Política de Privacidade · GesCondu</title>'),
     'título da página correto'
   );
-  assert.ok(r.corpo.includes('class="auth-page pagina-legal"'), 'usa a casca pública das páginas legais');
+  // ── 1.0 Cabeçalho/rodapé públicos partilhados com a homepage ───────
+  // As páginas legais deixaram de ser páginas isoladas: apresentam o MESMO
+  // cabeçalho e rodapé da homepage, reutilizando os parciais `_home-cabecalho`
+  // e `_home-rodape`. A prova não é a presença de classes (.hp-*) soltas —
+  // isso passaria com uma segunda cópia do menu. É a REUTILIZAÇÃO: o parcial é
+  // literalmente incluído e a folha da homepage (onde vivem as .hp-*) é
+  // carregada, com o <body> marcado como `home-publica`.
+  assert.ok(r.corpo.includes('class="hp-nav"'), 'política: cabeçalho da homepage presente');
+  assert.ok(r.corpo.includes('<details class="hp-menu-mobile"'), 'política: menu mobile da homepage presente');
+  assert.ok(r.corpo.includes('class="hp-rodape"'), 'política: rodapé da homepage presente');
+  assert.ok(r.corpo.includes('class="hp-skip" href="#conteudo"'), 'política: ligação de salto para o conteúdo');
+  assert.ok(
+    /<body class="blank-page home-publica"/.test(r.corpo),
+    'política: <body> marcado com a classe da homepage (ativa o fundo/texto de home.css)'
+  );
+  assert.ok(
+    r.corpo.includes('/css/home.css?v='),
+    'política: folha da homepage carregada (as classes .hp-* vivem nela)'
+  );
+  // E a casca legal deixou de ter cabeçalho/rodapé próprios (sem duplicação).
+  assert.ok(!r.corpo.includes('class="auth-head"'), 'política: sem segundo cabeçalho próprio');
+  assert.ok(!r.corpo.includes('class="auth-foot"'), 'política: sem segundo rodapé próprio');
+  // O <title> continua a ser o título PRÓPRIO da página (SEO), não o da homepage.
+  assert.ok(!/GesCondu — software de gestão/.test(r.corpo), 'política: título próprio, não o da homepage');
+  // Conteúdo principal centrado e com largura de leitura confortável.
+  assert.ok(r.corpo.includes('class="legal-doc"'), 'política: bloco de conteúdo com largura de leitura');
+
+  // O cabeçalho é o MESMO parcial da homepage: a prova direta é o parcial conter
+  // a marca .hp-nav e as duas páginas partilharem esse ficheiro. Aqui cruza-se a
+  // fonte com o render, para que uma cópia divergente falhe.
+  const parcialCabecalho = ler('views/partials/_home-cabecalho.handlebars');
+  assert.ok(parcialCabecalho.includes('class="hp-nav"'), 'parcial do cabeçalho é a origem do menu');
+  assert.ok(
+    /\{\{>\s*_home-cabecalho\s*\}\}/.test(ler('views/partials/_pagina-legal.handlebars')),
+    'casca legal reutiliza o parcial do cabeçalho (sem duplicar o HTML do menu)'
+  );
+  assert.ok(
+    /\{\{>\s*_home-rodape\s*\}\}/.test(ler('views/partials/_pagina-legal.handlebars')),
+    'casca legal reutiliza o parcial do rodapé'
+  );
+
   // Os controlos de aparência (tema e tamanho do texto) existem apenas depois
   // de iniciar sessão: nas páginas públicas não aparecem.
   assert.ok(!r.corpo.includes('data-tema-toggle') && !r.corpo.includes('data-fonte-opcao'), 'páginas públicas sem controlos de aparência');
@@ -111,7 +157,7 @@ async function main() {
     ['Open Graph: idioma', /<meta property="og:locale" content="pt_PT" \/>/],
     ['tema da barra', /<meta name="theme-color" content="#06213F" \/>/],
     ['cartão de partilha', /<meta name="twitter:card" content="summary_large_image" \/>/],
-    ['ligação de salto', /<a class="legal-skip" href="#conteudo">/],
+    ['ligação de salto', /<a class="hp-skip" href="#conteudo">/],
     ['marca principal', /<main id="conteudo"/],
   ];
   // O ano do copyright é dinâmico (não fixo): acompanha o ano corrente, tal
@@ -171,7 +217,19 @@ async function main() {
   assert.strictEqual(t.status, 200, 'GET /termos responde 200 sem sessão');
   assert.strictEqual(t.cabecalhos.location, undefined, 'termos: não redireciona (sem Location)');
   assert.ok(t.corpo.includes('<title>Termos de Utilização · GesCondu</title>'), 'termos: título correto');
-  assert.ok(t.corpo.includes('class="auth-page pagina-legal"'), 'termos: mantém a casca das páginas legais');
+  // Tal como a política, os termos reutilizam o cabeçalho/rodapé da homepage
+  // (uma só navegação pública) e centram o texto no bloco de leitura.
+  assert.ok(t.corpo.includes('class="hp-nav"'), 'termos: cabeçalho da homepage presente');
+  assert.ok(t.corpo.includes('<details class="hp-menu-mobile"'), 'termos: menu mobile da homepage presente');
+  assert.ok(t.corpo.includes('class="hp-rodape"'), 'termos: rodapé da homepage presente');
+  assert.ok(
+    /<body class="blank-page home-publica"/.test(t.corpo),
+    'termos: <body> marcado com a classe da homepage'
+  );
+  assert.ok(t.corpo.includes('/css/home.css?v='), 'termos: folha da homepage carregada');
+  assert.ok(!t.corpo.includes('class="auth-head"'), 'termos: sem segundo cabeçalho próprio');
+  assert.ok(!t.corpo.includes('class="auth-foot"'), 'termos: sem segundo rodapé próprio');
+  assert.ok(t.corpo.includes('class="legal-doc"'), 'termos: bloco de conteúdo com largura de leitura');
   // As duas páginas legais partilham a casca: os mesmos elementos técnicos têm
   // de estar presentes nas duas, para não divergirem com o tempo.
   for (const [nome, regex] of SEO_LEGAIS) {
@@ -190,16 +248,29 @@ async function main() {
 
   // O rodapé legal tem de usar o ano dinâmico, não um ano escrito à mão.
   // Verificar só o HTML não chega: hoje «2026» coincide com o ano corrente e a
-  // asserção passaria mesmo com o valor fixo. O que se fixa é a fonte — a
-  // casca tem de usar o helper `currentYear`, como o rodapé da homepage.
+  // asserção passaria mesmo com o valor fixo. O que se fixa é a fonte.
+  //
+  // O copyright vem do rodapé da homepage (`_home-rodape`), que a casca legal
+  // reutiliza — é AÍ que o helper tem de estar. Fixa-se também a ligação entre
+  // os dois: a casca inclui esse parcial, pelo que o helper chega às páginas
+  // legais sem aqui se repetir um segundo rodapé.
   const cascaLegal = ler('views/partials/_pagina-legal.handlebars');
+  const rodapeHome = ler('views/partials/_home-rodape.handlebars');
   assert.ok(
-    /©\s*\{\{currentYear\}\}\s*GesCondu/.test(cascaLegal),
-    'casca legal: copyright com o helper currentYear (ano dinâmico)'
+    /©\s*\{\{currentYear\}\}\s*GesCondu/.test(rodapeHome),
+    'rodapé reutilizado: copyright com o helper currentYear (ano dinâmico)'
   );
   assert.ok(
-    !/©\s*20\d\d\s*GesCondu/.test(cascaLegal),
-    'casca legal: sem ano escrito à mão no copyright'
+    !/©\s*20\d\d\s*GesCondu/.test(rodapeHome),
+    'rodapé reutilizado: sem ano escrito à mão no copyright'
+  );
+  assert.ok(
+    /\{\{>\s*_home-rodape\s*\}\}/.test(cascaLegal),
+    'casca legal: o rodapé (e o seu copyright dinâmico) vem do parcial da homepage'
+  );
+  assert.ok(
+    !/©/.test(cascaLegal),
+    'casca legal: não duplica a nota de copyright (vem do rodapé reutilizado)'
   );
 
   const conteudoTermos = [
@@ -227,12 +298,24 @@ async function main() {
   assert.strictEqual(ligacoesInternas(t.corpo).filter((h) => !LIGACOES_PERMITIDAS.has(h)).length, 0, 'termos: sem ligações internas quebradas');
 
   // ── 3. Rodapé público com as duas ligações ─────────────────────────
+  // O rodapé das páginas legais é agora o da homepage (parcial `_home-rodape`),
+  // pelo que a verificação incide sobre esse bloco (classe `hp-rodape`).
   for (const [nome, html] of [['política', r.corpo], ['termos', t.corpo]]) {
-    const rodape = html.slice(html.indexOf('class="auth-foot'));
+    const rodape = html.slice(html.indexOf('class="hp-rodape'));
     assert.ok(rodape.includes('href="/politica-privacidade"'), `${nome}: rodapé liga à Política de Privacidade`);
     assert.ok(rodape.includes('href="/termos"'), `${nome}: rodapé liga aos Termos de Utilização`);
     assert.ok(rodape.includes(`© ${new Date().getFullYear()} GesCondu`), `${nome}: rodapé mantém a nota de copyright com o ano corrente`);
-    assert.ok(html.includes('Voltar ao GesCondu'), `${nome}: ligação de regresso à aplicação`);
+    // Não se removeu nenhuma possibilidade de navegação: o regresso à página
+    // inicial do GesCondu continua disponível — pela marca do cabeçalho e por
+    // uma ligação integrada no fim do documento legal.
+    assert.ok(
+      /<a[^>]*class="hp-marca"[^>]*href="\/"/.test(html) || /href="\/"[^>]*class="hp-marca"/.test(html),
+      `${nome}: marca do cabeçalho liga à página inicial`
+    );
+    assert.ok(
+      html.includes('Voltar à página inicial do GesCondu'),
+      `${nome}: ligação integrada de regresso à página inicial`
+    );
   }
   // As outras páginas públicas (entrada e escolha de condomínio) têm as mesmas ligações.
   for (const ficheiro of ['views/auth/login.handlebars', 'views/condominios/meus.handlebars']) {

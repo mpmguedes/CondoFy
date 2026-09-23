@@ -277,6 +277,11 @@ module.exports = {
   urlBase,
   emailAcesso,
   linkPedidoAcesso,
+  // Recursos (folha de estilos/script) das páginas públicas. Exportados para as
+  // páginas legais reutilizarem o MESMO caminho em vez de o repetirem: quem
+  // apresentar o cabeçalho/rodapé da homepage precisa desta folha.
+  recursosHtml,
+  scriptHtml,
   dadosHome,
   dadosPedidoAcesso,
 };

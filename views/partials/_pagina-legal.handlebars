@@ -1,68 +1,41 @@
 {{!-- Casca das páginas legais públicas (Política de Privacidade e Termos de
-     Utilização), usada com o layout `blank`. Reaproveita as classes .auth-* já
-     existentes (mesma estrutura da entrada e da escolha de condomínio) e usa
-     apenas os tokens do tema, pelo que funciona no tema Claro/Escuro e
-     acompanha a escala de texto definida em Configurações → aparência.
+     Utilização), usada com o layout `blank`.
+
+     Estas páginas fazem parte do percurso público do GesCondu: apresentam o
+     MESMO cabeçalho e rodapé da homepage, reutilizando os parciais `_home-cabecalho`
+     e `_home-rodape` — não há aqui uma segunda cópia do menu. É por isso que a
+     rota carrega a folha da homepage (`/css/home.css`, ver `dadosSeoLegais`) e
+     marca o <body> com `home-publica`: as classes .hp-* vivem nessa folha.
 
      O conteúdo de cada página é passado como bloco:
        {{#> _pagina-legal tituloPagina="…" descricaoPagina="…"}} … {{/_pagina-legal}}
      O bloco é opcional (o teste de vistas renderiza o parcial isolado). --}}
 <style>
-  /* Estilos próprios destas páginas (não alteram o CSS global): só a largura de
-     leitura, o ritmo dos títulos e o aspeto dos parágrafos. */
-  .pagina-legal .auth-panel { max-width: 900px; }
-  .pagina-legal .auth-panel-inner { min-height: 0; }
-  .pagina-legal h1 { font-size: 1.6rem; font-weight: 700; color: var(--c-text); margin: 0 0 .3rem; }
-  .pagina-legal .legal-meta { font-size: .8rem; color: var(--c-text-muted); margin: 0 0 1.4rem; }
-  .pagina-legal h2 { font-size: 1.05rem; font-weight: 600; color: var(--c-text); margin: 1.7rem 0 .55rem; }
-  .pagina-legal h3 { font-size: .95rem; font-weight: 600; color: var(--c-text); margin: 1.1rem 0 .35rem; }
-  .pagina-legal p, .pagina-legal li { font-size: .93rem; line-height: 1.65; color: var(--c-text); }
-  .pagina-legal ul, .pagina-legal ol { padding-left: 1.2rem; margin: 0 0 .8rem; }
-  .pagina-legal li { margin-bottom: .3rem; }
-  .pagina-legal a { color: var(--c-link); }
-  .pagina-legal a:hover { color: var(--c-link-hover); text-decoration: underline; }
-  .pagina-legal code { font-size: .85em; }
-  .pagina-legal .legal-nota { background: var(--c-surface-2); border: 1px solid var(--c-border); border-radius: 10px; padding: .8rem .9rem; margin: 0 0 1rem; }
-  .pagina-legal .legal-nota p { margin: 0; font-size: .88rem; }
-  .pagina-legal .legal-aviso { font-weight: 600; }
-  .pagina-legal .legal-voltar { white-space: nowrap; }
-  .pagina-legal .legal-rodape-ligacoes a { color: inherit; text-decoration: underline; }
-  .pagina-legal .legal-rodape-ligacoes a:hover { color: var(--nav-text); }
-  /* Ligação de salto para o conteúdo: mesma ideia da homepage, mas definida
-     aqui porque estas páginas não carregam a folha da homepage. Fica invisível
-     até receber foco pelo teclado. */
-  .pagina-legal .legal-skip {
-    position: absolute;
-    left: -9999px;
-    top: 0;
-    z-index: 30;
-    background: var(--c-surface);
-    color: var(--c-text);
-    padding: .6rem .9rem;
-    border-radius: 0 0 var(--radius-sm) 0;
-    font-size: .85rem;
-  }
-  .pagina-legal .legal-skip:focus { left: 0; }
+  /* Estilos próprios destas páginas: só a largura de leitura, o ritmo dos
+     títulos e o aspeto dos parágrafos. Nada aqui altera o CSS global nem a
+     homepage (o seletor `.legal-doc` só existe nesta casca). */
+  .legal-doc { max-width: 74ch; margin-inline: auto; }
+  .legal-doc h1 { font-size: 1.6rem; font-weight: 700; color: var(--c-text); margin: 0 0 .3rem; }
+  .legal-doc .legal-meta { font-size: .8rem; color: var(--c-text-muted); margin: 0 0 1.4rem; }
+  .legal-doc h2 { font-size: 1.05rem; font-weight: 600; color: var(--c-text); margin: 1.7rem 0 .55rem; }
+  .legal-doc h3 { font-size: .95rem; font-weight: 600; color: var(--c-text); margin: 1.1rem 0 .35rem; }
+  .legal-doc p, .legal-doc li { font-size: .93rem; line-height: 1.65; color: var(--c-text); }
+  .legal-doc ul, .legal-doc ol { padding-left: 1.2rem; margin: 0 0 .8rem; }
+  .legal-doc li { margin-bottom: .3rem; }
+  .legal-doc a { color: var(--c-link); }
+  .legal-doc a:hover { color: var(--c-link-hover); text-decoration: underline; }
+  .legal-doc code { font-size: .85em; }
+  .legal-doc .legal-nota { background: var(--c-surface-2); border: 1px solid var(--c-border); border-radius: 10px; padding: .8rem .9rem; margin: 0 0 1rem; }
+  .legal-doc .legal-nota p { margin: 0; font-size: .88rem; }
+  .legal-doc .legal-aviso { font-weight: 600; }
 </style>
 
-<div class="auth-page pagina-legal">
-  <a class="legal-skip" href="#conteudo">Saltar para o conteúdo</a>
+{{> _home-cabecalho}}
 
-  <header class="auth-head">
-    <a class="auth-logo" href="/" title="GesCondu">
-      <img src="/img/gescondu_logo_final.svg" alt="GesCondu" />
-    </a>
-    <div class="d-flex align-items-center gap-2 flex-wrap">
-      <a href="/" class="btn btn-sm btn-outline-light legal-voltar">
-        <span class="material-symbols-outlined" style="font-size:1rem" aria-hidden="true">arrow_back</span>
-        Voltar ao GesCondu
-      </a>
-    </div>
-  </header>
-
-  <main id="conteudo" class="auth-stage">
-    <div class="auth-panel">
-      <div class="auth-panel-inner">
+<main id="conteudo" class="legal-pagina">
+  <section class="hp-sec">
+    <div class="hp-wrap">
+      <article class="legal-doc">
         <h1>{{tituloPagina}}</h1>
         {{#if descricaoPagina}}<p class="legal-meta">{{descricaoPagina}}</p>{{/if}}
         <p class="legal-meta">
@@ -84,13 +57,13 @@
         {{/if}}
 
         {{#if @partial-block}}{{> @partial-block}}{{/if}}
-      </div>
-    </div>
-  </main>
 
-  <footer class="auth-foot legal-rodape-ligacoes">
-    © {{currentYear}} GesCondu. Todos os direitos reservados. ·
-    <a href="/politica-privacidade">Política de Privacidade</a> ·
-    <a href="/termos">Termos de Utilização</a>
-  </footer>
-</div>
+        <p class="legal-meta mt-4 mb-0">
+          <a href="/">Voltar à página inicial do GesCondu</a>
+        </p>
+      </article>
+    </div>
+  </section>
+</main>
+
+{{> _home-rodape}}

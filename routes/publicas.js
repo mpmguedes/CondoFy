@@ -92,6 +92,14 @@ function dadosLegais(req) {
 // `helpers/home-publica.dadosHome`/`dadosPedidoAcesso` — os campos que o layout
 // `blank` já sabe consumir — para que as páginas legais fiquem ao nível das
 // restantes páginas públicas (título próprio, descrição, canónica e Open Graph).
+//
+// As páginas legais apresentam o MESMO cabeçalho e rodapé da homepage, pelo que
+// carregam também a folha de estilos da homepage (`home.css`, onde vivem as
+// classes .hp-*) e marcam o <body> com `home-publica` — é essa classe que
+// ativa o fundo claro e a cor de texto da homepage (ver o topo de home.css).
+// A folha vem do mesmo `homePublica` que a homepage usa: uma só fonte para o
+// caminho do recurso, em vez de um segundo valor escrito à mão que poderia
+// divergir.
 function dadosSeoLegais(req, caminho, titulo) {
   const base = homePublica.urlBase(req);
   const descricao = DESCRICOES[caminho];
@@ -104,6 +112,8 @@ function dadosSeoLegais(req, caminho, titulo) {
     ogSite: 'GesCondu',
     ogLocale: 'pt_PT',
     temaCor: '#06213F',
+    headExtra: homePublica.recursosHtml(),
+    corpoClass: 'home-publica',
   };
 }
 
