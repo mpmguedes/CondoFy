@@ -123,6 +123,10 @@
   --sidebar-w: 244px;
   --sidebar-w-collapsed: 68px;
   --header-h: 56px;
+  /* Altura mínima da barra inferior móvel (`.mobile-bottom-bar`), usada para
+     reservar espaço ao último atalho de cada ecrã. A barra tem
+     `min-height: 48px` por item e `padding-bottom` da safe-area. */
+  --bottom-bar-h: 52px;
 }
 
 /* Tema escuro: ativado com <html data-theme="dark"> */
@@ -677,6 +681,28 @@ a:hover { color: var(--c-primary-dark); }
   .app-shell.collapsed .sidebar-item-text { display: block; }
   .app-shell.collapsed .sidebar-item { justify-content: flex-start; padding: var(--sp-2) var(--sp-3); }
   .user-name { display: none; }
+
+  /* Drawer na diagonal: a barra inferior móvel (z-index 1050) fica ACIMA do
+     drawer (1040), pelo que a área de scroll do menu tem de parar antes dela.
+     Sem isto, o último item (ex.: «Backups» em Administração global) ficava
+     tapado e era inalcançável.
+     O offset depende da altura da janela porque a 768px de largura ainda há
+     telemóveis em paisagem: em ecrãs muito baixos (menos de ~520px) o menu
+     cola ao fundo e passa por cima da barra — fechá-lo por gesto ou tecla
+     continua a funcionar, e é preferível a deixar 134px sem qualquer menu. */
+  .sidebar {
+    width: min(var(--sidebar-w), 100vw);
+    height: 100dvh;
+    height: calc(100vh - var(--bottom-bar-h) - env(safe-area-inset-bottom, 0px));
+  }
+  .sidebar-nav {
+    padding-bottom: calc(var(--sp-3) + env(safe-area-inset-bottom, 0px));
+    overscroll-behavior: contain;
+  }
+}
+
+@media (max-width: 991.98px) and (max-height: 520px) {
+  .sidebar { height: 100vh; height: 100dvh; }
 }
 
 @media (max-width: 575.98px) {
