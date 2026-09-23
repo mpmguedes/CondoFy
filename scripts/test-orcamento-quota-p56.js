@@ -431,31 +431,138 @@ async function testeEmissao() {
 }
 
 // ── 6. Dados existentes ─────────────────────────────────────────────
-function testeDadosExistentes() {
+// ── 6. DADOS EXISTENTES: a guarda de aprovação, por COMPORTAMENTO ────
+// Esta secção monta a ROTA REAL de aprovação e exerce-a. A versão anterior
+// provava-a por inspeção de texto (`/periodoValido/.test(fonte)`), que é um
+// falso verde: a mutação que APAGA a guarda continuava a passar porque a
+// cadeia `periodoValido` continuava noutro sítio do bloco. O comportamento
+// não se lê — executa-se.
+async function testeDadosExistentes() {
   secao('6. DADOS EXISTENTES: a guarda de aprovação apanha períodos antigos');
 
-  const rota = ler('routes/orcamento.js');
-  // A guarda de aprovação revalida o período: um orçamento criado ANTES desta
-  // regra (com 13 meses) não pode ser aprovado e chegar a emitir 13 quotas.
-  const blocoAprovar = /router\.post\('\/orcamento\/:id\/aprovar'[\s\S]*?\n\}\);/.exec(rota);
-  assert.ok(blocoAprovar, 'a rota de aprovação existe');
-  assert.ok(/periodoValido/.test(blocoAprovar[0]),
-    'a aprovação revalida o período com a regra nova (apanha dados pré-existentes)');
-  assert.ok(!/periodoUmAno/.test(blocoAprovar[0]),
-    'a aprovação já NÃO usa a regra antiga que aceitava 13 meses');
-  ok('aprovação revalida o período: orçamento antigo com 13 meses não é aprovado');
+  const APROVADOS = [];
+  const ALTERACOES = [];
+  let ORCAMENTO = null;
+  const comToJSON = (o) => Object.assign(Object.create({ toJSON() { return { ...this }; } }), o);
+  const modelo = (over = {}) => Object.assign({
+    findOne: async () => null, findAll: async () => [], create: async (v) => comToJSON({ id: 1, ...v }),
+    destroy: async () => 0, count: async () => 0, update: async () => [0], findByPk: async () => null,
+    findOrCreate: async () => [comToJSON({}), false],
+  }, over);
 
-  // Um orçamento antigo válido continua a poder ser aprovado (sem regressão).
-  assert.ok(periodo.periodoValido('2026-01-01', '2026-12-31').ok,
-    'um orçamento existente alinhado ao ano civil continua a aprovar');
-  ok('orçamento existente de 12 meses: continua a poder ser aprovado');
+  const MODELS = {
+    Orcamento: modelo({ findOne: async () => ORCAMENTO }),
+    OrcamentoRubrica: modelo(), OrcamentoDistribuicao: modelo(),
+    OrcamentoAlteracao: modelo({ create: async (v) => { ALTERACOES.push(v); return comToJSON(v); } }),
+    PlanoQuota: modelo(), Quota: modelo(), Categoria: modelo(), Fracao: modelo(), User: modelo(), sequelize: {},
+  };
+  stub('models/index.js', MODELS);
+  stub('models', MODELS);
+  stub('config/database.js', { transaction: async () => ({ commit: async () => {}, rollback: async () => {}, LOCK: { UPDATE: 'U' } }) });
+  stub('helpers/tenant.js', {
+    comCondominioAtivo: (req, res, next) => { req.condominioId = 1; next(); },
+    comPapel: () => (req, res, next) => next(),
+    comSuporte: () => (req, res, next) => next(),
+    pertenceAoAtivo: () => true, papelMaiorOuIgual: () => true,
+  });
+  stub('helpers/suporte-allowlist.js', {
+    soDiagnostico: () => (req, res, next) => next(),
+    comPapelOuSuporteAdmitido: () => (req, res, next) => next(),
+  });
+  stub('helpers/audit.js', { audit: async () => {} });
+  stub('helpers/numeracao.js', { proximoNumero: async () => 'Q/2026/1' });
+  stub('helpers/dates.js', { monthName: (m) => `M${m}`, toDateInput: (d) => String(d).slice(0, 10) });
+  stub('helpers/handlebars-helpers.js', {});
+  stub('helpers/quotas-config.js', { getQuotaConfig: async () => ({ valorPor1000: '110.0000', fcrPercentagem: '0' }) });
 
-  // A regra antiga aceitava estes; a nova recusa — é a correção do defeito.
-  const antigos = [['2026-07-15', '2027-07-14'], ['2026-06-30', '2027-06-29']];
-  for (const [i, f] of antigos) {
-    assert.strictEqual(periodo.periodoValido(i, f).ok, false, `${i} → ${f} (dados antigos) deixa de ser aceitável`);
+  const app = express();
+  app.engine('handlebars', engine({
+    defaultLayout: false, helpers: {},
+    layoutsDir: path.join(RAIZ, 'views', 'layouts'),
+    partialsDir: path.join(RAIZ, 'views', 'partials'),
+    runtimeOptions: { allowProtoPropertiesByDefault: true, allowProtoMethodsByDefault: true },
+  }));
+  app.set('view engine', 'handlebars');
+  app.set('views', path.join(RAIZ, 'views'));
+  app.use(session({ secret: 't', resave: false, saveUninitialized: true }));
+  app.use(express.urlencoded({ extended: true }));
+  app.use(flash());
+  const FLASH = { error_msg: [], success_msg: [] };
+  app.use((req, res, next) => {
+    const original = req.flash.bind(req);
+    req.flash = (tipo, ...resto) => {
+      if (resto.length > 0 && (tipo === 'error_msg' || tipo === 'success_msg')) FLASH[tipo].push(resto[0]);
+      return original(tipo, ...resto);
+    };
+    next();
+  });
+  app.use((req, res, next) => {
+    req.user = { id: 1 };
+    res.locals.user = { id: 1 };
+    res.locals.currentYear = 2026; res.locals.currentMonth = 1;
+    res.locals.currentPath = req.path;
+    res.locals.condominioAtivo = { id: 1, role: 'gestor' };
+    res.locals.appName = 'GesCondu';
+    res.locals.success_msg = []; res.locals.error_msg = []; res.locals.error = [];
+    res.locals.tarefas = {}; res.locals.meusCondominios = [];
+    res.locals.sessaoExpiraEm = Date.now() + 3600000;
+    res.locals.sessaoAvisoMs = 1; res.locals.sessaoIdleMs = 1;
+    next();
+  });
+  app.use('/admin', routerFresco());
+  app.use((err, req, res, next) => res.status(500).send('ERRO_500: ' + err.message));
+
+  const servidor = app.listen(0);
+  const base = `http://127.0.0.1:${servidor.address().port}`;
+  const aprovar = async (id) => {
+    FLASH.error_msg = []; FLASH.success_msg = [];
+    return fetch(`${base}/admin/orcamento/${id}/aprovar`, {
+      method: 'POST', body: new URLSearchParams({}), redirect: 'manual',
+    });
+  };
+  const erros = () => FLASH.error_msg.map((e) => String(e));
+  const orcamento = (campos) => {
+    ORCAMENTO = comToJSON(Object.assign({
+      id: 55, condominio_id: 1, designacao: 'Orçamento antigo', estado: 'rascunho',
+      data_inicio: '2026-01-01', data_fim: '2026-12-31', update: async (v) => { APROVADOS.push(v); Object.assign(ORCAMENTO, v); },
+      // A aprovação exige pelo menos uma rubrica ativa com valor > 0.
+      rubricas: [{ ativo: true, valor_anual: '1200.00' }],
+    }, campos));
+    ORCAMENTO.update = async (v) => { APROVADOS.push(v); Object.assign(ORCAMENTO, v); };
+    return ORCAMENTO;
+  };
+
+  try {
+    // 6.1 Dados ANTIGOS com 13 meses → NÃO é aprovado (a barreira morde).
+    orcamento({ data_inicio: '2026-07-15', data_fim: '2027-07-14' });
+    APROVADOS.length = 0;
+    let r = await aprovar(55);
+    assert.strictEqual(r.status, 302, '6.1a. responde com redirect');
+    assert.strictEqual(APROVADOS.length, 0, '6.1b. o orçamento de 13 meses NÃO foi aprovado (estado intacto)');
+    assert.strictEqual(ORCAMENTO.estado, 'rascunho', '6.1c. continua em rascunho');
+    assert.ok(erros().some((m) => /12 meses de calendário inteiros/i.test(m)),
+      `6.1d. o utilizador é avisado (${erros().join(' | ')})`);
+    assert.ok(ALTERACOES.length === 0, '6.1e. nenhum registo de aprovação foi criado');
+    ok('dados antigos com 13 meses: aprovação RECUSADA, estado intacto (comportamento, não texto)');
+
+    // 6.2 Um orçamento antigo mas VÁLIDO continua a aprovar (sem regressão).
+    orcamento({ data_inicio: '2026-01-01', data_fim: '2026-12-31' });
+    APROVADOS.length = 0;
+    r = await aprovar(55);
+    assert.strictEqual(APROVADOS.length, 1, '6.2a. o orçamento de 12 meses FOI aprovado');
+    assert.strictEqual(APROVADOS[0].estado, 'aprovado', '6.2b. passa a aprovado');
+    assert.ok(ALTERACOES.length === 1, '6.2c. o registo de aprovação foi criado');
+    ok('orçamento existente de 12 meses: continua a poder ser aprovado');
+
+    // 6.3 Um período deslocado mas alinhado (13 meses) também é recusado.
+    orcamento({ data_inicio: '2026-01-01', data_fim: '2027-01-31' });
+    APROVADOS.length = 0;
+    await aprovar(55);
+    assert.strictEqual(APROVADOS.length, 0, '6.3a. 13 meses alinhados também não passam na aprovação');
+    ok('dados pré-existentes com período de 13 meses: detetados na aprovação, não corrigidos em silêncio');
+  } finally {
+    servidor.close();
   }
-  ok('dados pré-existentes com período de 13 meses: detetados na aprovação, não corrigidos em silêncio');
 }
 
 // ── 8. /admin/quotas/gerar com metodo='orcamento' grava o vínculo ────
@@ -604,7 +711,7 @@ async function main() {
   testeOutroCondominio();
   await testeEmissao();
   await testeGerarPorOrcamento();
-  testeDadosExistentes();
+  await testeDadosExistentes();
   testeCobertura();
   console.log(`\n✓ P56 (Orçamento → Quota): ${n} verificações passaram, sem base de dados.`);
 }

@@ -7,6 +7,10 @@ node_modules/
 # Resíduos dos harnesses de mutação (backup do alvo + marcador `.alvo`).
 # NUNCA versionar: são cópias temporárias de ficheiros do repositório.
 .mutation-backup-*
+# Resíduos renomeados fora do padrão vigiado pelo hook `safe-delete` (que fica
+# latched a meio da sessão e impede a remoção). Ficam justificados aqui.
+ORFAO-inativo-*
+ORFAO-mutation-backup-*
 public/uploads/*
 !public/uploads/.gitkeep
 backups/local/
