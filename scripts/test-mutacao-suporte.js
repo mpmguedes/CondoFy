@@ -22,8 +22,8 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { execFileSync } = require('child_process');
 const backupMut = require('./helpers/backup-mutacao');
+const correrProc = require('./helpers/correr-processo');
 
 const RAIZ = path.join(__dirname, '..');
 const hash = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -42,17 +42,17 @@ const titulo = (t) => console.log(`\n── ${t}`);
 const RESULTADO = { PASSOU: 'passou', FALHOU: 'falhou', INTERROMPIDO: 'interrompido' };
 
 function resultadoDoTeste(script) {
-  try {
-    execFileSync(process.execPath, [path.join(RAIZ, 'scripts', script)], {
-      cwd: RAIZ, stdio: 'pipe', timeout: 120000,
-    });
-    return RESULTADO.PASSOU;
-  } catch (e) {
-    // `execFileSync` reenvia SIGTERM ao filho quando o `timeout` expira e marca
-    // o erro com `signal`. Sem sinal, foi o próprio teste que terminou com um
-    // código diferente de zero — isso sim é uma deteção.
-    return e && e.signal ? RESULTADO.INTERROMPIDO : RESULTADO.FALHOU;
-  }
+  // ⛔ P53-FOLLOWUP: o filho corre com stdin em `ignore` (ver o helper). Sem
+  // isto, um `EBUSY` do host fazia o filho NUNCA arrancar e o `catch` lia esse
+  // erro de infraestrutura como «o teste FALHOU» — isto é, como mutação
+  // detetada. Por isso a execução passa por `correrProc`, que distingue
+  // «correu e falhou» (deteção) de «não chegou a correr» (aborta).
+  const r = correrProc.executarOuFalhar(process.execPath, [path.join(RAIZ, 'scripts', script)], {
+    cwd: RAIZ, timeout: 120000,
+  });
+  // `executarOuFalhar` já abortou em falha de spawn; resta separar o desfecho.
+  if (r.estado === correrProc.ESTADO.PASSOU) return RESULTADO.PASSOU;
+  return r.estado === correrProc.ESTADO.INTERROMPIDO ? RESULTADO.INTERROMPIDO : RESULTADO.FALHOU;
 }
 
 // Aplica uma mutação, corre o teste (tem de FALHAR), e restaura o ficheiro.

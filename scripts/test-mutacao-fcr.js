@@ -23,8 +23,8 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { execFileSync } = require('child_process');
 const backupMut = require('./helpers/backup-mutacao');
+const correrProc = require('./helpers/correr-processo');
 
 const RAIZ = path.join(__dirname, '..');
 const hash = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -38,14 +38,14 @@ const titulo = (t) => console.log(`\n── ${t}`);
 const RESULTADO = { PASSOU: 'passou', FALHOU: 'falhou', INTERROMPIDO: 'interrompido' };
 
 function resultadoDoTeste(script) {
-  try {
-    execFileSync(process.execPath, [path.join(RAIZ, 'scripts', script)], {
-      cwd: RAIZ, stdio: 'pipe', timeout: 120000,
-    });
-    return RESULTADO.PASSOU;
-  } catch (e) {
-    return e && e.signal ? RESULTADO.INTERROMPIDO : RESULTADO.FALHOU;
-  }
+  // ⛔ P53-FOLLOWUP: ver `helpers/correr-processo.js` — o filho corre com stdin
+  // em `ignore` (mata o `EBUSY` deste host) e uma falha de spawn aborta em vez
+  // de ser tomada por «o teste FALHOU» (= mutação detetada).
+  const r = correrProc.executarOuFalhar(process.execPath, [path.join(RAIZ, 'scripts', script)], {
+    cwd: RAIZ, timeout: 120000,
+  });
+  if (r.estado === correrProc.ESTADO.PASSOU) return RESULTADO.PASSOU;
+  return r.estado === correrProc.ESTADO.INTERROMPIDO ? RESULTADO.INTERROMPIDO : RESULTADO.FALHOU;
 }
 
 // Aplica uma mutação, corre o teste (tem de FALHAR) e restaura o ficheiro.

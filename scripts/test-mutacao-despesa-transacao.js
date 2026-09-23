@@ -50,8 +50,8 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { execFileSync } = require('child_process');
 const backupMut = require('./helpers/backup-mutacao');
+const correrProc = require('./helpers/correr-processo');
 
 const RAIZ = path.join(__dirname, '..');
 const ALVO = path.join(RAIZ, 'helpers', 'movimentos.js');
@@ -73,15 +73,16 @@ const titulo = (t) => console.log(`\n── ${t}`);
 const RESULTADO = { PASSOU: 'passou', FALHOU: 'falhou', INTERROMPIDO: 'interrompido' };
 
 function correrTeste() {
-  try {
-    const saida = execFileSync(process.execPath, [path.join(RAIZ, 'scripts', TESTE)], {
-      cwd: RAIZ, stdio: 'pipe', timeout: 120000,
-    });
-    return { resultado: RESULTADO.PASSOU, saida: String(saida) };
-  } catch (e) {
-    const saida = `${e.stdout || ''}${e.stderr || ''}`;
-    return { resultado: e && e.signal ? RESULTADO.INTERROMPIDO : RESULTADO.FALHOU, saida };
-  }
+  // ⛔ P53-FOLLOWUP: ver `helpers/correr-processo.js`. Uma falha de spawn
+  // (EBUSY) aborta aqui com mensagem de infraestrutura em vez de devolver
+  // FALHOU — era esse FALHOU espúrio que fazia o harness declarar a mutação
+  // detetada sem o filho alguma vez ter corrido.
+  const r = correrProc.executarOuFalhar(process.execPath, [path.join(RAIZ, 'scripts', TESTE)], {
+    cwd: RAIZ, timeout: 120000,
+  });
+  const resultado = r.estado === correrProc.ESTADO.PASSOU ? RESULTADO.PASSOU
+    : (r.estado === correrProc.ESTADO.INTERROMPIDO ? RESULTADO.INTERROMPIDO : RESULTADO.FALHOU);
+  return { resultado, saida: r.saida };
 }
 
 // Aplica uma mutação, corre o teste (tem de FALHAR, e falhar na asserção
@@ -110,9 +111,12 @@ function mutacao({ nome, de, para, ocorrencias = 1, falhaEm }) {
     // Uma mutação que não COMPILA faria o teste falhar por erro de carregamento
     // do módulo, não por detetar o defeito — seria uma deteção FALSA. Exige-se
     // que o código mutado continue a ser JavaScript válido.
-    try {
-      execFileSync(process.execPath, ['--check', ALVO], { cwd: RAIZ, stdio: 'pipe' });
-    } catch (e) {
+    //
+    // ⛔ P53-FOLLOWUP: `verificarSintaxe` distingue «código inválido» (false) de
+    // «não consegui executar» (aborta). Antes, um EBUSY do host caía no `catch`
+    // e era reportado como «produziu código inválido» — uma atribuição FALSA,
+    // que escondia uma falha de infraestrutura atrás de um erro de sintaxe.
+    if (!correrProc.verificarSintaxe(RAIZ, ALVO)) {
       assert.fail(`mutação «${nome}» produziu código inválido (erro de sintaxe): `
         + 'a falha do teste não provaria nada');
     }
