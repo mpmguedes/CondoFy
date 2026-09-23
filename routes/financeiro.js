@@ -1172,6 +1172,12 @@ router.post('/quotas/gerar', async (req, res) => {
             condominio_id: req.condominioId,
             numero_documento: numero,
             fracao_id: f.id,
+            // P56 — vínculo ao orçamento de origem. Sem isto, uma quota gerada
+            // pelo método «orçamento» perdia o vínculo, e como `orcamento_id` é
+            // campo CONGELADO pelo R10 (`helpers/quota-imutabilidade.js`) não
+            // podia ser preenchido depois por uma edição normal. `null` quando o
+            // método é a permilagem (não há orçamento de origem a registar).
+            orcamento_id: metodo === 'orcamento' ? orcamentoId : null,
             ano: anoNum,
             mes: m,
             periodo: new Date(anoNum, m - 1, 1),

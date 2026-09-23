@@ -23,6 +23,7 @@ const { proximoNumero } = require('../helpers/numeracao');
 const { getQuotaConfig } = require('../helpers/quotas-config');
 const { dividirComponentesQuota } = require('../helpers/quotas-calc');
 const orcamentoEstado = require('../helpers/orcamento-estado');
+const orcamentoPeriodo = require('../helpers/orcamento-periodo');
 
 const router = express.Router();
 // Isolamento: condomínio ativo (sessão validada) em todas as operações.
@@ -67,15 +68,14 @@ function rotuloPeriodo(o) {
   return inicio === fim ? `${inicio}` : `${inicio}/${fim}`;
 }
 
-// Normaliza o período para exatamente 1 ano (ano civil ou personalizado).
-function periodoUmAno(dataInicio, dataFim) {
-  if (!dataInicio || !dataFim) return false;
-  const [iy, im, id] = dataInicio.split('-').map(Number);
-  const fim = new Date(Date.UTC(iy, im - 1, id));
-  fim.setUTCFullYear(fim.getUTCFullYear() + 1);
-  fim.setUTCDate(fim.getUTCDate() - 1);
-  const esperado = fim.toISOString().slice(0, 10);
-  return dataFim === esperado;
+// P56 — mensagem para o utilizador quando o período não é aceitável.
+// A regra em si vive em `helpers/orcamento-periodo.js` (lógica pura,
+// testável offline); aqui só se traduz o motivo.
+function mensagemPeriodoInvalido(motivo) {
+  if (motivo === 'invertido') return 'A data de fim do período não pode ser anterior à de início.';
+  if (motivo === 'datas') return 'Indique datas de início e de fim válidas.';
+  return 'O período tem de corresponder a 12 meses de calendário inteiros '
+    + '(começa no dia 1.º de um mês e termina no último dia do 12.º mês).';
 }
 
 function dataParaAnoCivil(ano) {
@@ -153,14 +153,30 @@ router.post('/orcamento', async (req, res) => {
   if (tipoPeriodo === 'personalizado') {
     dataInicio = req.body.data_inicio;
     dataFim = req.body.data_fim;
-    if (!periodoUmAno(dataInicio, dataFim)) {
-      req.flash('error_msg', 'O período tem de corresponder exatamente a 1 ano.');
+    // P56 — o período tem de ser de 12 meses de calendário INTEIROS. A regra
+    // antiga (`periodoUmAno`) aceitava `2026-07-15 → 2027-07-14`, que atravessa
+    // 13 meses de calendário e produzia uma 13.ª quota em silêncio.
+    const periodo = orcamentoPeriodo.periodoValido(dataInicio, dataFim);
+    if (!periodo.ok) {
+      req.flash('error_msg', mensagemPeriodoInvalido(periodo.motivo));
       return res.redirect('/admin/orcamento/nova');
     }
   } else {
     const civil = dataParaAnoCivil(ano);
     dataInicio = civil.dataInicio;
     dataFim = civil.dataFim;
+  }
+
+  // P56 — não-sobreposição: dois orçamentos ATIVOS do mesmo condomínio não
+  // podem partilhar um único mês. Períodos adjacentes continuam válidos.
+  const existentes = await Orcamento.findAll({
+    where: { condominio_id: req.condominioId },
+    attributes: ['id', 'designacao', 'data_inicio', 'data_fim', 'estado'],
+  });
+  const conflito = orcamentoPeriodo.conflitoDePeriodo({ dataInicio, dataFim }, existentes);
+  if (conflito) {
+    req.flash('error_msg', orcamentoPeriodo.mensagemConflito(conflito));
+    return res.redirect('/admin/orcamento/nova');
   }
 
   if (metodoCalculo === 'modo_b' && receitaPrevista <= 0) {
@@ -267,8 +283,25 @@ router.post('/orcamento/:id', async (req, res) => {
   };
 
   if (req.body.tipo_periodo === 'personalizado') {
-    if (!periodoUmAno(req.body.data_inicio, req.body.data_fim)) {
-      req.flash('error_msg', 'O período tem de corresponder exatamente a 1 ano.');
+    // P56 — mesma regra da criação: 12 meses de calendário inteiros.
+    const periodo = orcamentoPeriodo.periodoValido(req.body.data_inicio, req.body.data_fim);
+    if (!periodo.ok) {
+      req.flash('error_msg', mensagemPeriodoInvalido(periodo.motivo));
+      return res.redirect(`/admin/orcamento/${orcamento.id}/editar`);
+    }
+    // P56 — não-sobreposição, ignorando o PRÓPRIO orçamento (manter o
+    // período não pode colidir consigo mesmo).
+    const existentes = await Orcamento.findAll({
+      where: { condominio_id: req.condominioId },
+      attributes: ['id', 'designacao', 'data_inicio', 'data_fim', 'estado'],
+    });
+    const conflito = orcamentoPeriodo.conflitoDePeriodo(
+      { dataInicio: req.body.data_inicio, dataFim: req.body.data_fim },
+      existentes,
+      { ignorarId: orcamento.id }
+    );
+    if (conflito) {
+      req.flash('error_msg', orcamentoPeriodo.mensagemConflito(conflito));
       return res.redirect(`/admin/orcamento/${orcamento.id}/editar`);
     }
     dados.data_inicio = req.body.data_inicio;
@@ -372,8 +405,15 @@ router.post('/orcamento/:id/aprovar', async (req, res) => {
     req.flash('error_msg', 'Apenas orçamentos em rascunho podem ser aprovados.');
     return res.redirect(`/admin/orcamento/${orcamento.id}`);
   }
-  if (!periodoUmAno(orcamento.data_inicio, orcamento.data_fim)) {
-    req.flash('error_msg', 'O período não corresponde a 1 ano.');
+  // P56 — o período tem de ser de 12 meses de calendário inteiros. Esta guarda
+  // de aprovação é a última barreira: apanha orçamentos criados ANTES desta
+  // regra (dados existentes) e impede que uma 13.ª quota chegue a ser planeada.
+  const periodo = orcamentoPeriodo.periodoValido(
+    orcamentoPeriodo.isoDe(orcamento.data_inicio),
+    orcamentoPeriodo.isoDe(orcamento.data_fim)
+  );
+  if (!periodo.ok) {
+    req.flash('error_msg', `O período não corresponde a 12 meses de calendário inteiros. ${mensagemPeriodoInvalido(periodo.motivo)}`);
     return res.redirect(`/admin/orcamento/${orcamento.id}`);
   }
   if (!orcamento.rubricas.some((r) => r.ativo && toCents(r.valor_anual) > 0)) {
