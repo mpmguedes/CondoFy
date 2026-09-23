@@ -3,7 +3,7 @@
     <h1>Condóminos</h1>
     <p class="subtitle">Proprietários e arrendatários das frações</p>
   </div>
-  <a href="/admin/condominos/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">person_add</span>Novo condómino</a>
+  <a href="/admin/condominos/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1" aria-hidden="true">person_add</span>Novo condómino</a>
 </div>
 
 {{#if pessoas}}
@@ -41,9 +41,9 @@
             {{/each}}
           </td>
           <td class="text-end">
-            <a href="/admin/condominos/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
+            <a aria-label="Editar" href="/admin/condominos/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
             <form action="/admin/condominos/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Eliminar este condómino?" data-confirmar-perigo="1">
-              <button class="btn btn-sm btn-outline-danger" title="Eliminar" data-ajuda="Elimina este condómino. Não é possível se tiver titularidades ativas — encerre-as primeiro." data-ajuda-titulo="Eliminar condómino"><span class="material-symbols-outlined">delete</span></button>
+              <button aria-label="Eliminar" class="btn btn-sm btn-outline-danger" title="Eliminar" data-ajuda="Elimina este condómino. Não é possível se tiver titularidades ativas — encerre-as primeiro." data-ajuda-titulo="Eliminar condómino"><span class="material-symbols-outlined">delete</span></button>
             </form>
           </td>
         </tr>

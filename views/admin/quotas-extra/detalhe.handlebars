@@ -5,23 +5,23 @@
     <p class="subtitle">Quota extraordinária — {{#if (eq extra.metodo_divisao 'igual')}}partes iguais{{else}}permilagem{{/if}} · {{extra.numero_parcelas}} parcelas · {{lookup periodicidadeLabel extra.periodicidade}}</p>
   </div>
   <div class="d-flex gap-2 align-items-center flex-wrap">
-    <a href="/admin/quotas-extra" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
+    <a href="/admin/quotas-extra" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1" aria-hidden="true">arrow_back</span>Voltar</a>
     {{#if acoes.podeEditar}}
-    <a href="/admin/quotas-extra/{{extra.id}}/editar" class="btn btn-outline-primary"><span class="material-symbols-outlined me-1">edit</span>Editar</a>
+    <a href="/admin/quotas-extra/{{extra.id}}/editar" class="btn btn-outline-primary"><span class="material-symbols-outlined me-1" aria-hidden="true">edit</span>Editar</a>
     {{/if}}
     {{#if acoes.podeAprovar}}
     <form action="/admin/quotas-extra/{{extra.id}}/aprovar" method="POST">
-      <button class="btn btn-success" data-ajuda="Aprova a quota extraordinária. Depois de aprovada tem de ser processada antes de as parcelas poderem ser cobradas." data-ajuda-titulo="Aprovar quota extra"><span class="material-symbols-outlined me-1">check</span>Aprovar quota extra</button>
+      <button class="btn btn-success" data-ajuda="Aprova a quota extraordinária. Depois de aprovada tem de ser processada antes de as parcelas poderem ser cobradas." data-ajuda-titulo="Aprovar quota extra"><span class="material-symbols-outlined me-1" aria-hidden="true">check</span>Aprovar quota extra</button>
     </form>
     {{/if}}
     {{#if acoes.podeProcessar}}
     <form action="/admin/quotas-extra/{{extra.id}}/processar" method="POST">
-      <button class="btn btn-primary" data-ajuda="Processa a quota extraordinária: as parcelas ficam disponíveis para serem incluídas em avisos e pagas." data-ajuda-titulo="Processar quota extra"><span class="material-symbols-outlined me-1">play_arrow</span>Processar / Preparar cobrança</button>
+      <button class="btn btn-primary" data-ajuda="Processa a quota extraordinária: as parcelas ficam disponíveis para serem incluídas em avisos e pagas." data-ajuda-titulo="Processar quota extra"><span class="material-symbols-outlined me-1" aria-hidden="true">play_arrow</span>Processar / Preparar cobrança</button>
     </form>
     {{/if}}
     {{#if acoes.podeAnular}}
     <form action="/admin/quotas-extra/{{extra.id}}/anular" method="POST" data-confirmar="Anular esta quota extraordinária? Parcelas não pagas serão anuladas (pagas permanecem)." data-confirmar-perigo="1">
-      <button class="btn btn-outline-danger" data-ajuda="Anula a quota extraordinária. As parcelas ainda não pagas são anuladas; as já pagas mantêm-se no histórico." data-ajuda-titulo="Anular quota extra"><span class="material-symbols-outlined me-1">block</span>Anular</button>
+      <button class="btn btn-outline-danger" data-ajuda="Anula a quota extraordinária. As parcelas ainda não pagas são anuladas; as já pagas mantêm-se no histórico." data-ajuda-titulo="Anular quota extra"><span class="material-symbols-outlined me-1" aria-hidden="true">block</span>Anular</button>
     </form>
     {{/if}}
   </div>
@@ -104,7 +104,7 @@
           <td class="text-end text-nowrap">
             {{#if (eq estado 'paga')}}
             <form action="/admin/quotas-extra/parcelas/{{id}}/desfazer" method="POST" class="d-inline" data-confirmar="Reverter este pagamento? A parcela volta ao estado anterior." data-confirmar-perigo="1">
-              <button class="btn btn-sm btn-outline-secondary" title="Desfazer pagamento" data-ajuda="Reverte o pagamento desta parcela. A parcela volta ao estado anterior e o valor deixa de contar como pago." data-ajuda-titulo="Desfazer pagamento"><span class="material-symbols-outlined">undo</span></button>
+              <button aria-label="Desfazer pagamento" class="btn btn-sm btn-outline-secondary" title="Desfazer pagamento" data-ajuda="Reverte o pagamento desta parcela. A parcela volta ao estado anterior e o valor deixa de contar como pago." data-ajuda-titulo="Desfazer pagamento"><span class="material-symbols-outlined">undo</span></button>
             </form>
             {{else if (eq estado 'anulada')}}—
             {{else if (eq ../../extra.estado 'processada')}}
@@ -113,7 +113,7 @@
                 <option value="">Sem conta</option>
                 {{#each ../../contas}}<option value="{{id}}">{{nome}}</option>{{/each}}
               </select>
-              <button class="btn btn-sm btn-outline-success" title="Pagar parcela" data-ajuda="Registra o pagamento desta parcela, com número de documento e movimento na conta escolhida." data-ajuda-titulo="Pagar parcela"><span class="material-symbols-outlined">check</span></button>
+              <button aria-label="Pagar parcela" class="btn btn-sm btn-outline-success" title="Pagar parcela" data-ajuda="Registra o pagamento desta parcela, com número de documento e movimento na conta escolhida." data-ajuda-titulo="Pagar parcela"><span class="material-symbols-outlined">check</span></button>
             </form>
             {{else}}
             <span class="small text-muted">Aguarda aprovação/processamento</span>

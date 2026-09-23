@@ -3,7 +3,7 @@
     <h1>Condomínios</h1>
     <p class="subtitle">Administração global</p>
   </div>
-  <a href="/global" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1" style="font-size:1rem">arrow_back</span>Global</a>
+  <a href="/global" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1" style="font-size:1rem" aria-hidden="true">arrow_back</span>Global</a>
 </div>
 
 <div class="card mb-4">
@@ -14,7 +14,7 @@
       <div class="col-12 col-md-4"><label class="form-label">Morada</label><input type="text" class="form-control" name="morada" placeholder="Ex: Rua das Flores, 25, 2.º Esq." /></div>
       <div class="col-6 col-md-2"><label class="form-label">Código postal</label><input type="text" class="form-control" name="codigo_postal" placeholder="Ex: 1000-000" /></div>
       <div class="col-6 col-md-2"><label class="form-label">Localidade</label><input type="text" class="form-control" name="localidade" placeholder="Ex: Lisboa" /></div>
-      <div class="col-12 col-md-1 d-grid"><button class="btn btn-primary" type="submit"><span class="material-symbols-outlined">add</span></button></div>
+      <div class="col-12 col-md-1 d-grid"><button aria-label="Criar condomínio" class="btn btn-primary" type="submit"><span class="material-symbols-outlined">add</span></button></div>
     </form>
   </div>
 </div>
@@ -37,8 +37,8 @@
           <td class="text-end">{{membros}}</td>
           <td>{{#if (eq estado 'ativo')}}<span class="badge text-bg-success">Ativo</span>{{else}}<span class="badge text-bg-secondary">Desativado</span>{{/if}}</td>
           <td class="text-end text-nowrap">
-            <a href="/global/condominios/{{id}}" class="btn btn-sm btn-outline-secondary" title="Gerir"><span class="material-symbols-outlined" style="font-size:1rem">manage_accounts</span></a>
-            <a href="/global/condominios/{{id}}/suporte" class="btn btn-sm btn-outline-primary" title="Acesso de suporte"><span class="material-symbols-outlined" style="font-size:1rem">support_agent</span></a>
+            <a aria-label="Gerir" href="/global/condominios/{{id}}" class="btn btn-sm btn-outline-secondary" title="Gerir"><span class="material-symbols-outlined" style="font-size:1rem">manage_accounts</span></a>
+            <a aria-label="Acesso de suporte" href="/global/condominios/{{id}}/suporte" class="btn btn-sm btn-outline-primary" title="Acesso de suporte"><span class="material-symbols-outlined" style="font-size:1rem">support_agent</span></a>
             {{#if (eq estado 'ativo')}}
             {{!--
               A desativação exige MOTIVO, e o motivo tem de ser escrito por quem
@@ -48,7 +48,7 @@
               `/:id/estado` sem `acao` nem `motivo`, e o servidor recusava sempre
               — a operação era impossível por aqui.
             --}}
-            <a href="/global/condominios/{{id}}#estado" class="btn btn-sm btn-outline-danger" title="Desativar" data-ajuda="Abre a página do condomínio, onde é pedido o motivo da desativação. Os utilizadores deixam de conseguir entrar e os acessos de suporte em vigor são encerrados." data-ajuda-titulo="Desativar condomínio"><span class="material-symbols-outlined" style="font-size:1rem">pause_circle</span></a>
+            <a aria-label="Desativar" href="/global/condominios/{{id}}#estado" class="btn btn-sm btn-outline-danger" title="Desativar" data-ajuda="Abre a página do condomínio, onde é pedido o motivo da desativação. Os utilizadores deixam de conseguir entrar e os acessos de suporte em vigor são encerrados." data-ajuda-titulo="Desativar condomínio"><span class="material-symbols-outlined" style="font-size:1rem">pause_circle</span></a>
             {{else}}
             {{!--
               Reativar não exige motivo, mas continua a exigir a INTENÇÃO
@@ -57,7 +57,7 @@
             --}}
             <form action="/global/condominios/{{id}}/estado" method="POST" class="d-inline">
               <input type="hidden" name="acao" value="reativar" />
-              <button class="btn btn-sm btn-outline-success" title="Reativar" data-ajuda="Reativa o condomínio. O histórico e os registos mantêm-se intactos." data-ajuda-titulo="Reativar condomínio"><span class="material-symbols-outlined" style="font-size:1rem">play_circle</span></button>
+              <button aria-label="Reativar" class="btn btn-sm btn-outline-success" title="Reativar" data-ajuda="Reativa o condomínio. O histórico e os registos mantêm-se intactos." data-ajuda-titulo="Reativar condomínio"><span class="material-symbols-outlined" style="font-size:1rem">play_circle</span></button>
             </form>
             {{/if}}
           </td>

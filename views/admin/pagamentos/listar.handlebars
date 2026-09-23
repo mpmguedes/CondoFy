@@ -5,8 +5,8 @@
   </div>
   {{#unless suporteDiagnostico}}
   <div class="d-flex gap-2 flex-wrap">
-    <a href="/admin/pagamentos/enviar-recibos" class="btn btn-outline-primary"><span class="material-symbols-outlined me-1">mail</span>Enviar recibos</a>
-    <a href="/admin/pagamentos/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">add</span>Registar pagamento</a>
+    <a href="/admin/pagamentos/enviar-recibos" class="btn btn-outline-primary"><span class="material-symbols-outlined me-1" aria-hidden="true">mail</span>Enviar recibos</a>
+    <a href="/admin/pagamentos/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1" aria-hidden="true">add</span>Registar pagamento</a>
   </div>
   {{/unless}}
 </div>
@@ -42,18 +42,18 @@
             {{#if ../suporteDiagnostico}}
             {{!-- Suporte: único acesso de leitura — o detalhe. Nada de recibo
                  PDF (emite documento) nem de anular (escrita). --}}
-            <a href="/admin/pagamentos/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver detalhe"><span class="material-symbols-outlined">visibility</span></a>
+            <a aria-label="Ver detalhe" href="/admin/pagamentos/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver detalhe"><span class="material-symbols-outlined">visibility</span></a>
             {{else}}
-            <a href="/admin/pagamentos/{{id}}/recibo" target="_blank" class="btn btn-sm btn-outline-primary" title="Recibo PDF" data-ajuda="Abre o recibo deste pagamento em PDF, numa nova aba." data-ajuda-titulo="Recibo (PDF)"><span class="material-symbols-outlined">picture_as_pdf</span></a>
+            <a aria-label="Recibo PDF" href="/admin/pagamentos/{{id}}/recibo" target="_blank" class="btn btn-sm btn-outline-primary" title="Recibo PDF" data-ajuda="Abre o recibo deste pagamento em PDF, numa nova aba." data-ajuda-titulo="Recibo (PDF)"><span class="material-symbols-outlined">picture_as_pdf</span></a>
             {{#if ../driveLigado}}
             <form action="/admin/pagamentos/{{id}}/recibo/drive" method="POST" class="d-inline">
-              <button class="btn btn-sm btn-outline-secondary" title="Guardar recibo no Google Drive" data-ajuda="Gera o recibo em PDF e guarda-o no serviço de armazenamento do condomínio." data-ajuda-titulo="Guardar recibo no armazenamento"><span class="material-symbols-outlined">cloud_upload</span></button>
+              <button aria-label="Guardar recibo no Google Drive" class="btn btn-sm btn-outline-secondary" title="Guardar recibo no Google Drive" data-ajuda="Gera o recibo em PDF e guarda-o no serviço de armazenamento do condomínio." data-ajuda-titulo="Guardar recibo no armazenamento"><span class="material-symbols-outlined">cloud_upload</span></button>
             </form>
             {{/if}}
-            <a href="/admin/pagamentos/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
+            <a aria-label="Ver" href="/admin/pagamentos/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
             {{#if (eq estado 'confirmado')}}
             <form action="/admin/pagamentos/{{id}}/anular" method="POST" class="d-inline" data-confirmar="Anular este pagamento?" data-confirmar-perigo="1">
-              <button class="btn btn-sm btn-outline-danger" title="Anular" data-ajuda="Anula este pagamento: o movimento bancário correspondente é também anulado e as quotas voltam ao estado anterior. O número do documento mantém-se." data-ajuda-titulo="Anular pagamento"><span class="material-symbols-outlined">block</span></button>
+              <button aria-label="Anular" class="btn btn-sm btn-outline-danger" title="Anular" data-ajuda="Anula este pagamento: o movimento bancário correspondente é também anulado e as quotas voltam ao estado anterior. O número do documento mantém-se." data-ajuda-titulo="Anular pagamento"><span class="material-symbols-outlined">block</span></button>
             </form>
             {{/if}}
             {{/if}}

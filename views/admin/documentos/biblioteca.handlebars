@@ -6,10 +6,10 @@
   <div class="d-flex gap-2">
     {{#if armazenamentoAbrePasta}}
     <a href="/admin/documentos/drive/pasta" class="btn btn-outline-secondary" title="Abrir a pasta deste condomínio no {{@root.armazenamentoRotulo}} (a pasta é criada automaticamente no primeiro documento)" data-ajuda="Abre a pasta deste condomínio no serviço de armazenamento ligado. É criada automaticamente no primeiro documento." data-ajuda-titulo="Abrir pasta no armazenamento">
-      <span class="material-symbols-outlined me-1">folder_open</span>Abrir pasta no {{@root.armazenamentoRotulo}}
+      <span class="material-symbols-outlined me-1" aria-hidden="true">folder_open</span>Abrir pasta no {{@root.armazenamentoRotulo}}
     </a>
     {{/if}}
-    <a href="/admin/documentos/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">upload</span>Novo documento</a>
+    <a href="/admin/documentos/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1" aria-hidden="true">upload</span>Novo documento</a>
   </div>
 </div>
 
@@ -25,7 +25,7 @@
     <a href="{{{href}}}" class="card doc-card h-100 text-decoration-none">
       <div class="card-body d-flex flex-column">
         <div class="doc-card-topo d-flex align-items-start gap-3 mb-2">
-          <span class="material-symbols-outlined doc-card-icone">{{icone}}</span>
+          <span class="material-symbols-outlined doc-card-icone" aria-hidden="true">{{icone}}</span>
         </div>
         <h3 class="h6 mb-1">{{titulo}}</h3>
         <p class="text-muted small mb-3">{{descricao}}</p>
@@ -33,7 +33,7 @@
           <span class="small {{#if (eq contagem 0)}}text-muted{{else}}fw-semibold{{/if}}">
             {{#if (eq contagem 0)}}Sem documentos{{else}}{{contagem}} {{#if (eq contagem 1)}}documento{{else}}documentos{{/if}}{{/if}}
           </span>
-          <span class="material-symbols-outlined doc-card-seta">arrow_forward</span>
+          <span class="material-symbols-outlined doc-card-seta" aria-hidden="true">arrow_forward</span>
         </div>
       </div>
     </a>
@@ -50,7 +50,7 @@
     <a href="{{{href}}}" class="card doc-card h-100 text-decoration-none">
       <div class="card-body d-flex flex-column">
         <div class="d-flex align-items-start gap-3 mb-2">
-          <span class="material-symbols-outlined doc-card-icone">{{icone}}</span>
+          <span class="material-symbols-outlined doc-card-icone" aria-hidden="true">{{icone}}</span>
         </div>
         <h3 class="h6 mb-1">{{titulo}}</h3>
         <p class="text-muted small mb-3">{{descricao}}</p>
@@ -58,7 +58,7 @@
           <span class="small {{#if (eq contagem 0)}}text-muted{{else}}fw-semibold{{/if}}">
             {{#if (eq contagem 0)}}Sem documentos{{else}}{{contagem}} {{#if (eq contagem 1)}}documento{{else}}documentos{{/if}}{{/if}}
           </span>
-          <span class="material-symbols-outlined doc-card-seta">arrow_forward</span>
+          <span class="material-symbols-outlined doc-card-seta" aria-hidden="true">arrow_forward</span>
         </div>
       </div>
     </a>

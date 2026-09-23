@@ -52,6 +52,29 @@
   --c-warning-text: #9A6108;
   --c-info-text: #065E8F;
 
+  /* Anel de foco. NAO reutilizar a cor primaria: e o fundo dos botoes
+     solidos, logo o anel ficaria invisivel sobre eles (contraste 1:1).
+     ⛔ Nunca escrever o nome de um token seguido de dois pontos dentro de um
+     comentario: o leitor de tokens dos testes usa uma expressao regular
+     simples e passaria a ler esse texto como se fosse o valor do token. */
+  --c-focus-ring: #06213F;            /* 15,29:1 sobre o fundo da pagina */
+
+  /* Estado desativado: atenua-se pela COR, nunca por opacity no elemento
+     (a opacity dilui texto E fundo um contra o outro e baixa o contraste). */
+  --c-disabled-bg: #E8EFF5;
+  --c-disabled-text: #4E687D;
+  --c-disabled-border: #D7E4ED;
+
+  /* FASE 4 — contrato de tamanho dos controlos (A7). DECLARADO mas ainda NÃO
+     aplicado: aplicar estas alturas muda a geometria de todos os botoes do
+     produto e exige revisao visual propria (fora do ambito desta fase).
+     As dimensoes de controlo NAO escalam com a escala de texto: quem cresce
+     e a tipografia (--font-scale), nao a caixa. */
+  --ctl-h-sm: 32px;
+  --ctl-h: 36px;
+  --ctl-h-lg: 44px;
+  --ctl-h-touch: 48px;
+
   /* Ponte com o Bootstrap 5: os componentes nativos seguem a paleta. */
   --bs-border-color: var(--c-border);
   --bs-body-color: var(--c-text);
@@ -160,6 +183,16 @@
   --c-error-text: #FF7B8D;
   --c-warning-text: #FFC45C;
   --c-info-text: var(--c-cyan-400);
+
+  --c-focus-ring: #F6FCFF;            /* 15,64:1 sobre o fundo da pagina */
+  /* Estado desativado (tema escuro). O fundo tem de se DISTINGUIR do ativo:
+     a superfície ativa é #0B2E56, pelo que um fundo colado a ela (ex.: #12395E,
+     passo de luminância 0.012) tornaria o estado desativado indistinguível do
+     ativo. #2E5F8C dá passo 0.080 (o tema claro tem 0.145) e mantém o texto a
+     6.01:1. Ajustado por medição, não a olho. */
+  --c-disabled-bg: #2E5F8C;
+  --c-disabled-text: #EAF4FB;
+  --c-disabled-border: #3D7198;
   --bs-body-bg: var(--c-navy-950);
   --bs-body-color: var(--c-text);
   --bs-secondary-color: var(--c-text-muted);
@@ -419,25 +452,60 @@ a:hover { color: var(--c-primary-dark); }
 }
 .card-body { padding: var(--sp-4); }
 
-/* ── Botões Material ─────────────────────────────────────────────── */
+/* ── Botões — contrato único ─────────────────────────────────────────
+   Cada seletor de botão é definido UMA só vez neste ficheiro. O ficheiro
+   teve três blocos concorrentes (o "Material", o "compacto" e a ponte
+   Bootstrap) e a cascata decidia por ordem de aparição — imprevisível.
+   ⛔ Não reintroduzir duplicações destas regras mais abaixo.
+   A tipografia escala com --font-scale; as dimensões de controlo não. */
 .btn {
-  border-radius: 20px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 5px 12px;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 500;
   letter-spacing: 0.01em;
-  padding: 0.5rem 1.15rem;
-  border: 1px solid transparent;
   position: relative;
   overflow: hidden;
   transition: box-shadow 0.15s ease, background-color 0.15s ease;
 }
-.btn-primary { background: var(--c-primary); border-color: var(--c-primary); box-shadow: var(--elev-1); }
-.btn-primary:hover, .btn-primary:focus { background: var(--c-primary-dark); border-color: var(--c-primary-dark); box-shadow: var(--elev-2); }
-.btn-outline-primary { color: var(--c-primary); border-color: var(--c-border); background: var(--c-surface); }
-.btn-outline-primary:hover { background: var(--c-primary-light); border-color: var(--c-primary); color: var(--c-primary-dark); }
+.btn-lg { padding: 7px 16px; font-size: calc(14px * var(--font-scale)); }
+.btn-sm { padding: 3px 9px; border-radius: 16px; font-size: calc(12px * var(--font-scale)); }
+
+/* Variantes: a COR distingue a intenção; a geometria é comum. */
+.btn-primary { background: var(--c-primary); border-color: var(--c-primary); color: var(--c-on-primary); box-shadow: var(--elev-1); }
+.btn-primary:hover, .btn-primary:focus, .btn-primary:active, .btn-primary.active { background: var(--c-primary-dark); border-color: var(--c-primary-dark); color: var(--c-on-primary); box-shadow: var(--elev-2); }
+.btn-outline-primary { color: var(--c-primary); border-color: var(--c-border-strong); background: var(--c-surface); }
+.btn-outline-primary:hover, .btn-outline-primary:focus { background: var(--c-primary-light); border-color: var(--c-primary); color: var(--c-primary); }
 .btn-outline-secondary { color: var(--c-text-muted); border-color: var(--c-border); background: var(--c-surface); }
+.btn-outline-secondary:hover, .btn-outline-secondary:focus { background: var(--c-surface-2); border-color: var(--c-border-strong); color: var(--c-text); }
 .btn-outline-danger { color: var(--c-error); border-color: var(--c-border); background: var(--c-surface); }
-.btn-outline-danger:hover { background: var(--c-error-bg); border-color: var(--c-error); color: var(--c-error); }
-.btn-sm { padding: 0.3rem 0.8rem; border-radius: 16px; }
+.btn-outline-danger:hover, .btn-outline-danger:focus { background: var(--c-error-bg); border-color: var(--c-error); color: var(--c-error); }
+.btn-success { background: var(--c-success); border-color: var(--c-success); color: var(--c-on-accent); }
+.btn-success:hover, .btn-success:focus { background: var(--c-success); border-color: var(--c-success); color: var(--c-on-accent); filter: brightness(.94); }
+.btn-outline-light { color: var(--nav-text); border-color: var(--nav-border); background: transparent; }
+.btn-outline-light:hover, .btn-outline-light:focus { background: var(--nav-surface); border-color: var(--nav-text); color: var(--nav-text); }
+
+/* Estado desativado — legível e simétrico nos dois temas.
+   ⛔ Sem opacity: um botão desativado tem de se ler MELHOR do que o limiar,
+   não pior do que um botão ativo cinzento. */
+.btn:disabled, .btn.disabled, fieldset:disabled .btn {
+  opacity: 1;
+  background: var(--c-disabled-bg);
+  border-color: var(--c-disabled-border);
+  color: var(--c-disabled-text);
+  box-shadow: none;
+  cursor: not-allowed;
+  /* O Bootstrap corta os eventos de ponteiro nos botões desativados, o que
+     tornaria `cursor: not-allowed` inerte (o cursor seria o do fundo).
+     Devolvem-se os eventos: o atributo nativo `disabled` já impede cliques,
+     foco e submissão. */
+  pointer-events: auto;
+}
+/* Ligações com aspeto de botão continuariam a navegar: aqui a inatividade é
+   funcional, não cosmética, e tem de cortar mesmo os eventos de ponteiro.
+   (Não há `fieldset[disabled]` nas vistas — a regra é defensiva.) */
+a.btn.disabled, fieldset:disabled a.btn { pointer-events: none; }
 
 /* Ripple */
 .ripple {
@@ -647,6 +715,23 @@ a:hover { color: var(--c-primary-dark); }
   outline: 2px solid var(--c-primary);
   outline-offset: 2px;
 }
+/* Botões: o anel global usa a cor primária, que é o FUNDO dos botões sólidos.
+   O anel é desenhado FORA da caixa do botão (outline-offset 2px), pelo que a
+   referência de contraste é a superfície onde o botão assenta, não a cor do
+   próprio botão: usa-se um token próprio, escolhido por medição.
+   ⛔ TEM de ser o atalho `outline` completo (largura, estilo E cor): o Bootstrap
+   5.3 define `.btn:focus-visible { outline: 0 }` e, com a MESMA especificidade
+   (0,2,0), ganhava à regra global de `:focus-visible`. Declarar só
+   `outline-color` deixava a largura a 0 — o anel não era desenhado e a
+   declaração era decorativa. Medido no browser: largura 0px, estilo none.
+   ⛔ Um anel da cor do fundo do botão (ex.: branco sobre branco na página
+   clara) também deixa de se ver — não reintroduzir essa variante. */
+.btn:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 2px; }
+/* Botões claros sobre superfícies navy (topbar, rodapé): o anel escuro do
+   tema claro desapareceria sobre o azul-marinho. */
+.btn-outline-light:focus-visible { outline-color: var(--nav-focus); }
+/* "Bolinhas": vivem na topbar navy — o anel escuro seria invisível. */
+.icon-btn:focus-visible { outline: 2px solid var(--nav-focus); outline-offset: 2px; }
 .skip-link {
   position: absolute;
   left: -9999px;
@@ -985,10 +1070,7 @@ textarea.form-control { min-height: auto; }
 .input-group-text { padding: 5px 10px; font-size: calc(13px * var(--font-scale)); }
 .mb-3 { margin-bottom: 0.8rem !important; }
 
-/* Botões compactos */
-.btn { font-size: calc(13px * var(--font-scale)); padding: 5px 12px; border-radius: 7px; }
-.btn-lg { font-size: calc(14px * var(--font-scale)); padding: 7px 16px; }
-.btn-sm { font-size: calc(12px * var(--font-scale)); padding: 3px 9px; }
+/* Botões: ver o bloco único "Botões — contrato único" no topo do ficheiro. */
 
 /* Tabelas compactas */
 .table { font-size: calc(13px * var(--font-scale)); }
@@ -2094,21 +2176,6 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
 .auth-colapso { border: 1px solid var(--c-border); border-radius: 12px; padding: .9rem; background: var(--c-surface-2); }
 /* Bootstrap 5: componentes nativos com a paleta GesCondu
    (botoes, tabelas, formularios, dropdowns, modais, badges e alertas). */
-.btn-primary { color: var(--c-on-primary); }
-.btn-primary:hover, .btn-primary:focus, .btn-primary:active, .btn-primary.active {
-  background: var(--c-primary-dark); border-color: var(--c-primary-dark); color: var(--c-on-primary);
-}
-.btn-primary:disabled, .btn-primary.disabled { background: var(--c-primary); border-color: var(--c-primary); color: var(--c-on-primary); opacity: .55; }
-.btn-success { background: var(--c-success); border-color: var(--c-success); color: var(--c-on-accent); }
-.btn-success:hover, .btn-success:focus { background: var(--c-success); border-color: var(--c-success); color: var(--c-on-accent); filter: brightness(.94); }
-.btn-outline-primary { color: var(--c-primary); border-color: var(--c-border-strong); background: var(--c-surface); }
-.btn-outline-primary:hover, .btn-outline-primary:focus { background: var(--c-primary-light); border-color: var(--c-primary); color: var(--c-primary); }
-.btn-outline-secondary { color: var(--c-text-muted); border-color: var(--c-border); background: var(--c-surface); }
-.btn-outline-secondary:hover, .btn-outline-secondary:focus { background: var(--c-surface-2); border-color: var(--c-border-strong); color: var(--c-text); }
-.btn-outline-danger { color: var(--c-error); border-color: var(--c-border); background: var(--c-surface); }
-.btn-outline-danger:hover, .btn-outline-danger:focus { background: var(--c-error-bg); border-color: var(--c-error); color: var(--c-error); }
-.btn-outline-light { color: var(--nav-text); border-color: var(--nav-border); background: transparent; }
-.btn-outline-light:hover, .btn-outline-light:focus { background: var(--nav-surface); border-color: var(--nav-text); color: var(--nav-text); }
 [data-theme="dark"] .btn-close { filter: invert(1) grayscale(1) brightness(1.8); }
 
 .text-muted { color: var(--c-text-muted) !important; }

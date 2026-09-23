@@ -17,7 +17,7 @@
       Acontecimentos do condomínio — assembleias, comunicações e eventos
     </p>
   </div>
-  <a href="/admin" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Painel</a>
+  <a href="/admin" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1" aria-hidden="true">arrow_back</span>Painel</a>
 </div>
 
 {{!-- ── Criar acontecimentos ───────────────────────────────────────── --}}
@@ -27,13 +27,13 @@
       Um evento é criado aqui; as assembleias e as comunicações, nos módulos respetivos — tudo aparece neste calendário.
     </span>
     <a href="/admin/calendario/eventos/nova" class="btn btn-sm btn-primary">
-      <span class="material-symbols-outlined me-1">event</span>Novo evento
+      <span class="material-symbols-outlined me-1" aria-hidden="true">event</span>Novo evento
     </a>
     <a href="/admin/assembleias/nova" class="btn btn-sm btn-outline-primary">
-      <span class="material-symbols-outlined me-1">add</span>Nova assembleia
+      <span class="material-symbols-outlined me-1" aria-hidden="true">add</span>Nova assembleia
     </a>
     <a href="/admin/avisos/nova" class="btn btn-sm btn-outline-primary">
-      <span class="material-symbols-outlined me-1">campaign</span>Programar comunicação
+      <span class="material-symbols-outlined me-1" aria-hidden="true">campaign</span>Programar comunicação
     </a>
   </div>
 </div>
@@ -64,7 +64,7 @@
       {{/if}}
       <div class="col-12 col-lg-4 d-flex gap-2">
         <button type="submit" class="btn btn-sm btn-primary">
-          <span class="material-symbols-outlined me-1">filter_alt</span>Aplicar
+          <span class="material-symbols-outlined me-1" aria-hidden="true">filter_alt</span>Aplicar
         </button>
         {{#if temFiltros}}
         <a href="/admin/calendario" class="btn btn-sm btn-outline-secondary">Limpar</a>
@@ -108,7 +108,7 @@
 
     {{#if proximo.link}}
     <a class="btn btn-primary btn-sm mt-3" href="{{proximo.link}}">
-      <span class="material-symbols-outlined me-1">{{#if proximo.editavel}}edit{{else}}visibility{{/if}}</span>{{#if proximo.editavel}}Editar{{else}}Ver detalhe{{/if}}
+      <span class="material-symbols-outlined me-1" aria-hidden="true">{{#if proximo.editavel}}edit{{else}}visibility{{/if}}</span>{{#if proximo.editavel}}Editar{{else}}Ver detalhe{{/if}}
     </a>
     {{/if}}
   </div>
@@ -133,7 +133,7 @@
     </div>
     <div class="text-nowrap">
       {{#if estadoRotulo}}<span class="badge {{estadoClasse}} me-2">{{estadoRotulo}}</span>{{/if}}
-      {{#if link}}<a href="{{link}}" class="btn btn-sm btn-outline-secondary" title="{{#if editavel}}Editar evento{{else}}Ver detalhe{{/if}}"><span class="material-symbols-outlined">{{#if editavel}}edit{{else}}visibility{{/if}}</span></a>{{/if}}
+      {{#if link}}<a aria-label="{{#if editavel}}Editar evento{{else}}Ver detalhe{{/if}}" href="{{link}}" class="btn btn-sm btn-outline-secondary" title="{{#if editavel}}Editar evento{{else}}Ver detalhe{{/if}}"><span class="material-symbols-outlined">{{#if editavel}}edit{{else}}visibility{{/if}}</span></a>{{/if}}
     </div>
   </li>
   {{/unless}}
@@ -166,7 +166,7 @@
     </div>
     <div class="text-nowrap">
       {{#if estadoRotulo}}<span class="badge {{estadoClasse}} me-2">{{estadoRotulo}}</span>{{/if}}
-      {{#if link}}<a href="{{link}}" class="btn btn-sm btn-outline-secondary" title="{{#if editavel}}Editar evento{{else}}Ver detalhe{{/if}}"><span class="material-symbols-outlined">{{#if editavel}}edit{{else}}visibility{{/if}}</span></a>{{/if}}
+      {{#if link}}<a aria-label="{{#if editavel}}Editar evento{{else}}Ver detalhe{{/if}}" href="{{link}}" class="btn btn-sm btn-outline-secondary" title="{{#if editavel}}Editar evento{{else}}Ver detalhe{{/if}}"><span class="material-symbols-outlined">{{#if editavel}}edit{{else}}visibility{{/if}}</span></a>{{/if}}
     </div>
   </li>
   {{/each}}
@@ -186,10 +186,10 @@
   <div class="small mb-3">Os eventos, as assembleias e as comunicações programadas aparecem aqui automaticamente.</div>
   <div class="d-flex flex-wrap gap-2 justify-content-center">
     <a href="/admin/calendario/eventos/nova" class="btn btn-sm btn-primary">
-      <span class="material-symbols-outlined me-1">event</span>Novo evento
+      <span class="material-symbols-outlined me-1" aria-hidden="true">event</span>Novo evento
     </a>
     <a href="/admin/assembleias/nova" class="btn btn-sm btn-outline-primary">
-      <span class="material-symbols-outlined me-1">add</span>Nova assembleia
+      <span class="material-symbols-outlined me-1" aria-hidden="true">add</span>Nova assembleia
     </a>
   </div>
   {{/if}}

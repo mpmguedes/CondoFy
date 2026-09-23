@@ -13,13 +13,13 @@
     </form>
     {{#unless suporteDiagnostico}}
     <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalTransitados" title="Definir/importar valores transitados" data-ajuda="Regista ou importa os valores que transitaram de anos anteriores, usados como saldo inicial das frações." data-ajuda-titulo="Valores transitados">
-      <span class="material-symbols-outlined me-1" style="font-size:1rem">swap_horiz</span>Transitados
+      <span class="material-symbols-outlined me-1" style="font-size:1rem" aria-hidden="true">swap_horiz</span>Transitados
     </button>
     <a class="btn btn-sm btn-outline-secondary" href="/admin/quotas/enviar" title="Enviar avisos de quota por email" data-ajuda="Abre o envio dos avisos de quota por email às frações que escolher." data-ajuda-titulo="Enviar quotas">
-      <span class="material-symbols-outlined me-1" style="font-size:1rem">mail</span>Enviar quotas
+      <span class="material-symbols-outlined me-1" style="font-size:1rem" aria-hidden="true">mail</span>Enviar quotas
     </a>
     <a class="btn btn-sm btn-primary" href="/admin/quotas/gerar" title="Gerar quotas do ano" data-ajuda="Abre o assistente para criar as quotas de um mês ou de todo o ano. As quotas já existentes são ignoradas." data-ajuda-titulo="Gerar quotas">
-      <span class="material-symbols-outlined me-1" style="font-size:1rem">auto_awesome</span>Gerar quotas
+      <span class="material-symbols-outlined me-1" style="font-size:1rem" aria-hidden="true">auto_awesome</span>Gerar quotas
     </a>
     {{/unless}}
   </div>

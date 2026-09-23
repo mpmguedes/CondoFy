@@ -4,8 +4,8 @@
     <p class="subtitle">Contas do condomínio e saldos</p>
   </div>
   <div class="d-flex gap-2">
-    <a href="/admin/contas/transferir-fcr" class="btn btn-outline-primary"><span class="material-symbols-outlined me-1">swap_horiz</span>Transferir FCR</a>
-    <a href="/admin/contas/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">add</span>Nova conta</a>
+    <a href="/admin/contas/transferir-fcr" class="btn btn-outline-primary"><span class="material-symbols-outlined me-1" aria-hidden="true">swap_horiz</span>Transferir FCR</a>
+    <a href="/admin/contas/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1" aria-hidden="true">add</span>Nova conta</a>
   </div>
 </div>
 
@@ -54,9 +54,9 @@
           <td class="text-end fw-semibold">{{eur saldo}}</td>
           <td>{{#if ativa}}<span class="badge text-bg-success">Ativa</span>{{else}}<span class="badge text-bg-secondary">Inativa</span>{{/if}}</td>
           <td class="text-end">
-            <a href="/admin/contas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
+            <a aria-label="Editar" href="/admin/contas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
             <form action="/admin/contas/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Eliminar esta conta?" data-confirmar-perigo="1">
-              <button class="btn btn-sm btn-outline-danger" title="Eliminar" data-ajuda="Elimina esta conta bancária. Se tiver movimentos associados, a eliminação é recusada — desative a conta para a tirar dos saldos sem perder o histórico." data-ajuda-titulo="Eliminar conta"><span class="material-symbols-outlined">delete</span></button>
+              <button aria-label="Eliminar" class="btn btn-sm btn-outline-danger" title="Eliminar" data-ajuda="Elimina esta conta bancária. Se tiver movimentos associados, a eliminação é recusada — desative a conta para a tirar dos saldos sem perder o histórico." data-ajuda-titulo="Eliminar conta"><span class="material-symbols-outlined">delete</span></button>
             </form>
           </td>
         </tr>

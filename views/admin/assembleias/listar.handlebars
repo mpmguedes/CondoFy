@@ -5,8 +5,8 @@
     <p class="subtitle">Assembleias de condóminos, convocatórias e atas</p>
   </div>
   <div class="d-flex gap-2">
-    <a href="/admin/convocatorias/nova" class="btn btn-outline-primary"><span class="material-symbols-outlined me-1">description</span>Nova Convocatória</a>
-    <a href="/admin/assembleias/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">add</span>Nova assembleia</a>
+    <a href="/admin/convocatorias/nova" class="btn btn-outline-primary"><span class="material-symbols-outlined me-1" aria-hidden="true">description</span>Nova Convocatória</a>
+    <a href="/admin/assembleias/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1" aria-hidden="true">add</span>Nova assembleia</a>
   </div>
 </div>
 
@@ -81,8 +81,8 @@
             {{else}}<span class="badge text-bg-warning">Agendada</span>{{/if}}
           </td>
           <td class="text-end">
-            <a href="/admin/assembleias/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
-            <a href="/admin/assembleias/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
+            <a aria-label="Ver" href="/admin/assembleias/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
+            <a aria-label="Editar" href="/admin/assembleias/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
           </td>
         </tr>
         {{/each}}

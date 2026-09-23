@@ -4,13 +4,13 @@
 </div>
 
 <div class="quick-actions">
-  <a class="quick-action" href="/admin/fracoes/nova"><span class="material-symbols-outlined">add</span>Nova fração</a>
-  <a class="quick-action" href="/admin/quotas/gerar"><span class="material-symbols-outlined">euro</span>Gerar quotas</a>
-  <a class="quick-action" href="/admin/assembleias/nova"><span class="material-symbols-outlined">groups</span>Nova assembleia</a>
-  <a class="quick-action" href="/admin/documentos/nova"><span class="material-symbols-outlined">note_add</span>Novo documento</a>
-  <a class="quick-action" href="/admin/pagamentos/nova"><span class="material-symbols-outlined">payments</span>Registar pagamento</a>
-  <a class="quick-action" href="/admin/despesas/nova"><span class="material-symbols-outlined">credit_card</span>Nova despesa</a>
-  <a class="quick-action" href="/admin/avisos/nova"><span class="material-symbols-outlined">campaign</span>Novo aviso</a>
+  <a class="quick-action" href="/admin/fracoes/nova"><span class="material-symbols-outlined" aria-hidden="true">add</span>Nova fração</a>
+  <a class="quick-action" href="/admin/quotas/gerar"><span class="material-symbols-outlined" aria-hidden="true">euro</span>Gerar quotas</a>
+  <a class="quick-action" href="/admin/assembleias/nova"><span class="material-symbols-outlined" aria-hidden="true">groups</span>Nova assembleia</a>
+  <a class="quick-action" href="/admin/documentos/nova"><span class="material-symbols-outlined" aria-hidden="true">note_add</span>Novo documento</a>
+  <a class="quick-action" href="/admin/pagamentos/nova"><span class="material-symbols-outlined" aria-hidden="true">payments</span>Registar pagamento</a>
+  <a class="quick-action" href="/admin/despesas/nova"><span class="material-symbols-outlined" aria-hidden="true">credit_card</span>Nova despesa</a>
+  <a class="quick-action" href="/admin/avisos/nova"><span class="material-symbols-outlined" aria-hidden="true">campaign</span>Novo aviso</a>
 </div>
 
 {{!-- SITUAÇÃO FINANCEIRA (uma área, cinco zonas) --}}
@@ -207,7 +207,7 @@
         {{#each proximasAssembleias}}
         <li class="list-group-item">
           <a class="painel-linha" href="/admin/assembleias/{{id}}">
-            <span class="painel-linha-icone" aria-hidden="true"><span class="material-symbols-outlined">forum</span></span>
+            <span class="painel-linha-icone" aria-hidden="true"><span class="material-symbols-outlined" aria-hidden="true">forum</span></span>
             <span class="painel-linha-texto">
               <span class="painel-linha-titulo">{{#if numero}}Assembleia {{numero}}{{else}}Assembleia de condóminos{{/if}}</span>
               <span class="painel-linha-meta">{{formatDate data}}{{#if hora}} · {{hora}}{{/if}}{{#if local}} · {{local}}{{/if}}</span>
@@ -237,7 +237,7 @@
         {{#each atividade}}
         <li class="list-group-item">
           <a class="painel-linha" href="{{url}}">
-            <span class="painel-linha-icone" aria-hidden="true"><span class="material-symbols-outlined">{{icone}}</span></span>
+            <span class="painel-linha-icone" aria-hidden="true"><span class="material-symbols-outlined" aria-hidden="true">{{icone}}</span></span>
             <span class="painel-linha-texto">
               <span class="painel-linha-titulo">{{rotulo}}</span>
               <span class="painel-linha-meta">{{formatDateTime data}}{{#if autor}} · {{autor}}{{/if}}</span>

@@ -3,7 +3,7 @@
     <h1>Despesas</h1>
     <p class="subtitle">Despesas do condomínio por categoria</p>
   </div>
-  {{#unless suporteDiagnostico}}<a href="/admin/despesas/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1">add</span>Nova despesa</a>{{/unless}}
+  {{#unless suporteDiagnostico}}<a href="/admin/despesas/nova" class="btn btn-primary"><span class="material-symbols-outlined me-1" aria-hidden="true">add</span>Nova despesa</a>{{/unless}}
 </div>
 
 {{#if suporteDiagnostico}}
@@ -56,9 +56,9 @@
             {{#if suporteDiagnostico}}
             <span class="text-muted small">—</span>
             {{else}}
-            <a href="/admin/despesas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
+            <a aria-label="Editar" href="/admin/despesas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
             <form action="/admin/despesas/{{id}}/anular" method="POST" class="d-inline" data-confirmar="Anular esta despesa?" data-confirmar-perigo="1">
-              <button class="btn btn-sm btn-outline-danger" title="Anular" data-ajuda="Anula esta despesa: mantém-se no histórico e deixa de contar para os resultados do condomínio." data-ajuda-titulo="Anular despesa"><span class="material-symbols-outlined">block</span></button>
+              <button aria-label="Anular" class="btn btn-sm btn-outline-danger" title="Anular" data-ajuda="Anula esta despesa: mantém-se no histórico e deixa de contar para os resultados do condomínio." data-ajuda-titulo="Anular despesa"><span class="material-symbols-outlined">block</span></button>
             </form>
             {{/if}}
           </td>

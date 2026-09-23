@@ -3,7 +3,7 @@
     <h1>Gerar quotas</h1>
     <p class="subtitle">Quotas calculadas por permilagem + Fundo Comum de Reserva (FCR)</p>
   </div>
-  <a href="/admin/quotas" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
+  <a href="/admin/quotas" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1" aria-hidden="true">arrow_back</span>Voltar</a>
 </div>
 
 <form action="/admin/quotas/gerar" method="POST" id="wizard">
@@ -111,7 +111,7 @@
       <div class="d-flex gap-2">
         <button type="button" class="btn btn-outline-secondary d-none" id="btnVoltar" onclick="wizard.go(-1)">Voltar</button>
         <button type="button" class="btn btn-primary d-none" id="btnContinuar" onclick="wizard.go(1)">Continuar</button>
-        <button type="submit" class="btn btn-primary d-none" id="btnGerar" data-ajuda="Cria as quotas do período indicado para todas as frações ativas. As quotas já existentes para as mesmas frações e meses são ignoradas." data-ajuda-titulo="Gerar quotas"><span class="material-symbols-outlined me-1">auto_awesome</span>Gerar quotas</button>
+        <button type="submit" class="btn btn-primary d-none" id="btnGerar" data-ajuda="Cria as quotas do período indicado para todas as frações ativas. As quotas já existentes para as mesmas frações e meses são ignoradas." data-ajuda-titulo="Gerar quotas"><span class="material-symbols-outlined me-1" aria-hidden="true">auto_awesome</span>Gerar quotas</button>
       </div>
     </div>
   </div>

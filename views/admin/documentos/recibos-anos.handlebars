@@ -8,7 +8,7 @@
     <h1>Recibos de Pagamento</h1>
     <p class="subtitle mb-0">Escolha o ano para consultar os recibos</p>
   </div>
-  <a href="/admin/documentos" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar à biblioteca</a>
+  <a href="/admin/documentos" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1" aria-hidden="true">arrow_back</span>Voltar à biblioteca</a>
 </div>
 
 {{#if anos}}
@@ -21,7 +21,7 @@
           <h2 class="h5 mb-1">{{ano}}</h2>
           <div class="text-muted small">{{n}} {{#if (eq n 1)}}recibo{{else}}recibos{{/if}}</div>
         </div>
-        <span class="material-symbols-outlined doc-card-seta">arrow_forward</span>
+        <span class="material-symbols-outlined doc-card-seta" aria-hidden="true">arrow_forward</span>
       </div>
     </a>
   </div>

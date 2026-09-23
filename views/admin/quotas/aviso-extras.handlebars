@@ -5,7 +5,7 @@
       {{#if quota.fracao}}{{quota.fracao.designacao}} · {{/if}}{{monthName quota.mes}} {{quota.ano}} — aviso da quota normal
     </p>
   </div>
-  <a href="/admin/quotas/{{quota.id}}" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
+  <a href="/admin/quotas/{{quota.id}}" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1" aria-hidden="true">arrow_back</span>Voltar</a>
 </div>
 
 {{#if elegiveis}}
@@ -33,7 +33,7 @@
     </ul>
     <div class="card-body border-top d-flex align-items-center justify-content-between flex-wrap gap-2">
       <span class="small text-muted">Ao confirmar, as parcelas selecionadas ficam marcadas como <strong>cobradas</strong> e deixam de voltar a aparecer noutros avisos.</span>
-      <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1">picture_as_pdf</span>Gerar aviso com as selecionadas</button>
+      <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1" aria-hidden="true">picture_as_pdf</span>Gerar aviso com as selecionadas</button>
     </div>
   </form>
 </div>

@@ -104,14 +104,14 @@
       <div class="cv-ponto-linha">
         <span class="cv-ponto-num">{{inc @index}}</span>
         <input type="text" class="form-control cv-ponto-input" name="pontos[]" value="{{this}}" placeholder="Descreva o ponto da ordem de trabalhos…" />
-        <button type="button" class="btn btn-outline-secondary btn-sm cv-ponto-btn" data-accao="subir" title="Subir na ordem"><span class="material-symbols-outlined">arrow_upward</span></button>
-        <button type="button" class="btn btn-outline-secondary btn-sm cv-ponto-btn" data-accao="descer" title="Descer na ordem"><span class="material-symbols-outlined">arrow_downward</span></button>
-        <button type="button" class="btn btn-outline-danger btn-sm cv-ponto-btn" data-accao="remover" title="Eliminar ponto"><span class="material-symbols-outlined">close</span></button>
+        <button aria-label="Subir na ordem" type="button" class="btn btn-outline-secondary btn-sm cv-ponto-btn" data-accao="subir" title="Subir na ordem"><span class="material-symbols-outlined">arrow_upward</span></button>
+        <button aria-label="Descer na ordem" type="button" class="btn btn-outline-secondary btn-sm cv-ponto-btn" data-accao="descer" title="Descer na ordem"><span class="material-symbols-outlined">arrow_downward</span></button>
+        <button aria-label="Eliminar ponto" type="button" class="btn btn-outline-danger btn-sm cv-ponto-btn" data-accao="remover" title="Eliminar ponto"><span class="material-symbols-outlined">close</span></button>
       </div>
       {{/each}}
     </div>
     <button type="button" id="btnAdicionarPonto" class="btn btn-outline-primary mt-2">
-      <span class="material-symbols-outlined me-1">add</span>Adicionar ponto
+      <span class="material-symbols-outlined me-1" aria-hidden="true">add</span>Adicionar ponto
     </button>
     <div class="form-text mt-2">
       Os pontos são numerados automaticamente e apresentados no documento pela ordem definida aqui.
@@ -122,10 +122,10 @@
 {{!-- ═══ Ações ═══ --}}
 <div class="cv-acoes d-flex flex-wrap gap-2 align-items-center">
   <button type="submit" name="_acao" value="preview" class="btn btn-outline-primary btn-lg" data-ajuda="Mostra o documento final sem o gerar. Nada é guardado enquanto não gerar o PDF." data-ajuda-titulo="Pré-visualizar convocatória">
-    <span class="material-symbols-outlined me-1">visibility</span>Pré-visualizar
+    <span class="material-symbols-outlined me-1" aria-hidden="true">visibility</span>Pré-visualizar
   </button>
   <button type="submit" name="_acao" value="pdf" class="btn btn-success btn-lg" data-ajuda="Gera a convocatória em PDF e guarda-a nos Documentos. Fica associada a esta assembleia." data-ajuda-titulo="Gerar PDF">
-    <span class="material-symbols-outlined me-1">picture_as_pdf</span>Gerar PDF
+    <span class="material-symbols-outlined me-1" aria-hidden="true">picture_as_pdf</span>Gerar PDF
   </button>
   {{#if driveLigado}}
   <span class="small text-muted ms-lg-auto"><span class="material-symbols-outlined me-1" style="font-size:.95rem">cloud_done</span>Ao gerar o PDF, a convocatória é guardada automaticamente nos Documentos.</span>

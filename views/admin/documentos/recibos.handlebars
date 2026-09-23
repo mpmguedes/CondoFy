@@ -9,7 +9,7 @@
     </nav>
     <h1>Recibos de Pagamento — {{ano}}</h1>
   </div>
-  <a href="/admin/documentos?pasta=recibos" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar aos anos</a>
+  <a href="/admin/documentos?pasta=recibos" class="btn btn-outline-secondary btn-sm"><span class="material-symbols-outlined me-1" aria-hidden="true">arrow_back</span>Voltar aos anos</a>
 </div>
 
 {{#if linhas}}
@@ -28,7 +28,7 @@
         <div class="d-flex align-items-center gap-1">
           {{#if reciboPdf}}<a href="{{reciboPdf}}" target="_blank" class="btn btn-sm btn-primary">Ver PDF</a>{{/if}}
           <div class="dropdown">
-            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="material-symbols-outlined">more_vert</span></button>
+            <button aria-label="Mais opções" class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="material-symbols-outlined">more_vert</span></button>
             <ul class="dropdown-menu dropdown-menu-end">
               {{#if ficheiroInterno}}<li><a class="dropdown-item" href="{{ficheiroInterno}}" target="_blank" rel="noopener">Abrir ficheiro</a></li>{{/if}}
               {{#if urlExterna}}<li><a class="dropdown-item" href="{{urlExterna}}" target="_blank" rel="noopener noreferrer">Abrir referência externa</a></li>{{/if}}

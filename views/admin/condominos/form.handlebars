@@ -1,6 +1,6 @@
 <div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
   <h1>{{titulo}}</h1>
-  <a href="/admin/condominos" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">arrow_back</span>Voltar</a>
+  <a href="/admin/condominos" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1" aria-hidden="true">arrow_back</span>Voltar</a>
 </div>
 
 <form action="{{#if edicao}}/admin/condominos/{{pessoa.id}}{{else}}/admin/condominos{{/if}}" method="POST">
@@ -43,7 +43,7 @@
                 {{/each}}
               </div>
               <button type="button" id="btnAdicionarContactoEmail" class="btn btn-sm btn-outline-primary mt-1">
-                <span class="material-symbols-outlined me-1" style="font-size: 1rem">add</span>Adicionar email
+                <span class="material-symbols-outlined me-1" style="font-size: 1rem" aria-hidden="true">add</span>Adicionar email
               </button>
             </div>
 
@@ -73,7 +73,7 @@
                 {{/each}}
               </div>
               <button type="button" id="btnAdicionarContactoTelefone" class="btn btn-sm btn-outline-primary mt-1">
-                <span class="material-symbols-outlined me-1" style="font-size: 1rem">add</span>Adicionar telefone
+                <span class="material-symbols-outlined me-1" style="font-size: 1rem" aria-hidden="true">add</span>Adicionar telefone
               </button>
             </div>
           </div>

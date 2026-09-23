@@ -16,10 +16,10 @@
     <p class="subtitle">{{#if suporteDiagnostico}}Leitura de diagnóstico — sem alterações{{else}}Quotas emitidas por fração e período{{/if}}</p>
   </div>
   <div class="d-flex gap-2 flex-wrap">
-    <a href="/admin/quotas/grelha" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1">grid_view</span>Grelha</a>
+    <a href="/admin/quotas/grelha" class="btn btn-outline-secondary"><span class="material-symbols-outlined me-1" aria-hidden="true">grid_view</span>Grelha</a>
     {{#unless suporteDiagnostico}}
-    <a href="/admin/quotas/enviar" class="btn btn-outline-primary" data-ajuda="Abre o envio dos avisos de quota por email às frações que escolher." data-ajuda-titulo="Enviar por email"><span class="material-symbols-outlined me-1">mail</span>Enviar por email</a>
-    <a href="/admin/quotas/gerar" class="btn btn-primary" data-ajuda="Abre o assistente para criar as quotas de um mês ou de todo o ano. As quotas já existentes para as mesmas frações são ignoradas." data-ajuda-titulo="Gerar quotas"><span class="material-symbols-outlined me-1">auto_awesome</span>Gerar quotas</a>
+    <a href="/admin/quotas/enviar" class="btn btn-outline-primary" data-ajuda="Abre o envio dos avisos de quota por email às frações que escolher." data-ajuda-titulo="Enviar por email"><span class="material-symbols-outlined me-1" aria-hidden="true">mail</span>Enviar por email</a>
+    <a href="/admin/quotas/gerar" class="btn btn-primary" data-ajuda="Abre o assistente para criar as quotas de um mês ou de todo o ano. As quotas já existentes para as mesmas frações são ignoradas." data-ajuda-titulo="Gerar quotas"><span class="material-symbols-outlined me-1" aria-hidden="true">auto_awesome</span>Gerar quotas</a>
     {{/unless}}
   </div>
 </div>
@@ -37,7 +37,7 @@
       <div class="stat-label">Valor por 1000‰</div>
       <div class="stat-value">{{quotaConfig.valorPor1000}} €</div>
       {{#unless suporteDiagnostico}}
-      <button class="btn btn-sm btn-outline-primary mt-2" data-bs-toggle="modal" data-bs-target="#modalConfig" data-ajuda="Altera o valor por 1000‰ e a percentagem do Fundo Comum de Reserva usados no cálculo das quotas." data-ajuda-titulo="Configuração das quotas"><span class="material-symbols-outlined me-1">tune</span>Alterar</button>
+      <button class="btn btn-sm btn-outline-primary mt-2" data-bs-toggle="modal" data-bs-target="#modalConfig" data-ajuda="Altera o valor por 1000‰ e a percentagem do Fundo Comum de Reserva usados no cálculo das quotas." data-ajuda-titulo="Configuração das quotas"><span class="material-symbols-outlined me-1" aria-hidden="true">tune</span>Alterar</button>
       {{/unless}}
     </div></div>
   </div>
@@ -120,7 +120,7 @@
         </select>
       </div>
       <div class="col-12 col-md-2 d-grid">
-        <button type="submit" class="btn btn-outline-primary"><span class="material-symbols-outlined me-1">filter_list</span>Filtrar</button>
+        <button type="submit" class="btn btn-outline-primary"><span class="material-symbols-outlined me-1" aria-hidden="true">filter_list</span>Filtrar</button>
       </div>
     </form>
   </div>
@@ -162,22 +162,22 @@
           </td>
           {{#unless ../suporteDiagnostico}}
           <td class="text-end text-nowrap">
-            <a href="/admin/quotas/{{id}}/aviso" target="_blank" class="btn btn-sm btn-outline-primary" title="Aviso PDF" data-ajuda="Abre o aviso de quota desta fração em PDF, numa nova aba." data-ajuda-titulo="Aviso de quota (PDF)"><span class="material-symbols-outlined">picture_as_pdf</span></a>
+            <a aria-label="Aviso PDF" href="/admin/quotas/{{id}}/aviso" target="_blank" class="btn btn-sm btn-outline-primary" title="Aviso PDF" data-ajuda="Abre o aviso de quota desta fração em PDF, numa nova aba." data-ajuda-titulo="Aviso de quota (PDF)"><span class="material-symbols-outlined">picture_as_pdf</span></a>
             {{#if ../driveLigado}}
             <form action="/admin/quotas/{{id}}/aviso/drive" method="POST" class="d-inline">
-              <button class="btn btn-sm btn-outline-secondary" title="Guardar aviso no Google Drive" data-ajuda="Gera o aviso em PDF e guarda-o no serviço de armazenamento do condomínio." data-ajuda-titulo="Guardar aviso no armazenamento"><span class="material-symbols-outlined">cloud_upload</span></button>
+              <button aria-label="Guardar aviso no Google Drive" class="btn btn-sm btn-outline-secondary" title="Guardar aviso no Google Drive" data-ajuda="Gera o aviso em PDF e guarda-o no serviço de armazenamento do condomínio." data-ajuda-titulo="Guardar aviso no armazenamento"><span class="material-symbols-outlined">cloud_upload</span></button>
             </form>
             {{/if}}
-            <a href="/admin/quotas/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
-            <a href="/admin/quotas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
+            <a aria-label="Ver" href="/admin/quotas/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
+            <a aria-label="Editar" href="/admin/quotas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
             <form action="/admin/quotas/{{id}}/anular" method="POST" class="d-inline" data-confirmar="Anular esta quota?" data-confirmar-perigo="1">
-              <button class="btn btn-sm btn-outline-danger" title="Anular" data-ajuda="Anula esta quota: deixa de ser cobrada e mantém-se no histórico. Os pagamentos e recibos já registados não são alterados." data-ajuda-titulo="Anular quota"><span class="material-symbols-outlined">block</span></button>
+              <button aria-label="Anular" class="btn btn-sm btn-outline-danger" title="Anular" data-ajuda="Anula esta quota: deixa de ser cobrada e mantém-se no histórico. Os pagamentos e recibos já registados não são alterados." data-ajuda-titulo="Anular quota"><span class="material-symbols-outlined">block</span></button>
             </form>
           </td>
           {{else}}
           {{!-- Suporte: único acesso de leitura — o detalhe (`/quotas/:id`). --}}
           <td class="text-end text-nowrap">
-            <a href="/admin/quotas/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver detalhe"><span class="material-symbols-outlined">visibility</span></a>
+            <a aria-label="Ver detalhe" href="/admin/quotas/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver detalhe"><span class="material-symbols-outlined">visibility</span></a>
           </td>
           {{/unless}}
         </tr>

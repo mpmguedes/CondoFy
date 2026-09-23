@@ -19,7 +19,7 @@
         </select>
       </div>
       <div class="col-6 col-md-3 d-grid">
-        <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1">add</span>Adicionar</button>
+        <button type="submit" class="btn btn-primary"><span class="material-symbols-outlined me-1" aria-hidden="true">add</span>Adicionar</button>
       </div>
     </form>
   </div>
@@ -54,9 +54,9 @@
             </div>
           </td>
           <td class="text-end">
-            <button form="cat-{{id}}" class="btn btn-sm btn-outline-primary" title="Guardar" data-ajuda="Guarda o nome, o tipo e o estado da categoria. Uma categoria inativa deixa de estar disponível ao criar despesas, mas mantém-se nas já registadas." data-ajuda-titulo="Guardar categoria"><span class="material-symbols-outlined">check</span></button>
+            <button aria-label="Guardar" form="cat-{{id}}" class="btn btn-sm btn-outline-primary" title="Guardar" data-ajuda="Guarda o nome, o tipo e o estado da categoria. Uma categoria inativa deixa de estar disponível ao criar despesas, mas mantém-se nas já registadas." data-ajuda-titulo="Guardar categoria"><span class="material-symbols-outlined">check</span></button>
             <form action="/admin/categorias/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Eliminar esta categoria?" data-confirmar-perigo="1">
-              <button class="btn btn-sm btn-outline-danger" title="Eliminar" data-ajuda="Elimina esta categoria. As despesas que a usam mantêm-se, mas ficam sem categoria." data-ajuda-titulo="Eliminar categoria"><span class="material-symbols-outlined">delete</span></button>
+              <button aria-label="Eliminar" class="btn btn-sm btn-outline-danger" title="Eliminar" data-ajuda="Elimina esta categoria. As despesas que a usam mantêm-se, mas ficam sem categoria." data-ajuda-titulo="Eliminar categoria"><span class="material-symbols-outlined">delete</span></button>
             </form>
           </td>
         </tr>

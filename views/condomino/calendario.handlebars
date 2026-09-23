@@ -71,7 +71,7 @@
   {{#unless @first}}
   <li class="portal-item-linha">
     {{#if link}}<a class="portal-item" href="{{link}}">{{else}}<span class="portal-item">{{/if}}
-      <span class="portal-item-icone" aria-hidden="true"><span class="material-symbols-outlined">{{#if (eq tipo 'assembleia')}}forum{{else}}schedule_send{{/if}}</span></span>
+      <span class="portal-item-icone" aria-hidden="true"><span class="material-symbols-outlined" aria-hidden="true">{{#if (eq tipo 'assembleia')}}forum{{else}}schedule_send{{/if}}</span></span>
       <span class="portal-item-texto">
         <span class="portal-item-titulo">{{titulo}}</span>
         <span class="portal-item-meta">{{tipoRotulo}}{{#if data}} · {{diaSemana data}}, {{formatDate data}}{{/if}}{{#if hora}} · {{hora}}{{/if}}{{#if local}} · {{local}}{{/if}}</span>
@@ -99,7 +99,7 @@
   {{#each passados}}
   <li class="portal-item-linha">
     {{#if link}}<a class="portal-item" href="{{link}}">{{else}}<span class="portal-item">{{/if}}
-      <span class="portal-item-icone" aria-hidden="true"><span class="material-symbols-outlined">{{#if (eq tipo 'assembleia')}}forum{{else}}campaign{{/if}}</span></span>
+      <span class="portal-item-icone" aria-hidden="true"><span class="material-symbols-outlined" aria-hidden="true">{{#if (eq tipo 'assembleia')}}forum{{else}}campaign{{/if}}</span></span>
       <span class="portal-item-texto">
         <span class="portal-item-titulo">{{titulo}}</span>
         <span class="portal-item-meta">{{formatDate data}}{{#if detalhe}} · {{detalhe}}{{/if}}</span>

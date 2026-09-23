@@ -62,7 +62,7 @@
         <div class="sidebar-group">
           <div class="sidebar-group-title">Painel</div>
           <a class="sidebar-item {{isActive currentPath '/admin'}}" href="/admin" title="Painel">
-            <span class="material-symbols-outlined">dashboard</span>
+            <span class="material-symbols-outlined" aria-hidden="true">dashboard</span>
             <span class="sidebar-item-text">Painel</span>
           </a>
         </div>
@@ -70,11 +70,11 @@
         <div class="sidebar-group">
           <div class="sidebar-group-title">Condomínio</div>
           <a class="sidebar-item {{isActive currentPath '/admin/fracoes'}}" href="/admin/fracoes" title="Frações">
-            <span class="material-symbols-outlined">apartment</span>
+            <span class="material-symbols-outlined" aria-hidden="true">apartment</span>
             <span class="sidebar-item-text">Frações</span>
           </a>
           <a class="sidebar-item {{isActive currentPath '/admin/condominos'}}" href="/admin/condominos" title="Condóminos">
-            <span class="material-symbols-outlined">groups</span>
+            <span class="material-symbols-outlined" aria-hidden="true">groups</span>
             <span class="sidebar-item-text">Condóminos</span>
           </a>
         </div>
@@ -82,27 +82,27 @@
         <div class="sidebar-group">
           <div class="sidebar-group-title">Finanças</div>
           <a class="sidebar-item {{isActive currentPath '/admin/orcamento'}}" href="/admin/orcamento" title="Orçamento">
-            <span class="material-symbols-outlined">account_balance_wallet</span>
+            <span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span>
             <span class="sidebar-item-text">Orçamento</span>
           </a>
           <a class="sidebar-item {{isActive currentPath '/admin/quotas'}}" href="/admin/quotas/conta-corrente" title="Quotas">
-            <span class="material-symbols-outlined">receipt_long</span>
+            <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>
             <span class="sidebar-item-text">Quotas</span>
           </a>
           <a class="sidebar-item {{isActive currentPath '/admin/despesas'}}" href="/admin/despesas" title="Despesas">
-            <span class="material-symbols-outlined">credit_card</span>
+            <span class="material-symbols-outlined" aria-hidden="true">credit_card</span>
             <span class="sidebar-item-text">Despesas</span>
           </a>
           <a class="sidebar-item {{isActive currentPath '/admin/contas'}}" href="/admin/contas" title="Contas bancárias">
-            <span class="material-symbols-outlined">account_balance</span>
+            <span class="material-symbols-outlined" aria-hidden="true">account_balance</span>
             <span class="sidebar-item-text">Contas</span>
           </a>
           <a class="sidebar-item {{isActive currentPath '/admin/movimentos'}}" href="/admin/movimentos" title="Extrato bancário">
-            <span class="material-symbols-outlined">receipt_long</span>
+            <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>
             <span class="sidebar-item-text">Extrato</span>
           </a>
           <a class="sidebar-item {{isActive currentPath '/admin/categorias'}}" href="/admin/categorias" title="Categorias">
-            <span class="material-symbols-outlined">category</span>
+            <span class="material-symbols-outlined" aria-hidden="true">category</span>
             <span class="sidebar-item-text">Categorias</span>
           </a>
         </div>
@@ -110,7 +110,7 @@
         <div class="sidebar-group">
           <div class="sidebar-group-title">Relatórios</div>
           <a class="sidebar-item {{isActive currentPath '/admin/relatorios/financeiro'}}" href="/admin/relatorios/financeiro" title="Relatório financeiro">
-            <span class="material-symbols-outlined">summarize</span>
+            <span class="material-symbols-outlined" aria-hidden="true">summarize</span>
             <span class="sidebar-item-text">Relatório financeiro</span>
           </a>
         </div>
@@ -118,7 +118,7 @@
         <div class="sidebar-group">
           <div class="sidebar-group-title">Documentos</div>
           <a class="sidebar-item {{isActive currentPath '/admin/documentos'}}" href="/admin/documentos" title="Documentos">
-            <span class="material-symbols-outlined">folder</span>
+            <span class="material-symbols-outlined" aria-hidden="true">folder</span>
             <span class="sidebar-item-text">Documentos</span>
           </a>
         </div>
@@ -126,13 +126,13 @@
         <div class="sidebar-group">
           <div class="sidebar-group-title">Assembleias</div>
           <a class="sidebar-item {{isActive currentPath '/admin/assembleias'}}" href="/admin/assembleias" title="Assembleias">
-            <span class="material-symbols-outlined">forum</span>
+            <span class="material-symbols-outlined" aria-hidden="true">forum</span>
             <span class="sidebar-item-text">Assembleias</span>
           </a>
           {{!-- Calendário: visível a admin E gestor (a rota exige papel ≥ gestor).
                Deixou de ser um placeholder reservado ao admin. --}}
           <a class="sidebar-item {{isActive currentPath '/admin/calendario'}}" href="/admin/calendario" title="Calendário">
-            <span class="material-symbols-outlined">calendar_month</span>
+            <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>
             <span class="sidebar-item-text">Calendário</span>
           </a>
         </div>
@@ -141,27 +141,27 @@
           <div class="sidebar-group-title">Serviços</div>
           {{#if (ne condominioAtivo.role 'gestor')}}
           <a class="sidebar-item {{isActive currentPath '/admin/tickets'}}" href="/admin/tickets" title="Tickets">
-            <span class="material-symbols-outlined">confirmation_number</span>
+            <span class="material-symbols-outlined" aria-hidden="true">confirmation_number</span>
             <span class="sidebar-item-text">Tickets</span>
           </a>
           {{/if}}
           <a class="sidebar-item {{isActive currentPath '/admin/fornecedores'}}" href="/admin/fornecedores" title="Fornecedores">
-            <span class="material-symbols-outlined">local_shipping</span>
+            <span class="material-symbols-outlined" aria-hidden="true">local_shipping</span>
             <span class="sidebar-item-text">Fornecedores</span>
           </a>
           {{#if (ne condominioAtivo.role 'gestor')}}
           <a class="sidebar-item {{isActive currentPath '/admin/seguros'}}" href="/admin/seguros" title="Seguros">
-            <span class="material-symbols-outlined">shield</span>
+            <span class="material-symbols-outlined" aria-hidden="true">shield</span>
             <span class="sidebar-item-text">Seguros</span>
           </a>
           {{/if}}
           <a class="sidebar-item {{isActive currentPath '/admin/avisos'}}" href="/admin/avisos" title="Comunicações">
-            <span class="material-symbols-outlined">campaign</span>
+            <span class="material-symbols-outlined" aria-hidden="true">campaign</span>
             <span class="sidebar-item-text">Comunicações</span>
           </a>
           {{#if (ne condominioAtivo.role 'gestor')}}
           <a class="sidebar-item {{isActive currentPath '/admin/emails'}}" href="/admin/emails" title="Emails">
-            <span class="material-symbols-outlined">mail</span>
+            <span class="material-symbols-outlined" aria-hidden="true">mail</span>
             <span class="sidebar-item-text">Emails</span>
           </a>
           {{/if}}
@@ -171,19 +171,19 @@
         <div class="sidebar-group">
           <div class="sidebar-group-title">Sistema</div>
           <a class="sidebar-item {{isActive currentPath '/admin/utilizadores'}}" href="/admin/utilizadores" title="Utilizadores">
-            <span class="material-symbols-outlined">manage_accounts</span>
+            <span class="material-symbols-outlined" aria-hidden="true">manage_accounts</span>
             <span class="sidebar-item-text">Utilizadores</span>
           </a>
           {{!-- Pedidos de acesso de suporte feitos por um Super Admin. Visível
                apenas ao administrador: é ele quem autoriza. O contador avisa
                sem obrigar a abrir a página. --}}
           <a class="sidebar-item {{isActive currentPath '/admin/suporte'}}" href="/admin/suporte" title="Acessos de suporte">
-            <span class="material-symbols-outlined">support_agent</span>
+            <span class="material-symbols-outlined" aria-hidden="true">support_agent</span>
             <span class="sidebar-item-text">Acessos de suporte</span>
             {{#if pedidosSuportePendentes}}<span class="badge rounded-pill text-bg-warning ms-2">{{pedidosSuportePendentes}}</span>{{/if}}
           </a>
           <a class="sidebar-item {{isActive currentPath '/admin/config'}}" href="/admin/config" title="Configuração">
-            <span class="material-symbols-outlined">settings</span>
+            <span class="material-symbols-outlined" aria-hidden="true">settings</span>
             <span class="sidebar-item-text">Configuração</span>
           </a>
         </div>
@@ -192,11 +192,11 @@
         <div class="sidebar-group sidebar-group-super">
           <div class="sidebar-group-title">Administração global</div>
           <a class="sidebar-item {{isActive currentPath '/global'}}" href="/global" title="Painel global">
-            <span class="material-symbols-outlined">public</span>
+            <span class="material-symbols-outlined" aria-hidden="true">public</span>
             <span class="sidebar-item-text">Global</span>
           </a>
           <a class="sidebar-item {{isActive currentPath '/global/armazenamento'}}" href="/global/armazenamento" title="Backups da instalação">
-            <span class="material-symbols-outlined">backup</span>
+            <span class="material-symbols-outlined" aria-hidden="true">backup</span>
             <span class="sidebar-item-text">Backups</span>
           </a>
         </div>
@@ -205,7 +205,7 @@
         <div class="sidebar-group">
           <div class="sidebar-group-title">Início</div>
           <a class="sidebar-item {{#if (eq currentPath '/condomino')}}active{{/if}}" href="/condomino" title="Início">
-            <span class="material-symbols-outlined">home</span>
+            <span class="material-symbols-outlined" aria-hidden="true">home</span>
             <span class="sidebar-item-text">Início</span>
           </a>
         </div>
@@ -214,34 +214,34 @@
           {{!-- Quotas, Pagamentos e Recibos são uma só área (separadores no topo),
                pela mesma ordem da navegação do telemóvel. --}}
           <a class="sidebar-item {{#if (or (isActive currentPath '/condomino/quotas') (isActive currentPath '/condomino/pagamentos'))}}active{{/if}}" href="/condomino/quotas" title="Quotas, pagamentos e recibos">
-            <span class="material-symbols-outlined">receipt_long</span>
+            <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>
             <span class="sidebar-item-text">Quotas</span>
           </a>
           <a class="sidebar-item {{isActive currentPath '/condomino/recibos'}}" href="/condomino/recibos" title="Os meus recibos">
-            <span class="material-symbols-outlined">receipt</span>
+            <span class="material-symbols-outlined" aria-hidden="true">receipt</span>
             <span class="sidebar-item-text">Recibos</span>
           </a>
         </div>
         <div class="sidebar-group">
           <div class="sidebar-group-title">Condomínio</div>
           <a class="sidebar-item {{isActive currentPath '/condomino/documentos'}}" href="/condomino/documentos" title="Documentos do condomínio">
-            <span class="material-symbols-outlined">folder</span>
+            <span class="material-symbols-outlined" aria-hidden="true">folder</span>
             <span class="sidebar-item-text">Documentos</span>
           </a>
           <a class="sidebar-item {{isActive currentPath '/condomino/avisos'}}" href="/condomino/avisos" title="Avisos do condomínio">
-            <span class="material-symbols-outlined">campaign</span>
+            <span class="material-symbols-outlined" aria-hidden="true">campaign</span>
             <span class="sidebar-item-text">Avisos</span>
           </a>
           <a class="sidebar-item {{isActive currentPath '/condomino/assembleias'}}" href="/condomino/assembleias" title="Assembleias">
-            <span class="material-symbols-outlined">forum</span>
+            <span class="material-symbols-outlined" aria-hidden="true">forum</span>
             <span class="sidebar-item-text">Assembleias</span>
           </a>
           <a class="sidebar-item {{isActive currentPath '/condomino/calendario'}}" href="/condomino/calendario" title="Calendário">
-            <span class="material-symbols-outlined">calendar_month</span>
+            <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>
             <span class="sidebar-item-text">Calendário</span>
           </a>
           <a class="sidebar-item {{isActive currentPath '/condomino/situacao-financeira'}}" href="/condomino/situacao-financeira" title="Situação financeira">
-            <span class="material-symbols-outlined">monitoring</span>
+            <span class="material-symbols-outlined" aria-hidden="true">monitoring</span>
             <span class="sidebar-item-text">Situação financeira</span>
           </a>
         </div>
@@ -249,11 +249,11 @@
         <div class="sidebar-group">
           <div class="sidebar-group-title">A minha conta</div>
           <a class="sidebar-item {{isActive currentPath '/condomino/perfil'}}" href="/condomino/perfil" title="Meu perfil">
-            <span class="material-symbols-outlined">account_circle</span>
+            <span class="material-symbols-outlined" aria-hidden="true">account_circle</span>
             <span class="sidebar-item-text">Meu perfil</span>
           </a>
           <a class="sidebar-item {{isActive currentPath '/condomino/condominios'}}" href="/condomino/condominios" title="Os meus condomínios">
-            <span class="material-symbols-outlined">apps</span>
+            <span class="material-symbols-outlined" aria-hidden="true">apps</span>
             <span class="sidebar-item-text">Condomínios</span>
           </a>
         </div>
@@ -268,7 +268,7 @@
         </button>
         {{#if isAdmin}}
         <a class="condominio-pill" id="condominioPill" href="/condominios" title="Trocar de condomínio">
-          <span class="material-symbols-outlined">sync</span>
+          <span class="material-symbols-outlined" aria-hidden="true">sync</span>
           {{#if condominioAtivo}}
           <span class="condominio-pill-text">{{condominioAtivo.designacao}}</span>
           {{else}}
@@ -279,7 +279,7 @@
         {{!-- Área do condómino: a troca de condomínio acontece dentro do portal
              (`/condomino/condominios`), para o condómino não perder a navegação. --}}
         <a class="condominio-pill" id="condominioPill" href="/condomino/condominios" title="Trocar de condomínio">
-          <span class="material-symbols-outlined">sync</span>
+          <span class="material-symbols-outlined" aria-hidden="true">sync</span>
           {{#if condominioAtivo}}
           <span class="condominio-pill-text">{{condominioAtivo.designacao}}</span>
           {{else}}
@@ -311,17 +311,17 @@
             <li><span class="dropdown-item-text px-3 py-1 small text-muted">{{user.email}}</span></li>
             <li><hr class="dropdown-divider" /></li>
             {{#if isAdmin}}
-            <li><a class="dropdown-item" href="/conta/seguranca"><span class="material-symbols-outlined me-2">shield</span>Segurança da conta</a></li>
-            <li><a class="dropdown-item" href="/condominios"><span class="material-symbols-outlined me-2">apps</span>Os meus condomínios</a></li>
+            <li><a class="dropdown-item" href="/conta/seguranca"><span class="material-symbols-outlined me-2" aria-hidden="true">shield</span>Segurança da conta</a></li>
+            <li><a class="dropdown-item" href="/condominios"><span class="material-symbols-outlined me-2" aria-hidden="true">apps</span>Os meus condomínios</a></li>
             {{else}}
             {{!-- Área do condómino: o mesmo menu do painel, mas com os destinos do
                  portal (o perfil reúne conta, segurança e condomínios). --}}
-            <li><a class="dropdown-item" href="/condomino/perfil"><span class="material-symbols-outlined me-2">account_circle</span>Meu perfil</a></li>
-            <li><a class="dropdown-item" href="/condomino/condominios"><span class="material-symbols-outlined me-2">apps</span>Os meus condomínios</a></li>
-            <li><a class="dropdown-item" href="/conta/seguranca"><span class="material-symbols-outlined me-2">shield</span>Segurança da conta</a></li>
-            <li><a class="dropdown-item" href="/condomino/saida"><span class="material-symbols-outlined me-2">directions_walk</span>Preparar saída do condomínio</a></li>
+            <li><a class="dropdown-item" href="/condomino/perfil"><span class="material-symbols-outlined me-2" aria-hidden="true">account_circle</span>Meu perfil</a></li>
+            <li><a class="dropdown-item" href="/condomino/condominios"><span class="material-symbols-outlined me-2" aria-hidden="true">apps</span>Os meus condomínios</a></li>
+            <li><a class="dropdown-item" href="/conta/seguranca"><span class="material-symbols-outlined me-2" aria-hidden="true">shield</span>Segurança da conta</a></li>
+            <li><a class="dropdown-item" href="/condomino/saida"><span class="material-symbols-outlined me-2" aria-hidden="true">directions_walk</span>Preparar saída do condomínio</a></li>
             {{/if}}
-            <li><a class="dropdown-item" href="/logout"><span class="material-symbols-outlined me-2">logout</span>Sair</a></li>
+            <li><a class="dropdown-item" href="/logout"><span class="material-symbols-outlined me-2" aria-hidden="true">logout</span>Sair</a></li>
           </ul>
         </div>
       </header>

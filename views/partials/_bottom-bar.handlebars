@@ -2,16 +2,16 @@
 <nav class="mobile-bottom-bar" aria-label="Acessos rápidos">
   {{#if isAdmin}}
   <a class="mb-item {{#if (eq currentPath '/admin')}}mb-item-ativo{{/if}}" href="/admin" title="Painel">
-    <span class="material-symbols-outlined">dashboard</span><span class="mb-label">Painel</span>
+    <span class="material-symbols-outlined" aria-hidden="true">dashboard</span><span class="mb-label">Painel</span>
   </a>
   <a class="mb-item {{#if (and (startsPath currentPath '/admin/quotas') (not (startsPath currentPath '/admin/quotas/recibos')))}}mb-item-ativo{{/if}}" href="/admin/quotas/conta-corrente" title="Quotas">
-    <span class="material-symbols-outlined">receipt_long</span><span class="mb-label">Quotas</span>
+    <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span><span class="mb-label">Quotas</span>
   </a>
   <a class="mb-item {{#if (startsPath currentPath '/admin/quotas/recibos')}}mb-item-ativo{{/if}}" href="/admin/quotas/recibos" title="Recibos">
-    <span class="material-symbols-outlined">confirmation_number</span><span class="mb-label">Recibos</span>
+    <span class="material-symbols-outlined" aria-hidden="true">confirmation_number</span><span class="mb-label">Recibos</span>
   </a>
   <a class="mb-item {{#if (startsPath currentPath '/admin/avisos')}}mb-item-ativo{{/if}}" href="/admin/avisos" title="Comunicações">
-    <span class="material-symbols-outlined">campaign</span><span class="mb-label">Avisos</span>
+    <span class="material-symbols-outlined" aria-hidden="true">campaign</span><span class="mb-label">Avisos</span>
   </a>
   {{else}}
   {{!-- Área do condómino: as funções do dia a dia a um toque. O resto (assembleias,
