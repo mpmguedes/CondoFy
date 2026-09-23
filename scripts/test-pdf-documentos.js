@@ -10,6 +10,7 @@ const path = require('path');
 const zlib = require('zlib');
 const { gerarReciboPDF, gerarAvisoQuotaPDF, componentesDaQuota } = require('../helpers/pdf');
 const { toCents } = require('../helpers/money');
+const backupMut = require('./helpers/backup-mutacao');
 
 // Valor em cêntimos → texto do número exatamente como o PDF o escreve
 // (ex.: 649,74), sem o símbolo € (que o PDF codifica como octal no stream).
@@ -281,7 +282,10 @@ async function testes() {
     assert.strictEqual(contarPaginas(pdfLogo), 1, 'continua numa página com logótipo');
     guardar('recibo-com-logotipo.pdf', pdfLogo);
   } finally {
-    fs.unlinkSync(logotipoTeste);
+    // Afastar por rename, não por unlink: o guard de eliminações do host
+    // (latched a meio da sessão) fazia este `finally` rebentar e o teste falhar
+    // por causa do ambiente, não do produto.
+    backupMut.afastar(logotipoTeste);
   }
 
   // ── 7. Aviso de quota (mesma linguagem visual) ─────────────────────

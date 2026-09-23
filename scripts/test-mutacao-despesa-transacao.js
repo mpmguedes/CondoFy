@@ -51,6 +51,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
+const backupMut = require('./helpers/backup-mutacao');
 
 const RAIZ = path.join(__dirname, '..');
 const ALVO = path.join(RAIZ, 'helpers', 'movimentos.js');
@@ -99,10 +100,7 @@ function mutacao({ nome, de, para, ocorrencias = 1, falhaEm }) {
     + `(esperado ${ocorrencias}×); âncora não única não prova nada`);
   assert.ok(falhaEm, `mutação «${nome}» sem asserção esperada: a prova seria cega`);
 
-  const carimbo = `${Date.now()}-${process.pid}`;
-  const backup = path.join(RAIZ, `${PREFIXO}${carimbo}.tmp`);
-  fs.writeFileSync(backup, original);
-  fs.writeFileSync(`${backup}.alvo`, REL_ALVO);
+  const bkp = backupMut.criar({ alvo: ALVO, ficheiro: REL_ALVO, raiz: RAIZ, prefixo: PREFIXO });
 
   try {
     const mutado = original.split(de).join(para);
@@ -133,9 +131,8 @@ function mutacao({ nome, de, para, ocorrencias = 1, falhaEm }) {
       + `outra razão, logo não vigia a invariante que a mutação quebra.\nSaída:\n${saida}`);
     feito(`«${nome}» → ${TESTE} falha em ${falhaEm} (a mutação é detetada no sítio certo)`);
   } finally {
-    fs.writeFileSync(ALVO, fs.readFileSync(backup));
-    fs.unlinkSync(backup);
-    if (fs.existsSync(`${backup}.alvo`)) fs.unlinkSync(`${backup}.alvo`);
+    backupMut.restaurar(bkp);
+    backupMut.limpar(bkp);
     assert.strictEqual(hash(fs.readFileSync(ALVO, 'utf8')), hashOriginal,
       `restauro de ${REL_ALVO} não ficou idêntico ao original`);
   }
@@ -148,27 +145,7 @@ function mutacao({ nome, de, para, ocorrencias = 1, falhaEm }) {
   // morta a meio deixa o backup órfão E o alvo mutado; cada backup é uma cópia
   // integral do original, pelo que o órfão se repõe (o `.alvo` diz em que
   // ficheiro). Os resíduos de outros harnesses não se tocam.
-  const orfaos = fs.readdirSync(RAIZ).filter((f) => RE_RESIDUO.test(f)).sort();
-  if (orfaos.length) {
-    const ultimo = orfaos[orfaos.length - 1];
-    const marcador = path.join(RAIZ, `${ultimo}.alvo`);
-    if (fs.existsSync(marcador)) {
-      const rel = fs.readFileSync(marcador, 'utf8').trim();
-      const destino = path.join(RAIZ, rel);
-      if (fs.existsSync(destino)) {
-        const conteudo = fs.readFileSync(path.join(RAIZ, ultimo), 'utf8');
-        if (fs.readFileSync(destino, 'utf8') !== conteudo) {
-          fs.writeFileSync(destino, conteudo);
-          console.log(`  ⚠ interrupção anterior detetada: ${rel} reposto a partir de ${ultimo}`);
-        }
-      }
-    }
-    for (const f of orfaos) {
-      fs.unlinkSync(path.join(RAIZ, f));
-      if (fs.existsSync(path.join(RAIZ, `${f}.alvo`))) fs.unlinkSync(path.join(RAIZ, `${f}.alvo`));
-    }
-    console.log(`  · ${orfaos.length} resíduo(s) deste harness limpo(s)`);
-  }
+  backupMut.varrerResiduos({ raiz: RAIZ, prefixo: PREFIXO });
 
   // ── 1. O helper ignora a transação que recebe ────────────────────
   // É o defeito P16 na sua forma observável: a escrita do movimento deixa de

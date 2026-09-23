@@ -36,6 +36,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
+const backupMut = require('./helpers/backup-mutacao');
 
 const RAIZ = path.join(__dirname, '..');
 const hash = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -77,10 +78,7 @@ function mutacao({ nome, ficheiro, de, para, script }) {
   assert.strictEqual(ocorrencias, 1,
     `a âncora de «${nome}» tem de ocorrer exatamente 1× em ${ficheiro} (ocorre ${ocorrencias}×) — sem âncora única a mutação não prova nada`);
 
-  const carimbo = `${Date.now()}-${process.pid}`;
-  const backup = path.join(RAIZ, `.mutation-backup-${carimbo}.tmp`);
-  fs.writeFileSync(backup, original);
-  fs.writeFileSync(`${backup}.alvo`, ficheiro);
+  const bkp = backupMut.criar({ alvo, ficheiro, raiz: RAIZ });
 
   let resultado = null;
   try {
@@ -88,10 +86,9 @@ function mutacao({ nome, ficheiro, de, para, script }) {
     assert.notStrictEqual(fs.readFileSync(alvo, 'utf8'), original, 'a mutação tem de alterar o ficheiro');
     resultado = resultadoDoTeste(script);
   } finally {
-    fs.writeFileSync(alvo, fs.readFileSync(backup, 'utf8'));
+    backupMut.restaurar(bkp);
     assert.strictEqual(hash(fs.readFileSync(alvo, 'utf8')), hashOriginal, `restauro de ${ficheiro} tem de ser byte a byte`);
-    fs.unlinkSync(backup);
-    if (fs.existsSync(`${backup}.alvo`)) fs.unlinkSync(`${backup}.alvo`);
+    backupMut.limpar(bkp);
   }
 
   assert.strictEqual(resultado, RESULTADO.FALHOU,
@@ -103,38 +100,9 @@ function mutacao({ nome, ficheiro, de, para, script }) {
 // ficheiro alvo mutado. Cada backup é uma CÓPIA INTEGRAL do original, pelo que
 // se repõe o alvo a partir dele em vez de só apagar o lixo.
 function varrerBackupsOrfaos() {
-  const ficheiros = fs.readdirSync(RAIZ).filter((f) => /^\.mutation-backup-\d+-\d+\.tmp$/.test(f));
-  for (const f of ficheiros) {
-    const caminhoAlvo = path.join(RAIZ, `${f}.alvo`);
-    if (fs.existsSync(caminhoAlvo)) {
-      const rel = fs.readFileSync(caminhoAlvo, 'utf8').trim();
-      fs.writeFileSync(path.join(RAIZ, rel), fs.readFileSync(path.join(RAIZ, f), 'utf8'));
-      console.log(`  · alvo órfão REPOSTO a partir do backup: ${rel}`);
-      // ⛔ O `.tmp` é apagado ANTES do `.alvo`, de propósito: se o processo morrer
-      // entre os dois `unlink`, sobra um `.alvo` sozinho — que a passagem 2 limpa.
-      // A ordem inversa deixaria um `.tmp` sem `.alvo`, impossível de repor (perde-se
-      // a correspondência com o alvo) e conservado para sempre.
-      fs.unlinkSync(path.join(RAIZ, f));
-      fs.unlinkSync(caminhoAlvo);
-    } else {
-      console.log(`  · backup órfão sem «.alvo»: conservado para inspeção (${f})`);
-    }
-  }
-
-  // Passagem 2 — `.alvo` SOZINHO (sem `.tmp`). Acontece quando o processo morre entre os
-  // dois `unlink` do `finally` de `mutacao`. É lixo inofensivo: o alvo já foi reposto
-  // (o `assert` de sha256 corre ANTES dos `unlink`). Sem esta passagem, acumulava para sempre.
-  // ⚠️ NÃO PROVADO: a execução deste harness foi bloqueada pelo guard de eliminações antes de
-  // correr (ver §4.4 do relatório). A sintaxe está validada (`node --check`), a prova por
-  // execução (12/12 + resíduos limpos) fica PENDENTE para quando o guard o permitir.
-  const soAlvo = fs.readdirSync(RAIZ).filter((f) => /^\.mutation-backup-\d+-\d+\.tmp\.alvo$/.test(f));
-  for (const f of soAlvo) {
-    const semSufixo = f.slice(0, -'.alvo'.length);
-    if (!fs.existsSync(path.join(RAIZ, semSufixo))) {
-      fs.unlinkSync(path.join(RAIZ, f));
-      console.log(`  · «.alvo» órfão (alvo já reposto) removido: ${f}`);
-    }
-  }
+  // Repõe alvos órfãos e afasta os resíduos pela via do helper: rename para
+  // fora da árvore, sem uma única eliminação (o `safe-delete` deixa de ser tocado).
+  backupMut.varrerResiduos({ raiz: RAIZ });
 }
 
 (async () => {

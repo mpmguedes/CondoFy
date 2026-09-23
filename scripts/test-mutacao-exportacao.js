@@ -21,6 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
+const backupMut = require('./helpers/backup-mutacao');
 
 const RAIZ = path.join(__dirname, '..');
 const hash = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -54,10 +55,7 @@ function mutacao({ nome, ficheiro, de, para, script }) {
 
   // Backup ao lado, com o caminho do alvo em `.alvo`: um órfão de uma execução
   // morta a meio é REPOSTO pelo varrimento de arranque em vez de só apagado.
-  const carimbo = `${Date.now()}-${process.pid}`;
-  const backup = path.join(RAIZ, `.mutation-backup-${carimbo}.tmp`);
-  fs.writeFileSync(backup, original);
-  fs.writeFileSync(`${backup}.alvo`, ficheiro);
+  const bkp = backupMut.criar({ alvo, ficheiro, raiz: RAIZ });
 
   try {
     assert.ok(original.includes(de),
@@ -79,9 +77,8 @@ function mutacao({ nome, ficheiro, de, para, script }) {
       `mutação NÃO detetada: ${script} continuou a passar com «${nome}» aplicada`);
     feito(`«${nome}» → ${script} FALHA (a mutação é detetada)`);
   } finally {
-    fs.writeFileSync(alvo, fs.readFileSync(backup));
-    fs.unlinkSync(backup);
-    if (fs.existsSync(`${backup}.alvo`)) fs.unlinkSync(`${backup}.alvo`);
+    backupMut.restaurar(bkp);
+    backupMut.limpar(bkp);
     assert.strictEqual(hash(fs.readFileSync(alvo, 'utf8')), hashOriginal,
       `restauro de ${ficheiro} não ficou idêntico ao original`);
   }
@@ -93,31 +90,7 @@ function mutacao({ nome, ficheiro, de, para, script }) {
   // Varrimento de arranque: uma execução anterior morta a meio (SIGTERM,
   // timeout, Ctrl-C) deixou o ficheiro alvo MUTADO no working copy. Cada backup
   // é uma cópia integral do original, pelo que o órfão se REPÕE.
-  const orfaos = fs.readdirSync(RAIZ)
-    .filter((f) => /^\.mutation-backup-\d+-\d+\.tmp$/.test(f))
-    .sort();
-  if (orfaos.length) {
-    const ultimo = orfaos[orfaos.length - 1];
-    const ficheiroAlvo = path.join(RAIZ, `${ultimo}.alvo`);
-    if (fs.existsSync(ficheiroAlvo)) {
-      const rel = fs.readFileSync(ficheiroAlvo, 'utf8').trim();
-      const destino = path.join(RAIZ, rel);
-      if (fs.existsSync(destino)) {
-        const conteudo = fs.readFileSync(path.join(RAIZ, ultimo), 'utf8');
-        if (fs.readFileSync(destino, 'utf8') !== conteudo) {
-          fs.writeFileSync(destino, conteudo);
-          console.log(`  ⚠ interrupção anterior detetada: ${rel} reposto a partir de ${ultimo}`);
-        }
-      }
-    } else {
-      console.log(`  · backup órfão sem «.alvo»: conservado para inspeção (${ultimo})`);
-    }
-    for (const f of orfaos) {
-      fs.unlinkSync(path.join(RAIZ, f));
-      if (fs.existsSync(path.join(RAIZ, `${f}.alvo`))) fs.unlinkSync(path.join(RAIZ, `${f}.alvo`));
-    }
-    console.log(`  · ${orfaos.length} backup(s) órfão(s) de execução anterior limpo(s)`);
-  }
+  backupMut.varrerResiduos({ raiz: RAIZ });
 
   // ── 1. A unidade do formatador volta a ser ambígua ───────────────
   // `formatEURCents` existe precisamente para NÃO converter. Se voltar a

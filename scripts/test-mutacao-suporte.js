@@ -23,6 +23,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
+const backupMut = require('./helpers/backup-mutacao');
 
 const RAIZ = path.join(__dirname, '..');
 const hash = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -71,10 +72,7 @@ function mutacao({ nome, ficheiro, de, para, global = false, script, esperaFalha
   // a meio possa ser REPOSTO pelo varrimento de arranque em vez de só apagado.
   // Sem isto, uma interrupção entre a mutação e o `finally` deixava o ficheiro
   // mutado para sempre e a suíte a acusar uma regressão que não existe.
-  const carimbo = `${Date.now()}-${process.pid}`;
-  const backup = path.join(RAIZ, `.mutation-backup-${carimbo}.tmp`);
-  fs.writeFileSync(backup, original);
-  fs.writeFileSync(`${backup}.alvo`, ficheiro);
+  const bkp = backupMut.criar({ alvo, ficheiro, raiz: RAIZ });
 
   try {
     assert.ok(original.includes(de),
@@ -96,9 +94,8 @@ function mutacao({ nome, ficheiro, de, para, global = false, script, esperaFalha
     feito(`«${nome}» → ${script} FALHA (a mutação é detetada)`);
   } finally {
     // Restauro byte a byte + verificação por hash.
-    fs.writeFileSync(alvo, fs.readFileSync(backup));
-    fs.unlinkSync(backup);
-    if (fs.existsSync(`${backup}.alvo`)) fs.unlinkSync(`${backup}.alvo`);
+    backupMut.restaurar(bkp);
+    backupMut.limpar(bkp);
     assert.strictEqual(hash(fs.readFileSync(alvo, 'utf8')), hashOriginal,
       `restauro de ${ficheiro} não ficou idêntico ao original`);
   }
@@ -116,35 +113,7 @@ function mutacao({ nome, ficheiro, de, para, global = false, script, esperaFalha
   // Cada backup é uma CÓPIA INTEGRAL do original, pelo que o órfão se REPÕE. O
   // `.alvo` diz em que ficheiro; sem ele não se adivinha o destino e o backup é
   // conservado para inspeção (nunca se apaga prova).
-  const orfaos = fs.readdirSync(RAIZ)
-    .filter((f) => /^\.mutation-backup-\d+-\d+\.tmp$/.test(f))
-    .sort();
-  if (orfaos.length) {
-    // Se sobraram VÁRIOS órfãos de execuções diferentes, o mais recente é o que
-    // tem a mutação ativa; os anteriores já foram repostos e são só lixo.
-    const ultimo = orfaos[orfaos.length - 1];
-    const ficheiroAlvo = path.join(RAIZ, `${ultimo}.alvo`);
-    if (fs.existsSync(ficheiroAlvo)) {
-      const rel = fs.readFileSync(ficheiroAlvo, 'utf8').trim();
-      const destino = path.join(RAIZ, rel);
-      if (fs.existsSync(destino)) {
-        const conteudo = fs.readFileSync(path.join(RAIZ, ultimo), 'utf8');
-        if (fs.readFileSync(destino, 'utf8') !== conteudo) {
-          fs.writeFileSync(destino, conteudo);
-          console.log(`  ⚠ interrupção anterior detetada: ${rel} reposto a partir de ${ultimo}`);
-        }
-      }
-    } else {
-      console.log(`  · backup órfão sem «.alvo»: conservado para inspeção (${ultimo})`);
-    }
-    for (const f of orfaos) {
-      fs.unlinkSync(path.join(RAIZ, f));
-      if (fs.existsSync(path.join(RAIZ, `${f}.alvo`))) {
-        fs.unlinkSync(path.join(RAIZ, `${f}.alvo`));
-      }
-    }
-    console.log(`  · ${orfaos.length} backup(s) órfão(s) de execução anterior limpo(s)`);
-  }
+  backupMut.varrerResiduos({ raiz: RAIZ });
 
   // ── 1. Remover o crivo de leitura do crivo de admissão ───────────
   // Sem `somenteLeitura`, um POST num caminho da lista seria admitido —
