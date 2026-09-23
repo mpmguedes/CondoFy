@@ -218,12 +218,22 @@ async function main() {
   const directo = await gerarConvocatoriaCartaPDF(COND, ENTRADA);
   const viaWrapper = await pdfReal.gerarConvocatoriaPDF(COND, { ...ENTRADA, tipo: 'Ordinária' });
   // Cada PDF leva dois elementos que mudam a cada geração e que NÃO são
-  // conteúdo: o identificador do documento (`/ID`, aleatório por documento) e,
-  // quando existir, a data dos metadados. Tudo o resto tem de coincidir.
+  // conteúdo: a data dos metadados e o identificador do documento (`/ID`).
+  // Tudo o resto tem de coincidir.
+  //
+  // ⛔ O PDFKit NÃO escreve a data em linha (`/CreationDate (D:…)`): escreve uma
+  // REFERÊNCIA INDIRETA (`/CreationDate 13 0 R`) e o valor num objeto à parte
+  // (`13 0 obj\n(D:…)`). A regex antiga só previa a forma em linha e, por isso,
+  // NUNCA removia a data real: qualquer par de gerações que caísse em segundos
+  // diferentes (≈3 % das vezes — medido) falhava com uma diferença que não é de
+  // conteúdo. Normalizam-se as DUAS formas, e o `/ID` (que é MD5 dessa data)
+  // continua a ser removido, para não se perder a comparação que o teste exige.
   const semMetadados = (b) =>
     b
       .toString('latin1')
-      .replace(/\/(CreationDate|ModDate)\s*\(D:[^)]*\)/g, '')
+      .replace(/\/(CreationDate|ModDate)\s*\([^)]*\)/g, '') // forma em linha
+      .replace(/\/(CreationDate|ModDate)\s+\d+\s+\d+\s+R/g, '') // referência indireta
+      .replace(/\d+\s+0\s+obj\s*\(D:\d+Z\)/g, '') // objeto que guarda o valor
       .replace(/\/ID\s*\[[^\]]*\]/g, '');
   const resumo = (s) => crypto.createHash('sha256').update(s, 'latin1').digest('hex');
   assert.strictEqual(viaWrapper.length, directo.length, 'assembleia e Convocatórias: mesmo tamanho de PDF');
