@@ -154,18 +154,23 @@ const SECOES = [
 // página só para condóminos (a administração continua a ser o público principal).
 const PORTAL_TERMOS = ['portal do condómino', 'condómino'];
 
-// ── 3.2 Exemplos visuais identificados como tal ───────────────────
+// ── 3.2 Exemplos visuais: a nota ficou só onde faz sentido ────────
 // Os "screenshots" da página são composições HTML/CSS (`_home-mock-*`), não
-// capturas de ecrã. A página tem de o dizer, sem desvalorizar o produto.
+// capturas de ecrã. A nota que o dizia foi RETIRADA da homepage a pedido do
+// utilizador (2026-09-23); em `/pedir-acesso` mantém-se, porque era esse o
+// comportamento anterior (a parcial `_home-rodape` é partilhada pelas duas
+// páginas e é a página que decide, com `comNotaExemplos`).
+//
+// Estas frases são o termo de comparação dos dois sentidos: o teste falha se
+// alguma aparecer na HOMEPAGE, e falha se a nota desaparecer de /pedir-acesso.
 const NOTA_EXEMPLOS = [
   'Exemplos visuais representativos da experiencia no GesCondu',
   'nao sao capturas de ecra da aplicacao',
 ];
-// Expressões que desvalorizariam o produto (proibidas na nota).
-const NOTA_EXEMPLOS_PROIBIDO = [
-  /apenas um desenho/i, /n[ãa]o (é|e) real/i, /imagem fict[íi]cia/i,
-  /mockup sem correspond[êe]ncia/i, /meramente ilustrativo/i, /sem valor/i,
-];
+// Caminho da nota nos dois sentidos da verificação (markup e texto).
+const NOTA_PARTICIAL = 'views/partials/_home-nota-exemplos.handlebars';
+const CONTEM_NOTA = (corpo) => /hp-nota-exemplos/.test(corpo)
+  && NOTA_EXEMPLOS.every((frase) => semAcentos(corpo).toLowerCase().includes(semAcentos(frase).toLowerCase()));
 
 // ── 3.3 Nada de produtos futuros apresentados como existentes ─────
 // Funcionalidades que ainda NÃO existem no portal: submeter comprovativos pelo
@@ -358,29 +363,49 @@ async function main() {
     'a administração continua a ter a sua secção própria');
   assert.ok(/Para quem administra/.test(html), 'a secção da administração mantém-se identificada');
 
-  // ── Exemplos visuais identificados honestamente ───────────────────
-  // A nota tem de existir e dizer, de forma clara, o que são estes elementos.
+  // ── Nota dos exemplos visuais: NÃO é apresentada na homepage ──────
+  // A nota foi retirada da homepage a pedido do utilizador (2026-09-23). O
+  // comportamento anterior mantém-se em `/pedir-acesso` (ver a secção «Pedir
+  // acesso», onde a mesma nota é exigida), pelo que esta verificação é
+  // DELIBERADAMENTE de sentido contrário à outra: a parcial `_home-rodape` é
+  // partilhada e é a página que decide.
   //
-  // A nota aparece uma única vez, no rodapé (`_home-rodape`, partilhado com a
-  // página de pedido de acesso), onde cobre a página inteira. As cópias que
-  // existiam junto de cada secção com exemplos foram removidas de propósito
-  // (commit b3e5723), pelo que a contagem esperada é 1. O que importa verificar
-  // é que a nota continua presente e que o seu texto é o correto — não quantas
-  // vezes aparece.
+  // A asserção prova que o texto desapareceu da página apresentada ao
+  // utilizador E que o parágrafo que o continha já não é renderizado (não basta
+  // esconder por CSS — o conteúdo não pode ir no HTML).
+  // Os elementos `_home-mock-*` continuam a existir; o que mudou foi só a nota.
   const ocorrenciasNota = (html.match(/hp-nota-exemplos/g) || []).length;
-  assert.ok(ocorrenciasNota >= 1, `a nota dos exemplos visuais continua presente na homepage (${ocorrenciasNota})`);
+  assert.strictEqual(ocorrenciasNota, 0,
+    `a nota dos exemplos visuais não é apresentada na homepage (ocorrências: ${ocorrenciasNota})`);
   for (const frase of NOTA_EXEMPLOS) {
-    assert.ok(semAcentos(html).toLowerCase().includes(semAcentos(frase).toLowerCase()),
-      `nota dos exemplos: «${frase}» presente`);
+    assert.ok(!semAcentos(html).toLowerCase().includes(semAcentos(frase).toLowerCase()),
+      `nota dos exemplos: «${frase}» já não aparece na página apresentada`);
   }
-  for (const regex of NOTA_EXEMPLOS_PROIBIDO) {
-    assert.ok(!regex.test(html), `nota dos exemplos: sem expressões que desvalorizem o produto (${regex})`);
-  }
-  // A nota está integrada (classe própria da homepage) e não é um alerta legal.
-  assert.ok(/class="hp-nota-exemplos"/.test(html), 'a nota usa o componente próprio da homepage');
-  assert.ok(!/alert alert-warning|alert alert-danger/.test(html), 'a nota não é apresentada como aviso legal');
-  const cssNota = ler('public/css/home.css');
-  assert.ok(/\.hp-nota-exemplos \{/.test(cssNota), 'a nota tem estilo próprio na folha da homepage');
+  assert.ok(!/Exemplos visuais representativos/i.test(html),
+    'nenhuma cópia ou fragmento da nota continua no HTML servido');
+  assert.ok(!/alert alert-warning|alert alert-danger/.test(html), 'não há avisos legais introduzidos no lugar da nota');
+  // Os exemplos visuais continuam a existir — só a nota foi retirada.
+  assert.ok(html.includes('_mk-janela') || html.includes('class="mk-tabela"'),
+    'os exemplos visuais (mockups) continuam presentes na página');
+  // A nota vive num parcial próprio e é incluída condicionalmente: prova-se que
+  // continua a ser uma parcial e que a remoção da homepage é feita por decisão
+  // da página, não por eliminação do ficheiro.
+  assert.ok(/<p class="hp-nota-exemplos">/.test(ler(NOTA_PARTICIAL)),
+    `a nota continua a existir em ${NOTA_PARTICIAL} (não foi eliminada)`);
+  assert.ok(!/comNotaExemplos/.test(ler('views/publicas/home.handlebars')),
+    'a homepage não pede a nota dos exemplos (o include é condicional)');
+
+  // ── Copyright do rodapé: centrado ─────────────────────────────────
+  assert.ok(html.includes('© 2026 GesCondu. Todos os direitos reservados.'),
+    'o copyright mantém o texto exato');
+  const cssRodape = ler('public/css/home.css');
+  const blocoBase = cssRodape.slice(cssRodape.indexOf('.hp-rodape-base {'), cssRodape.indexOf('.hp-rodape-base p'));
+  assert.ok(/justify-content:\s*center/.test(blocoBase),
+    'o rodapé centra o seu conteúdo (justify-content: center)');
+  assert.ok(!/justify-content:\s*space-between/.test(blocoBase),
+    'o rodapé deixou de alinhar às extremidades (space-between removido)');
+  assert.ok(/\.hp-rodape-base p \{ margin: 0; text-align: center; \}/.test(cssRodape),
+    'o parágrafo do copyright está centrado no seu próprio eixo');
 
   // ── Nenhum produto futuro apresentado como existente ──────────────
   for (const [regex, motivo] of PROMESSAS_PROIBIDAS) {
@@ -540,6 +565,19 @@ async function main() {
     assert.ok(acesso.corpo.includes('Canal de contacto por configurar'), 'sem endereço configurado: di-lo claramente');
     assert.ok(!/mailto:[^"]+/.test(acesso.corpo), 'sem endereço de contacto inventado');
     assert.ok(acesso.corpo.includes('href="/login"'), 'continua a haver caminho para entrar');
+
+    // ── A nota dos exemplos visuais MANTÉM-SE aqui ────────────────────
+    // A parcial `_home-rodape` é partilhada pela homepage e por esta página, e
+    // a alteração à homepage foi condicional: aqui preserva-se o comportamento
+    // anterior, incluindo a nota. Sem esta asserção, uma futura «limpeza»
+    // global da nota voltaria a passá-la também por aqui sem ninguém dar por
+    // isso (é a verificação que falta do outro lado da homepage).
+    assert.ok(CONTEM_NOTA(acesso.corpo),
+      'a nota dos exemplos visuais continua a ser apresentada em /pedir-acesso (comportamento anterior preservado)');
+    assert.ok(acesso.corpo.includes('class="hp-nota-exemplos"'),
+      'a nota é o parágrafo real (não uma cópia escondida por CSS)');
+    assert.ok(!/comNotaExemplos/.test(acesso.corpo),
+      'o parâmetro do include condicional não vaza para o HTML servido');
     // As ligações «/#secção» desta página apontam para secções da homepage
     // (que é o destino real), por isso são validadas contra os ids da homepage.
     const secoesHome = listaIds;

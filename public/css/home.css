@@ -760,14 +760,14 @@ body.blank-page.home-publica .blank-flash:empty { display: none; }
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 1.25rem;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   border-top: 1px solid var(--nav-border);
   margin-top: clamp(1.5rem, 3vw, 2.5rem);
   padding-top: 1.1rem;
   font-size: 0.8rem;
 }
-.hp-rodape-base p { margin: 0; }
+.hp-rodape-base p { margin: 0; text-align: center; }
 
 /* ── Aparência e acessibilidade (tema + escala de texto) ────── */
 .hp-aparencia { display: grid; gap: 1rem; }
