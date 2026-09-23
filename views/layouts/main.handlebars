@@ -29,7 +29,7 @@
   </script>
   {{!-- `?v=` é cache-busting: o caminho do favicon não muda, mas o conteúdo
        sim — sem isto o Chrome/Android continua a mostrar o ícone antigo. --}}
-  <link rel="icon" type="image/png" href="/img/favicon.png?v=20260921a" />
+  <link rel="icon" type="image/png" href="/img/favicon.png?v=20260923a" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -51,10 +51,10 @@
   <div class="app-shell" id="appShell">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">
-        {{!-- O logo principal do produto, aqui como em todo o lado. O ÚNICO
-             asset de marca que se mantém é o favicon (`public/img/favicon.png`),
-             que vive nos dois layouts e não é tocado. --}}
-        <img src="/img/gescondu_logo.png" alt="GesCondu" class="sidebar-logo" />
+        {{!-- O logo principal do produto, aqui como em todo o lado: o wordmark
+             final `ges|condu` (`public/img/gescondu_logo_final.svg`). O favicon
+             usa já a mesma identidade — o antigo símbolo «G» desapareceu. --}}
+        <img src="/img/gescondu_logo_final.svg" alt="GesCondu" class="sidebar-logo" />
       </div>
 
       <nav class="sidebar-nav" aria-label="Navegação principal">
