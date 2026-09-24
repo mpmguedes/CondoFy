@@ -822,6 +822,50 @@ body.blank-page.home-publica .blank-flash:empty { display: none; }
 .hp-js .hp-reveal-3 { transition-delay: 0.16s; }
 .hp-card, .mk { transition: box-shadow 0.2s ease, transform 0.2s ease; }
 .hp-card:hover { box-shadow: var(--elev-2); }
+
+/* ── Indicador de foco nas faixas navy (A7 C.9 · F29) ────────────────
+   A navbar, o painel do menu mobile, a faixa do CTA final e o rodapé são
+   azul-marinho nos DOIS temas: `--nav-bg-image` está definido em `:root` e
+   não é substituído pelo tema escuro.
+
+   O anel global (`styles.css`: `:focus-visible` → `--c-primary`) usa o azul
+   da marca no tema claro: sobre a paragem mais desfavorável do gradiente dá
+   1.94:1 e, nos botões sólidos que assentam nessa faixa, o anel coincide com
+   o fundo do próprio botão — 1.00:1. Medido com browser real (Playwright +
+   Edge, 45 paragens de teclado): quem navega por teclado deixa de ver onde
+   está. É o F29.
+
+   O contrato do A7 (secção C.9) é: o anel contrasta ≥ 3:1 com a SUPERFÍCIE
+   onde o controlo assenta — não com o fundo do próprio botão — e em
+   superfícies navy usa-se `--nav-focus` (ciano, 8.33:1 sobre a paragem mais
+   desfavorável). Nunca se escolhe o anel pela variante do botão: essa
+   variante foi medida e rejeitada no C.9.
+
+   ATENÇÃO: declara-se o atalho `outline` COMPLETO (largura, estilo e cor).
+   Só `outline-color` deixaria a largura à mercê da cascata — o Bootstrap 5.3
+   zera o contorno no seu `:focus-visible` dos botões e o anel podia não ser
+   desenhado. Foi esse o defeito medido no C.9 do A7. O `outline-offset`
+   mantém a geometria de 2px do anel global.
+
+   ATENÇÃO: em `.hp-sec-dark` os cartões continuam CLAROS (`--c-surface`),
+   pelo que a faixa navy é excluída DENTRO deles: o anel ciano sobre um
+   cartão claro daria 1.64:1 — uma regressão face aos 7.05:1 atuais. Daí o
+   `:not(.hp-card …)`.
+
+   `.hp-menu-painel` está hoje dentro de `.hp-nav` (é redundante), mas fica
+   explícito: é uma superfície navy com controlos próprios. */
+.hp-nav a:focus-visible,
+.hp-nav summary:focus-visible,
+.hp-menu-painel a:focus-visible,
+.hp-cta-final a:focus-visible,
+.hp-cta-final button:focus-visible,
+.hp-sec-dark a:not(.hp-card a):focus-visible,
+.hp-sec-dark button:not(.hp-card button):focus-visible,
+.hp-rodape a:focus-visible {
+  outline: 2px solid var(--nav-focus);
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hp-js .hp-reveal { opacity: 1; transform: none; transition: none; }
   .hp-card, .mk { transition: none; }
