@@ -15,7 +15,17 @@ function resposta() {
     statusCode: 200,
     redirectUrl: null,
     status(c) { this.statusCode = c; return this; },
-    redirect(u) { this.redirectUrl = u; },
+    // Espelha `res.redirect` do Express 4 (ver node_modules/express/lib/response.js):
+    // aceita `redirect(url)` (302 por omissão) e `redirect(status, url)`. O duplo
+    // ANTES só aceitava um argumento, pelo que `redirect(429, '/login')` gravava o
+    // 429 em `redirectUrl` e deixava `statusCode` a 200 — a asserção do 429 via um
+    // duplo infiel, não o middleware (o 429 sempre foi entregue: `res.status(429)
+    // .redirect()` é que o perdia, porque o `redirect` do Express repõe 302).
+    redirect(a, b) {
+      if (typeof a === 'number') { this.statusCode = a; this.redirectUrl = b; }
+      else { this.statusCode = 302; this.redirectUrl = a; }
+      return this;
+    },
   };
 }
 
