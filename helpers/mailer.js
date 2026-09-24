@@ -1,12 +1,30 @@
 // ─────────────────────────────────────────────────────────────────────
 // Email / SMTP — helper transversal.
 //
-// Configuração: as variáveis podem vir do .env (SMTP_*) ou da base de
-// dados (tabela `configuracoes`, chaves smtp_*), configuráveis na
-// interface administrativa. As da BD têm prioridade quando existem.
+// ── P30 — DOIS ÂMBITOS: GLOBAL e OVERRIDE POR CONDOMÍNIO ────────────
+//
+// A configuração efetiva resolve-se SEMPRE pela mesma precedência, CAMPO A
+// CAMPO (a mesma convenção que o armazenamento, as quotas e as notificações
+// já usam — ver `helpers/config-ambito.js`):
+//
+//   1. override do condomínio  ─ smtp_host:c<ID>
+//   2. configuração GLOBAL     ─ smtp_host            (BD)
+//   3. variável de ambiente    ─ SMTP_HOST            (.env)
+//   4. default do código       ─ porta 587, TLS ligado
+//
+// ⛔ O SMTP GLOBAL TEM DE CONTINUAR A EXISTIR. Há envios legitimamente SEM
+//    condomínio — código 2FA (`routes/auth.js`) e reposição de palavra-passe —
+//    que não têm condomínio nenhum a que pertencer. Sem um âmbito global, esses
+//    envios não teriam configuração. É esta a razão estrutural do P30 não ser
+//    «SMTP por condomínio» mas «GLOBAL COM OVERRIDE».
+//
+// ⛔ NUNCA se escolhe um condomínio arbitrário. Sem `condominioId` a resolução
+//    é global; com `condominioId` é esse condomínio — nunca «o primeiro da BD»,
+//    nunca o condomínio ativo de quem desencadeou o envio.
 //
 // Segurança: a password SMTP nunca é devolvida nem aparece na interface
-// (apenas indicador "definida"). Nada de credenciais em logs.
+// (apenas indicador "definida"). Nada de credenciais em logs. O tratamento do
+// segredo é EXATAMENTE o mesmo nos dois âmbitos — é o mesmo caminho de código.
 //
 // Em repouso a password é guardada CIFRADA (AES-256-GCM, chave da instalação)
 // através de helpers/segredos.js — a mesma proteção das credenciais de
@@ -18,6 +36,10 @@ const nodemailer = require('nodemailer');
 const { Op } = require('sequelize');
 const { Configuracao } = require('../models');
 const segredos = require('./segredos');
+// P30 — âmbito por condomínio das configurações chave-valor. Reutilizado, e
+// NÃO duplicado: a convenção `chave:c<ID>` e a precedência vivem aqui desde o
+// P54-7. Duas implementações da mesma regra divergem.
+const ambito = require('./config-ambito');
 // P54-1 — validador PURO da configuração. Não lê BD nem ambiente: recebe os
 // valores e devolve `{ ok, valores, erros, avisos }`. Mantê-lo fora daqui é o
 // que permite testá-lo sem base de dados e sem duplos.
@@ -34,18 +56,41 @@ const CHAVES = {
 };
 
 const TTL = 30 * 1000; // cache curto (30 s) para leituras à BD
-let _cache = { at: 0, dados: null };
+// P30 — a cache é POR ÂMBITO. Uma cache única faria a leitura do condomínio 2
+// devolver a configuração que o condomínio 1 acabou de gravar (e vice-versa) —
+// o pior defeito possível num modelo multi-tenant: contaminação cruzada.
+// Chave: o id do condomínio, ou a constante GLOBAL quando não há âmbito.
+const GLOBAL = 'global';
+const _cache = new Map();
+
+// Cache do âmbito pedido, ou `null` se expirada/ausente.
+function lerCache(chave) {
+  const c = _cache.get(chave);
+  if (!c) return null;
+  if (Date.now() - c.at >= TTL) return null;
+  return c.dados;
+}
+
+function guardarCache(chave, dados) {
+  _cache.set(chave, { at: Date.now(), dados });
+}
 
 // Substitui a password em texto simples pela versão cifrada (migração
 // transparente). Falha em silêncio: o valor continua utilizável em texto
 // simples e a tentativa repete-se na leitura seguinte. Sem chave de cifra não
 // há nada a migrar.
-async function migrarPasswordSmtp(texto) {
+//
+// ⛔ A chave é um PARÂMETRO e não `CHAVES.pass` fixo: é assim que a migração
+//    transparente vale igualmente para o override (`smtp_pass:c<ID>`). Sem
+//    isto, um override gravado sem chave de cifra nunca migrava e ficava em
+//    texto simples para sempre — tratamento DIFERENTE do global, que é
+//    exatamente o que o P30 proíbe.
+async function migrarPasswordSmtp(texto, chave = CHAVES.pass) {
   if (!texto) return;
   try {
     const valor = segredos.protegerPasswordSmtp(texto);
     if (valor === texto) return; // sem chave: mantém-se como está
-    const [reg] = await Configuracao.findOrCreate({ where: { chave: CHAVES.pass }, defaults: { valor } });
+    const [reg] = await Configuracao.findOrCreate({ where: { chave }, defaults: { valor } });
     if (reg.valor !== valor) {
       reg.valor = valor;
       await reg.save();
@@ -55,6 +100,35 @@ async function migrarPasswordSmtp(texto) {
   }
 }
 
+// Aplica à password a MESMA leitura (decifra + migração) em qualquer âmbito.
+// Devolve o mapa com a password já em texto simples.
+async function lerPasswordDoMapa(mapa, chavePass) {
+  const p = segredos.lerPasswordSmtp(mapa[chavePass]);
+  if (p.erro) {
+    // Segredo ilegível (chave diferente ou valor alterado): um valor não
+    // autenticado nunca é usado. Fica sem password e o âmbito seguinte da
+    // precedência serve de queda, tal como quando a chave não existe.
+    console.warn(
+      '[mailer] uma password SMTP guardada não pôde ser decifrada (ENCRYPTION_KEY diferente?). ' +
+        'O âmbito seguinte da configuração (global ou `.env`) continua a aplicar-se; ' +
+        'guarde a password novamente em Configuração → Email / SMTP.'
+    );
+    mapa[chavePass] = '';
+    return p;
+  }
+  mapa[chavePass] = p.valor;
+  if (p.precisaMigrar) await migrarPasswordSmtp(p.valor, chavePass);
+  return p;
+}
+
+// Lê as chaves do GLOBAL (`smtp_*`) — exatamente o que sempre fez.
+//
+// ⛔ O filtro `Op.like: 'smtp_%'` NÃO pode passar a incluir os overrides: em
+//    SQL, `smtp_%` casa também com `smtp_host:c7` (o `%` engole o sufixo), pelo
+//    que um padrão mais largo traria as configurações de TODOS os condomínios
+//    para o mapa global e um override vazaria para os outros. Os overrides são
+//    lidos por chave EXATA, em `lerChavesDoCondominio`. `test-smtp-estado.js`
+//    fixa este filtro.
 async function lerChavesDb() {
   const rows = await Configuracao.findAll({
     where: { chave: { [Op.like]: 'smtp_%' } },
@@ -66,19 +140,43 @@ async function lerChavesDb() {
   // A password é decifrada aqui, uma única vez por leitura, para que
   // `comporConfigSmtp` continue a receber texto simples e todo o resto do
   // módulo (e a interface) funcione exatamente como antes.
-  const p = segredos.lerPasswordSmtp(mapa[CHAVES.pass]);
-  if (p.erro) {
-    // Segredo ilegível (chave diferente ou valor alterado): um valor não
-    // autenticado nunca é usado. A BD fica sem password e o `.env` serve de
-    // queda, tal como quando a chave não existe na tabela.
-    console.warn(
-      '[mailer] a password SMTP guardada não pôde ser decifrada (ENCRYPTION_KEY diferente?). ' +
-        'A password do `.env` (SMTP_PASS) continua a aplicar-se; guarde a password novamente em Configuração → Email / SMTP.'
-    );
-    mapa[CHAVES.pass] = '';
-  } else {
-    mapa[CHAVES.pass] = p.valor;
-    if (p.precisaMigrar) await migrarPasswordSmtp(p.valor);
+  await lerPasswordDoMapa(mapa, CHAVES.pass);
+  return mapa;
+}
+
+// P30 — lê as chaves de OVERRIDE de um condomínio, com os nomes que
+// `comporConfigSmtp` já entende (`smtp_host`, `smtp_port`, …).
+//
+// Devolve um mapa VAZIO quando o condomínio não tem override nenhum — e é
+// então que a composição cai no global. Um override inexistente nunca é
+// materializado: consultar não cria cópia local do global.
+//
+// Leitura por chave EXATA (e não por padrão): um `smtp_%:c<ID>` literal — um
+// único valor, do condomínio certo — sem risco de arrastar chaves vizinhas.
+async function lerChavesDoCondominio(id) {
+  const cid = ambito.idCondominio(id);
+  if (!cid) return {};
+  const sufixo = `:c${cid}`;
+  const rows = await Configuracao.findAll({
+    // Sem metacaracteres de LIKE: o sufixo é `:c<inteiro>` e o prefixo é
+    // `smtp_`. Usar `Op.like` sem `ESCAPE` faria o `\_` casar um sublinhado
+    // literal em alguns motores e nada em outros — um comportamento que
+    // depende da BD não é uma fronteira. O filtro exato do sufixo é feito
+    // ABAIXO, em memória, e é ele que é a fronteira real.
+    where: { chave: { [Op.like]: `smtp_%${sufixo}` } },
+    attributes: ['chave', 'valor'],
+  });
+  const mapa = {};
+  for (const r of rows) {
+    const chave = String(r.chave);
+    if (!chave.endsWith(sufixo)) continue;
+    const base = chave.slice(0, -sufixo.length);
+    if (!base.startsWith('smtp_')) continue; // fronteira: só chaves smtp_*
+    mapa[base] = r.valor;
+  }
+  // Paridade de segredo: a password do override segue o MESMO caminho do global.
+  if (Object.prototype.hasOwnProperty.call(mapa, CHAVES.pass)) {
+    await lerPasswordDoMapa(mapa, CHAVES.pass);
   }
   return mapa;
 }
@@ -102,6 +200,11 @@ function configEnv() {
 // valor do .env (fallback). Isto garante que, por exemplo, uma BD sem
 // smtp_pass continua a autenticar com SMTP_PASS do .env — sem nunca
 // guardar a password do .env na BD nem expô-la.
+//
+// P30 — `db` pode ser o mapa JÁ COMPOSTO de dois níveis (override do condomínio
+// sobre o global), como `mesclarChaves` devolve. A função não sabe de âmbito
+// nenhum: recebe um mapa e compõe-no com o ambiente. É isso que faz com que a
+// precedência override → global → `.env` não precise de duas implementações.
 function comporConfigSmtp(db, env) {
   const mapaDb = db || {};
   const mapaEnv = env || configEnv();
@@ -120,33 +223,108 @@ function comporConfigSmtp(db, env) {
   return cfg;
 }
 
-// Configuração efetiva: BD com prioridade por campo + fallback ao .env.
-async function obterConfigSmtp({ force = false } = {}) {
-  const agora = Date.now();
-  if (!force && _cache.dados && agora - _cache.at < TTL) return _cache.dados;
+// P30 — funde o mapa do OVERRIDE sobre o do GLOBAL, campo a campo.
+// Um campo vazio no override (ausente, `null` ou só espaços) NÃO sobrepõe:
+// significa «herdar». Assim, um condomínio que só defina o `smtp_host` continua
+// a herdar porta, utilizador, password e remetente do global.
+//
+// ⛔ Esta função é a fronteira do isolamento: os dois mapas vêm de leituras
+//    separadas (`lerChavesDb` só `smtp_*` exatos; `lerChavesDoCondominio` só
+//    `smtp_*:c<ID>` do condomínio pedido). Nenhum override de outro condomínio
+//    chega aqui.
+function mesclarChaves(global, doCondominio) {
+  const g = global || {};
+  const c = doCondominio || {};
+  const vazio = (v) => v === null || v === undefined || String(v).trim() === '';
+  const resultado = { ...g };
+  for (const [chave, valor] of Object.entries(c)) {
+    if (!vazio(valor)) resultado[chave] = valor;
+  }
+  return resultado;
+}
+
+// Configuração efetiva. A precedência é CAMPO A CAMPO:
+//
+//   override do condomínio → global (BD) → `.env` → default do código
+//
+// `obterConfigSmtp()` sem argumento (ou com `condominioId` inválido/ausente)
+// devolve a configuração GLOBAL — é o que os envios sem condomínio (2FA,
+// reposição de palavra-passe) precisam. `obterConfigSmtp(cid)` resolve o
+// override DESSE condomínio. Nunca se escolhe um condomínio arbitrário.
+//
+// Aceita as duas formas de chamada, e a posicional vem primeiro de propósito:
+// há duplos antigos de `mailer.obterConfigSmtp` nos testes que ignoram os
+// argumentos, e um `obterConfigSmtp(7)` que caísse em `{}.condominioId`
+// devolveria a configuração global em SILÊNCIO — uma falha aberta.
+async function obterConfigSmtp(arg, opcoes = {}) {
+  const posicional = arg === undefined || arg === null || typeof arg !== 'object' ? arg : undefined;
+  const op = arg && typeof arg === 'object' ? arg : opcoes;
+  const { force = false } = op;
+  const cid = ambito.idCondominio(posicional !== undefined ? posicional : op.condominioId);
+  const chaveCache = cid ? String(cid) : GLOBAL;
+
+  if (!force) {
+    const cacheado = lerCache(chaveCache);
+    if (cacheado) return cacheado;
+  }
 
   let cfg = null;
   try {
-    const db = await lerChavesDb();
-    cfg = comporConfigSmtp(db, configEnv());
+    const env = configEnv();
+    if (!cid) {
+      const global = await lerChavesDb();
+      cfg = comporConfigSmtp(global, env);
+    } else {
+      // As duas leituras são independentes: em paralelo.
+      const [global, doCondominio] = await Promise.all([
+        lerChavesDb(),
+        lerChavesDoCondominio(cid),
+      ]);
+      cfg = comporConfigSmtp(mesclarChaves(global, doCondominio), env);
+    }
   } catch (err) {
     // BD indisponível → usa apenas o .env
     cfg = comporConfigSmtp({}, configEnv());
   }
-  _cache = { at: agora, dados: cfg };
+  guardarCache(chaveCache, cfg);
   return cfg;
 }
 
 // Limpa a cache (após guardar configuração).
-function limparCache() {
-  _cache = { at: 0, dados: null };
+//
+// P30 — o âmbito decidido pelo chamador é o SUJEITO da gravação, mas o efeito
+// da invalidação é mais largo, e de propósito:
+//
+//   · gravar um OVERRIDE do condomínio 7 invalida **só** o 7 e o GLOBAL.
+//     O global porque a sua entrada composta pode ter herdado de um global
+//     entretanto alterado por outro processo; os restantes condomínios NÃO são
+//     tocados (o override do 7 nunca lhes pertence).
+//   · gravar o GLOBAL invalida **TUDO**: qualquer condomínio sem override
+//     próprio estava a ler o global, logo a entrada em cache dele ficou obsoleta
+//     no instante da gravação. Manter essas entradas era servir uma configuração
+//     que já não existe — precisamente o defeito que a precedência por campo
+//     torna invisível (o campo herdado só se nota no envio seguinte).
+//
+// Sem argumento limpa tudo (é o caso da gravação global), para que uma chamada
+// esquecida nunca deixe cache envenenada.
+function limparCache(condominioId) {
+  const cid = ambito.idCondominio(condominioId);
+  if (!cid) {
+    _cache.clear();
+    return;
+  }
+  _cache.delete(String(cid));
+  _cache.delete(GLOBAL);
 }
 
 // Estado síncrono simples (usado em views). Reflete o .env ou a última
 // configuração lida da BD.
 function smtpConfigured() {
   if (process.env.SMTP_HOST) return true;
-  return Boolean(_cache.dados && _cache.dados.host);
+  for (const c of _cache.values()) {
+    if (c.dados && c.dados.host) return true;
+  }
+  return false;
 }
 
 function construirTransporte(cfg) {
@@ -200,7 +378,11 @@ async function obterNomeRemetente({ condominioId } = {}) {
 }
 
 async function sendMail({ to, subject, text, html, attachments = [], displayName, condominioId }) {
-  const cfg = await obterConfigSmtp();
+  // P30 — o envio resolve o SMTP do condomínio a que PERTENCE. `condominioId`
+  // é a única fonte do âmbito: nunca o condomínio ativo de quem desencadeou o
+  // envio, nunca o primeiro da BD. Ausente ⇒ configuração global (é o caso
+  // legítimo de 2FA e reposição de palavra-passe).
+  const cfg = await obterConfigSmtp(condominioId);
   if (!cfg.host) {
     console.log('[mailer] SMTP não configurado — email NÃO enviado.');
     return { enviado: false, motivo: 'SMTP não configurado' };
@@ -223,8 +405,13 @@ async function sendMail({ to, subject, text, html, attachments = [], displayName
 }
 
 // Verifica a ligação SMTP (sem enviar mensagens).
-async function testarLigacao() {
-  const cfg = await obterConfigSmtp({ force: true });
+//
+// P30 — o âmbito é o PRIMEIRO argumento POSICIONAL (`testarLigacao(cid)`), e
+// não um objeto: há duplos antigos deste método nos testes que ignoram os
+// argumentos, e um `{ condominioId }` que eles descartassem testaria a
+// configuração global em vez da do condomínio — em silêncio.
+async function testarLigacao(condominioId) {
+  const cfg = await obterConfigSmtp(condominioId, { force: true });
   if (!cfg.host) {
     return { ok: false, erro: 'SMTP não configurado.' };
   }
@@ -242,7 +429,9 @@ async function testarLigacao() {
 // Envio de teste IMEDIATO (não passa pela fila).
 // Devolve sempre { ok, erro?/messageId? }; nunca lança.
 // `condominioId` opcional: quando o teste é feito dentro de um condomínio
-// ativo, o nome do remetente respeita a mesma prioridade dos envios reais.
+// ativo, o envio usa a configuração EFETIVA desse condomínio (P30) — testar
+// tem de testar o que os envios reais vão mesmo usar — e o nome do remetente
+// respeita a mesma prioridade dos envios reais.
 async function enviarEmailTeste({ para, assunto, mensagem, html, condominioId }) {
   try {
     const res = await sendMail({ to: para, subject: assunto, text: mensagem, html, condominioId });
@@ -270,8 +459,34 @@ function mensagemErroAmigavel(err) {
 // o formulário tem de refletir o valor GUARDADO — sem isto, o `<select>` ficava
 // com uma opção fixa e gravar (mesmo só para mudar a password) enviava
 // `tls=true`, sobrepondo um `smtp_tls='false'` guardado. Ver P50.
-async function obterEstadoSmtp() {
-  const cfg = await obterConfigSmtp({ force: true });
+//
+// P30 — aceita o âmbito (`obterEstadoSmtp(cid)`): com condomínio, o estado é o
+// EFETIVO desse condomínio (override → global → `.env`), que é o que os envios
+// reais vão usar. Sem condomínio, o global.
+//
+// P30 — `passwordEstado` distingue a ORIGEM da password efetiva, sem revelar
+// nada sobre ela:
+//   · `propria`     — existe `smtp_pass:c<ID>` neste condomínio;
+//   · `herdada`     — não existe override e vale a password global/`.env`;
+//   · `ausente`     — não há password utilizável em nenhum âmbito.
+// Sem esta distinção, um administrador ficava convencido de ter definido uma
+// password quando apenas estava a herdar a da plataforma. ⛔ A origem é dita
+// pelo ESTADO — o valor, o tamanho, o hash e a máscara nunca saem daqui.
+async function obterEstadoSmtp(condominioId) {
+  const cid = ambito.idCondominio(condominioId);
+  const cfg = await obterConfigSmtp(cid, { force: true });
+
+  let temPasswordPropria = false;
+  if (cid) {
+    try {
+      const doCondominio = await lerChavesDoCondominio(cid);
+      const v = doCondominio[CHAVES.pass];
+      temPasswordPropria = v !== null && v !== undefined && String(v) !== '';
+    } catch (err) {
+      // BD indisponível: não se afirma uma origem que não se pôde verificar.
+    }
+  }
+
   const tls = cfg.tls === 'true';
   return {
     configurado: Boolean(cfg.host),
@@ -283,7 +498,27 @@ async function obterEstadoSmtp() {
     tls,
     seguranca: tls ? (String(cfg.port) === '465' ? 'SSL/TLS (465)' : 'STARTTLS (587)') : 'Sem TLS',
     temPassword: Boolean(cfg.pass),
+    // `herdada` só quando NÃO há password própria e HÁ uma efetiva para herdar.
+    // Uma password própria não é «herdada» mesmo que o global também tenha uma.
+    passwordEstado: temPasswordPropria ? 'propria' : (cfg.pass ? 'herdada' : 'ausente'),
+    // O condomínio tem override PRÓPRIO (qualquer campo) ou está tudo herdado?
+    temOverride: cid ? await temOverrideSmtp(cid) : false,
   };
+}
+
+// P30 — o condomínio tem QUALQUER chave `smtp_*:c<ID>` própria?
+// É o que permite à consulta dizer «configuração deste condomínio» em vez de
+// «configuração global (herdada)» — sem inventar uma cópia local do global só
+// porque o administrador abriu a página.
+async function temOverrideSmtp(condominioId) {
+  const cid = ambito.idCondominio(condominioId);
+  if (!cid) return false;
+  try {
+    const doCondominio = await lerChavesDoCondominio(cid);
+    return Object.keys(doCondominio).length > 0;
+  } catch (err) {
+    return false;
+  }
 }
 
 // Lê os valores GUARDADOS de `smtp_*` (brutos, sem decifrar a password).
@@ -297,7 +532,21 @@ async function obterEstadoSmtp() {
 //
 // Leitura estreita (só `smtp_%`) e tolerante: sem BD devolve vazio, e as regras
 // passam a avaliar apenas o que foi submetido — nunca se inventam valores.
-async function lerGuardadosSmtp() {
+//
+// P30 — com `condominioId`, lê o estado GUARDADO DESSE ÂMBITO: as chaves
+// `smtp_*:c<ID>` do condomínio, com os nomes que o validador entende. É o que
+// faz a validação de um override avaliar o override (e não o global): um
+// condomínio que só altere o `from` do seu override tem de ser validado contra
+// o host do SEU âmbito.
+async function lerGuardadosSmtp(condominioId) {
+  const cid = ambito.idCondominio(condominioId);
+  if (cid) {
+    try {
+      return await lerChavesDoCondominio(cid);
+    } catch (err) {
+      return {};
+    }
+  }
   const mapa = {};
   try {
     const rows = await Configuracao.findAll({
@@ -329,8 +578,10 @@ function contextoAtual(guardados) {
 // (P54-3): um payload inválido tem de ser recusado ANTES de o servidor emitir
 // um token — não faz sentido confirmar o que já se sabe que não pode ser
 // gravado. Não lança: devolve o resultado do validador puro.
-async function validarConfigSmtp(dados) {
-  const guardados = await lerGuardadosSmtp();
+//
+// P30 — valida no âmbito pedido (o override do condomínio, quando existe).
+async function validarConfigSmtp(dados, condominioId) {
+  const guardados = await lerGuardadosSmtp(condominioId);
   return validacaoSmtp.validarConfigSmtp(dados || {}, { atual: contextoAtual(guardados) });
 }
 
@@ -352,16 +603,33 @@ async function validarConfigSmtp(dados) {
 // deixaria a aplicação a ler a configuração NOVA de uma gravação que ainda
 // podia reverter — o pior dos dois mundos.
 //
-// Devolve `{ ok, alterados, avisos }`:
+// Devolve `{ ok, alterados, avisos, ambito }`:
 //   · `alterados` — NOMES dos campos que mudaram (V14). Nunca valores: a
 //     password aparece como `pass`, jamais o seu conteúdo;
 //   · `avisos` — coerências que NÃO bloqueiam: V8 (TLS numa porta não
-//     habitual), V13 (segredo ilegível preservado), V5 (nome saneado).
-async function guardarConfigSmtp(dados, { transaction } = {}) {
+//     habitual), V13 (segredo ilegível preservado), V5 (nome saneado);
+//   · `ambito` — `'condominio'` com o id, ou `'global'` (P30). É o que permite
+//     à auditoria identificar SEM ÂMBITO DE DÚVIDA o que foi alterado.
+//
+// P30 — O ÂMBITO É EXPLÍCITO NO ARGUMENTO, NUNCA NO CONTEÚDO:
+//   · `guardarConfigSmtp(dados)` → GLOBAL (`smtp_*`);
+//   · `guardarConfigSmtp(dados, { condominioId: 7 })` → OVERRIDE do condomínio 7
+//     (`smtp_*:c7`).
+// Um `condominioId` que venha do CORPO do pedido nunca é lido aqui — o âmbito é
+// decidido pela ROTA, a partir do tenant da sessão. É esta separação que impede
+// que um administrador de condomínio escreva no global, e que um pedido com um
+// `condominio_id` arbitrário altere outro tenant: não há caminho de código que
+// leve o valor do corpo até à chave gravada.
+async function guardarConfigSmtp(dados, { transaction, condominioId } = {}) {
   const d = dados || {};
   const opcoes = transaction ? { transaction } : undefined;
 
-  const guardados = await lerGuardadosSmtp();
+  const cid = ambito.idCondominio(condominioId);
+  // Prefixo de chave do âmbito. `null` ⇒ global (`smtp_host`); com condomínio ⇒
+  // `smtp_host:c7`, sempre com um id VALIDADO (nunca `:cNaN` nem `:c0`).
+  const chaveDe = (base) => (cid ? ambito.chaveDoCondominio(base, cid) : base);
+
+  const guardados = await lerGuardadosSmtp(cid);
   const v = validacaoSmtp.validarConfigSmtp(d, { atual: contextoAtual(guardados) });
 
   // ⛔ Fronteira: nada foi escrito até aqui.
@@ -369,35 +637,48 @@ async function guardarConfigSmtp(dados, { transaction } = {}) {
 
   const avisos = v.avisos.slice();
 
+  // Mapa de chaves REAIS (já com o sufixo do âmbito) → valor.
   const mapa = {};
-  if (d.host !== undefined) mapa[CHAVES.host] = v.valores.host;
+  if (d.host !== undefined) mapa[chaveDe(CHAVES.host)] = v.valores.host;
   // `port` mantém o comportamento anterior: um valor presente mas vazio cai na
   // porta padrão (`587`), tal como `String(dados.port || '587')` fazia.
-  if (d.port !== undefined) mapa[CHAVES.port] = v.valores.port;
-  if (d.user !== undefined) mapa[CHAVES.user] = v.valores.user;
-  if (d.tls !== undefined) mapa[CHAVES.tls] = v.valores.tls;
-  if (d.from !== undefined) mapa[CHAVES.from] = v.valores.from;
-  if (d.fromName !== undefined) mapa[CHAVES.fromName] = v.valores.fromName;
+  if (d.port !== undefined) mapa[chaveDe(CHAVES.port)] = v.valores.port;
+  if (d.user !== undefined) mapa[chaveDe(CHAVES.user)] = v.valores.user;
+  if (d.tls !== undefined) mapa[chaveDe(CHAVES.tls)] = v.valores.tls;
+  if (d.from !== undefined) mapa[chaveDe(CHAVES.from)] = v.valores.from;
+  if (d.fromName !== undefined) mapa[chaveDe(CHAVES.fromName)] = v.valores.fromName;
 
   if (v.passDefinida) {
     // Só quando o administrador introduz uma password nova (nunca é mostrada
     // nem devolvida). É guardada CIFRADA em repouso; sem chave de cifra fica em
     // texto simples (comportamento anterior) e é emitido um aviso.
-    mapa[CHAVES.pass] = segredos.protegerPasswordSmtp(String(d.pass));
+    //
+    // ⛔ Paridade de segredo: a MESMA função do global. Uma password de override
+    //    cifrada de outra maneira (ou não cifrada) seria um tratamento diferente
+    //    para o mesmo segredo.
+    mapa[chaveDe(CHAVES.pass)] = segredos.protegerPasswordSmtp(String(d.pass));
   } else {
     // ── V13 — segredo ilegível preservado, com AVISO ────────────────
     // Campo vazio ⇒ a password existente NÃO é apagada (comportamento de
-    // sempre). Mas se o valor guardado estiver ILEGÍVEL (chave de cifra
+    // sempre, P54 §5). Mas se o valor guardado estiver ILEGÍVEL (chave de cifra
     // diferente, valor adulterado), o operador tem de o SABER: sem o aviso fica
     // convencido de que há uma password configurada quando já não há nenhuma
     // utilizável, e o sintoma aparece só no próximo envio.
+    //
+    // ⛔ Campo vazio NÃO significa «herdar a do global». Remover o override de
+    //    password é uma operação EXPLÍCITA e separada, que o P30 deliberadamente
+    //    NÃO implementa: uma herança acidental por esvaziar um campo seria uma
+    //    alteração silenciosa às credenciais de envio do condomínio.
     const lido = segredos.lerPasswordSmtp(guardados[CHAVES.pass]);
     if (lido && lido.erro) {
       avisos.push({
         campo: 'pass',
         codigo: 'password_ilegivel_preservada',
-        mensagem: 'A password guardada não pôde ser decifrada e foi PRESERVADA sem alterações; '
-          + 'introduza uma nova password para a substituir.',
+        mensagem: cid
+          ? 'A password deste condomínio não pôde ser decifrada e foi PRESERVADA sem alterações; '
+            + 'introduza uma nova password para a substituir.'
+          : 'A password guardada não pôde ser decifrada e foi PRESERVADA sem alterações; '
+            + 'introduza uma nova password para a substituir.',
       });
     }
   }
@@ -406,13 +687,14 @@ async function guardarConfigSmtp(dados, { transaction } = {}) {
   // comparada (o que está guardado é cifrado, logo a comparação seria vazia) e
   // entra na lista pelo NOME quando é fornecida uma nova.
   const alterados = [];
-  for (const [campo, chave] of Object.entries(CHAVES)) {
+  for (const [campo, base] of Object.entries(CHAVES)) {
     if (campo === 'pass') {
       if (v.passDefinida) alterados.push(campo);
       continue;
     }
+    const chave = chaveDe(base);
     if (mapa[chave] === undefined) continue;
-    const antigo = guardados[chave];
+    const antigo = guardados[base];
     const antigoTxt = antigo === undefined || antigo === null ? '' : String(antigo);
     if (antigoTxt !== String(mapa[chave])) alterados.push(campo);
   }
@@ -432,12 +714,15 @@ async function guardarConfigSmtp(dados, { transaction } = {}) {
   // Com transação, a cache só é limpa pelo CHAMADOR, depois do commit (ver o
   // comentário da função): limpar agora serviria uma configuração que ainda
   // pode reverter.
-  if (!transaction) limparCache();
+  if (!transaction) limparCache(cid);
 
-  return { ok: true, alterados, avisos };
+  return { ok: true, alterados, avisos, ambito: cid ? { tipo: 'condominio', condominioId: cid } : { tipo: 'global' } };
 }
 
 // Pré-aquece a cache (chamado no arranque da aplicação).
+// P30 — aquece o âmbito GLOBAL apenas. Os overrides são lidos à primeira
+// utilização de cada condomínio: aquecer todos obrigaria a varrer `configuracoes`
+// por condomínios que podem nem ter override, e o custo aparece no arranque.
 async function inicializar() {
   try {
     await obterConfigSmtp({ force: true });
@@ -452,13 +737,18 @@ module.exports = {
   testarLigacao,
   enviarEmailTeste,
   obterEstadoSmtp,
+  obterConfigSmtp,
   guardarConfigSmtp,
   validarConfigSmtp,
   obterNomeRemetente,
   nomeDoCondominioParaRemetente,
   resolverNomeRemetente,
   comporConfigSmtp,
+  mesclarChaves,
+  lerChavesDoCondominio,
+  temOverrideSmtp,
   limparCache,
   inicializar,
   mensagemErroAmigavel,
+  CHAVES,
 };

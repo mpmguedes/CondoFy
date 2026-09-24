@@ -43,6 +43,28 @@
 <p class="mb-2"><span class="badge text-bg-danger">🔴 Não configurado</span></p>
 {{/if}}
 
+{{!-- ── P30 — ÂMBITO DA CONFIGURAÇÃO, explícito ─────────────────────
+     A página mostra SEMPRE a configuração EFETIVA do condomínio ativo
+     (override → global → `.env`). Sem dizer qual é a ORIGEM, um administrador
+     não saberia se está a ver uma configuração PRÓPRIA do condomínio ou a
+     configuração GLOBAL que a plataforma usa para todos os que não têm override
+     — e alterar a página passaria a escrever um override sem ele o saber.
+     ⛔ «Herdada» NÃO é uma cópia local: consultar não materializa nada. --}}
+{{#if ambitoSmtp}}
+  {{#if (eq ambitoSmtp 'condominio')}}
+  <p class="mb-2 small text-body-secondary">
+    <span class="badge text-bg-info">Configuração deste condomínio</span>
+    Apenas este condomínio usa estes valores; os restantes usam a configuração global.
+  </p>
+  {{else}}
+  <p class="mb-2 small text-body-secondary">
+    <span class="badge text-bg-secondary">Herdada da configuração global</span>
+    Este condomínio ainda não tem configuração própria. Alterar aqui cria uma
+    configuração DESTE condomínio, sem alterar a global.
+  </p>
+  {{/if}}
+{{/if}}
+
 {{#> _modo-edicao id="smtp" acao="/admin/config/email/smtp"
                  titulo="Configuração SMTP"
                  linhas=linhasSmtp

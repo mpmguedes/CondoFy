@@ -93,6 +93,10 @@ let estadoSmtpStub = {
   tls: true,
   seguranca: 'STARTTLS (587)',
   temPassword: true,
+  // P30 — o contrato do estado ganhou a ORIGEM da password e a existência de
+  // override. O duplo tem de os imitar, como imita o resto do contrato real.
+  passwordEstado: 'propria',
+  temOverride: true,
 };
 mailer.obterEstadoSmtp = async () => ({ ...estadoSmtpStub });
 // P54-3 (V14) — o contrato do mailer passou a incluir os NOMES dos campos
@@ -336,9 +340,17 @@ const TAB5 = 'href="/admin/config/auditoria"';
     assert.ok(!blocoTeste.includes(campo), `email: o bloco de teste não expõe o campo de configuração ${campo}`);
   }
   assert.ok(blocoTeste.includes('name="para"') && blocoTeste.includes('name="assunto"') && blocoTeste.includes('name="mensagem"'), 'email: o teste pede apenas destino/assunto/mensagem');
-  // A password nunca é impressa (apenas o indicador «Definida»).
+  // A password nunca é impressa (apenas o indicador de ESTADO).
   assert.ok(!/name="pass"[^>]*value="[^"]+"/.test(r.corpo), 'email: a password SMTP nunca é preenchida na vista');
-  assert.ok(r.corpo.includes('Definida'), 'email: indicador de password definida');
+  // P30 — o estado tem três valores (própria / herdada / em falta), para que o
+  // administrador saiba se a password é DESTE condomínio ou a da plataforma.
+  // O duplo devolve `passwordEstado: 'propria'` ⇒ a vista diz «Definida neste condomínio».
+  assert.ok(r.corpo.includes('Definida neste condomínio'),
+    'email: o indicador diz que a password é PRÓPRIA do condomínio (P30)');
+  // E o âmbito da página é explícito (P30): a vista distingue a configuração do
+  // condomínio da herdada. O duplo tem `temOverride: true` ⇒ âmbito do condomínio.
+  assert.ok(r.corpo.includes('Configuração deste condomínio'),
+    'email: a consulta declara que a configuração é a DESTE condomínio (P30)');
 
   // 4.0 P50 — o `<select name="tls">` reflete o valor GUARDADO.
   // Um `selected` fixo na opção «Usar TLS» fazia o formulário contradizer a

@@ -283,8 +283,10 @@ function varrerBackupsOrfaos() {
   mutacao({
     nome: '19. o limite de tentativas desaparece da rota de gravação',
     ficheiro: 'routes/configuracao.js',
-    de: "router.post('/config/email/smtp', limiteSmtpGravar, async (req, res) => {",
-    para: "router.post('/config/email/smtp', async (req, res) => {",
+    // P30 — a rota passou a ser registada a partir do handler parametrizado
+    // (`...guardarSmtp(SMTP_CONDOMINIO)`); a âncora acompanha essa forma.
+    de: 'router.post(\'/config/email/smtp\',\n  fixarAmbitoSmtp,\n  ...guardarSmtp(SMTP_CONDOMINIO));',
+    para: 'router.post(\'/config/email/smtp\',\n  fixarAmbitoSmtp,\n  async (req, res) => guardarSmtp(SMTP_CONDOMINIO).forEach((m) => m(req, res, () => {})));',
     script: 'test-p54-3-smtp-protecao.js',
   });
 
@@ -292,12 +294,12 @@ function varrerBackupsOrfaos() {
   mutacao({
     nome: '20. a reautenticação deixa de ser exigida na gravação',
     ficheiro: 'routes/configuracao.js',
-    de: '  const re = reautenticacao.reautenticacaoValida(req);\n'
-      + '  if (!re.ok) {\n'
-      + '    // Fica registado o MOTIVO',
-    para: '  const re = { ok: true };\n'
-      + '  if (!re.ok) {\n'
-      + '    // Fica registado o MOTIVO',
+    de: '    const re = reautenticacao.reautenticacaoValida(req);\n'
+      + '    if (!re.ok) {\n'
+      + '      // Fica registado o MOTIVO',
+    para: '    const re = { ok: true };\n'
+      + '    if (!re.ok) {\n'
+      + '      // Fica registado o MOTIVO',
     script: 'test-p54-3-smtp-protecao.js',
   });
 
@@ -305,15 +307,16 @@ function varrerBackupsOrfaos() {
   mutacao({
     nome: '21. o evento de auditoria da gravação deixa de ser escrito',
     ficheiro: 'routes/configuracao.js',
-    de: '    await audit({\n'
-      + '      userId: req.user.id,\n'
-      + "      acao: 'configurar_smtp',\n"
-      + "      entidade: 'Configuracao',\n"
-      + '      detalhes: { campos_alterados: r.alterados },\n'
-      + '      transaction: t,\n'
-      + '      rigoroso: true,\n'
-      + '    });',
-    para: '    // mutação: auditoria removida',
+    de: '      await audit({\n'
+      + '        userId: req.user.id,\n'
+      + "        acao: scp.global ? 'configurar_smtp_global' : 'configurar_smtp',\n"
+      + "        entidade: 'Configuracao',\n"
+      + '        entidadeId: cid || null,\n'
+      + '        detalhes: { campos_alterados: r.alterados, ambito: r.ambito },\n'
+      + '        transaction: t,\n'
+      + '        rigoroso: true,\n'
+      + '      });',
+    para: '      // mutação: auditoria removida',
     script: 'test-p54-3-smtp-protecao.js',
   });
 
@@ -321,8 +324,8 @@ function varrerBackupsOrfaos() {
   mutacao({
     nome: '22. a palavra-passe da conta passa a ser gravada na auditoria',
     ficheiro: 'routes/configuracao.js',
-    de: '      detalhes: { campos_alterados: r.alterados },',
-    para: '      detalhes: { campos_alterados: r.alterados, password: req.body.password },',
+    de: '        detalhes: { campos_alterados: r.alterados, ambito: r.ambito },',
+    para: '        detalhes: { campos_alterados: r.alterados, ambito: r.ambito, password: req.body.password },',
     script: 'test-p54-3-smtp-protecao.js',
   });
 
@@ -333,6 +336,70 @@ function varrerBackupsOrfaos() {
     de: '  const t = await sequelize.transaction();',
     para: '  const t = { commit: async () => {}, rollback: async () => {} };',
     script: 'test-p54-3-smtp-protecao.js',
+  });
+
+  // ── P30 — separação global vs override por condomínio ─────────────
+  // Cada mutação repõe uma das propriedades que o P30 estabelece. Todas têm de
+  // ser DETETADAS por `test-p30-smtp-ambito.js` — é isso que prova que as duas
+  // autorizações (global e condomínio) não são decorativas.
+  titulo('P30 — a autorização GLOBAL (Super Admin)');
+  mutacao({
+    nome: '24. a guarda de Super Admin desaparece da PREPARAÇÃO global (um admin obteria token do global)',
+    ficheiro: 'routes/configuracao.js',
+    de: "router.post('/config/email/smtp/global/preparar',\n  tenant.apenasSuperAdmin,",
+    para: "router.post('/config/email/smtp/global/preparar',",
+    script: 'test-p30-smtp-ambito.js',
+  });
+
+  mutacao({
+    nome: '25. a guarda de Super Admin desaparece da GRAVAÇÃO global (um admin escreveria o global)',
+    ficheiro: 'routes/configuracao.js',
+    de: "router.post('/config/email/smtp/global',\n  tenant.apenasSuperAdmin,",
+    para: "router.post('/config/email/smtp/global',",
+    script: 'test-p30-smtp-ambito.js',
+  });
+
+  titulo('P30 — o âmbito do override vem do TENANT, nunca do corpo');
+  mutacao({
+    nome: '26. o âmbito do override passa a aceitar `condominio_id` do corpo (escreveria noutro tenant)',
+    ficheiro: 'routes/configuracao.js',
+    de: 'const fixarAmbitoSmtp = (req, res, next) => { req.condominioSmtp = req.condominioId; next(); };',
+    para: 'const fixarAmbitoSmtp = (req, res, next) => { req.condominioSmtp = req.body.condominio_id || req.condominioId; next(); };',
+    script: 'test-p30-smtp-ambito.js',
+  });
+
+  titulo('P30 — a confirmação distingue os dois âmbitos');
+  mutacao({
+    nome: '27. a operação da confirmação deixa de distinguir o âmbito (um token do condomínio gravaria o global)',
+    ficheiro: 'routes/configuracao.js',
+    de: '      operacao: scp.operacao,',
+    para: "      operacao: 'smtp-config',",
+    script: 'test-p30-smtp-ambito.js',
+  });
+
+  titulo('P30 — a resolução da configuração efetiva');
+  mutacao({
+    nome: '28. o mailer deixa de aplicar o override do condomínio (usaria sempre o global)',
+    ficheiro: 'helpers/mailer.js',
+    de: '      cfg = comporConfigSmtp(mesclarChaves(global, doCondominio), env);',
+    para: '      cfg = comporConfigSmtp(global, env);',
+    script: 'test-p30-smtp-ambito.js',
+  });
+
+  mutacao({
+    nome: '29. um campo vazio do override deixa de herdar (sobrepõe o global com vazio, inclusive a password)',
+    ficheiro: 'helpers/mailer.js',
+    de: "  const resultado = { ...g };\n  for (const [chave, valor] of Object.entries(c)) {\n    if (!vazio(valor)) resultado[chave] = valor;\n  }",
+    para: "  const resultado = { ...g };\n  for (const [chave, valor] of Object.entries(c)) {\n    resultado[chave] = valor;\n  }",
+    script: 'test-p30-smtp-ambito.js',
+  });
+
+  mutacao({
+    nome: '30. a cache deixa de ser por âmbito (contaminação cruzada entre condomínios)',
+    ficheiro: 'helpers/mailer.js',
+    de: '  const chaveCache = cid ? String(cid) : GLOBAL;',
+    para: '  const chaveCache = GLOBAL;',
+    script: 'test-p30-smtp-ambito.js',
   });
 
   console.log(`\n✓ Testes de mutação de Email/SMTP, comunicações e lembretes passaram (${nTestes} mutações, todas detetadas e revertidas por sha256).`);

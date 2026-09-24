@@ -179,8 +179,13 @@ async function principal() {
 
   auditoriaGravada.length = 0;
   r = await guardar({ _confirmacao: token });
-  assert.strictEqual(loja.get('smtp_host'), 'smtp.exemplo.pt', 'com confirmação válida, grava');
-  assert.strictEqual(loja.get('smtp_port'), '587', 'a porta é gravada');
+  // P30 — a página de configuração passou a ter o âmbito do CONDOMÍNIO ATIVO
+  // (a sessão de teste tem o condomínio 1). As chaves gravadas levam o sufixo
+  // `:c1`; o contrato do P54-3 (confirmação, reautenticação, transação,
+  // auditoria) é o mesmo — só mudou o ÂMBITO da chave. A via GLOBAL tem teste
+  // próprio em `test-p30-smtp-ambito.js`.
+  assert.strictEqual(loja.get('smtp_host:c1'), 'smtp.exemplo.pt', 'com confirmação válida, grava (no âmbito do condomínio ativo)');
+  assert.strictEqual(loja.get('smtp_port:c1'), '587', 'a porta é gravada');
   feito('confirmação válida ⇒ gravação efetuada');
 
   // ⛔ Uso único: repetir o MESMO pedido não volta a passar.
@@ -193,7 +198,7 @@ async function principal() {
   const prep2 = await preparar();
   r = await guardar({ _confirmacao: prep2.json.token, host: 'smtp.outro.pt' });
   assert.strictEqual(loja.size, 0, '⛔ payload diferente do confirmado é recusado');
-  assert.ok(!loja.has('smtp_host'), 'e nada é escrito');
+  assert.ok(!loja.has('smtp_host:c1') && !loja.has('smtp_host'), 'e nada é escrito');
   feito('payload alterado depois da confirmação ⇒ recusado');
 
   // ⛔ Password SMTP trocada depois de confirmar: também é payload.
@@ -274,9 +279,11 @@ async function principal() {
   novoUtilizador();
 
   // Semeia uma configuração anterior que tem de sobreviver a um rollback.
+  // P30 — a gravação é do âmbito do condomínio ativo (`:c1`); a semente usa a
+  // MESMA chave para que a comparação «antes/depois» continue a ser válida.
   loja.clear();
-  loja.set('smtp_host', 'smtp.anterior.pt');
-  loja.set('smtp_port', '465');
+  loja.set('smtp_host:c1', 'smtp.anterior.pt');
+  loja.set('smtp_port:c1', '465');
   const antes = JSON.stringify([...loja.entries()].sort());
 
   auditoriaFalha = true; // a auditoria falha DENTRO da transação
@@ -296,7 +303,7 @@ async function principal() {
   const prep8 = await preparar();
   const r8 = await guardar({ _confirmacao: prep8.json.token });
   assert.strictEqual(r8.status, 302, 'gravação conclui');
-  assert.strictEqual(loja.get('smtp_host'), 'smtp.exemplo.pt', 'e os valores ficam gravados');
+  assert.strictEqual(loja.get('smtp_host:c1'), 'smtp.exemplo.pt', 'e os valores ficam gravados (âmbito do condomínio ativo)');
   assert.ok(transacoesAbertas >= 3, 'cada gravação abre a sua transação');
   feito('sucesso: transação aberta, commit e cache limpa depois');
 

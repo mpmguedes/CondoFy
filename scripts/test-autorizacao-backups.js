@@ -310,9 +310,18 @@ async function testeP10() {
 
 // ── As outras rotas do mesmo router NÃO foram afetadas ────────────
 async function testeSemRegressao() {
-  // A guarda é ROTA A ROTA, não do router inteiro: só as duas operações de
-  // backup da instalação a levam. As restantes rotas (incluindo as de um admin
-  // de condomínio) ficam exatamente como estavam.
+  // A guarda é ROTA A ROTA, não do router inteiro: as operações da INSTALAÇÃO
+  // levam-na. As restantes rotas (incluindo as de um admin de condomínio) ficam
+  // exatamente como estavam.
+  //
+  // P30 — a lista deixou de ser só de backups: a via de escrita do SMTP GLOBAL
+  // (`/config/email/smtp/global` e a sua preparação) é também uma operação da
+  // PLATAFORMA e leva a mesma guarda. É a única via que escreve `smtp_*` sem
+  // sufixo de condomínio; sem ela, o global ficava sem caminho de escrita depois
+  // de o override passar a ser o âmbito da página do condomínio. As duas rotas
+  // de SMTP do CONDOMÍNIO (`/config/email/smtp`, `/config/email/smtp/preparar`)
+  // NÃO entram aqui: continuam guardadas por `admin` (guarda do router), como
+  // qualquer operação do condomínio ativo.
   const comGuarda = [];
   for (const router of [routerConfiguracao, routerSistema]) {
     for (const camada of router.stack) {
@@ -324,8 +333,13 @@ async function testeSemRegressao() {
   }
   assert.deepStrictEqual(
     comGuarda.sort(),
-    ['POST /config/armazenamento/backups', 'POST /sistema/backup'].sort(),
-    'só as duas operações de backup da instalação levam a guarda'
+    [
+      'POST /config/armazenamento/backups',
+      'POST /config/email/smtp/global',
+      'POST /config/email/smtp/global/preparar',
+      'POST /sistema/backup',
+    ].sort(),
+    'só as operações da INSTALAÇÃO (backups + SMTP global) levam a guarda'
   );
 
   // O router de Configurações mantém os seus dois middlewares de isolamento

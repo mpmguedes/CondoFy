@@ -153,6 +153,7 @@ function recusarConfiguracaoGlobalSemSuperAdmin(req, res) {
   return true;
 }
 
+
 // Redirect URI do provedor: .env (quando definido) ou derivado do pedido.
 function redirectUriDe(req, provedor) {
   const daEnv = String(process.env[VAR_REDIRECT[provedor]] || '').trim();
@@ -688,33 +689,72 @@ router.post('/config/automacoes', async (req, res) => {
 // A CONFIGURAÇÃO técnica do serviço de email é administração do condomínio,
 // não operação da fila: a Central de Emails fica com a fila (reenviar,
 // cancelar) e a configuração passa a viver aqui. Não há — nem pode haver —
-// uma segunda configuração SMTP: as três rotas abaixo usam o MESMO
-// `helpers/mailer` que a fila usa para enviar.
+// uma segunda configuração SMTP: as rotas abaixo usam o MESMO `helpers/mailer`
+// que a fila usa para enviar.
 //
 // O envio do email de teste é uma AÇÃO DE VALIDAÇÃO desta configuração: usa a
 // configuração JÁ GUARDADA (`obterConfigSmtp` lê a BD com prioridade sobre o
 // `.env`), pelo que testa o que está efetivamente a ser usado nos envios reais.
+//
+// ── P30 — O ÂMBITO É DECIDIDO PELA ROTA, NUNCA PELO CORPO ──────────
+//
+// Há DOIS âmbitos e cada um tem o seu caminho EXPLÍCITO (não existe uma rota
+// ambígua que grave global ou condomínio conforme o que o cliente envie):
+//
+//   · `/config/email/smtp`         → OVERRIDE do condomínio ATIVO
+//                                    (`smtp_*:c<ID>`, id vindo do tenant da
+//                                    sessão). Exige `admin` — guarda do router.
+//   · `/config/email/smtp/global`  → configuração GLOBAL (`smtp_*`). Exige
+//                                    `super_admin`. É a única via de escrita do
+//                                    global: sem ela, o global ficava órfão
+//                                    assim que o override passou a ser o âmbito
+//                                    da página do condomínio.
+//
+// ⛔ Um `condominio_id` no corpo do pedido é IGNORADO: o âmbito vem de
+//    `req.condominioId` (associação real validada pelo tenant) ou de nenhum
+//    (global). Não há caminho de código do corpo até à chave gravada.
+//
+// ⛔ O SUPORTE NUNCA ESCREVE SMTP, em nenhum dos âmbitos. Este router não tem
+//    entrada na allow-list de suporte (`helpers/suporte-allowlist.js`): o
+//    acesso de suporte entra pelos routers declarados, e `configuracao` não é
+//    um deles. É por isso que NÃO se acrescenta aqui uma guarda de suporte —
+//    acrescentá-la seria admitir um caminho que hoje não existe.
 // ═══════════════════════════════════════════════════════════════════
 router.get('/config/email', async (req, res) => {
-  // `obterEstadoSmtp` nunca devolve a password — apenas o indicador «definida».
-  const estadoSmtp = await mailer.obterEstadoSmtp();
+  // P30 — o estado é o EFETIVO do condomínio ATIVO (override → global → `.env`),
+  // que é o que os envios deste condomínio vão usar.
+  // `obterEstadoSmtp` nunca devolve a password — apenas o indicador e a ORIGEM.
+  const estadoSmtp = await mailer.obterEstadoSmtp(req.condominioId);
   // ── P54-2 — linhas da CONSULTA para o padrão P54-0 ────────────────
   // Só o que o utilizador pode ver: valores de configuração e, para a password,
   // o ESTADO («Definida»/«Em falta»). ⛔ Não há aqui nenhum caminho que ponha a
   // password na vista: `obterEstadoSmtp` não a devolve, e a linha da password é
   // marcada `sensivel` para o parcial imprimir a máscara e IGNORAR o valor.
+  // P30 — a linha da password diz também a ORIGEM (própria deste condomínio ou
+  // herdada do global). É informação sobre o ESTADO, não sobre o valor: sem ela,
+  // um administrador ficava convencido de ter definido uma password quando
+  // apenas estava a herdar a da plataforma.
+  const rotuloPassword = {
+    propria: 'Definida neste condomínio',
+    herdada: 'Herdada da configuração global',
+    ausente: 'Em falta',
+  }[estadoSmtp.passwordEstado] || 'Em falta';
+
   const linhasSmtp = [
     { rotulo: 'Servidor', valor: estadoSmtp.servidor },
     { rotulo: 'Porta', valor: estadoSmtp.porta },
     { rotulo: 'Utilizador', valor: estadoSmtp.utilizador },
     { rotulo: 'Remetente', valor: estadoSmtp.remetente, estado: estadoSmtp.nomeRemetente },
     { rotulo: 'Segurança', valor: estadoSmtp.seguranca },
-    { rotulo: 'Password', sensivel: true, estado: estadoSmtp.temPassword ? 'Definida' : 'Em falta' },
+    { rotulo: 'Password', sensivel: true, estado: rotuloPassword },
   ];
   res.render('admin/configuracao/email', {
     titulo: 'Email / SMTP',
     estadoSmtp,
     linhasSmtp,
+    // P30 — a vista distingue «configuração deste condomínio» de «herdada da
+    // global», para o âmbito da página ser explícito (como o P30 exige).
+    ambitoSmtp: estadoSmtp.temOverride ? 'condominio' : 'global',
     // P54-3 (V11) — a vista pede o código 2FA apenas a quem o tem ativo.
     exige2fa: reautenticacao.exigeSegundoFator(req.user),
   });
@@ -730,25 +770,32 @@ router.get('/config/email', async (req, res) => {
 //   · o conteúdo é validado com o MESMO validador da gravação, para não se
 //     confirmar aquilo que já se sabe que vai ser recusado;
 //   · só então se emite o token, ligado à impressão do payload.
-router.post('/config/email/smtp/preparar', limiteSmtpGravar, async (req, res) => {
-  const re = reautenticacao.reautenticacaoValida(req);
-  if (!re.ok) return res.status(403).json({ ok: false, erro: 'reautenticacao', mensagem: re.erro });
+//
+// P30 — o âmbito entra na OPERAÇÃO da confirmação (`smtp-config` vs
+// `smtp-config-global`). É o que impede que uma confirmação preparada na
+// página do condomínio sirva para gravar o global: os tokens são de uso único
+// e a operação é um dos critérios de aceitação (`confirmacao-sensivel`).
+function prepararConfirmacaoSmtp(operacao, limite) {
+  return [limite, async (req, res) => {
+    const re = reautenticacao.reautenticacaoValida(req);
+    if (!re.ok) return res.status(403).json({ ok: false, erro: 'reautenticacao', mensagem: re.erro });
 
-  const v = await mailer.validarConfigSmtp(corpoSmtp(req.body));
-  if (!v.ok) {
-    return res.status(400).json({
-      ok: false,
-      erro: 'invalido',
-      // Só CÓDIGOS e a mensagem FIXA do catálogo — nunca valores.
-      campos: v.erros.map((e) => ({ campo: e.campo, codigo: e.codigo, mensagem: e.mensagem })),
-    });
-  }
+    const v = await mailer.validarConfigSmtp(corpoSmtp(req.body), req.condominioSmtp ?? null);
+    if (!v.ok) {
+      return res.status(400).json({
+        ok: false,
+        erro: 'invalido',
+        // Só CÓDIGOS e a mensagem FIXA do catálogo — nunca valores.
+        campos: v.erros.map((e) => ({ campo: e.campo, codigo: e.codigo, mensagem: e.mensagem })),
+      });
+    }
 
-  const t = confirmacao.emitir(req, { operacao: OPERACAO_SMTP, impressao: impressaoDoPedido(req.body) });
-  if (!t.ok) return res.status(409).json({ ok: false, erro: t.erro });
+    const t = confirmacao.emitir(req, { operacao, impressao: impressaoDoPedido(req.body) });
+    if (!t.ok) return res.status(409).json({ ok: false, erro: t.erro });
 
-  return res.json({ ok: true, token: t.valor, expiraEm: t.expiraEm });
-});
+    return res.json({ ok: true, token: t.valor, expiraEm: t.expiraEm });
+  }];
+}
 
 // Mensagens de recusa da confirmação. FIXAS, sem valores — a confirmação é um
 // segredo de uso único e não pode aparecer em texto nenhum.
@@ -776,107 +823,178 @@ function mensagemDeConfirmacao(erro) {
 //
 // ⛔ Um `POST` direto ao endpoint, sem passar pela interface, não traz o token e
 //    é recusado — a proteção não depende da página.
-router.post('/config/email/smtp', limiteSmtpGravar, async (req, res) => {
-  // 1. Confirmação server-side. É consumida mesmo que algo falhe a seguir.
-  const conf = confirmacao.validarEConsumir(req, {
-    operacao: OPERACAO_SMTP,
-    valor: req.body._confirmacao,
-    impressao: impressaoDoPedido(req.body),
-  });
-  if (!conf.ok) {
-    console.error('[smtp] gravação recusada — confirmação: %s', conf.erro);
-    req.flash('error_msg', mensagemDeConfirmacao(conf.erro));
-    return res.redirect('/admin/config/email');
-  }
+//
+// P30 — UM SÓ HANDLER, dois âmbitos. `ambitoSmtp` é `null` (GLOBAL) ou o id do
+// condomínio ativo; `operacao` distingue os tokens. ⛔ O âmbito NÃO vem do corpo:
+// vem de `req.condominioSmtp`, fixado pela ROTA antes de chegar aqui. Não há
+// segundo caminho de gravação, logo não há duas proteções P54-3 a divergir.
+function guardarSmtp(scp) {
+  return [limiteSmtpGravar, async (req, res) => {
+    // O âmbito é resolvido UMA vez, a partir do que a rota fixou — nunca do corpo.
+    const cid = scp.global ? null : req.condominioSmtp;
 
-  // 2. Reautenticação. É a barreira que uma sessão roubada não vence.
-  const re = reautenticacao.reautenticacaoValida(req);
-  if (!re.ok) {
-    // Fica registado o MOTIVO da recusa (nunca o valor submetido): sem isto,
-    // uma gravação recusada era indistinguível de uma falha de BD no log.
-    console.error('[smtp] gravação recusada — reautenticação');
-    req.flash('error_msg', re.erro);
-    return res.redirect('/admin/config/email');
-  }
-
-  // 3. Transação: a configuração e o evento de auditoria vivem ou morrem juntos.
-  const t = await sequelize.transaction();
-  try {
-    const r = await mailer.guardarConfigSmtp(corpoSmtp(req.body), { transaction: t });
-
-    // V14 — registar QUE CAMPOS mudaram: nomes apenas. Nenhum valor entra aqui,
-    // e a password entra pelo NOME, nunca pelo conteúdo nem por um digest.
-    await audit({
-      userId: req.user.id,
-      acao: 'configurar_smtp',
-      entidade: 'Configuracao',
-      detalhes: { campos_alterados: r.alterados },
-      transaction: t,
-      rigoroso: true,
+    // 1. Confirmação server-side. É consumida mesmo que algo falhe a seguir.
+    const conf = confirmacao.validarEConsumir(req, {
+      operacao: scp.operacao,
+      valor: req.body._confirmacao,
+      impressao: impressaoDoPedido(req.body),
     });
-
-    await t.commit();
-    // ⛔ Só DEPOIS do commit: limpar a cache antes serviria uma configuração
-    // que ainda podia reverter.
-    mailer.limparCache();
-    req.flash('success_msg', 'Configuração SMTP guardada.');
-  } catch (err) {
-    await t.rollback().catch(() => {});
-    if (err && err.name === 'ErroValidacaoSmtp') {
-      console.error('[smtp] gravação recusada pela validação');
-      req.flash('error_msg', 'Configuração inválida — nada foi alterado.');
-    } else {
-      console.error('[smtp] erro ao guardar:', err.message);
-      req.flash('error_msg', 'Não foi possível guardar a configuração SMTP. Nada foi alterado.');
+    if (!conf.ok) {
+      console.error('[smtp] gravação recusada — confirmação: %s', conf.erro);
+      req.flash('error_msg', mensagemDeConfirmacao(conf.erro));
+      return res.redirect(scp.regresso);
     }
-  }
-  res.redirect('/admin/config/email');
-});
+
+    // 2. Reautenticação. É a barreira que uma sessão roubada não vence.
+    const re = reautenticacao.reautenticacaoValida(req);
+    if (!re.ok) {
+      // Fica registado o MOTIVO da recusa (nunca o valor submetido): sem isto,
+      // uma gravação recusada era indistinguível de uma falha de BD no log.
+      console.error('[smtp] gravação recusada — reautenticação');
+      req.flash('error_msg', re.erro);
+      return res.redirect(scp.regresso);
+    }
+
+    // 3. Transação: a configuração e o evento de auditoria vivem ou morrem juntos.
+    const t = await sequelize.transaction();
+    try {
+      const r = await mailer.guardarConfigSmtp(corpoSmtp(req.body), { transaction: t, condominioId: cid });
+
+      // V14 — registar QUE CAMPOS mudaram: nomes apenas. Nenhum valor entra aqui,
+      // e a password entra pelo NOME, nunca pelo conteúdo nem por um digest.
+      // P30 — o ÂMBITO fica registado em claro (`r.ambito`): a auditoria tem de
+      // identificar sem ambiguidade se o que mudou foi o global ou o override de
+      // um condomínio concreto. Continua a não haver um único valor.
+      await audit({
+        userId: req.user.id,
+        acao: scp.global ? 'configurar_smtp_global' : 'configurar_smtp',
+        entidade: 'Configuracao',
+        entidadeId: cid || null,
+        detalhes: { campos_alterados: r.alterados, ambito: r.ambito },
+        transaction: t,
+        rigoroso: true,
+      });
+
+      await t.commit();
+      // ⛔ Só DEPOIS do commit: limpar a cache antes serviria uma configuração
+      // que ainda podia reverter.
+      mailer.limparCache(cid);
+      req.flash('success_msg', scp.global
+        ? 'Configuração SMTP global guardada.'
+        : 'Configuração SMTP deste condomínio guardada.');
+    } catch (err) {
+      await t.rollback().catch(() => {});
+      if (err && err.name === 'ErroValidacaoSmtp') {
+        console.error('[smtp] gravação recusada pela validação');
+        req.flash('error_msg', 'Configuração inválida — nada foi alterado.');
+      } else {
+        console.error('[smtp] erro ao guardar:', err.message);
+        req.flash('error_msg', 'Não foi possível guardar a configuração SMTP. Nada foi alterado.');
+      }
+    }
+    res.redirect(scp.regresso);
+  }];
+}
 
 // ── Testar a ligação (verificação, sem enviar nada) ────────────────
-router.post('/config/email/smtp/testar', limiteSmtpAcoes, async (req, res) => {
-  try {
-    const r = await mailer.testarLigacao();
-    if (r.ok) {
-      await audit({ userId: req.user.id, acao: 'testar_smtp', entidade: 'Configuracao', detalhes: { ok: true, servidor: r.servidor } });
-      req.flash('success_msg', '✓ Ligação SMTP estabelecida.');
-    } else {
-      req.flash('error_msg', `✕ ${r.erro}`);
+// P30 — testa o âmbito EFETIVO do contexto: o override do condomínio ativo na
+// página do condomínio, o global na página global. O âmbito vai no PRIMEIRO
+// argumento POSICIONAL (ver o comentário de `testarLigacao` no mailer).
+function testarSmtp(scp) {
+  return [limiteSmtpAcoes, async (req, res) => {
+    try {
+      const r = await mailer.testarLigacao(scp.global ? null : req.condominioSmtp);
+      if (r.ok) {
+        await audit({ userId: req.user.id, acao: 'testar_smtp', entidade: 'Configuracao', detalhes: { ok: true, servidor: r.servidor } });
+        req.flash('success_msg', '✓ Ligação SMTP estabelecida.');
+      } else {
+        req.flash('error_msg', `✕ ${r.erro}`);
+      }
+    } catch (err) {
+      req.flash('error_msg', `✕ Não foi possível ligar ao servidor SMTP: ${mailer.mensagemErroAmigavel(err)}`);
     }
-  } catch (err) {
-    req.flash('error_msg', `✕ Não foi possível ligar ao servidor SMTP: ${mailer.mensagemErroAmigavel(err)}`);
-  }
-  res.redirect('/admin/config/email');
-});
+    res.redirect(scp.regresso);
+  }];
+}
 
 // ── Enviar email de teste (envio IMEDIATO, fora da fila) ───────────
-router.post('/config/email/teste', limiteSmtpAcoes, async (req, res) => {
-  const para = String(req.body.para || '').trim();
-  if (!para) {
-    req.flash('error_msg', 'Indique o email de destino do teste.');
-    return res.redirect('/admin/config/email');
-  }
-  const r = await mailer.enviarEmailTeste({
-    para,
-    assunto: req.body.assunto || 'Teste SMTP — GesCondu',
-    mensagem: req.body.mensagem || 'Este é um email de teste do GesCondu.',
-    // Teste feito dentro do condomínio ativo: o nome do remetente segue a
-    // mesma prioridade dos envios reais (override global ou nome do condomínio).
-    condominioId: req.condominioId,
-  });
-  await audit({
-    userId: req.user.id,
-    acao: 'email_teste',
-    entidade: 'EmailFila',
-    detalhes: { ok: r.ok, para },
-  }).catch(() => {});
-  if (r.ok) {
-    req.flash('success_msg', `✓ Email de teste enviado para ${para}.`);
-  } else {
-    req.flash('error_msg', `✕ Não foi possível enviar o email de teste: ${r.erro}`);
-  }
-  res.redirect('/admin/config/email');
-});
+// P30 — o teste usa a configuração EFETIVA do âmbito: na página do condomínio,
+// o override (ou o global herdado); na página global, o global. O nome do
+// remetente segue a mesma prioridade dos envios reais.
+function enviarTeste(scp) {
+  return [limiteSmtpAcoes, async (req, res) => {
+    const para = String(req.body.para || '').trim();
+    if (!para) {
+      req.flash('error_msg', 'Indique o email de destino do teste.');
+      return res.redirect(scp.regresso);
+    }
+    const cid = scp.global ? null : req.condominioSmtp;
+    const r = await mailer.enviarEmailTeste({
+      para,
+      assunto: req.body.assunto || 'Teste SMTP — GesCondu',
+      mensagem: req.body.mensagem || 'Este é um email de teste do GesCondu.',
+      condominioId: cid || undefined,
+    });
+    await audit({
+      userId: req.user.id,
+      acao: 'email_teste',
+      entidade: 'EmailFila',
+      detalhes: { ok: r.ok, para },
+    }).catch(() => {});
+    if (r.ok) {
+      req.flash('success_msg', `✓ Email de teste enviado para ${para}.`);
+    } else {
+      req.flash('error_msg', `✕ Não foi possível enviar o email de teste: ${r.erro}`);
+    }
+    res.redirect(scp.regresso);
+  }];
+}
+
+// ── P30 — REGISTO DAS ROTAS, COM O ÂMBITO FIXADO AQUI ──────────────
+// ⛔ O middleware de âmbito é o ÚNICO sítio onde `req.condominioSmtp` é escrito.
+//    Vem do TENANT (`req.condominioId`, já validado por `comCondominioAtivo`),
+//    NUNCA do corpo: não há caminho de código que leve `req.body.condominio_id`
+//    até à chave gravada.
+//
+// ⛔ `tenant.apenasSuperAdmin` na via GLOBAL e só nela: um `admin` de condomínio
+//    não tem caminho — nem na UI nem por POST direto — para escrever o global.
+//    A guarda corre antes do handler, pelo que um pedido recusado não lê nem
+//    grava nada.
+//
+// A ordem é deliberada: `/smtp/global` é registada ANTES de `/smtp`, para que
+// nenhuma evolução de rotas com parâmetros possa vir a apanhar a via global.
+const OPERACAO_SMTP_GLOBAL = 'smtp-config-global';
+
+// Âmbito do CONDOMÍNIO ATIVO. Exige a associação real (guarda do router).
+const fixarAmbitoSmtp = (req, res, next) => { req.condominioSmtp = req.condominioId; next(); };
+const SMTP_CONDOMINIO = { global: false, operacao: OPERACAO_SMTP, regresso: '/admin/config/email' };
+const SMTP_GLOBAL_SCP = { global: true, operacao: OPERACAO_SMTP_GLOBAL, regresso: '/admin/config/email' };
+
+router.post('/config/email/smtp/global/preparar',
+  tenant.apenasSuperAdmin,
+  (req, res, next) => { req.condominioSmtp = null; next(); },
+  ...prepararConfirmacaoSmtp(OPERACAO_SMTP_GLOBAL, limiteSmtpGravar));
+
+router.post('/config/email/smtp/global',
+  tenant.apenasSuperAdmin,
+  (req, res, next) => { req.condominioSmtp = null; next(); },
+  ...guardarSmtp(SMTP_GLOBAL_SCP));
+
+router.post('/config/email/smtp/preparar',
+  fixarAmbitoSmtp,
+  ...prepararConfirmacaoSmtp(OPERACAO_SMTP, limiteSmtpGravar));
+
+router.post('/config/email/smtp',
+  fixarAmbitoSmtp,
+  ...guardarSmtp(SMTP_CONDOMINIO));
+
+router.post('/config/email/smtp/testar',
+  fixarAmbitoSmtp,
+  ...testarSmtp(SMTP_CONDOMINIO));
+
+router.post('/config/email/teste',
+  fixarAmbitoSmtp,
+  ...enviarTeste(SMTP_CONDOMINIO));
 
 // ═══════════════════════════════════════════════════════════════════
 // Google Drive — fluxo OAuth (Ligar / Callback / Desligar)
