@@ -99,10 +99,20 @@ const MUTACOES = [
     // ⛔ É o defeito central que o P54 combate: sem `hidden`, os campos ficam
     // focáveis e submetíveis em consulta — a alteração acidental que se quer
     // impedir (foi o que aconteceu no P50, com o TLS).
+    //
+    // A âncora pára em `hidden` (SEM o `>`): o P54-4 (`83e9f06`) acrescentou
+    // atributos condicionais ANTES do fecho da tag (`{{#if confirmar}}…`), pelo
+    // que o `>` deixou de seguir `hidden` e a âncora antiga
+    // (`action="{{acao}}" hidden>`) desapareceu — sem isto a mutação era
+    // «impossível» e o teste falhava por não conseguir mutar, não por detetar o
+    // defeito. `action="{{acao}}" hidden` continua ÚNICO no ficheiro e muta
+    // EXATAMENTE o mesmo comportamento (retira o `hidden` à tag); o resto da
+    // tag — incluindo os atributos novos e o `>` — fica intacto, pelo que a
+    // mutação permanece mínima e estável a futuros atributos.
     nome: 'o formulário deixa de nascer `hidden`',
     ficheiro: PARCIAL,
-    de: 'action="{{acao}}" hidden>',
-    para: 'action="{{acao}}">',
+    de: 'action="{{acao}}" hidden',
+    para: 'action="{{acao}}"',
     espera: /nasce com o atributo/,
   },
   {
