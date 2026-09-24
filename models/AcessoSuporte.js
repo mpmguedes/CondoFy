@@ -44,6 +44,18 @@ module.exports = (sequelize) => {
     {
       tableName: 'acessos_suporte',
       underscored: true,
+      // ⛔ P58 — a BD impõe a invariante «no máximo UM acesso VIGENTE por
+      // (utilizador, condomínio)» através de um índice UNIQUE sobre uma coluna
+      // GERADA (`vigente_chave`), criado na migration `20260101000081`.
+      //
+      // A coluna não está declarada aqui de propósito: é uma coluna GERADA, que
+      // o MariaDB calcula sozinho e que NUNCA pode ser escrita — declará-la como
+      // atributo do modelo faria o Sequelize tentar inseri-la. Fica fora do
+      // modelo e é o `up` da migration que a cria.
+      //
+      // Os índices abaixo são os de CONSULTA (não de integridade) e não a
+      // substituem: `findAll` por par é O(log n), mas é o índice único que
+      // impede, mesmo em corrida, dois acessos vigentes do mesmo par.
       indexes: [
         { fields: ['utilizador_id', 'estado'] },
         { fields: ['condominio_id', 'estado'] },

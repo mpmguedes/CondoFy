@@ -331,6 +331,41 @@ function mutacao({ nome, ficheiro, de, para, global = false, script, esperaFalha
     script: 'test-suporte.js',
   });
 
+  // ── 17. O acesso vigente ANTERIOR deixa de ser fechado (P58) ──────
+  // É a regressão ORIGINAL do ACHADO-04: `iniciar()` criava sempre um registo
+  // novo e deixava o anterior `ativo` até expirar. Aqui remove-se a limpeza por
+  // completo — o novo acesso é criado sem que nada feche o anterior.
+  //
+  // O teste que a deteta é `test-suporte-unicidade.js`, e fá-lo no caso 11, onde
+  // a constraint da BD está DELIBERADAMENTE desligada: com a rede da BD ligada,
+  // o índice único mascararia a remoção da lógica da aplicação e a mutação
+  // passaria por acidente.
+  mutacao({
+    nome: '17. o acesso vigente anterior deixa de ser fechado (P58)',
+    ficheiro: 'helpers/suporte.js',
+    de: '  const anteriores = await encerrarVigentesDoPar({\n'
+      + '    utilizadorId: req.user.id,\n'
+      + '    condominioId,\n'
+      + '    req,\n'
+      + '    atorId: req.user.id,\n'
+      + '  });',
+    para: '  const anteriores = { total: 0, terminados: 0, ids: [] };',
+    script: 'test-suporte-unicidade.js',
+  });
+
+  // ── 18. A limpeza passa a fechar os acessos ERRADOS (P58) ─────────
+  // O filtro passa a selecionar os estados TERMINAIS em vez dos VIVOS: a
+  // limpeza corre, não rebenta, e não fecha nada do que interessa. É o modo de
+  // falha mais traiçoeiro dos dois — parece que a lógica existe. Deixa outra
+  // vez dois acessos vivos do mesmo par.
+  mutacao({
+    nome: '18. a limpeza passa a fechar os acessos terminais em vez dos vivos (P58)',
+    ficheiro: 'helpers/suporte.js',
+    de: "        estado: { [require('sequelize').Op.notIn]: ESTADOS_TERMINAIS },",
+    para: "        estado: { [require('sequelize').Op.in]: ESTADOS_TERMINAIS },",
+    script: 'test-suporte-unicidade.js',
+  });
+
   console.log(`\n✓ Testes de mutação passaram (${nTestes} mutações, todas detetadas e revertidas).`);
 })().catch((e) => {
   console.error('✗ FALHA:', e.message);

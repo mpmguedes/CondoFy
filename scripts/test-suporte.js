@@ -25,6 +25,10 @@
 // ═══════════════════════════════════════════════════════════════════
 const assert = require('assert');
 const path = require('path');
+// Os operadores REAIS do Sequelize: o helper filtra os acessos vigentes com
+// `Op.notIn` (P58). Um stub que ignorasse o operador devolveria zero linhas e o
+// teste mediria a coisa errada em silêncio — ver `corresponde()` abaixo.
+const { Op } = require('sequelize');
 
 const RAIZ = path.join(__dirname, '..');
 const ler = (rel) => require('fs').readFileSync(path.join(RAIZ, rel), 'utf8');
@@ -43,6 +47,25 @@ const titulo = (t) => console.log(`\n── ${t}`);
 // sobre o MESMO objeto: um stub que devolvesse sempre `null` provaria apenas que
 // o código não rebenta, não que o estado é respeitado (armadilha conhecida).
 // ─────────────────────────────────────────────────────────────────────
+// Predicado de `where` partilhado pelos stubs, com os operadores que o helper
+// usa a sério. Honra `Op.notIn`/`Op.in` (P58) e `Op.lte` (expiração) — sem isto
+// um filtro devolveria zero linhas e o teste passaria sem exercitar o caminho.
+function corresponde(a, where) {
+  if (!where) return true;
+  return Object.entries(where).every(([k, v]) => {
+    if (v && typeof v === 'object' && !(v instanceof Date)) {
+      const lista = v[Op.notIn] !== undefined ? v[Op.notIn] : v[Op.in];
+      if (lista !== undefined) {
+        const dentro = lista.some((x) => String(x) === String(a[k]));
+        return v[Op.notIn] !== undefined ? !dentro : dentro;
+      }
+      if (v[Op.lte] !== undefined) return new Date(a[k]).getTime() <= new Date(v[Op.lte]).getTime();
+    }
+    if (k === 'id' || k === 'utilizador_id' || k === 'condominio_id') return Number(a[k]) === Number(v);
+    return a[k] === v;
+  });
+}
+
 function criarStubs() {
   const acessos = [];
   let seq = 0;
@@ -101,27 +124,14 @@ function criarStubs() {
       return wrap(acessos.find((a) => Number(a.id) === Number(id)) || null);
     },
     async findAll({ where } = {}) {
-      return acessos.filter((a) => {
-        if (!where) return true;
-        return Object.entries(where).every(([k, v]) => {
-          if (k === 'id' || k === 'utilizador_id' || k === 'condominio_id') return Number(a[k]) === Number(v);
-          return a[k] === v;
-        });
-      }).map(wrap);
+      return acessos.filter((a) => corresponde(a, where)).map(wrap);
     },
     async count({ where } = {}) {
       const lista = await AcessoSuporte.findAll({ where });
       return lista.length;
     },
     async update(patch, { where } = {}) {
-      const alvo = acessos.filter((a) => {
-        if (!where) return true;
-        return Object.entries(where).every(([k, v]) => {
-          if (v && typeof v === 'object' && 'lte' in v) return new Date(a[k]).getTime() <= new Date(v.lte).getTime();
-          if (k === 'id' || k === 'utilizador_id' || k === 'condominio_id') return Number(a[k]) === Number(v);
-          return a[k] === v;
-        });
-      });
+      const alvo = acessos.filter((a) => corresponde(a, where));
       alvo.forEach((a) => Object.assign(a, patch));
       return [alvo.length];
     },

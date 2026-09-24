@@ -154,17 +154,39 @@ const nivelConcedivel = (nivel) => NIVEIS_CONCEDIVEIS.includes(nivel);
 const ESTADOS_TERMINAIS = ['expirado', 'terminado', 'revogado'];
 const eEstadoTerminal = (estado) => ESTADOS_TERMINAIS.includes(estado);
 
+// P58 — «VIGENTE» é o COMPLEMENTO de «terminal», deliberadamente derivado e não
+// uma segunda lista escrita à mão.
+//
+// A invariante de unicidade é «no máximo UM acesso VIGENTE por (utilizador,
+// condomínio)». Ocupam esse lugar tanto o acesso já `ativo` como o que está
+// `pendente_autorizacao`: ambos são concessões vivas do mesmo par, e deixar
+// acumular pedidos pendentes do mesmo operador é exatamente a mesma falta de
+// higiene que acumular acessos ativos (o admin do condomínio veria dois pedidos
+// idênticos). Só os estados TERMINAIS são histórico e podem repetir-se à vontade.
+//
+// Derivar em vez de reescrever a lista é o que impede as duas definições de
+// divergirem quando um estado novo entrar no ENUM: um estado acrescentado passa
+// a ser «vigente» por omissão (o lado seguro — obriga a fechar antes de abrir).
+const eEstadoVigente = (estado) => !eEstadoTerminal(estado);
+
 // ── Origem do término ──────────────────────────────────────────────
-// Distingue, na AUDITORIA, quatro fins distintos que partilham o mesmo estado
+// Distingue, na AUDITORIA, os fins distintos que partilham o mesmo estado
 // `terminado`/`expirado`. Sem esta distinção, «terminado» não diria se o acesso
-// acabou por ação do próprio operador, pelo fim da sessão (logout/inatividade)
-// ou pela desativação da conta — três situações operacionais diferentes.
+// acabou por ação do próprio operador, pelo fim da sessão (logout/inatividade),
+// pela desativação da conta, pela desativação do condomínio ou por ter sido
+// substituído por um acesso mais recente — situações operacionais diferentes.
 const ORIGEM = {
   OPERADOR: 'operador', // término explícito pelo operador de suporte
   LOGOUT: 'logout', // sessão encerrada pelo próprio utilizador
   INATIVIDADE: 'inatividade', // sessão encerrada por inatividade
   CONTA_DESATIVADA: 'conta_desativada', // conta deixou de estar utilizável
   CONDOMINIO_DESATIVADO: 'condominio_desativado', // o CONDOMÍNIO foi desativado
+  // P58 — o acesso foi fechado porque o MESMO operador abriu outro para o MESMO
+  // condomínio. Não é uma decisão do operador (não é `operador`), nem uma sessão
+  // que morreu (não é `logout`/`inatividade`): é substituição por um acesso mais
+  // recente. Sem esta origem, o histórico mostraria dois fins indistinguíveis e
+  // um auditor não saberia se alguém cortou o acesso ou se ele foi renovado.
+  SUBSTITUIDO: 'substituido',
 };
 
 const CHAVE_SESSAO = 'suporte_ativo_id';
@@ -312,7 +334,13 @@ async function marcarExpirado(acesso, utilizador) {
   const [n] = await AcessoSuporte()
     .update(
       { estado: 'expirado', terminado_em: new Date() },
-      { where: { id: acesso.id, estado: 'ativo' } } // só transita a partir de ativo
+      // Transita a partir de QUALQUER estado não-terminal. Antes exigia-se
+      // `estado: 'ativo'`, o que deixava um pedido `pendente_autorizacao` fora
+      // do prazo preso para sempre: não era formalizado (o `where` não o
+      // apanhava) e continuava a ocupar o lugar de «acesso vivo» do par — o
+      // operador não conseguia abrir outro. O guard de estado terminal acima
+      // mantém a transição única, que é o que impede auditar duas vezes.
+      { where: { id: acesso.id, estado: { [require('sequelize').Op.notIn]: ESTADOS_TERMINAIS } } }
     )
     .catch(() => [0]);
   // `n === 0` significa que outro pedido já tratou da transição: não se audita
@@ -344,6 +372,88 @@ async function temAdminAtivo(condominioId) {
     where: { condominio_id: condominioId, role: 'admin', estado: 'ativo' },
   });
   return n > 0;
+}
+
+// ── P58: fechar o acesso vigente ANTERIOR do mesmo par ───────────
+//
+// INVARIANTE: no máximo UM acesso vigente por (utilizador, condomínio).
+//
+// Fecha todos os acessos NÃO-TERMINAIS do par antes de abrir um novo. Fecha por
+// `terminar()`, sem reimplementar a transição: duplicar a lógica criaria uma
+// segunda verdade sobre o que significa «terminado» (mesma disciplina de
+// `terminarVigentesDoCondominio`).
+//
+// ÂMBITO ESTRITO: o `where` filtra por `utilizador_id` E `condominio_id`. Os
+// pares vizinhos — o mesmo operador noutro condomínio, outro operador no mesmo
+// condomínio — não são lidos nem tocados. É a mesma disciplina de âmbito de
+// `vigente()` e de `terminarVigentesDoCondominio()`.
+//
+// Devolve `{ total, terminados, ids }` para o chamador poder relatar/auditar.
+// NUNCA lança: uma falha a fechar o anterior não pode impedir o operador de
+// abrir o novo. A constraint de unicidade da BD continua a arbitrar (ver
+// `iniciar`), pelo que o pior caso é a segunda tentativa — nunca um estado com
+// dois acessos vigentes.
+async function encerrarVigentesDoPar({ utilizadorId, condominioId, req = null, atorId = null } = {}) {
+  const u = Number(utilizadorId);
+  const c = Number(condominioId);
+  if (!Number.isFinite(u) || u <= 0 || !Number.isFinite(c) || c <= 0) {
+    return { total: 0, terminados: 0, ids: [] };
+  }
+
+  let vigentes = [];
+  try {
+    vigentes = await AcessoSuporte().findAll({
+      where: {
+        utilizador_id: u,
+        condominio_id: c,
+        estado: { [require('sequelize').Op.notIn]: ESTADOS_TERMINAIS },
+      },
+      order: [['id', 'ASC']],
+    });
+  } catch (err) {
+    console.error('[suporte/substituicao] erro a listar acessos vigentes do par:', err.message);
+    return { total: 0, terminados: 0, ids: [] };
+  }
+
+  const agora = Date.now();
+  const ids = [];
+  for (const acesso of vigentes) {
+    // Prazo já passado ⇒ formaliza como `expirado` (a transição CANÓNICA, com a
+    // auditoria `suporte_expirado`). Fechar como «substituído» um acesso cujo fim
+    // real foi o prazo poria no histórico a razão errada — e a razão é o que um
+    // auditor lê. Sem prazo legível (`expira_em` nulo) assume-se expirado: um
+    // acesso sem prazo não pode continuar a ocupar o lugar.
+    const expirado = !acesso.expira_em || new Date(acesso.expira_em).getTime() <= agora;
+    const r = expirado
+      ? await marcarExpirado(acesso, { id: atorId }).then((ok) => ({ ok })).catch((err) => {
+        console.error('[suporte/substituicao] erro a expirar acesso:', err.message);
+        return { ok: false };
+      })
+      : await terminar({
+        acessoId: acesso.id,
+        req,
+        origem: ORIGEM.SUBSTITUIDO,
+        utilizadorId: atorId,
+      }).catch((err) => {
+        console.error('[suporte/substituicao] erro a terminar acesso:', err.message);
+        return { ok: false };
+      });
+    if (r && r.ok) ids.push(acesso.id);
+  }
+
+  return { total: vigentes.length, terminados: ids.length, ids };
+}
+
+// Uma violação de unicidade é a BD a arbitrar uma CORRIDA: entre a limpeza dos
+// anteriores e o INSERT, outra transação criou um acesso vigente para o mesmo
+// par. Distingue-se de qualquer outro erro de escrita de propósito — engolir um
+// erro real (coluna em falta, ligação caída) como se fosse uma corrida benigna
+// esconderia uma avaria e devolveria um resultado enganador.
+function eConflitoDeUnicidade(err) {
+  if (!err) return false;
+  if (err.name === 'SequelizeUniqueConstraintError') return true;
+  const codigo = (err.parent && err.parent.code) || (err.original && err.original.code) || err.code;
+  return codigo === 'ER_DUP_ENTRY' || codigo === 'SQLITE_CONSTRAINT';
 }
 
 // ── Criar um acesso ──────────────────────────────────────────────
@@ -378,7 +488,25 @@ async function iniciar({ req, condominioId, motivo, nivel, duracaoMinutos } = {}
   const exigeAutorizacao = await temAdminAtivo(condominioId);
   const estado = exigeAutorizacao ? 'pendente_autorizacao' : 'ativo';
 
-  const acesso = await AcessoSuporte().create({
+  // ── P58 — FECHAR o vigente anterior deste par antes de abrir o novo ──
+  //
+  // Sem isto, cada `iniciar()` do mesmo operador no mesmo condomínio deixava o
+  // anterior `ativo` até expirar: `ativosDe(cid)` mostrava dois «operadores» em
+  // diagnóstico quando só havia um, e o histórico acumulava acessos abertos que
+  // ninguém fechou. A sessão guarda UM id (o último escrito), pelo que o
+  // anterior ficava inalcançável — nem o operador o conseguia fechar.
+  //
+  // A ordem é deliberada: fechar primeiro, criar depois. `terminar` limpa a
+  // chave da sessão ao fechar o anterior, e o novo acesso volta a escrevê-la a
+  // seguir — nunca fica um id de um acesso já terminado na sessão.
+  const anteriores = await encerrarVigentesDoPar({
+    utilizadorId: req.user.id,
+    condominioId,
+    req,
+    atorId: req.user.id,
+  });
+
+  const dados = {
     utilizador_id: req.user.id,
     condominio_id: condominioId,
     nivel: nivelPedido,
@@ -387,7 +515,31 @@ async function iniciar({ req, condominioId, motivo, nivel, duracaoMinutos } = {}
     iniciado_em: agora,
     expira_em: expira,
     session_id: req.sessionID || null,
-  });
+  };
+
+  // ── P58 — a constraint da BD é o árbitro da concorrência ─────────
+  //
+  // A limpeza acima não é atómica com o INSERT: dois `iniciar()` em paralelo
+  // para o mesmo par podem ambos limpar e ambos tentar inserir. Não se assume
+  // que «não acontece» — a BD tem um índice UNIQUE sobre o par para os estados
+  // vigentes (migration 20260101000081) e é ele que decide. Quem perder a
+  // corrida recebe `ER_DUP_ENTRY`: fecha-se o que ficou vivo e tenta-se UMA vez.
+  //
+  // Só uma violação de UNICIDADE é tratada assim; qualquer outro erro sobe
+  // intacto, para não se disfarçar uma avaria real de corrida benigna.
+  let acesso;
+  try {
+    acesso = await AcessoSuporte().create(dados);
+  } catch (err) {
+    if (!eConflitoDeUnicidade(err)) throw err;
+    await encerrarVigentesDoPar({
+      utilizadorId: req.user.id,
+      condominioId,
+      req,
+      atorId: req.user.id,
+    });
+    acesso = await AcessoSuporte().create(dados);
+  }
 
   // Só um acesso já ATIVO entra na sessão. Um pedido pendente não dá contexto
   // nenhum — e como `vigente` recusa `pendente_autorizacao`, mesmo que o id
@@ -395,7 +547,7 @@ async function iniciar({ req, condominioId, motivo, nivel, duracaoMinutos } = {}
   if (estado === 'ativo') req.session[CHAVE_SESSAO] = acesso.id;
   else limparSessao(req);
 
-  return { ok: true, acesso, pendente: estado === 'pendente_autorizacao' };
+  return { ok: true, acesso, pendente: estado === 'pendente_autorizacao', anteriores };
 }
 
 // ── Autorizar um pedido pendente ─────────────────────────────────
@@ -659,6 +811,7 @@ module.exports = {
   ESTADOS_TERMINAIS,
   nivelConcedivel,
   eEstadoTerminal,
+  eEstadoVigente,
   idNaSessao,
   limparSessao,
   paraContexto,
@@ -673,6 +826,7 @@ module.exports = {
   recusar,
   terminarPorSessao,
   terminarVigentesDoCondominio,
+  encerrarVigentesDoPar,
   condominioAtivo,
   vigentesDe,
   contagemPendentes,
