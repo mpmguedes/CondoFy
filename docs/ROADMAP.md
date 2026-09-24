@@ -18,7 +18,7 @@ deve ser corrigido.
 
 ## 1. Estado atual
 
-**Data da última atualização:** 2026-09-23
+**Data da última atualização:** 2026-09-24
 
 **Resumo global.** O GesCondu é uma aplicação de gestão de condomínios (PT-PT) em  
 Node.js/Express + Sequelize (MariaDB) + Handlebars, com 8 fases históricas declaradas como  
@@ -38,9 +38,9 @@ menores registados e deliberadamente não corrigidos (secção 4).
 
 | Item                  | Valor                                                                                                                                                                                                      |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `HEAD`                | `6408732` — «UI: normalizar botoes e acessibilidade» (A7, 2026-09-23) — **publicado**. A cadeia publicada é: `78e32c6` (base) → `12a06b7` (P53 harnesses) → `bdf121b` (homepage) → `09dd5d5` (menu mobile) → `47548e1` (convocatória) → `793ef32` (P53-FOLLOWUP) → `5f16016` (páginas legais) → **`6408732`** (A7) |
-| Remoto `origin/main`  | `6408732` — confirmado por `git ls-remote origin main` (2026-09-23) ⇒ **0 commits por publicar** (`HEAD` local = remoto). Foram publicados os 7 commits do bloco: P53 harnesses, homepage, menu mobile, convocatória, **P53-FOLLOWUP**, páginas legais e **A7**. O ciclo A1–A8, a frente R10/Q11 (`9b422eb` + `34bd5d3`), a frente P56 (`1cd3846` + `73f367e`) e a frente de branding (`0a606ca` + `4aa7f3f`) estão publicados. A lista de commits está no **§7**; o número exato **não se fixa aqui** de propósito — este documento é editado pelos próprios commits que descreve |
-| Working tree          | **stage vazio**; medido a 2026-09-23 (**pós-A7**): **4 ` M` + 28 ` ??`**. Os 4 ` M` são **todos da frente EPD/DPO** (Encarregado de Proteção de Dados, art. 37.º do RGPD) — ver a nota de desambiguação abaixo. Os ficheiros são `routes/publicas.js`, `scripts/test-paginas-publicas.js`, `views/publicas/politica-privacidade.handlebars` e `views/partials/_pagina-legal.handlebars` — **pré-existentes e preservados**; as frentes de branding, R10/Q11, P56, páginas legais e A7 já **não** estão aqui (publicadas). Em `??` estão **19 ficheiros de arte de marca na raiz** (não servidos), **6 auditorias/especificações** não rastreadas, `docs/documentos/`, `docs/mobile/` e `.workbuddy-ai/`. O resíduo `.commit-c3.tmp.txt` **já não existe**. Os resíduos `.mutation-backup-*` e `ORFAO-*` das campanhas de mutação continuam **ignorados** por `.gitignore` |
+| `HEAD`                | `76cfdae` — «C1: corrigir autorização de backups» (2026-09-24) — **local, por publicar**; o commit anterior `cb64cb4` («docs: atualizar roadmap após ciclo 6408732») também está **local, por publicar**. `6408732` (A7 UI) e todos os anteriores estão **publicados**. ⛔ A mensagem diz «corrigir» mas **só o ficheiro de teste** foi alterado — ver **§4.10** |
+| Remoto `origin/main`  | `cb64cb4` — confirmado por `git ls-remote origin main` (2026-09-24) ⇒ **1 commit por publicar** (`76cfdae`, C1) — mais **este documento**, que fica ` M` até ser commitado. Foram publicados os 7 commits do bloco de 2026-09-23 (P53 harnesses, homepage, menu mobile, convocatória, **P53-FOLLOWUP**, páginas legais, **A7**) e o ROADMAP pós-ciclo (`cb64cb4`). O ciclo A1–A8, a frente R10/Q11 (`9b422eb` + `34bd5d3`), a frente P56 (`1cd3846` + `73f367e`) e a frente de branding (`0a606ca` + `4aa7f3f`) estão publicados. A lista de commits está no **§7**; o número exato **não se fixa aqui** de propósito — este documento é editado pelos próprios commits que descreve |
+| Working tree          | **stage vazio**; medido a 2026-09-24: **5 ` M` + 28 ` ??`** (4 de frentes + **este documento**, que fica ` M` até ser commitado — é a razão de serem 5 e não 4). Os 4 ` M` de frentes são **todos da frente EPD/DPO** (Encarregado de Proteção de Dados, art. 37.º do RGPD) — ver a nota de desambiguação abaixo. Os ficheiros são `routes/publicas.js`, `scripts/test-paginas-publicas.js`, `views/publicas/politica-privacidade.handlebars` e `views/partials/_pagina-legal.handlebars` — **pré-existentes e preservados**; as frentes de branding, R10/Q11, P56, páginas legais e A7 já **não** estão aqui (publicadas). Em `??` estão **19 ficheiros de arte de marca na raiz** (não servidos), **6 auditorias/especificações** não rastreadas, `docs/documentos/`, `docs/mobile/` e `.workbuddy-ai/`. O resíduo `.commit-c3.tmp.txt` **já não existe**. Os resíduos `.mutation-backup-*` e `ORFAO-*` das campanhas de mutação continuam **ignorados** por `.gitignore` |
 | Migrations            | 80 (`migrations/20260101000001…00080`; a `…00079-segredos-em-repouso` é a migração da frente A1 e a `…00080-extra-quota-acerto` a da frente R10/Q11)                                                                                                                                                                     |
 | Modelos               | 47 ficheiros em `models/`                                                                                                                                                                                  |
 | Routers               | 28 ficheiros em `routes/`                                                                                                                                                                                  |
@@ -287,7 +287,7 @@ agente possa retomar sem recomeçar do zero.
 | Retenção **cloud**                                                                              | 🟠     | `jobs/backup.js` (`limparBackupsAntigos`)                                       | `test-backup-retencao.js`       | `docs/BACKUPS.md` §8                                         | **No-op no Dropbox** (sem `apagarArquivo`). **Fechado** — A4: `apagarArquivo` implementado no Dropbox (`files/delete_v2`) (§4.4).                      |
 | Espaço cloud medível                                                                            | 🔴     | —                                                                               | —                               | `docs/BACKUPS.md`                                            | Os provedores não expõem listagem de pasta ⇒ «não disponível».                |
 | Agendamento de `diario`/`semanal`/`mensal` (`manual` fora da agenda)                            | 🟢     | `helpers/backup-agenda.js` (`plano()`) + `jobs/scheduler.js`                    | `test-backup-agenda.js`         | `docs/BACKUPS.md`                                            | **Fechado** — A4: os três ciclos são agendados; `manual` nunca (dispara-se à mão). ⛔ O dia da semana sai **numérico** (o node-cron 3.x rejeita nomes) — **P55** (§4.4). |
-| Configuração e disparo de backups por admin de condomínio                                       | 🟡     | `routes/configuracao.js`, `routes/sistema.js`                                   | —                               | `docs/AUDITORIA-BACKUPS-2026-09-21.md` §3.4 (P9/P10)         | Ver **P9/P10** — defeitos de **autorização**, deliberadamente fora de âmbito. |
+| Configuração e disparo de backups por admin de condomínio                                       | 🟢     | `routes/configuracao.js:361`, `routes/sistema.js:18` — guarda `tenant.apenasSuperAdmin`                                   | `test-autorizacao-backups.js`                               | `docs/AUDITORIA-BACKUPS-2026-09-21.md` §3.4 (P9/P10)         | **Fechado** — a guarda existe desde `830f624`; a **cobertura** foi alargada em `76cfdae` (C1). Ver **§4.10**. |
 
 
 ### 3.14 Assembleias, convocatórias, atas e deliberações
@@ -567,7 +567,7 @@ corrigidos**. Nenhum foi inventado. Cada item indica onde está e o que falta de
 | **P32**    | Acessibilidade das tabelas do portal (D1/D2: `<caption>`, `scope="col"`)                            | Aberto                                                                             | idem                                                                                                                                                     | Corrigir                                                                                                                             |
 | **P42**    | Bloqueio por conta (lockout)                                                                        | Não existe (só rate limit por IP)                                                  | `docs/AUDITORIA-SEGURANCA-SUPORTE-2026-09-18.md`                                                                                                         | Decidir se é necessário                                                                                                              |
 | **P43**    | Paginação                                                                                           | Não existe em nenhum lado                                                          | —                                                                                                                                                        | Decidir se se introduz (hoje: limites fixos)                                                                                         |
-| **P9/P10** | Configuração e disparo de backups por um **admin de condomínio**                                    | Defeito de **autorização** confirmado e deliberadamente fora de âmbito             | `docs/AUDITORIA-BACKUPS-2026-09-21.md` §3.4                                                                                                              | Corrigir em `routes/configuracao.js` e `routes/sistema.js` (frentes de autorização) — **requer autorização explícita**               |
+| **P9/P10** | Configuração e disparo de backups por um **admin de condomínio**                                    | **RESOLVIDO** — a guarda `tenant.apenasSuperAdmin` está nas duas rotas desde `830f624`             | `docs/AUDITORIA-BACKUPS-2026-09-21.md` §3.4                                                                                                              | **Fechado em duas partes distintas:** a **autorização** foi corrigida em **`830f624`** («Consolidar sistema de backups e autorização global»); a **cobertura** foi alargada em **`76cfdae`** (C1, **só o teste**). Ver **§4.10**               |
 | **P12**    | `helpers/audit.js` engole erros                                                                     | Aberto                                                                             | `docs/AUDITORIA-ALLOWLIST-SUPORTE.md` §9.2                                                                                                               | Decidir se passa a registar a falha                                                                                                  |
 | **P13**    | Tokens em claro (`convite_token`, `reset_token`, `two_fa_totp_secret`)                              | Aberto                                                                             | `docs/AUDITORIA-ALLOWLIST-SUPORTE.md` §9.3                                                                                                               | Cifrar em repouso                                                                                                                    |
 | **P14**    | Password SMTP sem cifra em repouso                                                                  | Aberto                                                                             | `docs/ARMAZENAMENTO.md` §2.1, `docs/AUDITORIA-ALLOWLIST-SUPORTE.md` §9.4                                                                                 | Cifrar (como os tokens OAuth)                                                                                                        |
@@ -645,7 +645,11 @@ Tudo o que se segue foi **corrigido e provado nesta árvore** (frentes A1–A8, 
 | **A2** (fora da lista P) | A2 | `helpers/extra-quotas.js:parcelar` passou a maior-resto (punha até 0,59 € na última parcela); `order` fixado na distribuição do orçamento e da quota extraordinária (determinismo) | `test-financeiro.js` (asserção A4 adaptada) · `test-quotas-recalculo-plano.js` · mutações C2/C3/D1/D2 |
 | **A4** (fora da lista P) | A4 | `routes/configuracao.js`: `POST /config/drive/estrutura` verificava o Drive **sem condomínio** e criava a árvore no condomínio ativo | `test-configuracao-drive-estrutura.js` |
 
-**Continua aberto, com evidência:** **P4**, **P5** (remoção adiada com plano fechado de 4 edições), **P6**, **P9/P10**, **P17**, **P18**, **P21**, **P23**, **P30**, **P31** (C2 e C4), **P33**, **P35**, **P39/P40**, **P42**, **P43**, **P49** (não existe `scripts/test-mutacao-tips.js`) e **P53**.
+**Continua aberto, com evidência:** **P4**, **P5** (remoção adiada com plano fechado de 4 edições), **P6**, **P17**, **P18**, **P21**, **P23**, **P30**, **P31** (C2 e C4), **P33**, **P35**, **P39/P40**, **P42**, **P43**, **P49** (não existe `scripts/test-mutacao-tips.js`) e **P53**.
+
+> **Saída desta lista (2026-09-24) — P9/P10:** **fechado** (§4.10). A guarda de autorização existe desde
+> `830f624`; a cobertura foi alargada em `76cfdae` (C1). O item **não** era um defeito por corrigir — era
+> **falta de cobertura** sobre uma guarda já existente.
 
 > **Lacuna registada pelo A9 (2 harnesses):** existem na árvore **dois** harnesses de mutação que **não  
 > estão ligados à cadeia `test:offline`** — `scripts/test-mutacao-despesa-transacao.js` (**P16**, frente A7)  
@@ -908,6 +912,55 @@ injeção ⇒ **3 detetadas**, ou seja, a correção **não cegou** o harness). 
 
 ---
 
+### 4.10 C1 — Autorização de backups (P9/P10) · **COBERTURA / VALIDAÇÃO, não correção funcional** (2026-09-24)
+
+> ⛔ **Leia com atenção — este item NÃO corrigiu nenhum defeito.** O commit chama-se «C1: corrigir
+> autorização de backups», mas **não alterou uma única linha de código da aplicação**: mudou **só** o
+> ficheiro de teste. A palavra «corrigir» na mensagem é **imprecisa** e fica registada como tal.
+
+**(a) O que o commit `76cfdae` contém, medido.**
+
+| | |
+|---|---|
+| Ficheiros alterados | **1** — `scripts/test-autorizacao-backups.js` |
+| Diff | **+200 / −18** |
+| Código da aplicação | **0 ficheiros** |
+| Eliminações | **0** |
+
+**(b) Onde estava, então, a autorização?** Em **`830f624`** («Consolidar sistema de backups e autorização
+global»), que introduziu a guarda `tenant.apenasSuperAdmin` nas duas rotas:
+
+- **P9** — `routes/configuracao.js:361` (`POST /config/armazenamento/backups`)
+- **P10** — `routes/sistema.js:18` (`POST /sistema/backup`)
+
+Verificado por `git log -S apenasSuperAdmin` (as duas rotas) e por leitura direta em `cb64cb4`: a guarda
+**já lá estava** antes de `76cfdae`. ⇒ **P9/P10 era falta de cobertura sobre uma guarda já existente**,
+não um defeito por corrigir.
+
+**(c) O que a cobertura nova prova.** O teste monta os **dois routers reais** num servidor Express e usa
+as guardas **reais** (não duplos), cobrindo agora **dois eixos**:
+
+- **Eixo A — operações da INSTALAÇÃO** (o dump contém todos os condomínios): Super Admin **permitido** (com
+  efeito observável); admin de condomínio **recusado sem efeito**.
+- **Eixo B — operações do CONDOMÍNIO ativo**: admin de condomínio permitido; **gestor/leitura**, **outro
+  condomínio**, **sem associação**, **sem sessão**, **Super Admin sem suporte** e **Super Admin com suporte
+  vigente** → todos recusados (o suporte **não** herda papel de admin); `condominio_id` no corpo é
+  **ignorado** (o âmbito vem da sessão).
+- **Prova de que o teste morde:** removida a guarda do stack, o mesmo pedido **passa a ter efeito** — e há
+  um caso de mutação (`comPapel('admin')`) que falha pela razão certa.
+
+**Estado:** `scripts/test-autorizacao-backups.js` **EXIT 0** (2026-09-24) e **na cadeia `test:offline`**.
+
+**(d) Consequência para o planeamento.** O **C1** do ciclo anterior era **P0** por ser «defeito de
+autorização». Como **não havia defeito**, o C1 fica como **cobertura** (P2) e **o P0 desaparece**: não há,
+hoje, nenhum item **P0** aberto neste ROADMAP.
+
+**(e) Lição de processo.** Uma mensagem de commit que diz «corrigir» deve corresponder a código de
+aplicação alterado. Quando o commit é **só teste**, a mensagem deve dizer **«cobrir»**/«provar» — senão o
+histórico passa a afirmar correções que nunca aconteceram.
+
+---
+
 ## 5. Em desenvolvimento / trabalho recente
 
 ### 5.1 Working tree — o que ficou FORA do ciclo A1–A8 (medido em 2026-09-22)
@@ -951,6 +1004,7 @@ Trabalho que **não pertence ao ciclo A1–A8** e que, por isso, **não entrou n
 
 | Frente                                                                | Commit                                                                           | Estado                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | --------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **C1 — Cobertura da autorização de backups** (P9/P10)                | `76cfdae` «C1: corrigir autorização de backups» (2026-09-24) — **local, por publicar** | ⛔ **Cobertura/validação, NÃO correção funcional.** 1 ficheiro (`scripts/test-autorizacao-backups.js`, +200/−18); **0** linhas de código da aplicação. A guarda `tenant.apenasSuperAdmin` já existia desde **`830f624`**. O teste passa a cobrir **dois eixos** (instalação e condomínio) com as guardas **reais**, incl. a prova de que morde. Detalhe em **§4.10**. |
 | **Bloco de 7 commits (2026-09-23)**                                  | `12a06b7` · `bdf121b` · `09dd5d5` · `47548e1` · `793ef32` · `5f16016` · `6408732` | **Publicado** (`78e32c6` → `6408732`). Auditado **antes** do push: 7 commits, **lineares**, **fast-forward**, **118 ficheiros**, **0 eliminações**, **0** ficheiros proibidos, **0** `.workbuddy-ai/`. Detalhe por frente nas linhas seguintes. |
 | **A7 — UI: botões, acessibilidade e tabs**                           | `6408732` «UI: normalizar botoes e acessibilidade» (2026-09-23)                   | **Publicado.** **92 ficheiros** (88 vistas + `public/css/styles.css` + 2 testes novos + a especificação). Fases **1/2/3/3B** da `docs/ESPECIFICACAO-A7-UI-BOTOES-TABS-2026-09-23.md`. ⛔ **Não confundir** com a linha «A7 — Área financeira (P8 + P16)» (`b18cfea`) — outra frente, mesmo rótulo. Os testes novos estão **no commit mas fora de `test:offline`**; pendências **F27–F31** e Fases **4/5/6** em **§4.8**. |
 | **P53-FOLLOWUP — falso-verde do `spawn`**                            | `793ef32` «P53: corrigir falso-verde nos mutation harnesses» (2026-09-23)         | **Publicado.** 11 ficheiros, **3 novos** (`scripts/helpers/correr-processo.js`, `scripts/test-correr-processo.js`, `scripts/test-falha-spawn.js`). Detalhe e prova em **§4.9**. |
@@ -1120,11 +1174,13 @@ ficou por publicar**; o único commit **local** é `9b422eb` (R10/Q11), registad
 ---
 
 *Documento de levantamento. Nenhuma alteração funcional foi feita ao criar este ficheiro.  
-Estado verificado em **2026-09-23** (após a publicação do bloco de 7 commits): `HEAD` = **`6408732`**
-(«UI: normalizar botoes e acessibilidade», A7); `origin/main` = **`6408732`** ⇒ **0 commits por
-publicar**; working tree com **4 ` M` + 28 ` ??`** (os 4 ` M` são da frente **EPD/DPO**, **pré-existentes
-e preservados**; a frente «páginas legais», que partilha esses caminhos, foi publicada em `5f16016`).
+Estado verificado em **2026-09-24**: `HEAD` = **`76cfdae`** («C1: corrigir autorização de backups» —
+**local, por publicar**; ⛔ a mensagem diz «corrigir» mas **só o teste** foi alterado, ver **§4.10**);
+`origin/main` = **`cb64cb4`** ⇒ **1 commit por publicar** (mais este documento, que fica ` M`);
+working tree com **5 ` M` + 28 ` ??`** (4 ` M` são da frente **EPD/DPO**, **pré-existentes e preservados**;
+a frente «páginas legais», que partilha esses caminhos, foi publicada em `5f16016`).
 A frente R10/Q11 foi commitada em `9b422eb` e publicada em `34bd5d3`; a de branding em
-`0a606ca` + `4aa7f3f`; a P56 em `1cd3846` + `73f367e`; a P53 em `12a06b7`; a P53-FOLLOWUP em `793ef32`.
-O P56 está registado na **§4.7**, o A7 na **§4.8** e a P53/P53-FOLLOWUP na **§4.9**; a lista de commits
-está no **§7**.*
+`0a606ca` + `4aa7f3f`; a P56 em `1cd3846` + `73f367e`; a P53 em `12a06b7`; a P53-FOLLOWUP em `793ef32`;
+o bloco de 2026-09-23 (`12a06b7`…`6408732`) e o ROADMAP pós-ciclo (`cb64cb4`) estão **publicados**.
+O P56 está registado na **§4.7**, o A7 na **§4.8**, a P53/P53-FOLLOWUP na **§4.9** e a C1/P9-P10 na
+**§4.10**; a lista de commits está no **§7**.*
