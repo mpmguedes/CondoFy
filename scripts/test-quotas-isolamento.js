@@ -491,15 +491,16 @@ function testeInvariantesDeCodigo() {
     assert.ok(!/setQuotaConfig\(\{/.test(ler(ficheiro)), `${ficheiro}: sem setQuotaConfig({...}) sem âmbito`);
   }
 
-  // `routes/financeiro.js` tem 4 chamadas ATIVAS com âmbito. A antiga chamada
-  // sem âmbito da rota sombreada (`GET /quotas` em financeiro.js, servida na
-  // verdade por quotas-modulo.js) foi ELIMINADA: mesmo sendo código morto por
-  // sombreamento, ficava à espera de que uma reordenação da montagem a
-  // reativasse com o default global em vez do condomínio ativo.
+  // `routes/financeiro.js` tem 3 chamadas ATIVAS com âmbito. A quarta era a da
+  // rota sombreada (`GET /quotas` em financeiro.js, servida na verdade por
+  // quotas-modulo.js): chegou a ser corrigida para o âmbito certo e, depois
+  // disso, a rota foi REMOVIDA (C6) por ser código morto. A contagem abaixo é a
+  // das que servem pedidos — fixá-la é o que faz falhar o reaparecimento da rota
+  // (ou de uma chamada sem âmbito).
   const financeiro = ler('routes/financeiro.js');
   assert.strictEqual(
-    (financeiro.match(/getQuotaConfig\(req\.condominioId\)/g) || []).length, 4,
-    'financeiro: 4 leituras ativas com condomínio ativo'
+    (financeiro.match(/getQuotaConfig\(req\.condominioId\)/g) || []).length, 3,
+    'financeiro: 3 leituras ativas com condomínio ativo'
   );
   assert.strictEqual(
     (financeiro.match(/setQuotaConfig\(req\.condominioId,/g) || []).length, 1,
@@ -509,6 +510,47 @@ function testeInvariantesDeCodigo() {
     (financeiro.match(/getQuotaConfig\(\)/g) || []).length, 0,
     'financeiro: NENHUMA chamada sem âmbito — a do código morto E3 foi corrigida, não reativada'
   );
+
+  // (f) C6 — a rota `GET /quotas` de `financeiro.js` NÃO pode reaparecer.
+  // Estava SOMBREADA por `routes/quotas-modulo.js` (montado ANTES em `app.js`),
+  // pelo que o handler nunca corria: era código morto. Foi removido em C6. Se
+  // voltar, o código morto regressa — e com ele o risco de uma reordenação da
+  // montagem o reativar. A guarda tem três partes: (1) a rota não existe em
+  // financeiro.js; (2) continua a existir onde é servida; (3) a ordem de
+  // montagem que a sombreava mantém-se — é a razão pela qual era morta, e sem
+  // ela a asserção (1) seria uma proibição sem fundamento.
+  assert.ok(
+    !/router\.get\(\s*'\/quotas'\s*,/.test(financeiro),
+    'financeiro: a rota morta GET /quotas (C6) não pode reaparecer'
+  );
+  assert.ok(
+    /router\.get\(\s*'\/quotas'\s*,/.test(ler('routes/quotas-modulo.js')),
+    'quotas-modulo: é AQUI que GET /quotas é servida'
+  );
+  {
+    // ⛔ O que decide o sombreamento é a ordem dos `app.use`, não a dos `require`.
+    // Assertar os `require` seria um proxy: reordenar só as montagens evadia a
+    // guarda. Assertam-se as duas, para que a ordem dos `require` não possa
+    // divergir da ordem que o Express realmente aplica.
+    const appFonte = ler('app.js');
+    const usoModulo = appFonte.indexOf("app.use('/admin', rotasQuotasModulo)");
+    const usoFinanceiro = appFonte.indexOf("app.use('/admin', rotasFinanceiro)");
+    assert.ok(
+      usoModulo !== -1 && usoFinanceiro !== -1,
+      'app.js monta os dois routers de quotas sob /admin'
+    );
+    assert.ok(
+      usoModulo < usoFinanceiro,
+      'app.js: quotas-modulo é MONTADO antes de financeiro — é isso que torna '
+      + 'qualquer GET /quotas em financeiro código morto'
+    );
+    const reqModulo = appFonte.indexOf("require('./routes/quotas-modulo')");
+    const reqFinanceiro = appFonte.indexOf("require('./routes/financeiro')");
+    assert.ok(
+      reqModulo !== -1 && reqFinanceiro !== -1 && reqModulo < reqFinanceiro,
+      'app.js: a ordem dos require acompanha a das montagens'
+    );
+  }
 
   // O job nunca aplica uma configuração global nem consulta frações sem âmbito.
   const job = ler('jobs/automatizacao.js');
@@ -520,7 +562,7 @@ function testeInvariantesDeCodigo() {
   // A geração continua idempotente (chave fração+ano+mês+condomínio).
   assert.ok(/where: \{ fracao_id: f\.id, ano, mes, condominio_id: condominioId \}/.test(job),
     'job: a verificação de duplicados inclui o condomínio');
-  console.log('  ✓ invariantes: nenhum consumidor chama a configuração sem âmbito (incl. o código morto E3, agora corrigido)');
+  console.log('  ✓ invariantes: nenhum consumidor chama a configuração sem âmbito; a rota morta GET /quotas (C6) não voltou');
 }
 
 (async () => {

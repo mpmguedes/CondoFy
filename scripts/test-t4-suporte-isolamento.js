@@ -150,7 +150,10 @@ const stubs = {
   // As pastas são PURAS — usam-se as REAIS (estender, não substituir, para não
   // perder exports como `pastasPersonalizadas` que o handler invoca).
   'helpers/documento-pastas': require(path.join(RAIZ, 'helpers/documento-pastas')),
-  'helpers/recibos': { pagoPorQuota: async () => new Map(), cobertoPorQuota: async () => new Map(), pagamentosDasQuotas: async () => [], periodoLabel: () => '', gerarReciboPDF: async () => Buffer.from('') },
+  // `detalhePorEmitir` entrou com o C6: removida a rota sombreada de
+  // `financeiro.js`, o pedido a `/quotas` chega ao handler REAL
+  // (`quotas-modulo.js:205`), que usa este método. O stub tem de o cobrir.
+  'helpers/recibos': { pagoPorQuota: async () => new Map(), cobertoPorQuota: async () => new Map(), pagamentosDasQuotas: async () => [], periodoLabel: () => '', gerarReciboPDF: async () => Buffer.from(''), detalhePorEmitir: async () => [] },
   'helpers/pdf': { gerarReciboPDF: async () => Buffer.from('') },
   'helpers/audit': {
     // O stub de auditoria tem de ser OBSERVÁVEL (ACHADO-02): é por aqui que a
@@ -495,10 +498,16 @@ const ROTAS_COM_QUERY = [
     { ficheiro: 'routes/quotas-modulo.js',
       ancora: /function anosDisponiveis\(condominioId\)[\s\S]{0,120}?const where = condominioId \? \{ condominio_id: condominioId \} : \{\}/,
       nome: 'anosDisponiveis(condominioId): âmbito no parâmetro' },
-    // A listagem de comprovativos/quota em `financeiro.js` — o bug original §3.
+    // A ficha de quota (`GET /quotas/:id`) — rota ADMITIDA ao suporte. O `where`
+    // leva `condominio_id` ao lado do `id`: sem ele, um id de outro condomínio
+    // devolveria a quota alheia. ⚠️ Substitui a âncora da antiga listagem
+    // `GET /quotas` de `financeiro.js` (`const where = { condominio_id: ... }`),
+    // que era código MORTO por sombreamento e foi removida em **C6** — a âncora
+    // desapareceu com ela. A entrada nova mantém a cobertura deste ficheiro,
+    // agora sobre uma rota que é de facto servida.
     { ficheiro: 'routes/financeiro.js',
-      ancora: /const where = \{\s*condominio_id:\s*req\.condominioId\s*\}/,
-      nome: 'financeiro: const where = { condominio_id: req.condominioId }' },
+      ancora: /router\.get\('\/quotas\/:id', async \(req, res\) => \{\s*const quota = await Quota\.findOne\(\{ where: \{ id: req\.params\.id, condominio_id: req\.condominioId \}/,
+      nome: 'financeiro: GET /quotas/:id — Quota.findOne({ id, condominio_id })' },
   ];
   for (const c of CONSULTAS_COM_AMBITO) {
     assert.ok(c.ancora.test(FONTES[c.ficheiro]),
@@ -511,14 +520,36 @@ const ROTAS_COM_QUERY = [
   // `condominio_id`. Confirma-se a CADEIA explícita (não a forma de cada nome),
   // porque é a cadeia que garante o isolamento.
   const CADEIAS = [
+    // A cadeia da página de pagamento combinado (`GET /pagamentos/nova` com
+    // `?fracao=ID`): as quotas são lidas com `condominio_id` do PEDIDO e os
+    // `ids` derivados alimentam a consulta-filho de `PagamentoQuota`. É esta
+    // cadeia que garante que as aplicações mostradas pertencem ao condomínio
+    // ativo. ⚠️ Substitui a cadeia da antiga listagem `GET /quotas` de
+    // `financeiro.js` (`quotas` → `quotaIds`), que era código MORTO por
+    // sombreamento e foi removida em **C6** — levou consigo a âncora antiga.
     { ficheiro: 'routes/financeiro.js',
-      pai: /const quotas = await Quota\.findAll\(\{\s*where,/,
-      filho: /const quotaIds = quotas\.map\(\(q\) => q\.id\)/,
-      nome: 'quotas (where com âmbito) → quotaIds' },
+      pai: /const quotas = await Quota\.findAll\(\{\s*where: \{ condominio_id: req\.condominioId, fracao_id: fracaoValida\.id,/,
+      filho: /const ids = quotas\.map\(\(q\) => q\.id\)/,
+      // ⛔ `filho` NÃO é único em `financeiro.js`: há outro `ids = quotas.map(...)`
+      // em `contextoEnvioQuotas` (rota de envio em lote, sem `PagamentoQuota`).
+      // Testar pai e filho em SEPARADO aceitaria essa cadeia alheia — o teste
+      // passaria mesmo que a cadeia real perdesse os `ids`. Exige-se o par num
+      // só intervalo, com `PagamentoQuota.findAll` a fechar a ligação.
+      juntos: /const quotas = await Quota\.findAll\(\{\s*where: \{ condominio_id: req\.condominioId, fracao_id: fracaoValida\.id,[\s\S]{0,400}?const ids = quotas\.map\(\(q\) => q\.id\)[\s\S]{0,400}?PagamentoQuota\.findAll/,
+      nome: 'quotas (where com âmbito) → ids → PagamentoQuota' },
   ];
+  // Sem esta guarda, esvaziar a lista tornaria o ciclo abaixo um no-op silencioso
+  // — o teste «passaria» sem verificar cadeia nenhuma (falso verde por vacuidade).
+  assert.ok(CADEIAS.length >= 1, 'a lista de cadeias pai→filhos não pode ficar vazia');
   for (const c of CADEIAS) {
     assert.ok(c.pai.test(FONTES[c.ficheiro]) && c.filho.test(FONTES[c.ficheiro]),
       c.ficheiro + ': a cadeia «' + c.nome + '» deixou de ser verificável — os ids filhos podem ter perdido a origem com âmbito');
+    // ⛔ O par tem de estar LIGADO no mesmo handler: uma âncora-filho que também
+    // existe noutra rota não prova que ESTA cadeia mantém o âmbito.
+    if (c.juntos) {
+      assert.ok(c.juntos.test(FONTES[c.ficheiro]),
+        c.ficheiro + ': a cadeia «' + c.nome + '» deixou de estar LIGADA — o pai e o filho já não coexistem no mesmo handler');
+    }
   }
   feito(CADEIAS.length + ' cadeia(s) pai→filhos com origem com âmbito confirmada (§25)');
 

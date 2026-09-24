@@ -174,7 +174,13 @@ const stubs = {
   // o que toca na BD fica de fora. Estender o módulo real (em vez de o
   // substituir) evita que um export novo deixe o teste frágil.
   'helpers/documento-pastas': require(path.join(RAIZ, 'helpers/documento-pastas')),
-  'helpers/recibos': { pagoPorQuota: async () => new Map(), cobertoPorQuota: async () => new Map(), pagamentosDasQuotas: async () => [], periodoLabel: () => '', gerarReciboPDF: async () => Buffer.from('') },
+  // `detalhePorEmitir` entrou com o C6. Antes dele, este teste monta
+  // `financeiro` ANTES de `quotas-modulo`, pelo que `GET /admin/quotas` era
+  // servido pelo handler de `financeiro` — que em produção está SOMBREADO e é
+  // código morto. Com a rota morta removida, o pedido chega finalmente ao
+  // handler REAL (`quotas-modulo.js`, quem o serve em produção), e o stub tem
+  // de cobrir o que ele usa. Um stub incompleto aqui era cobertura enganadora.
+  'helpers/recibos': { pagoPorQuota: async () => new Map(), cobertoPorQuota: async () => new Map(), pagamentosDasQuotas: async () => [], periodoLabel: () => '', gerarReciboPDF: async () => Buffer.from(''), detalhePorEmitir: async () => [] },
   'helpers/pdf': { gerarReciboPDF: async () => Buffer.from('') },
   'helpers/audit': { audit: async () => ({}), auditSafe: async () => ({}) },
 };
