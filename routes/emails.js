@@ -109,6 +109,14 @@ router.get('/emails', async (req, res) => {
     listarPreferencias(),
   ]);
 
+  // P54-7 — linhas da CONSULTA para o padrão P54-0: valores como TEXTO, sem um
+  // único input na página. Não há segredos nesta área (são preferências
+  // sim/não), pelo que nenhuma linha é marcada como `sensivel`.
+  const linhasNotificacoes = preferencias.map((p) => ({
+    rotulo: p.rotulo,
+    valor: `Email: ${p.email ? 'ativo' : 'inativo'} · Guardar: ${p.drive ? 'ativo' : 'inativo'}`,
+  }));
+
   res.render(req.suporte ? 'admin/emails/index-suporte' : 'admin/emails/index', {
     titulo: 'Emails',
     emails,
@@ -118,6 +126,7 @@ router.get('/emails', async (req, res) => {
     contagens,
     estadoSmtp,
     preferencias,
+    linhasNotificacoes,
     estadosLabel: ESTADOS_LABEL,
     periodo,
     periodos: ATALHOS,
@@ -125,14 +134,31 @@ router.get('/emails', async (req, res) => {
 });
 
 // ── Notificações automáticas (preferências por evento) ─────────────
+// P54-7 — o ÂMBITO vem do condomínio ATIVO (`req.condominioId`, já validado pelo
+// tenant), nunca do corpo do pedido: é isso que impede que gravar aqui altere as
+// preferências de outro condomínio. A gravação recusa-se a correr sem âmbito.
 router.post('/emails/notificacoes', async (req, res) => {
   try {
-    const r = await guardarPreferencias(req.body);
-    await audit({ userId: req.user.id, acao: 'configurar_notificacoes', entidade: 'Configuracao', detalhes: { eventos: r.eventos } }).catch(() => {});
-    req.flash('success_msg', 'Preferências de notificações guardadas.');
+    const r = await guardarPreferencias(req.body, req.condominioId);
+    await audit({
+      userId: req.user.id,
+      acao: 'configurar_notificacoes',
+      entidade: 'Configuracao',
+      // P54-7 — auditoria com utilizador, condomínio e as chaves cujo EFEITO
+      // mudou. ⛔ Só NOMES de campos: nunca valores (não há segredos aqui, mas a
+      // regra é a mesma em toda a frente).
+      detalhes: { condominioId: req.condominioId, eventos: r.eventos, alterados: r.alterados },
+    }).catch(() => {});
+    req.flash('success_msg', r.alterados.length
+      ? `Preferências de notificações guardadas (${r.alterados.length} alteração(ões)).`
+      : 'Preferências de notificações guardadas — nada mudou.');
   } catch (err) {
     console.error('[emails] notificações:', err.message);
-    req.flash('error_msg', 'Não foi possível guardar as notificações.');
+    // As mensagens do validador são escritas para o utilizador; qualquer outra
+    // falha (BD, âmbito ausente) mantém a mensagem genérica — nunca se ecoa o
+    // erro interno.
+    const doValidador = err.motivo === 'submissao_incompleta' || err.motivo === 'campo_desconhecido';
+    req.flash('error_msg', doValidador ? err.message : 'Não foi possível guardar as notificações.');
   }
   res.redirect('/admin/emails#notificacoes');
 });

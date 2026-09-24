@@ -186,7 +186,20 @@
     <i class="bi bi-bell me-1"></i>Notificações automáticas
   </div>
   <div class="card-body">
-    <form action="/admin/emails/notificacoes" method="POST">
+    {{!-- P54-7 — PADRÃO CONSULTA → EDITAR → GUARDAR/CANCELAR.
+         Nasce em CONSULTA (só texto) e o formulário só aparece depois de
+         «Editar». O bloco usa um id PRÓPRIO (`notif-prefs`): o cartão já tem
+         `id="notificacoes"`, que é o destino do âncora `#notificacoes` — dois
+         elementos com o mesmo id seriam HTML inválido e quebravam o âncora. --}}
+    {{#> _modo-edicao id="notif-prefs" acao="/admin/emails/notificacoes"
+                     linhas=linhasNotificacoes
+                     rotuloGuardar="Guardar notificações"
+                     confirmarAbandono="Há preferências de notificações por guardar. Se sair agora, perdem-se."}}
+      {{!-- ⛔ Marcador de submissão COMPLETA. Uma checkbox desmarcada não viaja no
+           corpo do pedido: sem este marcador, «campo ausente» seria
+           indistinguível de «formulário nunca submetido» e um POST direto
+           desligava todas as preferências. O servidor recusa a gravação sem ele. --}}
+      <input type="hidden" name="_notificacoes" value="1" />
       <div class="table-responsive">
         <table class="table align-middle mb-3">
           <thead class="table-light">
@@ -223,7 +236,6 @@
         de quotas em atraso). O canal “Guardar no {{@root.armazenamentoRotulo}}” fica disponível para os fluxos automáticos
         futuros; nos restantes documentos a ação de guardar é manual em cada módulo.
       </div>
-      <button type="submit" class="btn btn-primary" data-ajuda="Guarda quais as notificações automáticas que o condomínio envia por email." data-ajuda-titulo="Guardar notificações"><i class="bi bi-check2 me-1"></i>Guardar notificações</button>
-    </form>
+    {{/_modo-edicao}}
   </div>
 </div>

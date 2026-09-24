@@ -8,8 +8,14 @@
 // automáticos já existentes (recibo por email, lembretes de quotas em
 // atraso) ficam ATIVOS. As restantes preferências ficam guardadas para
 // os fluxos automáticos, sem ativar comportamento novo.
+//
+// ── P54-7 — ÂMBITO POR CONDOMÍNIO (isolamento) ──────────────────────
+// Como nas automações de documentos: grava-se em `notif_<evento>_<canal>:c<ID>`
+// e a chave base fica como valor herdado. Antes gravava-se sempre a chave GLOBAL
+// e a preferência de um condomínio passava a valer para todos.
+// A gravação EXIGE âmbito; uma leitura sem contexto lê a chave base.
 // ─────────────────────────────────────────────────────────────────────
-const { getConfig, setConfig } = require('./config');
+const { idCondominio, lerComPrecedencia, gravarNoAmbito } = require('./config-ambito');
 
 const EVENTOS = {
   quotas_novas: 'Novas quotas',
@@ -23,6 +29,12 @@ const EVENTOS = {
   pagamentos: 'Pagamentos',
   administrativos: 'Outros avisos administrativos',
 };
+
+const CANAIS = ['email', 'drive'];
+
+// Marcador de submissão COMPLETA — mesma razão das automações: sem ele, um
+// `POST` direto desligava todas as notificações por omissão dos campos ausentes.
+const MARCADOR = '_notificacoes';
 
 // Comportamento atual por omissão ('1' = ativo). Canal "drive" começa
 // desligado — nunca se ativa armazenamento automático sem decisão do admin.
@@ -42,40 +54,95 @@ const DEFAULTS = {
   administrativos_email: '1',
 };
 
-async function estaAtivo(evento, canal) {
-  if (!EVENTOS[evento] || !['email', 'drive'].includes(canal)) return false;
-  const chave = `notif_${evento}_${canal}`;
-  const v = await getConfig(chave, null);
-  if (v === null) return DEFAULTS[`${evento}_${canal}`] === '1';
+// Chave (sem âmbito) de uma preferência. O âmbito é acrescentado por
+// `helpers/config-ambito.js`.
+function chaveDe(evento, canal) {
+  return `notif_${evento}_${canal}`;
+}
+
+function chavesConhecidas() {
+  const out = [];
+  for (const evento of Object.keys(EVENTOS)) for (const canal of CANAIS) out.push(chaveDe(evento, canal));
+  return out;
+}
+
+// `condominioId` é opcional na LEITURA: sem ele lê-se a chave herdada (global),
+// que é o que um job sem contexto de condomínio deve usar.
+async function estaAtivo(evento, canal, condominioId) {
+  if (!EVENTOS[evento] || !CANAIS.includes(canal)) return false;
+  const v = await lerComPrecedencia(chaveDe(evento, canal), condominioId);
+  if (v === undefined) return DEFAULTS[`${evento}_${canal}`] === '1';
   return v === '1';
 }
 
 // Lista de eventos com o estado atual, para a interface.
-async function listarPreferencias() {
+async function listarPreferencias(condominioId) {
   const out = [];
   for (const [evento, rotulo] of Object.entries(EVENTOS)) {
     out.push({
       evento,
       rotulo,
-      email: await estaAtivo(evento, 'email'),
-      drive: await estaAtivo(evento, 'drive'),
+      email: await estaAtivo(evento, 'email', condominioId),
+      drive: await estaAtivo(evento, 'drive', condominioId),
     });
   }
   return out;
 }
 
-// Grava preferências a partir do formulário (campos notif_<evento>_<canal>).
-async function guardarPreferencias(body) {
-  const escritas = [];
-  for (const [evento, rotulo] of Object.entries(EVENTOS)) {
-    for (const canal of ['email', 'drive']) {
-      const chave = `notif_${evento}_${canal}`;
-      const valor = body[chave] === 'on' || body[chave] === '1' ? '1' : '0';
-      await setConfig(chave, valor);
-      escritas.push(chave);
-    }
+// Valida o corpo antes de escrever. Devolve `{ ok, motivo, mensagem }`.
+function validarCorpo(body) {
+  const corpo = body && typeof body === 'object' ? body : {};
+  if (corpo[MARCADOR] !== '1') {
+    return {
+      ok: false,
+      motivo: 'submissao_incompleta',
+      mensagem: 'A submissão não foi identificada como completa. Recarregue a página e tente de novo '
+        + '(nenhuma preferência foi alterada).',
+    };
   }
-  return { eventos: Object.keys(EVENTOS).length, canais: 2, escritas: escritas.length };
+  const conhecidas = new Set([MARCADOR, ...chavesConhecidas()]);
+  const desconhecidas = Object.keys(corpo).filter((k) => !conhecidas.has(k));
+  if (desconhecidas.length) {
+    return {
+      ok: false,
+      motivo: 'campo_desconhecido',
+      campos: desconhecidas,
+      mensagem: `Campo não reconhecido: ${desconhecidas.join(', ')}. Nada foi alterado.`,
+    };
+  }
+  return { ok: true };
 }
 
-module.exports = { EVENTOS, estaAtivo, listarPreferencias, guardarPreferencias };
+// Grava preferências a partir do formulário (campos notif_<evento>_<canal>)
+// NO ÂMBITO do condomínio indicado. Devolve as chaves cujo EFEITO mudou.
+//
+// ⛔ A exigência de âmbito vive SÓ em `gravarNoAmbito` (o ponto único por onde
+// passam todas as escritas). Duplicá-la aqui criaria dois sítios a manter e um
+// deles poderia divergir sem que nada o detetasse.
+async function guardarPreferencias(body, condominioId) {
+  const id = idCondominio(condominioId);
+  const validacao = validarCorpo(body);
+  if (!validacao.ok) {
+    const err = new Error(validacao.mensagem);
+    err.motivo = validacao.motivo;
+    err.campos = validacao.campos;
+    throw err;
+  }
+
+  const alterados = [];
+  for (const evento of Object.keys(EVENTOS)) {
+    for (const canal of CANAIS) {
+      const chave = chaveDe(evento, canal);
+      const valor = body[chave] === 'on' || body[chave] === '1' ? '1' : '0';
+      const antes = (await estaAtivo(evento, canal, id)) ? '1' : '0';
+      if (antes !== valor) alterados.push(chave);
+      await gravarNoAmbito(chave, valor, id, { origem: 'guardarPreferencias' });
+    }
+  }
+  return { eventos: Object.keys(EVENTOS).length, canais: CANAIS.length, alterados };
+}
+
+module.exports = {
+  EVENTOS, CANAIS, MARCADOR, chaveDe, chavesConhecidas,
+  estaAtivo, listarPreferencias, validarCorpo, guardarPreferencias,
+};

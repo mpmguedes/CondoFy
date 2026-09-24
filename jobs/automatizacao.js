@@ -201,8 +201,15 @@ async function enviarLembretesAutomaticos() {
     // «Em atraso» = o vencimento já passou. Uma quota que vence hoje não é
     // atraso — entra pela janela do lembrete.
     const ehAtraso = vencimento < hojeISO;
-    // Avisos de atraso respeitam a preferência "Quotas em atraso → email".
-    if (ehAtraso && !(await estaAtivo('quotas_atraso', 'email'))) continue;
+    // O condomínio vem da PRÓPRIA quota (nunca de uma assunção global). Sem ele,
+    // `resolverDestinatarios` desliga o escopo por condomínio e pode devolver
+    // contactos de outro condomínio.
+    const condominioId = Number(q.condominio_id);
+    // Avisos de atraso respeitam a preferência «Quotas em atraso → email» NO
+    // ÂMBITO do condomínio da própria quota (P54-7): a preferência de um
+    // condomínio nunca governa os avisos dos outros. Numa quota sem condomínio a
+    // leitura cai na chave herdada (global) — nunca na de um condomínio alheio.
+    if (ehAtraso && !(await estaAtivo('quotas_atraso', 'email', condominioId))) continue;
 
     const assunto = ehAtraso ? ASSUNTO_ATRASO : ASSUNTO_LEMBRETE;
     if (jaDespachado.has(`${Number(q.id)}:${assunto}`)) {
@@ -210,10 +217,6 @@ async function enviarLembretesAutomaticos() {
       continue;
     }
 
-    // O condomínio vem da PRÓPRIA quota (nunca de uma assunção global). Sem ele,
-    // `resolverDestinatarios` desliga o escopo por condomínio e pode devolver
-    // contactos de outro condomínio.
-    const condominioId = Number(q.condominio_id);
     if (!condominioId) continue;
 
     const dest = await resolverDestinatarios(
