@@ -1,12 +1,14 @@
-{{!-- Tabs superiores do módulo Assembleias — recebe "ativo": assembleias | convocatorias | votacoes --}}
+{{!-- Tabs superiores do módulo Assembleias — recebe "ativo": assembleias | convocatorias | votacoes
+     F17/F31 — a tab ativa leva `aria-current="page"` (o estado ativo era dado só
+     pela cor da classe `.active`). Os ícones já levam `aria-hidden` desde a F18. --}}
 <nav class="assembleias-tabs" aria-label="Secções do módulo Assembleias">
-  <a class="assembleias-tab {{#if (eq ativo 'assembleias')}}active{{/if}}" href="/admin/assembleias">
+  <a class="assembleias-tab {{#if (eq ativo 'assembleias')}}active{{/if}}" href="/admin/assembleias" {{#if (eq ativo 'assembleias')}}aria-current="page"{{/if}}>
     <span class="material-symbols-outlined" aria-hidden="true">forum</span>Assembleias
   </a>
-  <a class="assembleias-tab {{#if (eq ativo 'convocatorias')}}active{{/if}}" href="/admin/convocatorias/nova">
+  <a class="assembleias-tab {{#if (eq ativo 'convocatorias')}}active{{/if}}" href="/admin/convocatorias/nova" {{#if (eq ativo 'convocatorias')}}aria-current="page"{{/if}}>
     <span class="material-symbols-outlined" aria-hidden="true">description</span>Convocatórias
   </a>
-  <a class="assembleias-tab {{#if (eq ativo 'votacoes')}}active{{/if}}" href="/admin/votacoes">
+  <a class="assembleias-tab {{#if (eq ativo 'votacoes')}}active{{/if}}" href="/admin/votacoes" {{#if (eq ativo 'votacoes')}}aria-current="page"{{/if}}>
     <span class="material-symbols-outlined" aria-hidden="true">how_to_vote</span>Votações
   </a>
 </nav>

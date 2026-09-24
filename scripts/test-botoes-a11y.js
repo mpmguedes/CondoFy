@@ -306,13 +306,68 @@ for (const [nome, mapa] of [['claro', claro], ['escuro', escuro]]) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// FASE 4 — contratos de tamanho declarados e componentes preservados
+// FASE 4 — contratos de tamanho DECLARADOS **e APLICADOS**
 // ═══════════════════════════════════════════════════════════════════
+// ⛔ O que faltava: os tokens estavam declarados e fixados por teste, mas
+// NENHUM componente os usava (medido no browser: `.btn` = 33,1px, não 36px).
+// Um teste que só verifique a DECLARAÇÃO do token é um falso verde: o contrato
+// tem de estar ligado ao componente.
 console.log('\n── FASE 4: contratos de tamanho ──');
 for (const [token, valor] of [['--ctl-h-sm', '32px'], ['--ctl-h', '36px'], ['--ctl-h-lg', '44px'], ['--ctl-h-touch', '48px']]) {
   exigir(claro.get(token) === valor, `${token} declarado com ${valor} (obtido: ${claro.get(token)})`);
   console.log(`OK   ${token} = ${valor}`);
 }
+// Resolve `var(--token)` para o valor declarado, para poder asserir a ligação.
+function medidaDoToken(corpo, prop) {
+  const v = declaracao(corpo, prop);
+  if (v === null) return null;
+  const m = v.match(/^var\((--[a-z0-9-]+)\)$/);
+  if (!m) return v;
+  const t = claro.get(m[1]);
+  return t === undefined ? null : `var(${m[1]})`;
+}
+for (const [seletor, token, valor] of [
+  ['.btn', '--ctl-h', '36px'],
+  ['.btn-sm', '--ctl-h-sm', '32px'],
+  ['.btn-lg', '--ctl-h-lg', '44px'],
+  ['.portal-btn', '--ctl-h-touch', '48px'],
+  ['.portal-atalho', '--ctl-h-touch', '48px'],
+  ['.quick-action', '--ctl-h', '36px'],
+]) {
+  const ligado = medidaDoToken(corpoDe(seletor), 'min-height');
+  exigir(ligado === `var(${token})`,
+    `${seletor}: min-height tem de vir do token ${token} (obtido: ${ligado ?? 'nenhum'})`);
+  exigir(claro.get(token) === valor, `${token} = ${valor}`);
+  console.log(`OK   ${seletor} min-height = var(${token}) → ${valor}`);
+}
+// ⛔ `.btn` NÃO pode ter `height` fixa: tem `overflow: hidden` (ripple) e um
+// rótulo que quebre linha seria TRUNCADO em silêncio. Medido no browser: um
+// rótulo de 37 caracteres ocupa 51,7px. A altura é um PISO (`min-height`).
+exigir(!/(?:^|;)\s*height\s*:/.test(corpoDe('.btn')),
+  '.btn não pode fixar `height` (truncaria rótulos de duas linhas — usar min-height)');
+console.log('OK   .btn usa min-height (um rótulo longo cresce em vez de ser truncado)');
+
+// A caixa do ícone tem de ser fixa: sem isso o ícone (font-size escalado,
+// 19,44px a 108%) inflaciona a linha do flex e o botão COM ícone fica mais alto
+// do que o mesmo botão sem ícone (medido: 37,4px vs 36px; tabs 42,4 vs 40px).
+for (const seletor of [
+  '.btn .material-symbols-outlined',
+  '.btn-sm .material-symbols-outlined',
+  '.btn-lg .material-symbols-outlined',
+  '.quotas-tab .material-symbols-outlined',
+]) {
+  const corpo = corpoDe(seletor);
+  exigir(/height:\s*18px/.test(corpo), `${seletor}: caixa fixa de 18px (não infla a altura do controlo)`);
+  exigir(/font-size:\s*calc\(\d+px \* var\(--font-scale\)\)/.test(corpo),
+    `${seletor}: o glifo escala com --font-scale`);
+}
+console.log('OK   a caixa do ícone é fixa (18px) e o glifo escala — a altura não é inflacionada');
+// O gap ícone↔texto é 6px: o `me-1` do markup somava-se ao `gap` (10px).
+exigir(/gap:\s*6px/.test(corpoDe('.btn')), '.btn: gap ícone-texto de 6px');
+exigir(/margin-right:\s*0\s*!important/.test(corpoDe('.btn > .material-symbols-outlined')),
+  'a margem do ícone dentro do .btn é neutralizada (o me-1 não se soma ao gap)');
+console.log('OK   gap ícone↔texto de 6px (o me-1 do markup deixou de se somar)');
+
 // As "bolinhas" continuam redondas e do tamanho aprovado, no desktop e no telemóvel.
 const bolinha = corpoDe('.icon-btn');
 exigir(declaracao(bolinha, 'width') === '40px', '.icon-btn mantém 40px de largura');
@@ -322,14 +377,136 @@ console.log('OK   .icon-btn circular 40x40 preservada');
 exigir((css.match(/\.icon-btn\s*\{\s*width:\s*44px;\s*height:\s*44px/g) || []).length >= 2,
   '.icon-btn mantém 44x44 nos contextos de toque (telemóvel)');
 console.log('OK   .icon-btn 44x44 nos contextos de toque');
-// Componentes com requisitos próprios não foram tocados.
-for (const [seletor, prop, valor] of [
-  ['.portal-btn', 'min-height', '48px'],
-  ['.quick-action', 'min-height', '36px'],
-]) {
-  exigir(declaracao(corpoDe(seletor), prop) === valor, `${seletor} mantém ${prop}: ${valor}`);
+// Componentes com requisitos próprios: geometria própria preservada.
+exigir(/line-height:\s*1\.5/.test(corpoDe('.mes-btn')),
+  'o .mes-btn preserva o ritmo vertical próprio (o line-height do contrato .btn encurtava-o)');
+console.log('OK   .mes-btn preserva a geometria própria (cartão de duas linhas)');
+
+// ═══════════════════════════════════════════════════════════════════
+// FASE 5 — tabs: bloco único, estado ativo pelo contrato, aria-current
+// ═══════════════════════════════════════════════════════════════════
+console.log('\n── FASE 5: tabs ──');
+const FAMILIAS_TAB = ['.quotas-tab', '.assembleias-tab', '.config-tab', '.fracoes-tab'];
+for (const f of FAMILIAS_TAB) {
+  const n = ocorrencias(f);
+  exigir(n === 1, `${f}: ${n} definições globais (esperado 1 — bloco único com seletores agrupados)`);
+  console.log(`${n === 1 ? 'OK   ' : 'FALHA'} ${String(n).padStart(2)}× ${f}`);
 }
-console.log('OK   .portal-btn e .quick-action mantêm as suas dimensões');
+// ⛔ O 4.º sistema (Bootstrap) foi eliminado: era o único com raio 0, padding 16px
+// e SEM ícone. Uma regra `.nav-tabs` que reste é a porta para a divergência voltar.
+exigir(!/\.nav-tabs/.test(global), 'nenhuma regra .nav-tabs resta em styles.css (4.º sistema eliminado)');
+exigir(ocorrencias('.nav-tabs .nav-link') === 0, 'nenhuma regra .nav-tabs .nav-link resta');
+console.log('OK   o sistema Bootstrap .nav-tabs/.nav-link foi eliminado do CSS');
+
+const itemTab = corpoDe('.quotas-tab');
+exigir(/padding:\s*10px 14px/.test(itemTab), 'as tabs partilham um padding único (10px 14px)');
+exigir(/border-radius:\s*var\(--radius-sm\) var\(--radius-sm\) 0 0/.test(itemTab),
+  'as tabs partilham o raio 8px 8px 0 0');
+console.log('OK   geometria única das tabs (padding 10px 14px, raio 8px 8px 0 0)');
+// O alvo tátil de 48px aplicava-se SÓ a `.quotas-tab`; passa às QUATRO famílias.
+exigir(/\.quotas-tab, \.assembleias-tab, \.config-tab, \.fracoes-tab \{ min-height: var\(--ctl-h-touch\)/.test(css),
+  'o alvo tátil de 48px aplica-se às QUATRO famílias de tabs em telemóvel');
+console.log('OK   alvo tátil de 48px nas quatro famílias de tabs (antes só em .quotas-tab)');
+
+// Estado ativo: fundo primário + texto `--c-on-primary` — a linguagem do
+// `.btn-primary`. ⛔ Nunca branco hardcoded: no tema escuro `--c-on-primary` é
+// `#06213F` e impor `#FFF` baixaria o contraste de 8,77:1 para ~1,5:1.
+for (const f of FAMILIAS_TAB) {
+  const ativo = corpoDe(`${f}.active`);
+  exigir(/background:\s*var\(--c-primary\)/.test(ativo), `${f}.active: fundo var(--c-primary)`);
+  exigir(/color:\s*var\(--c-on-primary\)/.test(ativo), `${f}.active: texto var(--c-on-primary)`);
+  exigir(!/#fff|#ffffff|:\s*white/i.test(ativo), `${f}.active: nunca branco hardcoded`);
+}
+console.log('OK   estado ativo das tabs pelo contrato (fundo primário + texto on-primary)');
+for (const [nome, mapa] of [['claro', claro], ['escuro', escuro]]) {
+  medir(`tab ativa (${nome}): --c-on-primary sobre --c-primary`,
+    resolver(mapa, '--c-on-primary'), resolver(mapa, '--c-primary'), 4.5);
+}
+
+// As tabs vivem em `<a href>` (URLs preservados) e em `<button>` (fracoes):
+// em nenhum caso o estado ativo pode depender só da cor.
+const TABS_PARCIAIS = ['_quotas-tabs', '_assembleias-tabs', '_config-tabs', '_condomino-quotas-tabs'];
+for (const p of TABS_PARCIAIS) {
+  const src = ler(`views/partials/${p}.handlebars`);
+  const abas = (src.match(/<a class="/g) || []).length;
+  const current = (src.match(/aria-current="page"\{\{\/if\}\}/g) || []).length;
+  exigir(abas > 0, `${p}: tem abas`);
+  exigir(current >= abas, `${p}: ${current} aria-current para ${abas} abas (o estado ativo é invisível para leitores de ecrã)`);
+  console.log(`OK   ${p}: ${current}/${abas} abas com aria-current="page"`);
+}
+// A vista migrada: sem as classes Bootstrap, com a linguagem única, e com os
+// atributos de que o JS do Bootstrap precisa (senão as tabs deixam de trocar).
+const vistaFracoes = ler('views/admin/fracoes/detalhe.handlebars');
+exigir(!/class="nav nav-tabs"/.test(vistaFracoes), 'fracoes/detalhe já não usa a classe Bootstrap .nav-tabs');
+exigir(!/class="nav-link/.test(vistaFracoes), 'fracoes/detalhe já não usa a classe Bootstrap .nav-link');
+exigir(/class="fracoes-tabs"/.test(vistaFracoes), 'fracoes/detalhe usa a linguagem única (.fracoes-tabs)');
+exigir(/data-bs-toggle="tab"/.test(vistaFracoes), 'os gatilhos data-bs-toggle mantêm-se (o JS das tabs funciona)');
+exigir(/role="tab"/.test(vistaFracoes), 'os gatilhos mantêm role="tab" (o Tab do Bootstrap procura por ele)');
+exigir((vistaFracoes.match(/material-symbols-outlined/g) || []).length >= 6,
+  'as tabs de fracoes passaram a ter ícone (o sistema antigo não tinha)');
+console.log('OK   fracoes/detalhe migrada para a linguagem única, com os gatilhos do Bootstrap intactos');
+
+// ── F14 / F15 — blocos duplicados consolidados, com o VENCEDOR preservado ──
+// ⛔ Consolidar não é escolher o primeiro bloco: é preservar o resultado
+// CALCULADO (o último da cascata). O `.page-heading` dizia `--sp-5` (24px) no
+// primeiro bloco e o valor efetivo era 14px, do segundo — uma divergência
+// silenciosa entre o ficheiro e o que se via.
+for (const seletor of ['.page-heading', '.page-heading h1', '.page-heading .subtitle', '.card-header']) {
+  const n = ocorrencias(seletor);
+  exigir(n === 1, `${seletor}: ${n} definições globais (esperado 1)`);
+  console.log(`${n === 1 ? 'OK   ' : 'FALHA'} ${String(n).padStart(2)}× ${seletor}`);
+}
+exigir(declaracao(corpoDe('.page-heading'), 'margin-bottom') === '14px',
+  'o .page-heading preserva o margin-bottom EFETIVO (14px), não os --sp-5 do bloco perdedor');
+console.log('OK   .page-heading preserva o valor efetivo (14px), não o do bloco perdedor');
+const corpoCardHeader = corpoDe('.card-header');
+for (const [prop, esperado] of [
+  ['background', 'var(--c-surface)'],
+  ['color', 'var(--c-text)'],
+  ['font-weight', '600'],
+  ['padding', '8px 14px'],
+  ['border-radius', 'var(--radius) var(--radius) 0 0 !important'],
+]) {
+  exigir(declaracao(corpoCardHeader, prop) === esperado,
+    `.card-header: ${prop} devia ser ${esperado} (vencedor da cascata)`);
+}
+console.log('OK   .card-header consolidado preserva o vencedor de cada propriedade');
+
+// ═══════════════════════════════════════════════════════════════════
+// FASE 6 — F27 (.mes-btn desativado) e F28 (.quick-action canónico)
+// ═══════════════════════════════════════════════════════════════════
+console.log('\n── FASE 6: F27 e F28 ──');
+const mesDesativado = corpoDe('.mes-btn:disabled');
+exigir(/opacity:\s*1\b/.test(mesDesativado), '.mes-btn desativado repõe opacity: 1 (F27)');
+exigir(!/opacity:\s*0?\.\d/.test(mesDesativado), '.mes-btn desativado não usa opacidade fracionária');
+for (const prop of ['background', 'border-color']) {
+  exigir(new RegExp(`${prop}\\s*:\\s*var\\(--c-disabled`).test(mesDesativado),
+    `.mes-btn desativado define ${prop} por token (F27)`);
+}
+// As linhas internas têm cor PRÓPRIA e venceriam a cascata do elemento pai.
+for (const linha of ['.mes-btn-mes', '.mes-btn-valor']) {
+  exigir(new RegExp(`color:\\s*var\\(--c-disabled-text\\)`).test(corpoDe(`.mes-btn:disabled ${linha}`)),
+    `${linha} desativado recebe --c-disabled-text (tem cor própria e vencia o pai)`);
+}
+console.log('OK   F27 — .mes-btn desativado por COR (tokens), com as linhas internas cobertas');
+// Nenhuma regra de controlo pode voltar a atenuar por opacidade fracionária.
+const fraca = regras.filter((r) => /opacity:\s*0?\.\d/.test(r.corpo)
+  && r.seletor.split(',').some((s) => /^\.(btn|mes-btn)(\b|[-.:])/.test(s.trim())
+    && !s.trim().startsWith('.btn-close')));
+assert.deepStrictEqual(fraca.map((r) => r.seletor), [],
+  `controlos atenuados por opacity (a diluir texto e fundo): ${fraca.map((r) => r.seletor).join(' | ')}`);
+console.log('OK   nenhuma regra de botão ou .mes-btn usa opacity fracionária');
+
+// F28 — `.quick-action` tinha 3 definições (mais uma no @media) e a cascata
+// decidia por ordem de aparição.
+exigir(ocorrencias('.quick-action') === 1,
+  `.quick-action: ${ocorrencias('.quick-action')} definições globais (esperado 1 — canónica)`);
+console.log('OK   F28 — .quick-action com uma só definição');
+// A hierarquia intencional face ao `.btn` mantém-se (peso 400, não 500).
+exigir(declaracao(corpoDe('.quick-action'), 'font-weight') === '400',
+  '.quick-action mantém font-weight: 400 (hierarquia intencional face ao .btn)');
+console.log('OK   .quick-action mantém o peso 400 (hierarquia face ao .btn preservada)');
+
 
 // ═══════════════════════════════════════════════════════════════════
 // FASE 2 — nome acessível dos controlos e ícones decorativos

@@ -12,13 +12,22 @@
   </div>
 </div>
 
-<ul class="nav nav-tabs" role="tablist">
-  <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#resumo" type="button" role="tab">Resumo</button></li>
-  <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pessoas" type="button" role="tab">Proprietários</button></li>
-  <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#quotas" type="button" role="tab">Quotas</button></li>
-  <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pagamentos" type="button" role="tab">Pagamentos</button></li>
-  <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#documentos" type="button" role="tab">Documentos</button></li>
-  <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#comunicacoes" type="button" role="tab">Comunicações</button></li>
+{{!-- Fase 5 (F9) — tabs migradas do sistema Bootstrap `.nav-tabs`/`.nav-link` para a
+     linguagem única do projeto (`.fracoes-tabs`/`.fracoes-tab`). O `.nav-tabs` era o
+     4.º sistema: raio 0, padding 16px e SEM ícone. Agora tem o mesmo raio (8px 8px 0 0),
+     a mesma altura e o ícone de 18px das outras três famílias.
+     Mantêm-se os atributos de que o JS do Bootstrap precisa: `data-bs-toggle="tab"`,
+     `data-bs-target` e `role="tab"`. O `Tab` do Bootstrap 5.3 procura os gatilhos por
+     `[role="tab"]`/`[data-bs-toggle="tab"]` e o `_parent` é o próprio `<ul>`, pelo que
+     NÃO depende das classes `nav-tabs`/`nav-link`. Os `<li class="nav-item">` ficam
+     porque `_getOuterElement()` os usa. --}}
+<ul class="fracoes-tabs" role="tablist">
+  <li class="nav-item" role="presentation"><button class="fracoes-tab active" data-bs-toggle="tab" data-bs-target="#resumo" type="button" role="tab"><span class="material-symbols-outlined" aria-hidden="true">summarize</span>Resumo</button></li>
+  <li class="nav-item" role="presentation"><button class="fracoes-tab" data-bs-toggle="tab" data-bs-target="#pessoas" type="button" role="tab"><span class="material-symbols-outlined" aria-hidden="true">groups</span>Proprietários</button></li>
+  <li class="nav-item" role="presentation"><button class="fracoes-tab" data-bs-toggle="tab" data-bs-target="#quotas" type="button" role="tab"><span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>Quotas</button></li>
+  <li class="nav-item" role="presentation"><button class="fracoes-tab" data-bs-toggle="tab" data-bs-target="#pagamentos" type="button" role="tab"><span class="material-symbols-outlined" aria-hidden="true">credit_card</span>Pagamentos</button></li>
+  <li class="nav-item" role="presentation"><button class="fracoes-tab" data-bs-toggle="tab" data-bs-target="#documentos" type="button" role="tab"><span class="material-symbols-outlined" aria-hidden="true">folder</span>Documentos</button></li>
+  <li class="nav-item" role="presentation"><button class="fracoes-tab" data-bs-toggle="tab" data-bs-target="#comunicacoes" type="button" role="tab"><span class="material-symbols-outlined" aria-hidden="true">campaign</span>Comunicações</button></li>
 </ul>
 
 <div class="tab-content mt-4">

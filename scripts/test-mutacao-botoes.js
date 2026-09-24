@@ -7,7 +7,7 @@
 // que o teste FALHE — e que falhe PELA RAZÃO CERTA (a mensagem da asserção
 // esperada), não por um efeito colateral.
 //
-// Mutações (alvo: `public/css/styles.css` e duas vistas):
+// Mutações (alvo: `public/css/styles.css`, uma parcial de tabs e duas vistas):
 //   1. Fase 1 — reintroduzir um segundo `.btn` global (a cascata volta a
 //      decidir por ordem de aparição, que é o defeito que a frente corrigiu);
 //   2. Fase 3 — o estado desativado volta a atenuar por `opacity`;
@@ -23,7 +23,24 @@
 //  10. Fase 4 — a "bolinha" deixa de ser circular;
 //  11. Fase 2 — controlo só-ícone sem nome acessível;
 //  12. Fase 2 — ícone decorativo sem `aria-hidden` (a ligadura do ícone entra
-//      no nome acessível do botão).
+//      no nome acessível do botão);
+//  13. Fase 4 — REMOVER a aplicação do token de altura no `.btn` (o defeito
+//      original: tokens declarados e nenhum componente a usá-los);
+//  14. Fase 4 — `.btn` passa a fixar `height` (truncaria rótulos de 2 linhas);
+//  15. Fase 4 — a caixa do ícone deixa de ser fixa (inflaciona a altura);
+//  16. Fase 4 — o alvo tátil do portal deixa de vir do token;
+//  17. Fase 5 — a tab ativa volta a usar o fundo da superfície;
+//  18. Fase 5 — a tab ativa passa a texto branco hardcoded;
+//  19. Fase 5 — remover o `aria-current` de uma parcial de tabs;
+//  20. Fase 5 — reintroduzir um segundo bloco de tab (divergência de padding);
+//  21. Fase 5 — repor o 4.º sistema Bootstrap (`.nav-tabs`) no CSS;
+//  22. Fase 5 — a vista de frações volta às classes Bootstrap;
+//  23. Fase 5 — o alvo tátil volta a aplicar-se só a `.quotas-tab`;
+//  24. F27 — o `.mes-btn` desativado volta a atenuar por opacidade;
+//  25. F27 — o `.mes-btn` desativado perde o fundo por token;
+//  26. F27 — as linhas internas do `.mes-btn` perdem o token de desativado;
+//  27. F28 — reintroduzir uma segunda definição de `.quick-action`;
+//  28. F28 — o `.quick-action` perde a hierarquia (peso igual ao do `.btn`).
 //
 // ── Nomes de backup próprios (árvore partilhada) ───────────────────
 // Os outros harnesses varrem `^\.mutation-backup-\d+-\d+\.tmp$` e afastam tudo
@@ -195,6 +212,168 @@ const MUTACOES = [
     de: 'me-1" aria-hidden="true"',
     para: 'me-1"',
     espera: /decorativos sem aria-hidden/,
+  },
+  // ── Fase 4 (aplicação EFETIVA dos tokens) ──────────────────────────
+  {
+    // ⛔ O defeito original: os tokens `--ctl-h*` estavam declarados e fixados
+    // por teste, mas NENHUM componente os usava (medido no browser: `.btn` =
+    // 33,1px, não 36px). Esta mutação repõe exatamente esse estado.
+    nome: 'Fase 4: remover a APLICAÇÃO do token de altura no `.btn`',
+    ficheiro: 'public/css/styles.css',
+    de: '  min-height: var(--ctl-h);\n  border: 1px solid transparent;',
+    para: '  min-height: 24px;\n  border: 1px solid transparent;',
+    espera: /\.btn: min-height tem de vir do token --ctl-h/,
+  },
+  {
+    // ⛔ Uma `height` fixa truncaria em silêncio qualquer rótulo de duas linhas
+    // (medido: 51,7px de conteúdo). A altura tem de ser um PISO.
+    nome: 'Fase 4: `.btn` passa a fixar `height` (truncaria rótulos de duas linhas)',
+    ficheiro: 'public/css/styles.css',
+    de: '  min-height: var(--ctl-h);\n  border: 1px solid transparent;',
+    para: '  height: var(--ctl-h);\n  min-height: var(--ctl-h);\n  border: 1px solid transparent;',
+    espera: /não pode fixar/,
+  },
+  {
+    // ⛔ Sem caixa fixa, o ícone (19,44px a 108%) inflaciona a linha do flex:
+    // medido 37,4px num botão COM ícone contra 36px no mesmo botão sem ícone.
+    // O alvo é o PRIMEIRO bloco de ícone (`.btn .material-symbols-outlined`).
+    nome: 'Fase 4: caixa do ícone deixa de ser fixa (inflaciona a altura do botão)',
+    ficheiro: 'public/css/styles.css',
+    de: '  height: 18px;\n  overflow: visible;',
+    para: '  overflow: visible;',
+    espera: /caixa fixa de 18px/,
+  },
+  {
+    nome: 'Fase 4: o alvo tátil do portal deixa de vir do token',
+    ficheiro: 'public/css/styles.css',
+    de: '  min-height: var(--ctl-h-touch);\n  border-radius: var(--radius-sm);\n  font-weight: 600;',
+    para: '  min-height: 40px;\n  border-radius: var(--radius-sm);\n  font-weight: 600;',
+    espera: /\.portal-btn: min-height tem de vir do token --ctl-h-touch/,
+  },
+  // ── Fase 5 (tabs) ──────────────────────────────────────────────────
+  {
+    nome: 'Fase 5: a tab ativa volta a usar o fundo da superfície (não o primário)',
+    ficheiro: 'public/css/styles.css',
+    de: '  color: var(--c-on-primary);\n  background: var(--c-primary);\n  border-color: var(--c-primary);',
+    para: '  color: var(--c-primary);\n  background: var(--c-surface);\n  border-color: var(--c-border);',
+    espera: /fundo var\(--c-primary\)/,
+  },
+  {
+    // ⛔ No tema escuro `--c-on-primary` é `#06213F`: impor branco baixaria o
+    // contraste de 8,77:1 para ~1,5:1 (reprova).
+    nome: 'Fase 5: a tab ativa passa a texto branco hardcoded',
+    ficheiro: 'public/css/styles.css',
+    de: '  color: var(--c-on-primary);\n  background: var(--c-primary);',
+    para: '  color: #FFFFFF;\n  background: var(--c-primary);',
+    espera: /nunca branco hardcoded/,
+  },
+  {
+    nome: 'Fase 5: remover o `aria-current` de uma parcial de tabs',
+    ficheiro: 'views/partials/_assembleias-tabs.handlebars',
+    de: ' {{#if (eq ativo \'assembleias\')}}aria-current="page"{{/if}}',
+    para: '',
+    espera: /aria-current para/,
+  },
+  {
+    // ⛔ O defeito estrutural: 3 blocos byte-idênticos. Reintroduzir um deles
+    // devolve a cascata a decidir por ordem de aparição.
+    nome: 'Fase 5: reintroduzir um segundo bloco de tab (divergência de padding)',
+    ficheiro: 'public/css/styles.css',
+    de: '.quotas-tab:hover, .assembleias-tab:hover,',
+    para: '.quotas-tab { padding: 8px 14px; }\n.quotas-tab:hover, .assembleias-tab:hover,',
+    espera: /definições globais \(esperado 1/,
+  },
+  {
+    nome: 'Fase 5: repor o 4.º sistema Bootstrap (`.nav-tabs`) no CSS',
+    ficheiro: 'public/css/styles.css',
+    de: '.quotas-tabs, .assembleias-tabs, .config-tabs, .fracoes-tabs {',
+    para: '.nav-tabs { border-bottom: 1px solid var(--c-border); }\n.quotas-tabs, .assembleias-tabs, .config-tabs, .fracoes-tabs {',
+    espera: /resta em styles.css/,
+  },
+  {
+    nome: 'Fase 5: a vista de frações volta às classes Bootstrap',
+    ficheiro: 'views/admin/fracoes/detalhe.handlebars',
+    de: '<ul class="fracoes-tabs" role="tablist">',
+    para: '<ul class="nav nav-tabs" role="tablist">',
+    espera: /já não usa a classe Bootstrap/,
+  },
+  {
+    // O alvo tátil de 48px era SÓ de `.quotas-tab`; as outras três famílias
+    // ficavam com ~40px no telemóvel.
+    nome: 'Fase 5: o alvo tátil volta a aplicar-se só a `.quotas-tab`',
+    ficheiro: 'public/css/styles.css',
+    de: '.quotas-tab, .assembleias-tab, .config-tab, .fracoes-tab { min-height: var(--ctl-h-touch); padding: 10px 12px; }',
+    para: '.quotas-tab { min-height: var(--ctl-h-touch); padding: 10px 12px; }',
+    espera: /alvo tátil de 48px aplica-se às QUATRO famílias/,
+  },
+  // ── Fase 6 (F27 / F28) ─────────────────────────────────────────────
+  {
+    // ⛔ F27 — a mesma doença do antigo `.btn-primary:disabled`: a opacidade
+    // dilui texto E fundo um contra o outro (2,2:1 medido no tema claro).
+    nome: 'F27: o `.mes-btn` desativado volta a atenuar por opacidade',
+    ficheiro: 'public/css/styles.css',
+    de: '.mes-btn:disabled, .mes-btn.sem-valor {\n  opacity: 1;',
+    para: '.mes-btn:disabled, .mes-btn.sem-valor {\n  opacity: 0.55;',
+    espera: /mes-btn desativado repõe opacity: 1|opacity fracionária/,
+  },
+  {
+    nome: 'F27: o `.mes-btn` desativado perde o fundo por token',
+    ficheiro: 'public/css/styles.css',
+    de: '.mes-btn:disabled, .mes-btn.sem-valor {\n  opacity: 1;\n  cursor: not-allowed;\n  background: var(--c-disabled-bg);',
+    para: '.mes-btn:disabled, .mes-btn.sem-valor {\n  opacity: 1;\n  cursor: not-allowed;\n  background: var(--c-surface-2);',
+    espera: /desativado define background por token/,
+  },
+  {
+    // ⛔ As linhas internas têm cor PRÓPRIA: sem a regra explícita venceriam a
+    // cascata do elemento pai e o texto desativado ficava com a cor ativa.
+    // A mutação atinge a REGRA INTEIRA (as duas famílias de seletores), senão o
+    // ramo `:disabled` continuaria a fornecer o token e o teste passaria.
+    nome: 'F27: as linhas internas do `.mes-btn` perdem o token de desativado',
+    ficheiro: 'public/css/styles.css',
+    de: '.mes-btn:disabled .mes-btn-mes, .mes-btn:disabled .mes-btn-valor,\n.mes-btn.sem-valor .mes-btn-mes, .mes-btn.sem-valor .mes-btn-valor { color: var(--c-disabled-text); }',
+    para: '.mes-btn:disabled .mes-btn-mes, .mes-btn:disabled .mes-btn-valor,\n.mes-btn.sem-valor .mes-btn-mes, .mes-btn.sem-valor .mes-btn-valor { color: var(--c-text); }',
+    espera: /desativado recebe --c-disabled-text/,
+  },
+  {
+    // ⛔ F28 — `.quick-action` tinha 3 definições e a cascata decidia por ordem.
+    nome: 'F28: reintroduzir uma segunda definição de `.quick-action`',
+    ficheiro: 'public/css/styles.css',
+    de: '.quick-action:hover { background: var(--c-surface-2);',
+    para: '.quick-action { padding: 6px 13px; }\n.quick-action:hover { background: var(--c-surface-2);',
+    espera: /\.quick-action: \d+ definições globais/,
+  },
+  {
+    // A hierarquia face ao `.btn` é INTENCIONAL (400 contra 500): uniformizar o
+    // peso apagaria a distinção entre ação rápida e botão.
+    nome: 'F28: o `.quick-action` perde a hierarquia (peso igual ao do `.btn`)',
+    ficheiro: 'public/css/styles.css',
+    de: '  font-weight: 400;\n  color: var(--c-primary);\n  text-decoration: none;',
+    para: '  font-weight: 500;\n  color: var(--c-primary);\n  text-decoration: none;',
+    espera: /mantém font-weight: 400/,
+  },
+  // ── Fase 5 (F14 / F15) ─────────────────────────────────────────────
+  {
+    nome: 'F15: reintroduzir um segundo bloco de `.card-header`',
+    ficheiro: 'public/css/styles.css',
+    de: 'hr { border-color: var(--c-border); opacity: 1; }\n\n.table {',
+    para: 'hr { border-color: var(--c-border); opacity: 1; }\n.card-header { padding: 4px 6px; }\n\n.table {',
+    espera: /\.card-header: \d+ definições globais/,
+  },
+  {
+    nome: 'F14: reintroduzir um segundo bloco de `.page-heading`',
+    ficheiro: 'public/css/styles.css',
+    de: '.page-heading { margin-bottom: 14px; }\n.page-heading h1 { font-size: calc(22px * var(--font-scale)); font-weight: 600; margin: 0 0 2px; }',
+    para: '.page-heading { margin-bottom: var(--sp-5); }\n.page-heading { margin-bottom: 14px; }\n.page-heading h1 { font-size: calc(22px * var(--font-scale)); font-weight: 600; margin: 0 0 2px; }',
+    espera: /\.page-heading: \d+ definições globais/,
+  },
+  {
+    // ⛔ O primeiro bloco dizia `--sp-5` (24px) e o valor EFETIVO era 14px, do
+    // segundo. Consolidar tem de preservar o vencedor, não o primeiro.
+    nome: 'F14: a consolidação guarda o valor do bloco PERDEDOR (--sp-5)',
+    ficheiro: 'public/css/styles.css',
+    de: '.page-heading { margin-bottom: 14px; }',
+    para: '.page-heading { margin-bottom: var(--sp-5); }',
+    espera: /preserva o margin-bottom EFETIVO/,
   },
 ];
 

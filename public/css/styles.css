@@ -443,11 +443,17 @@ a:hover { color: var(--c-primary-dark); }
   border-radius: var(--radius);
   box-shadow: var(--elev-1);
 }
+/* F15 — definição ÚNICA. Havia TRÊS blocos (este, o de «densidade» e o do bloco
+   de utilidades) e a cascata decidia por ordem de aparição. Preserva-se o
+   VENCEDOR por propriedade: `background`/`color` vinham do 3.º bloco,
+   `padding`/`font-size` do 2.º, `font-weight`/`border-radius` deste. */
 .card-header {
   background: var(--c-surface);
+  color: var(--c-text);
   border-bottom: 1px solid var(--c-border);
   font-weight: 600;
-  padding: var(--sp-3) var(--sp-4);
+  padding: 8px 14px;
+  font-size: calc(13px * var(--font-scale));
   border-radius: var(--radius) var(--radius) 0 0 !important;
 }
 .card-body { padding: var(--sp-4); }
@@ -459,18 +465,83 @@ a:hover { color: var(--c-primary-dark); }
    ⛔ Não reintroduzir duplicações destas regras mais abaixo.
    A tipografia escala com --font-scale; as dimensões de controlo não. */
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  /* Fase 4 — a altura vem do TOKEN, não do padding.
+     ⛔ É `min-height` e não `height`: `.btn` tem `overflow: hidden` (ripple) e um
+     rótulo que quebre linha seria TRUNCADO por uma altura fixa. Medido no browser:
+     «Ativar e gerar códigos de recuperação» ocupa 54px; `.mes-btn` (duas linhas,
+     herda `.btn.btn-sm`) ocupa 61px. Com `line-height` contido, o botão de UMA
+     linha assenta exatamente no valor do token (36/32/44px) e o de duas linhas
+     cresce em vez de perder texto. */
+  min-height: var(--ctl-h);
   border: 1px solid transparent;
-  border-radius: 7px;
-  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
   font-size: calc(13px * var(--font-scale));
   font-weight: 500;
+  line-height: 1.2;
   letter-spacing: 0.01em;
   position: relative;
   overflow: hidden;
-  transition: box-shadow 0.15s ease, background-color 0.15s ease;
+  text-decoration: none;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
-.btn-lg { padding: 7px 16px; font-size: calc(14px * var(--font-scale)); }
-.btn-sm { padding: 3px 9px; border-radius: 16px; font-size: calc(12px * var(--font-scale)); }
+/* O `me-1` do markup somava-se ao `gap` (4+6 = 10px). O contrato A7 é 6px:
+   neutraliza-se a margem do ícone DENTRO do botão (as utilities do Bootstrap são
+   `!important`, daí o `!important` — é o uso sancionado da regra). A remoção do
+   `me-1` do markup é trabalho da Fase 6. */
+.btn > .material-symbols-outlined { margin-right: 0 !important; }
+.btn .material-symbols-outlined {
+  font-size: calc(18px * var(--font-scale));
+  /* ⛔ A caixa do ícone é FIXA (18px). O ícone participa na linha do flex e, com
+     `font-size` escalado (19,44px a 108%), inflacionava a altura do controlo:
+     medido 37,4px num botão COM ícone contra 36px no MESMO botão sem ícone, e
+     42,4px nas tabs contra os 40px do contrato. A caixa fixa devolve a altura
+     canónica; o glifo continua a escalar (font-size) e transborda a caixa de
+     forma simétrica, dentro do padding — `overflow: visible` impede o corte. */
+  line-height: 1;
+  height: 18px;
+  overflow: visible;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-lg { min-height: var(--ctl-h-lg); padding: 11px 20px; font-size: calc(14px * var(--font-scale)); }
+.btn-lg .material-symbols-outlined {
+  font-size: calc(20px * var(--font-scale));
+  /* ⛔ A caixa do ícone é FIXA (18px). O ícone participa na linha do flex e, com
+     `font-size` escalado (19,44px a 108%), inflacionava a altura do controlo:
+     medido 37,4px num botão COM ícone contra 36px no MESMO botão sem ícone, e
+     42,4px nas tabs contra os 40px do contrato. A caixa fixa devolve a altura
+     canónica; o glifo continua a escalar (font-size) e transborda a caixa de
+     forma simétrica, dentro do padding — `overflow: visible` impede o corte. */
+  line-height: 1;
+  height: 18px;
+  overflow: visible;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-sm { min-height: var(--ctl-h-sm); padding: 6px 12px; border-radius: var(--radius-sm); font-size: calc(12px * var(--font-scale)); }
+.btn-sm .material-symbols-outlined {
+  font-size: calc(16px * var(--font-scale));
+  /* ⛔ A caixa do ícone é FIXA (18px). O ícone participa na linha do flex e, com
+     `font-size` escalado (19,44px a 108%), inflacionava a altura do controlo:
+     medido 37,4px num botão COM ícone contra 36px no MESMO botão sem ícone, e
+     42,4px nas tabs contra os 40px do contrato. A caixa fixa devolve a altura
+     canónica; o glifo continua a escalar (font-size) e transborda a caixa de
+     forma simétrica, dentro do padding — `overflow: visible` impede o corte. */
+  line-height: 1;
+  height: 18px;
+  overflow: visible;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
 /* Variantes: a COR distingue a intenção; a geometria é comum. */
 .btn-primary { background: var(--c-primary); border-color: var(--c-primary); color: var(--c-on-primary); box-shadow: var(--elev-1); }
@@ -600,18 +671,37 @@ a.btn.disabled, fieldset:disabled a.btn { pointer-events: none; }
 .progress-bar { background: var(--c-primary); border-radius: 4px; }
 
 /* ── Dashboard ───────────────────────────────────────────────────── */
-.page-heading { margin-bottom: var(--sp-5); }
-.page-heading h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 var(--sp-1); }
-.page-heading .subtitle { color: var(--c-text-muted); margin: 0; }
+/* F14 — definição ÚNICA. Havia DOIS blocos globais e a cascata decidia por ordem:
+   o `margin-bottom` efetivo era `14px`, não os `--sp-5` (24px) do primeiro —
+   uma divergência silenciosa entre o que o ficheiro dizia e o que se via.
+   Preserva-se o VENCEDOR de cada propriedade (14px, h1 a 22px [×scale] com
+   `font-weight: 600`, subtítulo a 12,5px [×scale] e `--c-text-muted`). */
+.page-heading { margin-bottom: 14px; }
+.page-heading h1 { font-size: calc(22px * var(--font-scale)); font-weight: 600; margin: 0 0 2px; }
+.page-heading .subtitle { color: var(--c-text-muted); font-size: calc(12.5px * var(--font-scale)); margin: 0; }
 
+/* F28 — definição CANÓNICA única. Havia 3 blocos (mais um 4.º no @media de
+   telemóvel) e a cascata decidia por ordem de aparição. O valor preservado é o
+   VENCEDOR da cascata (o último), não o primeiro: fundo `--c-primary-light`,
+   `font-weight: 400`, `padding: 6px 12px`, raio 8px. O peso 400 (face ao 500 do
+   `.btn`) é HIERARQUIA INTENCIONAL — a ação rápida é mais leve do que o botão. */
 .quick-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-5); }
 .quick-action {
-  display: inline-flex; align-items: center; gap: var(--sp-2);
-  border: 1px solid var(--c-border); background: var(--c-surface);
-  border-radius: 20px; padding: 0.5rem 1rem; font-weight: 500; color: var(--c-text);
-  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--ctl-h);
+  border: 1px solid var(--c-border);
+  background: var(--c-primary-light);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 400;
+  color: var(--c-primary);
+  text-decoration: none;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
 }
-.quick-action:hover { box-shadow: var(--elev-1); border-color: var(--c-primary); color: var(--c-primary-dark); }
+.quick-action:hover { background: var(--c-surface-2); color: var(--c-primary-dark); border-color: var(--c-border-strong); box-shadow: var(--elev-1); }
 .quick-action .material-symbols-outlined { color: var(--c-primary); font-size: calc(18px * var(--font-scale)); }
 
 .stat-card { height: 100%; }
@@ -623,18 +713,10 @@ a.btn.disabled, fieldset:disabled a.btn { pointer-events: none; }
 
 .section-title { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--c-text-muted); margin: var(--sp-5) 0 var(--sp-3); }
 
-/* ── Tabs ────────────────────────────────────────────────────────── */
-.nav-tabs { border-bottom: 1px solid var(--c-border); gap: var(--sp-1); }
-.nav-tabs .nav-link {
-  border: none;
-  color: var(--c-text-muted);
-  font-weight: 500;
-  padding: var(--sp-2) var(--sp-4);
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-}
-.nav-tabs .nav-link:hover { color: var(--c-text); }
-.nav-tabs .nav-link.active { color: var(--c-primary); border-bottom: 2px solid var(--c-primary); background: transparent; }
+/* As tabs do projeto vivem num bloco único mais abaixo (Fase 5). O sistema
+   Bootstrap `.nav-tabs`/`.nav-link` foi ELIMINADO: era o 4.º sistema, com raio 0,
+   padding 16px e sem ícone. `views/admin/fracoes/detalhe.handlebars` migrou para
+   a linguagem única. */
 
 /* ── Stepper (wizard) ────────────────────────────────────────────── */
 .stepper {
@@ -994,19 +1076,7 @@ a.btn.disabled, fieldset:disabled a.btn { pointer-events: none; }
 .sidebar-item .material-symbols-outlined { font-size: calc(17px * var(--font-scale)); }
 .sidebar-item-text { letter-spacing: 0.01em; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
-/* Painel — ações rápidas suaves (sem bold, cores discretas) */
-.quick-actions { gap: 6px; }
-.quick-action {
-  font-weight: 400;
-  min-height: 36px;
-  padding: 6px 13px;
-  border-radius: 10px;
-  background: var(--c-primary-light);
-  color: var(--c-primary);
-  border: 1px solid var(--c-border);
-}
-.quick-action:hover { background: var(--c-surface-2); color: var(--c-primary-dark); border-color: var(--c-border-strong); }
-.quick-action .material-symbols-outlined { color: var(--c-primary); font-size: calc(18px * var(--font-scale)); }
+/* Ações rápidas: definição canónica em `.quick-action` (F28, junto ao Dashboard). */
 
 /* Gráficos do Painel com altura contida */
 #chartFinanceiro, #chartCategorias { height: 200px; width: 100%; }
@@ -1025,9 +1095,7 @@ a.btn.disabled, fieldset:disabled a.btn { pointer-events: none; }
    ══════════════════════════════════════════════════════════════════ */
 body { font-size: calc(13.5px * var(--font-scale)); }
 
-.page-heading { margin-bottom: 14px; }
-.page-heading h1 { font-size: calc(22px * var(--font-scale)); margin-bottom: 2px; }
-.page-heading .subtitle { font-size: calc(12.5px * var(--font-scale)); margin: 0; }
+/* `page-heading`: definição única, junto ao contrato da página (F14). */
 
 .section-title {
   font-size: calc(11px * var(--font-scale));
@@ -1043,12 +1111,7 @@ body { font-size: calc(13.5px * var(--font-scale)); }
   border-color: var(--c-border);
   box-shadow: none;
 }
-.card-header {
-  padding: 8px 14px;
-  font-size: calc(13px * var(--font-scale));
-  background: var(--c-surface-2);
-  border-bottom: 1px solid var(--c-border);
-}
+/* `card-header`: definição única, junto ao contrato dos cartões (F15). */
 .card-body { padding: 12px 14px; }
 .card-body .card-body { padding: 0; }
 
@@ -1088,15 +1151,7 @@ textarea.form-control { min-height: auto; }
 .stat-value { font-size: calc(22px * var(--font-scale)); line-height: 1.2; font-weight: 700; }
 .stat-sub { font-size: calc(11.5px * var(--font-scale)); color: var(--c-text-muted); }
 
-/* Ações rápidas compactas (altura ~36px) */
-.quick-actions { gap: 6px; }
-.quick-action {
-  min-height: 36px;
-  padding: 6px 12px;
-  font-size: calc(13px * var(--font-scale));
-  border-radius: 8px;
-}
-.quick-action .material-symbols-outlined { font-size: calc(18px * var(--font-scale)); }
+
 
 /* Alertas/mensagens menos volumosos */
 .alert { font-size: calc(13px * var(--font-scale)); padding: 8px 12px; border-radius: 8px; }
@@ -1159,7 +1214,7 @@ a.portal-item:hover .portal-item-titulo { text-decoration: underline; }
 /* Alvos de toque dos atalhos do Início: 48px em qualquer largura. A classe é
    própria do portal para não alterar o painel de administração (onde
    `.quick-action` fica em 36–44px por ser uso com rato). */
-.portal-atalho { min-height: 48px; }
+.portal-atalho { min-height: var(--ctl-h-touch); }
 
 /* ── Início: composição da página (mobile-first) ───────────────────
    O mesmo conteúdo no telemóvel e no desktop, reorganizado: cartão principal
@@ -1187,8 +1242,9 @@ a.portal-item:hover .portal-item-titulo { text-decoration: underline; }
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 48px;
-  border-radius: 10px;
+  /* 48px é o alvo TÁTIL do portal — preservado, agora pelo token (F12). */
+  min-height: var(--ctl-h-touch);
+  border-radius: var(--radius-sm);
   font-weight: 600;
 }
 .portal-btn .material-symbols-outlined { font-size: calc(20px * var(--font-scale)); }
@@ -1256,7 +1312,9 @@ a.portal-item:hover .portal-item-titulo { text-decoration: underline; }
 /* Separadores da área financeira ao toque: alvo confortável no telemóvel
    (a regra base fica compacta para o desktop). */
 @media (max-width: 767.98px) {
-  .quotas-tab { min-height: 48px; padding: 10px 12px; }
+  /* ⛔ Defeito corrigido (A.6): o alvo tátil de 48px aplicava-se SÓ a
+     `.quotas-tab`; as outras três famílias ficavam com ~40px no telemóvel. */
+  .quotas-tab, .assembleias-tab, .config-tab, .fracoes-tab { min-height: var(--ctl-h-touch); padding: 10px 12px; }
 }
 
 /* ── Documentos do condómino: cartões e filtros ────────────────────
@@ -1768,35 +1826,71 @@ a.portal-item:hover .portal-item-titulo { text-decoration: underline; }
 /* ---------------------------------------------------------------
    Módulo Quotas — Mapa | Comprovativos | Recibos
    --------------------------------------------------------------- */
-.quotas-tabs {
+/* ══ Fase 5 (F8) — TABS: UMA linguagem, quatro nomes preservados ══════
+   `.quotas-tab`, `.assembleias-tab`, `.config-tab` e `.fracoes-tab` são o MESMO
+   componente. Antes havia TRÊS blocos byte-idênticos (46 linhas duplicadas,
+   provado por `diff` após normalizar o nome da classe). Consolida-se num bloco
+   único com seletores agrupados; os NOMES ficam por compatibilidade de
+   templates — renomear tocaria 22 vistas sem qualquer benefício.
+   O 4.º sistema (Bootstrap `.nav-tabs`, raio 0, padding 16px, sem ícone) foi
+   ELIMINADO e `fracoes/detalhe.handlebars` migrou para esta linguagem (F9).
+   ⛔ Não reintroduzir um bloco por família: é a duplicação que originou os
+   desvios de padding (14px vs 16px) e de raio (8px vs 0). */
+.quotas-tabs, .assembleias-tabs, .config-tabs, .fracoes-tabs {
   display: flex;
   gap: 2px;
   margin: 0 0 var(--sp-4);
   border-bottom: 1px solid var(--c-border);
   flex-wrap: wrap;
+  padding-left: 0;
+  list-style: none;
 }
-.quotas-tab {
+.quotas-tab, .assembleias-tab, .config-tab, .fracoes-tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
+  padding: 10px 14px;
   margin-bottom: -1px;
   border: 1px solid transparent;
   border-bottom: 2px solid transparent;
   color: var(--c-text-muted);
   font-size: 0.86rem;
   font-weight: 500;
+  line-height: 1.2;
   text-decoration: none;
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
-.quotas-tab .material-symbols-outlined { font-size: 1.05rem; }
-.quotas-tab:hover { color: var(--c-text); background: var(--c-surface-2); }
-.quotas-tab.active {
-  color: var(--c-primary);
-  border-color: var(--c-border) var(--c-border) transparent var(--c-border);
+.quotas-tab .material-symbols-outlined,
+.assembleias-tab .material-symbols-outlined,
+.config-tab .material-symbols-outlined,
+.fracoes-tab .material-symbols-outlined {
+  font-size: calc(18px * var(--font-scale));
+  /* ⛔ A caixa do ícone é FIXA (18px). O ícone participa na linha do flex e, com
+     `font-size` escalado (19,44px a 108%), inflacionava a altura do controlo:
+     medido 37,4px num botão COM ícone contra 36px no MESMO botão sem ícone, e
+     42,4px nas tabs contra os 40px do contrato. A caixa fixa devolve a altura
+     canónica; o glifo continua a escalar (font-size) e transborda a caixa de
+     forma simétrica, dentro do padding — `overflow: visible` impede o corte. */
+  line-height: 1;
+  height: 18px;
+  overflow: visible;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.quotas-tab:hover, .assembleias-tab:hover, .config-tab:hover, .fracoes-tab:hover {
+  color: var(--c-text);
+  background: var(--c-surface-2);
+}
+/* Estado ativo (F31/D.3): a MESMA linguagem do `.btn-primary` — fundo primário
+   e texto `--c-on-primary`. ⛔ Nunca branco hardcoded: no tema escuro
+   `--c-on-primary` é `#06213F` (8,77:1); impor `#FFF` baixaria para ~1,5:1. */
+.quotas-tab.active, .assembleias-tab.active, .config-tab.active, .fracoes-tab.active {
+  color: var(--c-on-primary);
+  background: var(--c-primary);
+  border-color: var(--c-primary);
   border-bottom-color: var(--c-primary);
-  background: var(--c-surface);
 }
 
 .mini-stat { border-radius: var(--radius-sm); }
@@ -1859,6 +1953,12 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
   cursor: pointer;
   transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
 }
+/* O `.mes-btn` é um cartão de DUAS linhas (mês + valor disponível) com o seu
+   próprio ritmo vertical, afinado como alvo tátil no modal de recibos. O contrato
+   de `.btn` (Fase 4) fixa `line-height: 1.2` para assentar na altura canónica;
+   neste cartão isso encurtava-o de 61,2px para 52,8px (medido no browser). Repõe-se
+   o ritmo do corpo — a geometria própria deste componente é preservada. */
+.mes-btn { line-height: 1.5; }
 .mes-btn:hover:not(:disabled) { border-color: var(--c-primary); }
 .mes-btn.selected {
   border-color: var(--c-primary);
@@ -1866,7 +1966,19 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
   box-shadow: 0 0 0 1px var(--c-primary);
 }
 .mes-btn.selected .mes-btn-valor { color: var(--c-primary-dark); font-weight: 700; }
-.mes-btn:disabled, .mes-btn.sem-valor { opacity: 0.55; cursor: not-allowed; background: var(--c-surface-2); }
+/* F27 — mesma doença do antigo `.btn-primary:disabled`: `opacity: 0.55` diluía o
+   texto E o fundo um contra o outro (medido 2,2:1 no tema claro). Passa a usar os
+   MESMOS tokens do resto do sistema, com `opacity: 1` — a atenuação é feita pela
+   cor. As linhas internas (`.mes-btn-mes`/`.mes-btn-valor`) têm cor própria e
+   seriam elas a vencer a cascata, pelo que recebem o token explicitamente. */
+.mes-btn:disabled, .mes-btn.sem-valor {
+  opacity: 1;
+  cursor: not-allowed;
+  background: var(--c-disabled-bg);
+  border-color: var(--c-disabled-border);
+}
+.mes-btn:disabled .mes-btn-mes, .mes-btn:disabled .mes-btn-valor,
+.mes-btn.sem-valor .mes-btn-mes, .mes-btn.sem-valor .mes-btn-valor { color: var(--c-disabled-text); }
 .mes-btn-mes {
   font-size: 0.72rem;
   font-weight: 700;
@@ -1956,68 +2068,8 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
 .condominio-card-arrow { font-size: 1.05rem; transition: transform .15s ease; }
 .condominio-card:hover .condominio-card-arrow { transform: translateX(3px); }
 
-/* ── Tabs do módulo Assembleias (mesma linguagem das tabs de Quotas) ── */
-.assembleias-tabs {
-  display: flex;
-  gap: 2px;
-  margin: 0 0 var(--sp-4);
-  border-bottom: 1px solid var(--c-border);
-  flex-wrap: wrap;
-}
-.assembleias-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  margin-bottom: -1px;
-  border: 1px solid transparent;
-  border-bottom: 2px solid transparent;
-  color: var(--c-text-muted);
-  font-size: 0.86rem;
-  font-weight: 500;
-  text-decoration: none;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  transition: color 0.15s ease, background 0.15s ease;
-}
-.assembleias-tab .material-symbols-outlined { font-size: 1.05rem; }
-.assembleias-tab:hover { color: var(--c-text); background: var(--c-surface-2); }
-.assembleias-tab.active {
-  color: var(--c-primary);
-  border-color: var(--c-border) var(--c-border) transparent var(--c-border);
-  border-bottom-color: var(--c-primary);
-  background: var(--c-surface);
-}
-/* ── Tabs do módulo Configuração (mesma linguagem das tabs de Quotas) ── */
-.config-tabs {
-  display: flex;
-  gap: 2px;
-  margin: 0 0 var(--sp-4);
-  border-bottom: 1px solid var(--c-border);
-  flex-wrap: wrap;
-}
-.config-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  margin-bottom: -1px;
-  border: 1px solid transparent;
-  border-bottom: 2px solid transparent;
-  color: var(--c-text-muted);
-  font-size: 0.86rem;
-  font-weight: 500;
-  text-decoration: none;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  transition: color 0.15s ease, background 0.15s ease;
-}
-.config-tab .material-symbols-outlined { font-size: 1.05rem; }
-.config-tab:hover { color: var(--c-text); background: var(--c-surface-2); }
-.config-tab.active {
-  color: var(--c-primary);
-  border-color: var(--c-border) var(--c-border) transparent var(--c-border);
-  border-bottom-color: var(--c-primary);
-  background: var(--c-surface);
-}
+/* Tabs de Assembleias: bloco único em «Fase 5 (F8) — TABS». */
+/* Tabs de Configuração: bloco único em «Fase 5 (F8) — TABS». */
 
 
 /* ── Cartões da biblioteca de Documentos ── */
@@ -2188,7 +2240,6 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
 .bg-light { background-color: var(--c-surface-2) !important; }
 .border { border-color: var(--c-border) !important; }
 hr { border-color: var(--c-border); opacity: 1; }
-.card-header { background: var(--c-surface); color: var(--c-text); border-bottom-color: var(--c-border); }
 
 .table {
   --bs-table-color: var(--c-text);
@@ -2295,7 +2346,7 @@ hr { border-color: var(--c-border); opacity: 1; }
   .painel-strip { row-gap: var(--sp-3); }
 
   .quick-actions { gap: var(--sp-2); }
-  .quick-action { min-height: 44px; padding: 8px 14px; border-radius: var(--radius-sm); white-space: nowrap; }
+  .quick-action { min-height: var(--ctl-h-lg); padding: 8px 14px; border-radius: var(--radius-sm); white-space: nowrap; }
   .quick-action .material-symbols-outlined { font-size: calc(20px * var(--font-scale)); }
 
   .table-responsive { -webkit-overflow-scrolling: touch; }

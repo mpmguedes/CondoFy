@@ -221,8 +221,19 @@ function testeInicio() {
   const classesAtalho = [...html.matchAll(/class="quick-action([^"]*)"/g)].map((m) => m[1]);
   assert.strictEqual(classesAtalho.length, 6, 'Início: seis atalhos rápidos');
   assert.ok(classesAtalho.every((c) => c.includes('portal-atalho')), 'Início: atalhos com alvo de toque de 48px');
-  assert.ok(/\.portal-atalho \{ min-height: 48px; \}/.test(ler('public/css/styles.css')),
+  // O valor passou a vir do token A7 `--ctl-h-touch` (48px): a asserção aceita
+  // as duas formas e confirma que o token vale mesmo 48px.
+  const cssApp = ler('public/css/styles.css');
+  assert.ok(/--ctl-h-touch: 48px;/.test(cssApp), 'CSS: o token --ctl-h-touch vale 48px');
+  assert.ok(/\.portal-atalho \{ min-height: (48px|var\(--ctl-h-touch\)); \}/.test(cssApp),
     'CSS: 48px definidos só para os atalhos do portal (painel inalterado)');
+  // ⛔ O painel NÃO pode herdar os 48px do portal. Antes isto era IMPLÍCITO (o
+  // `48px` só existia no `.portal-atalho`); passa a ser asserido diretamente,
+  // para que aplicar o token ao `.quick-action` deixe de passar em silêncio.
+  const corpoQuickAction = /\.quick-action \{([^}]*)\}/.exec(cssApp);
+  assert.ok(corpoQuickAction, 'CSS: existe a definição canónica de .quick-action');
+  assert.ok(/min-height: var\(--ctl-h\);/.test(corpoQuickAction[1]),
+    'CSS: o painel mantém-se em 36px (--ctl-h), não nos 48px do portal');
   // A vista decide pelo estado de associação (D3). Sem `acesso` nem pessoa, a
   // mensagem é a histórica de «conta sem condómino».
   const semPessoa = render('views/condomino/dashboard.handlebars', { ...CONTEXTO, pessoa: null, registroSemCondomino: true });
