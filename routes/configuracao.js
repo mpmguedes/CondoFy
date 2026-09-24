@@ -8,7 +8,7 @@ const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const { getCondominio, clearCondominioCache } = require('../helpers/condominio');
 const { getConfig, setConfig } = require('../helpers/config');
-const { listarAutomacoes, guardarAutomacoes } = require('../helpers/automacoes');
+const { listarAutomacoes, linhasDeConsulta, guardarAutomacoes } = require('../helpers/automacoes');
 const drive = require('../helpers/drive');
 // Fachada de armazenamento multi-provedor (Google Drive | Dropbox | OneDrive).
 const storage = require('../helpers/storage');
@@ -571,12 +571,25 @@ router.post('/config', uploadLogotipo, async (req, res) => {
 
 // ═══════════════════════════════════════════════════════════════════
 // Documentos e Automações (Configurações)
+//
+// P54-7 — as automações são configuração DE UM CONDOMÍNIO. O âmbito vem sempre
+// do tenant (`req.condominioId`, já validado por `tenant.comCondominioAtivo`),
+// NUNCA do corpo do pedido: aceitar um `condominioId` submetido seria deixar o
+// cliente escolher de quem são as automações que está a alterar.
 // ═══════════════════════════════════════════════════════════════════
 router.get('/config/automacoes', async (req, res) => {
-  const grupos = await listarAutomacoes();
+  const grupos = await listarAutomacoes(req.condominioId);
   res.render('admin/configuracao/automacoes', {
     titulo: 'Documentos e Automações',
     grupos,
+    // ── P54-7 — linhas do estado de CONSULTA (padrão P54-0) ──────────
+    // A página nasce em consulta, com o estado efetivo como TEXTO; o
+    // formulário só existe depois de `Editar`. Construídas aqui porque o
+    // Handlebars não compõe arrays (mesmo caminho do `linhasSmtp` do P54-2 e
+    // do `linhasPrincipal` do P54-4).
+    // ⛔ Nenhuma linha é `sensivel: true`: esta área só tem interruptores
+    // sim/não — aqui não existe um único segredo.
+    linhasAutomacoes: linhasDeConsulta(grupos),
   });
 });
 
@@ -594,14 +607,30 @@ router.get('/config/auditoria', async (req, res) => {
 // mantém os links existentes a funcionar.
 router.get('/auditoria', (req, res) => res.redirect('/admin/config/auditoria'));
 
+// P54-7 — gravação das automações do condomínio ATIVO. O âmbito vem do tenant
+// (nunca do corpo) e a gravação recusa-se a correr sem ele, pelo que uma
+// chamada direta sem contexto não altera as automações de ninguém.
 router.post('/config/automacoes', async (req, res) => {
   try {
-    const r = await guardarAutomacoes(req.body);
-    await audit({ userId: req.user.id, acao: 'configurar_automacoes', entidade: 'Configuracao', detalhes: { tipos: r.tipos } }).catch(() => {});
-    req.flash('success_msg', 'Automações de documentos guardadas.');
+    const r = await guardarAutomacoes(req.body, req.condominioId);
+    await audit({
+      userId: req.user.id,
+      acao: 'configurar_automacoes',
+      entidade: 'Configuracao',
+      // P54-7 — utilizador (pelo `audit`), condomínio e as chaves cujo EFEITO
+      // mudou. ⛔ Só NOMES de campos: nunca valores.
+      detalhes: { condominioId: req.condominioId, tipos: r.tipos, alterados: r.alterados },
+    }).catch(() => {});
+    req.flash('success_msg', r.alterados.length
+      ? `Automações de documentos guardadas (${r.alterados.length} alteração(ões)).`
+      : 'Automações de documentos guardadas — nada mudou.');
   } catch (err) {
     console.error('[automacoes]', err.message);
-    req.flash('error_msg', 'Não foi possível guardar as automações.');
+    // As mensagens do validador são escritas para o utilizador; qualquer outra
+    // falha (BD, âmbito ausente) mantém a mensagem genérica — nunca se ecoa o
+    // erro interno.
+    const doValidador = err.motivo === 'submissao_incompleta' || err.motivo === 'campo_desconhecido';
+    req.flash('error_msg', doValidador ? err.message : 'Não foi possível guardar as automações.');
   }
   res.redirect('/admin/config/automacoes');
 });

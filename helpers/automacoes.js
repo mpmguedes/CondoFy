@@ -3,15 +3,38 @@
 // documento quando o GesCondu gera/regista um documento.
 //
 // Por cada tipo guarda-se na BD (chaves `auto_<tipo>_<canal>`):
-//  · drive      → guardar automaticamente no Google Drive (0/1)
+//  · drive      → guardar automaticamente no serviço de armazenamento (0/1)
 //  · email      → disponibilizar para envio por email (0/1, informativo)
 //  · automatico → enviar automaticamente por email quando aplicável (0/1)
 //
 // Regra de segurança: NADA é enviado/guardado automaticamente sem
 // configuração explícita ('1'). O padrão é tudo desligado, exceto o que
 // já era o comportamento da aplicação (ex.: backups com Drive ligado).
+//
+// ── P54-7 — ÂMBITO POR CONDOMÍNIO (isolamento) ──────────────────────
+// Antes gravava-se SEMPRE a chave GLOBAL (`auto_<tipo>_<canal>`), pelo que o
+// administrador do condomínio A desligava as automações de TODOS — o B
+// incluído, que nunca tinha pedido nada. Agora:
+//
+//   · a GRAVAÇÃO escreve `auto_<tipo>_<canal>:c<ID>` e EXIGE âmbito (sem
+//     condomínio válido é recusada — nunca cai na chave global);
+//   · a LEITURA usa a precedência específica → global → default do código,
+//     pelo que a chave base fica como valor HERDADO (uma instalação que só
+//     tenha as chaves globais comporta-se exatamente como antes, sem uma
+//     única escrita nova na base de dados);
+//   · uma leitura SEM contexto de condomínio (jobs globais) nunca é afetada
+//     pelo que um condomínio gravou no seu próprio âmbito.
+//
+// A convenção vive em `helpers/config-ambito.js` (a mesma que o P54-7 usou nas
+// notificações) — este módulo não a reimplementa.
+//
+// ── Submissão COMPLETA (marcador) ───────────────────────────────────
+// Uma checkbox desmarcada não viaja no corpo do pedido: «campo ausente» era
+// indistinguível de «formulário nunca submetido», e um POST direto desligava
+// todas as automações em silêncio. O formulário envia `_automacoes=1` e a
+// gravação recusa qualquer corpo sem ele.
 // ─────────────────────────────────────────────────────────────────────
-const { getConfig, setConfig } = require('./config');
+const { idCondominio, lerComPrecedencia, gravarNoAmbito } = require('./config-ambito');
 
 const CATEGORIAS = {
   assembleias: 'ASSEMBLEIAS',
@@ -37,11 +60,27 @@ const TIPOS = {
   backups: { categoria: 'backups', rotulo: 'Backups' },
 };
 
+// Canais na ORDEM em que aparecem na interface e nas chaves.
+const CANAIS = ['drive', 'email', 'automatico'];
+
+// Rótulo de cada canal para a consulta (modo de leitura do P54-0).
+// ⛔ Os nomes das CHAVES (`drive`, `email`, `automatico`) nunca mudam: são a
+// chave gravada na BD e o `name` do campo no formulário. Isto é só texto.
+const CANAIS_ROTULO = {
+  drive: 'Guardar',
+  email: 'Disponível por email',
+  automatico: 'Automático',
+};
+
+// Marcador de submissão COMPLETA. O formulário envia-o sempre; a gravação
+// recusa um corpo que não o traga.
+const MARCADOR = '_automacoes';
+
 // Padrões (comportamento atual da aplicação):
 //  · email='1' para tipos que já são sempre disponibilizados/enváveis;
 //  · drive/automatico desligados por omissão (nada automático sem decisão).
 const DEFAULT_EMAIL = { quotas: '1', recibos: '1', convocatorias: '1', atas: '1', avisos_pagamento: '1', backups: '1' };
-const DEFAULT_DRIVE = { backups: '1' }; // com Drive ligado, backups já vão para o Drive
+const DEFAULT_DRIVE = { backups: '1' }; // com storage ligado, backups já vão para lá
 const DEFAULT_AUTO = {};
 
 function canalPadrao(tipo, canal) {
@@ -51,42 +90,116 @@ function canalPadrao(tipo, canal) {
   return false;
 }
 
-async function estaAtivo(tipo, canal) {
-  if (!TIPOS[tipo] || !['drive', 'email', 'automatico'].includes(canal)) return false;
-  const chave = `auto_${tipo}_${canal}`;
-  const v = await getConfig(chave, null);
-  if (v === null) return canalPadrao(tipo, canal);
+// Chave (sem âmbito) de uma automação. O âmbito é acrescentado por
+// `helpers/config-ambito.js`.
+function chaveDe(tipo, canal) {
+  return `auto_${tipo}_${canal}`;
+}
+
+function chavesConhecidas() {
+  const out = [];
+  for (const tipo of Object.keys(TIPOS)) for (const canal of CANAIS) out.push(chaveDe(tipo, canal));
+  return out;
+}
+
+// `condominioId` é OPCIONAL na LEITURA: sem ele lê-se a chave herdada (global),
+// que é o que uma execução sem contexto de condomínio deve usar. O padrão do
+// código só entra quando não há nem chave específica nem global.
+async function estaAtivo(tipo, canal, condominioId) {
+  if (!TIPOS[tipo] || !CANAIS.includes(canal)) return false;
+  const v = await lerComPrecedencia(chaveDe(tipo, canal), condominioId);
+  if (v === undefined) return canalPadrao(tipo, canal);
   return v === '1';
 }
 
-// Lista agrupada por categoria, com os estados atuais — para a interface.
-async function listarAutomacoes() {
+// Lista agrupada por categoria, com os estados atuais NO ÂMBITO indicado —
+// para a interface (`GET /admin/config/automacoes`, sempre com o condomínio da
+// sessão).
+async function listarAutomacoes(condominioId) {
   const grupos = Object.keys(CATEGORIAS).map((cat) => ({ categoria: cat, rotulo: CATEGORIAS[cat], tipos: [] }));
   const porCat = Object.fromEntries(grupos.map((g) => [g.categoria, g]));
   for (const [tipo, def] of Object.entries(TIPOS)) {
-    porCat[def.categoria].tipos.push({
-      tipo,
-      rotulo: def.rotulo,
-      drive: await estaAtivo(tipo, 'drive'),
-      email: await estaAtivo(tipo, 'email'),
-      automatico: await estaAtivo(tipo, 'automatico'),
-    });
+    const estados = {};
+    for (const canal of CANAIS) estados[canal] = await estaAtivo(tipo, canal, condominioId);
+    porCat[def.categoria].tipos.push({ tipo, rotulo: def.rotulo, ...estados });
   }
   return grupos.filter((g) => g.tipos.length);
 }
 
-// Grava as opções do formulário (auto_<tipo>_<canal> = '1'/'0').
-async function guardarAutomacoes(body) {
-  let alteradas = 0;
-  for (const tipo of Object.keys(TIPOS)) {
-    for (const canal of ['drive', 'email', 'automatico']) {
-      const chave = `auto_${tipo}_${canal}`;
-      const valor = body[chave] === 'on' || body[chave] === '1' ? '1' : '0';
-      await setConfig(chave, valor);
-      alteradas++;
+// Linhas do estado de CONSULTA (padrão P54-0) para uma lista de grupos.
+//
+// Construídas AQUI, e não na vista, porque o Handlebars não compõe arrays — e
+// porque a mesma verdade (o estado efetivo) tem de servir a consulta e o
+// formulário, sem duas cópias que possam divergir.
+function linhasDeConsulta(grupos) {
+  const linhas = [];
+  for (const grupo of grupos || []) {
+    for (const t of grupo.tipos || []) {
+      for (const canal of CANAIS) {
+        linhas.push({
+          rotulo: `${t.rotulo} · ${CANAIS_ROTULO[canal]}`,
+          valor: t[canal] ? 'Ativo' : 'Inativo',
+          grupo: grupo.rotulo,
+        });
+      }
     }
   }
-  return { tipos: Object.keys(TIPOS).length, canais: 3, alteradas };
+  return linhas;
+}
+
+// Valida o corpo antes de escrever. Devolve `{ ok, motivo, mensagem, campos }`.
+function validarCorpo(body) {
+  const corpo = body && typeof body === 'object' ? body : {};
+  if (corpo[MARCADOR] !== '1') {
+    return {
+      ok: false,
+      motivo: 'submissao_incompleta',
+      mensagem: 'A submissão não foi identificada como completa. Recarregue a página e tente de novo '
+        + '(nenhuma automação foi alterada).',
+    };
+  }
+  const conhecidas = new Set([MARCADOR, ...chavesConhecidas()]);
+  const desconhecidas = Object.keys(corpo).filter((k) => !conhecidas.has(k));
+  if (desconhecidas.length) {
+    return {
+      ok: false,
+      motivo: 'campo_desconhecido',
+      campos: desconhecidas,
+      mensagem: `Campo não reconhecido: ${desconhecidas.join(', ')}. Nada foi alterado.`,
+    };
+  }
+  return { ok: true };
+}
+
+// Grava as automações do formulário (campos `auto_<tipo>_<canal>`) NO ÂMBITO do
+// condomínio indicado. Devolve `{ tipos, canais, alterados }`, onde `alterados`
+// lista as chaves cujo EFEITO mudou (e não as que foram reescritas com o mesmo
+// valor — gravar o que já estava não é uma alteração).
+//
+// ⛔ A exigência de âmbito vive SÓ em `gravarNoAmbito` (o ponto único por onde
+// passam todas as escritas). Duplicá-la aqui criaria dois sítios a manter, e um
+// deles poderia divergir sem que nada o detetasse.
+async function guardarAutomacoes(body, condominioId) {
+  const id = idCondominio(condominioId);
+  const validacao = validarCorpo(body);
+  if (!validacao.ok) {
+    const err = new Error(validacao.mensagem);
+    err.motivo = validacao.motivo;
+    err.campos = validacao.campos;
+    throw err;
+  }
+
+  const alterados = [];
+  for (const tipo of Object.keys(TIPOS)) {
+    for (const canal of CANAIS) {
+      const chave = chaveDe(tipo, canal);
+      const valor = body[chave] === 'on' || body[chave] === '1' ? '1' : '0';
+      const antes = (await estaAtivo(tipo, canal, id)) ? '1' : '0';
+      if (antes !== valor) alterados.push(chave);
+      await gravarNoAmbito(chave, valor, id, { origem: 'guardarAutomacoes' });
+    }
+  }
+  return { tipos: Object.keys(TIPOS).length, canais: CANAIS.length, alterados };
 }
 
 // Converte um tipo de documento lógico (Documento.tipo ou slug) na chave
@@ -107,4 +220,8 @@ function tipoAutomacao(tipoDocumento) {
   return mapa[tipoDocumento] || tipoDocumento || 'documentos_gerais';
 }
 
-module.exports = { CATEGORIAS, TIPOS, estaAtivo, listarAutomacoes, guardarAutomacoes, tipoAutomacao };
+module.exports = {
+  CATEGORIAS, TIPOS, CANAIS, CANAIS_ROTULO, MARCADOR,
+  chaveDe, chavesConhecidas,
+  estaAtivo, listarAutomacoes, linhasDeConsulta, validarCorpo, guardarAutomacoes, tipoAutomacao,
+};

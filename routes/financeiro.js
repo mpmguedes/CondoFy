@@ -57,6 +57,9 @@ const { resolverDestinatarios } = require('../helpers/avisos');
 const titulares = require('../helpers/titularidades');
 const { enfileirarEmail } = require('../helpers/email-fila');
 const { estaAtivo } = require('../helpers/notificacoes');
+// P54-7 — as automações são POR CONDOMÍNIO: toda a leitura leva o condomínio
+// ativo. Sem ele leria-se a chave herdada (global) e a decisão de UM
+// condomínio passaria a governar a geração de quotas de TODOS.
 const { estaAtivo: automacaoAtiva } = require('../helpers/automacoes');
 const background = require('../helpers/background-jobs');
 const { getQuotaConfig, setQuotaConfig, validarFcrPercentagem } = require('../helpers/quotas-config');
@@ -985,10 +988,12 @@ router.get('/quotas/gerar', async (req, res) => {
     existentesSet[`${q.fracao_id}|${q.ano}|${q.mes}`] = true;
   });
 
+  // P54-7 — as automações que pré-marcam os interruptores são as DESTE
+  // condomínio (a página de automações grava no âmbito `:c<ID>`).
   const [autoQuotasDrive, autoQuotasEmail, autoQuotasAutomatico] = await Promise.all([
-    automacaoAtiva('quotas', 'drive'),
-    automacaoAtiva('quotas', 'email'),
-    automacaoAtiva('quotas', 'automatico'),
+    automacaoAtiva('quotas', 'drive', req.condominioId),
+    automacaoAtiva('quotas', 'email', req.condominioId),
+    automacaoAtiva('quotas', 'automatico', req.condominioId),
   ]);
 
   res.render('admin/quotas/gerar', {
@@ -1116,8 +1121,11 @@ router.post('/quotas/gerar', async (req, res) => {
     let extraMsg = '';
     try {
       if (criadas > 0) {
-        const guardarDrive = req.body.guardar_drive === 'on' || (await automacaoAtiva('quotas', 'drive'));
-        const enviarEmail = req.body.enviar_email === 'on' || (await automacaoAtiva('quotas', 'automatico'));
+        // P54-7 — a automação é lida no âmbito do condomínio que está a gerar
+        // (o MESMO `req.condominioId` que vai para o `background.enqueue`),
+        // para que o pré-processamento não aplique a decisão de outro.
+        const guardarDrive = req.body.guardar_drive === 'on' || (await automacaoAtiva('quotas', 'drive', req.condominioId));
+        const enviarEmail = req.body.enviar_email === 'on' || (await automacaoAtiva('quotas', 'automatico', req.condominioId));
         const storageLigado = storage.isConfigured(req.condominioId);
         if ((guardarDrive && storageLigado) || enviarEmail) {
           const baseUrl = `${req.protocol}://${req.get('host')}`;

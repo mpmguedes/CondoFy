@@ -9,13 +9,46 @@
 </div>
 
 <div class="alert alert-info small">
-  <span class="material-symbols-outlined me-1">info</span>
+  <span class="material-symbols-outlined me-1" aria-hidden="true">info</span>
   “Guardar no {{@root.armazenamentoRotulo}}” e “Enviar automaticamente por email” são opções
   <strong>independentes</strong>. Nada é enviado ou guardado automaticamente sem uma
   configuração explícita aqui.
 </div>
 
-<form method="POST" action="/admin/config/automacoes">
+{{!-- ══════════════════════════════════════════════════════════════════
+     P54-7 — CONSULTA → EDITAR → GUARDAR/CANCELAR
+     ══════════════════════════════════════════════════════════════════
+     Antes esta página era um formulário PERMANENTEMENTE armado: cada
+     interruptor estava à espera de um clique acidental e o «Cancelar» era um
+     link para `/admin/config` — navegava para fora e perdia as alterações em
+     silêncio (um falso cancelar).
+
+     Passa a viver no padrão do P54-0
+     (`views/partials/_modo-edicao.handlebars`): nasce em CONSULTA, com o
+     estado efetivo como TEXTO e sem um único input; os interruptores só
+     existem depois de `Editar`, e o `Cancelar` repõe os valores capturados sem
+     submeter nada. ⛔ NÃO existe um segundo sistema de modo de edição.
+
+     O que se mostra em consulta é o estado EFETIVO — o da chave do condomínio
+     quando existe, senão o herdado, senão o padrão do código. É a mesma
+     verdade que o formulário apresenta, porque ambas vêm de `listarAutomacoes`
+     no âmbito do condomínio ativo.
+
+     Depois de guardar, a página volta a nascer em consulta: ver o
+     `res.redirect` do `POST /admin/config/automacoes`. --}}
+{{#> _modo-edicao id="automacoes" acao="/admin/config/automacoes"
+                 titulo="Automações por tipo de documento"
+                 linhas=linhasAutomacoes
+                 rotuloEditar="Editar automações"
+                 rotuloGuardar="Guardar automações"
+                 confirmarAbandono="Há automações por guardar. Se sair agora, perdem-se."}}
+  {{!-- ⛔ Marcador de submissão COMPLETA. Uma checkbox desmarcada não viaja no
+       corpo do pedido: sem este marcador, «campo ausente» seria
+       indistinguível de «formulário nunca submetido» e um POST direto
+       desligava todas as automações em silêncio. O servidor recusa a gravação
+       sem ele (`helpers/automacoes.js`). --}}
+  <input type="hidden" name="_automacoes" value="1" />
+
   {{#each grupos}}
   <div class="card mb-4">
     <div class="card-header bg-white fw-semibold">{{rotulo}}</div>
@@ -24,9 +57,9 @@
         <thead class="table-light">
           <tr>
             <th>Documento</th>
-            <th style="width:180px"><i class="{{@root.armazenamentoIcone}} me-1"></i>Guardar no {{@root.armazenamentoRotulo}}</th>
-            <th style="width:180px"><i class="bi bi-send me-1"></i>Disponível para email</th>
-            <th style="width:180px"><i class="bi bi-lightning-charge me-1"></i>Enviar automaticamente</th>
+            <th style="width:180px"><i class="{{@root.armazenamentoIcone}} me-1" aria-hidden="true"></i>Guardar no {{@root.armazenamentoRotulo}}</th>
+            <th style="width:180px"><i class="bi bi-send me-1" aria-hidden="true"></i>Disponível para email</th>
+            <th style="width:180px"><i class="bi bi-lightning-charge me-1" aria-hidden="true"></i>Enviar automaticamente</th>
             <th style="width:110px">Estado</th>
           </tr>
         </thead>
@@ -65,10 +98,10 @@
   </div>
   {{/each}}
 
-  <div class="card">
-    <div class="card-body">
-      <button type="submit" class="btn btn-primary" data-ajuda="Guarda as automações escolhidas. Passam a aplicar-se aos documentos criados a partir de agora." data-ajuda-titulo="Guardar automações"><i class="bi bi-check2 me-1"></i>Guardar automações</button>
-      <a href="/admin/config" class="btn btn-outline-secondary ms-2">Cancelar</a>
-    </div>
-  </div>
-</form>
+  <p class="form-text mb-0">
+    <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+    As automações desta página são <strong>deste condomínio</strong>. Ativar “Enviar automaticamente”
+    faz o aviso seguir por email sem ser preciso marcá-lo em cada módulo — o envio manual continua
+    sempre disponível.
+  </p>
+{{/_modo-edicao}}
