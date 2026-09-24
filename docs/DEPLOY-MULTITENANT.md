@@ -62,7 +62,7 @@ npm run db:migrate:undo   # uma migração de cada vez, da 066 para a 056
    o seletor de condomínio aparece na sidebar.
 3. **Dados preservados**: quotas, FIFO/pagamentos, comprovativos, recibos/PDFs e Drive
    continuam visíveis no mapa de Quotas, Comprovativos e Recibos.
-4. **Super Admin global** (`/admin/global`) — gerir condomínios/associações/auditoria.
+4. **Super Admin global** (`/global`) — gerir condomínios/associações/auditoria.
 5. **Criar um 2.º condomínio (Super Admin)** e confirmar o **isolamento**:
    - criar uma fração/documento/pagamento no novo condomínio;
    - verificar que **não aparece** no primeiro condomínio (e vice-versa).
