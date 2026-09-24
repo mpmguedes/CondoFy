@@ -574,13 +574,28 @@ const TAB5 = 'href="/admin/config/auditoria"';
   destinosGravados.length = 0;
 
   ligacoesBackup.dropbox = { condominioId: 7, conta: 'gestao@exemplo.pt', origem: 'condominio' };
+  // P54-4 (reforço): `?ambito=plataforma` é operação da INSTALAÇÃO — um admin de
+  // condomínio é RECUSADO e o adaptador NÃO é chamado. Sem esta guarda, um POST
+  // direto deixava-o desligar a ligação de que a instalação inteira depende.
+  UTILIZADOR = UTILIZADOR_ADMIN;
+  await enviar('/admin/config/armazenamento/dropbox/desligar?ambito=plataforma', {});
+  assert.deepStrictEqual(desligados, [],
+    'desligar: admin de condomínio NÃO chega ao adaptador em âmbito de plataforma');
+  assert.deepStrictEqual(destinosGravados, [],
+    'desligar: admin de condomínio não altera o destino dos backups');
+  // …mas um Super Admin pode: o âmbito de plataforma chega ao adaptador com
+  // `condominioId: null` (a ligação da instalação, não a de um condomínio).
+  UTILIZADOR = UTILIZADOR_SUPER;
   await enviar('/admin/config/armazenamento/dropbox/desligar?ambito=plataforma', {});
   assert.deepStrictEqual(desligados, [{ condominioId: null, opcoes: { plataforma: true } }],
-    'desligar: âmbito de plataforma passado ao adaptador');
+    'desligar: Super Admin passa o âmbito de plataforma ao adaptador');
   assert.deepStrictEqual(destinosGravados, [],
     'desligar: mantém o destino dos backups enquanto restar uma ligação utilizável');
 
   ligacoesBackup.dropbox = { condominioId: null, conta: null, origem: null };
+  // Âmbito de CONDOMÍNIO (sem `?ambito=plataforma`): um admin de condomínio
+  // continua a poder desligá-lo — a guarda nova só trava o âmbito de plataforma.
+  UTILIZADOR = UTILIZADOR_ADMIN;
   await enviar('/admin/config/armazenamento/dropbox/desligar', {});
   assert.deepStrictEqual(destinosGravados, [null],
     'desligar: liberta o destino dos backups quando não resta nenhuma ligação utilizável');

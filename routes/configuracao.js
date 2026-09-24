@@ -114,6 +114,45 @@ const VAR_REDIRECT = {
   onedrive: 'ONEDRIVE_REDIRECT_URI',
 };
 
+// ── P54-4 (reforço) — âmbito de PLATAFORMA exige Super Admin ───────
+// As ligações de armazenamento existem em dois âmbitos: a do CONDOMÍNIO ativo
+// (documentos desse condomínio) e a da PLATAFORMA/instalação (a mesma conta que
+// serve os backups de TODOS os condomínios). A guarda `tenant.apenasSuperAdmin`
+// já protegia o destino dos backups; faltava-a nas duas ações OAuth, onde o
+// âmbito chega por `?ambito=plataforma` — um admin de condomínio podia, por
+// POST direto, desligar ou testar a ligação de que a instalação inteira depende.
+//
+// Ao contrário de `tenant.apenasSuperAdmin` (middleware montado à entrada, com
+// o âmbito ainda por resolver), esta verificação corre DENTRO do handler, já
+// depois de `plataforma` ser conhecido: assim o âmbito de CONDOMÍNIO continua a
+// funcionar sem alteração para um admin de condomínio.
+//
+// ⛔ Não é um segundo sistema de autorização: decide pelo MESMO mecanismo
+// (`tenant.eSuperAdmin` → `users.role_global`). Devolve `true` quando RECUSOU
+// (já respondeu com flash + redirect), `false` quando pode continuar.
+function recusarSePlataformaSemSuperAdmin(req, res, plataforma) {
+  if (!plataforma) return false;
+  if (tenant.eSuperAdmin(req.user)) return false;
+  req.flash('error_msg', 'Esta operação é da administração global: apenas um Super Admin pode gerir as ligações de armazenamento da plataforma.');
+  res.redirect('/admin/config/armazenamento');
+  return true;
+}
+
+// ── P54-4 (reforço) — gravação de configuração GLOBAL exige Super Admin ──
+// `configuracoes` NÃO tem `condominio_id`: as chaves que `drive/opcoes` escreve
+// (`google_drive_root_folder`, `drive_auto_backups`) valem para a instalação
+// inteira — a pasta raiz é a da conta Google e a cópia automática é a dos
+// backups. Um admin de condomínio não pode, por isso, alterá-las: sem esta
+// guarda, escrevia a configuração global a partir de um formulário de
+// condomínio. Mesmo critério de `tenant.apenasSuperAdmin` (é um sistema só).
+// Devolve `true` quando RECUSOU.
+function recusarConfiguracaoGlobalSemSuperAdmin(req, res) {
+  if (tenant.eSuperAdmin(req.user)) return false;
+  req.flash('error_msg', 'Estas opções são da administração global: apenas um Super Admin as pode alterar.');
+  res.redirect('/admin/config/armazenamento#google-drive');
+  return true;
+}
+
 // Redirect URI do provedor: .env (quando definido) ou derivado do pedido.
 function redirectUriDe(req, provedor) {
   const daEnv = String(process.env[VAR_REDIRECT[provedor]] || '').trim();
@@ -356,6 +395,10 @@ router.get('/config/armazenamento/:provedor/callback', async (req, res) => {
 router.post('/config/armazenamento/:provedor/desligar', async (req, res) => {
   const provedor = String(req.params.provedor || '').toLowerCase();
   const plataforma = req.query.ambito === 'plataforma' || req.body.ambito === 'plataforma';
+  // P54-4 (reforço): desligar a ligação da PLATAFORMA (a dos backups) é operação
+  // da instalação — só Super Admin. Correr ANTES do redirect para o Drive, senão
+  // o 307 levava o pedido ao irmão `/config/drive/desligar` sem guarda nenhuma.
+  if (recusarSePlataformaSemSuperAdmin(req, res, plataforma)) return;
   if (provedor === 'google_drive') {
     // 307 preserva o POST e o âmbito.
     return res.redirect(307, `${ROTAS_DRIVE.desligar}?ambito=${plataforma ? 'plataforma' : 'condominio'}`);
@@ -397,6 +440,10 @@ router.post('/config/armazenamento/:provedor/desligar', async (req, res) => {
 router.post('/config/armazenamento/:provedor/testar', async (req, res) => {
   const provedor = String(req.params.provedor || '').toLowerCase();
   const plataforma = req.query.ambito === 'plataforma' || req.body.ambito === 'plataforma';
+  // P54-4 (reforço): testar a ligação da PLATAFORMA pode RENOVAR tokens e, se o
+  // fornecedor os tiver revogado, removê-los — altera o estado da instalação.
+  // Só Super Admin. ANTES do redirect para o Drive (o irmão não tem guarda).
+  if (recusarSePlataformaSemSuperAdmin(req, res, plataforma)) return;
   if (provedor === 'google_drive') {
     return res.redirect(307, `${ROTAS_DRIVE.testar}?ambito=${plataforma ? 'plataforma' : 'condominio'}`);
   }
@@ -913,6 +960,10 @@ router.get('/config/drive/callback', async (req, res) => {
 // Âmbito: a conta do condomínio (por omissão) ou a da plataforma.
 router.post('/config/drive/desligar', async (req, res) => {
   const plataforma = req.query.ambito === 'plataforma' || req.body.ambito === 'plataforma';
+  // P54-4 (reforço): esta rota é o DESTINO do 307 de
+  // `/config/armazenamento/google_drive/desligar` e é alcançável por POST direto
+  // — a guarda tem de viver aqui também, senão bastava chamá-la diretamente.
+  if (recusarSePlataformaSemSuperAdmin(req, res, plataforma)) return;
   try {
     await drive.desligar(plataforma ? null : req.condominioId, { plataforma });
     await drive.inicializar();
@@ -936,6 +987,13 @@ router.post('/config/drive/desligar', async (req, res) => {
 
 // Guarda opções de armazenamento: pasta raiz do Drive e backups automáticos.
 router.post('/config/drive/opcoes', async (req, res) => {
+  // ── P54-4 (reforço) — âmbito GLOBAL ───────────────────────────────
+  // Ambas as chaves escritas aqui vivem em `configuracoes`, que não tem
+  // `condominio_id`: são da instalação. Um admin de condomínio NÃO as altera.
+  // O âmbito NUNCA vem do corpo: não existe (nem passa a existir) um
+  // `condominioId` de cliente que mude o destino da escrita — a guarda decide
+  // pelo `users.role_global` do utilizador autenticado.
+  if (recusarConfiguracaoGlobalSemSuperAdmin(req, res)) return;
   // ── P54-4 — campo OMITIDO preserva o valor; valor inválido é recusado ──
   // A regra do P54 §5 é explícita: «campo omitido → manter existente». Antes,
   // este handler escrevia SEMPRE as duas chaves, pelo que guardar apenas a
@@ -996,6 +1054,9 @@ router.post('/config/drive/opcoes', async (req, res) => {
 router.post('/config/drive/testar', async (req, res) => {
   // Âmbito: a ligação da plataforma (backups) ou a do condomínio ativo.
   const plataforma = req.query.ambito === 'plataforma' || req.body.ambito === 'plataforma';
+  // P54-4 (reforço): destino do 307 de
+  // `/config/armazenamento/google_drive/testar` e alcançável por POST direto.
+  if (recusarSePlataformaSemSuperAdmin(req, res, plataforma)) return;
   const cidTeste = plataforma ? null : req.condominioId;
   const r = await drive.testarLigacao(cidTeste);
   // Uma autorização revogada no Google faz o teste falhar e os tokens são

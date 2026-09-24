@@ -323,6 +323,11 @@ config.setConfig = async (chave, valor) => { configGravada.push({ chave, valor }
 
 const drive = require('../helpers/drive');
 drive.estadoLigacao = async () => ({ ligado: true, ativo: true, credenciais: true, viaEnv: false, conta: 'admin@gmail.com' });
+// P54-4 (reforço) — ações do Drive (destino dos 307 das rotas genéricas).
+drive.desligar = async (cid, opcoes) => { acoesArmazenamento.push({ tipo: 'drive.desligar', cid, plataforma: Boolean(opcoes && opcoes.plataforma) }); };
+drive.testarLigacao = async (cid) => { acoesArmazenamento.push({ tipo: 'drive.testarLigacao', cid }); return { ok: true, conta: 'admin@gmail.com' }; };
+drive.inicializar = async () => {};
+drive.isConfigured = () => true;
 
 const porServico = require('../helpers/documentos-por-servico');
 porServico.contarPorServico = async () => ({});
@@ -343,6 +348,9 @@ const estado = {
 };
 const principaisGravados = [];
 const destinosGravados = [];
+// P54-4 (reforço) — registo das AÇÕES de ligação, para provar que a recusa
+// acontece ANTES de qualquer efeito (desligar/testar não chegam a correr).
+const acoesArmazenamento = [];
 let ligacaoBackup = { condominioId: null, conta: 'backups@exemplo.pt', origem: 'plataforma' };
 
 storage.provedores = () => estado.provedores.map((p) => p.nome);
@@ -359,8 +367,10 @@ storage.obterProvedor = (nome) => {
     rotulo: () => p.rotulo,
     icone: () => p.icone,
     isConfigured: () => p.ligado,
-    desligar: async () => {},
-    testarLigacao: async () => ({ ok: true, conta: p.conta || null }),
+    // P54-4 (reforço): registam-se as chamadas com o ARGUMENTO de âmbito, para
+    // provar que a guarda de plataforma impede a ação de sequer correr.
+    desligar: async (cid, opcoes) => { acoesArmazenamento.push({ tipo: 'desligar', cid, plataforma: Boolean(opcoes && opcoes.plataforma) }); },
+    testarLigacao: async (cid) => { acoesArmazenamento.push({ tipo: 'testarLigacao', cid }); return { ok: true, conta: p.conta || null }; },
   };
 };
 storage.definirPrincipalDoCondominio = async (cid, nome) => { principaisGravados.push({ cid, nome }); return nome; };
@@ -536,6 +546,82 @@ async function rotas() {
   const inesperado = configGravada.find((c) => !['google_drive_root_folder', 'drive_auto_backups'].includes(c.chave));
   exigir(!inesperado, 'C14: campos inesperados não são gravados (só as chaves conhecidas)');
   ok('C14: campos inesperados são ignorados');
+
+  // ── P54-4 (reforço) — ÂMBITO DE PLATAFORMA exige Super Admin ──────
+  // Ver ponto 1 do pedido: um admin de condomínio alcançava a ligação da
+  // PLATAFORMA (a dos backups) por POST direto. Correção: guarda no servidor.
+
+  // C15. Admin de condomínio NÃO desliga a ligação da plataforma (POST direto).
+  UTILIZADOR = { id: 1, nome: 'Admin', email: 'a@b.pt', role_global: 'admin' };
+  acoesArmazenamento.length = 0; limpar();
+  r = await enviar('/admin/config/armazenamento/dropbox/desligar?ambito=plataforma', {});
+  exigir(!acoesArmazenamento.some((a) => a.tipo === 'desligar'), 'C15: a ação de desligar NÃO corre');
+  exigir(r.status === 302, `C15: é recusado com redirect (${r.status})`);
+  exigir(/error/i.test((ultimoFlash() || {}).tipo || ''), 'C15: e a recusa é comunicada');
+  ok('C15: admin de condomínio NÃO desliga a ligação da plataforma (POST direto recusado)');
+
+  // C16. Admin de condomínio NÃO testa a ligação da plataforma (POST direto).
+  acoesArmazenamento.length = 0; limpar();
+  r = await enviar('/admin/config/armazenamento/dropbox/testar?ambito=plataforma', {});
+  exigir(!acoesArmazenamento.some((a) => a.tipo === 'testarLigacao'), 'C16: a ação de testar NÃO corre');
+  exigir(r.status === 302, `C16: é recusado com redirect (${r.status})`);
+  ok('C16: admin de condomínio NÃO testa a ligação da plataforma (POST direto recusado)');
+
+  // C17. O irmão direto do 307 (Google Drive) está igualmente protegido.
+  acoesArmazenamento.length = 0; limpar();
+  r = await enviar('/admin/config/drive/desligar?ambito=plataforma', {});
+  exigir(!acoesArmazenamento.some((a) => a.tipo === 'drive.desligar'), 'C17: drive/desligar NÃO corre');
+  acoesArmazenamento.length = 0; limpar();
+  r = await enviar('/admin/config/drive/testar?ambito=plataforma', {});
+  exigir(!acoesArmazenamento.some((a) => a.tipo === 'drive.testarLigacao'), 'C17: drive/testar NÃO corre');
+  ok('C17: as rotas do Google Drive (destino do 307) recusam a plataforma a um admin de condomínio');
+
+  // C18. Super Admin CONTINUA a poder as ações de plataforma.
+  UTILIZADOR = { id: 9, nome: 'Super', email: 's@b.pt', role_global: 'super_admin' };
+  acoesArmazenamento.length = 0; limpar();
+  await enviar('/admin/config/armazenamento/dropbox/desligar?ambito=plataforma', {});
+  exigir(acoesArmazenamento.some((a) => a.tipo === 'desligar' && a.plataforma === true),
+    'C18: com Super Admin, desligar a plataforma corre com âmbito de plataforma');
+  acoesArmazenamento.length = 0; limpar();
+  await enviar('/admin/config/armazenamento/dropbox/testar?ambito=plataforma', {});
+  exigir(acoesArmazenamento.some((a) => a.tipo === 'testarLigacao' && a.cid === null),
+    'C18: com Super Admin, testar a plataforma corre sobre a ligação da plataforma');
+  ok('C18: Super Admin continua a poder desligar/testar a ligação da plataforma');
+
+  // C19. Âmbito de CONDOMÍNIO continua a funcionar para um admin de condomínio.
+  UTILIZADOR = { id: 1, nome: 'Admin', email: 'a@b.pt', role_global: 'admin' };
+  acoesArmazenamento.length = 0; limpar();
+  await enviar('/admin/config/armazenamento/dropbox/desligar', {});
+  exigir(acoesArmazenamento.some((a) => a.tipo === 'desligar' && a.plataforma === false && a.cid === 1),
+    'C19: sem âmbito de plataforma, o admin de condomínio desliga a ligação do SEU condomínio');
+  acoesArmazenamento.length = 0; limpar();
+  await enviar('/admin/config/armazenamento/dropbox/testar', {});
+  exigir(acoesArmazenamento.some((a) => a.tipo === 'testarLigacao' && a.cid === 1),
+    'C19: e testa a ligação do seu condomínio (sem regressão)');
+  ok('C19: o âmbito de CONDOMÍNIO mantém o comportamento anterior (sem regressão)');
+
+  // C20. `drive/opcoes` — configuração GLOBAL exige Super Admin.
+  configGravada.length = 0; limpar();
+  r = await enviar('/admin/config/drive/opcoes', { pasta_raiz: 'Global' });
+  exigir(configGravada.length === 0, 'C20: um admin de condomínio NÃO grava a pasta global');
+  exigir(r.status === 302, `C20: é recusado com redirect (${r.status})`);
+  ok('C20: admin de condomínio NÃO altera a configuração global (drive/opcoes)');
+
+  // C21. O âmbito da escrita NUNCA vem do corpo: um `condominioId` de cliente
+  // não promove um admin de condomínio a Super Admin nem muda o destino.
+  configGravada.length = 0; limpar();
+  await enviar('/admin/config/drive/opcoes', { pasta_raiz: 'Global', condominio_id: '1', condominioId: '1', plataforma: '1' });
+  exigir(configGravada.length === 0,
+    'C21: nenhum campo do corpo (condominio_id/plataforma) confere âmbito global');
+  // E com Super Admin, a mesma rota grava mesmo (recusa não é vacuidade).
+  UTILIZADOR = { id: 9, nome: 'Super', email: 's@b.pt', role_global: 'super_admin' };
+  configGravada.length = 0; limpar();
+  await enviar('/admin/config/drive/opcoes', { pasta_raiz: 'Global' });
+  exigir(configGravada.some((c) => c.chave === 'google_drive_root_folder' && c.valor === 'Global'),
+    'C21: com Super Admin, a mesma rota grava (a recusa de C20 não é vacuidade)');
+  ok('C21: o âmbito não vem do corpo; Super Admin grava a configuração global');
+
+  UTILIZADOR = { id: 1, nome: 'Admin', email: 'a@b.pt', role_global: 'admin' };
 }
 
 // ═══════════════════════════════════════════════════════════════════
