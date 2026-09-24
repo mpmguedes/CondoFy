@@ -1,0 +1,186 @@
+/* ══════════════════════════════════════════════════════════════════
+   P54-0 — PADRÃO «CONSULTA → EDITAR → CANCELAR → GUARDAR»
+   Folha INDEPENDENTE do padrão. Par do parcial `_modo-edicao.handlebars`
+   e de `public/js/modo-edicao.js`.
+
+   ⛔ Regras desta folha (não negociáveis):
+     · todas as classes são namespaceadas `me-`; nenhuma colide com as
+       utilities de espaçamento do Bootstrap (`me-0`..`me-5`, `me-auto`,
+       `me-{breakpoint}-*`) nem com classes de `styles.css`/`home.css`;
+     · NÃO redefine nada do design system: consome os tokens (leitura) e
+       nunca os altera. Não há `!important` nem seletores fora de `.me`;
+     · funciona sem o design system — cada token tem um valor de recurso,
+       para o componente poder ser usado (e testado) isolado;
+     · nada depende de `:hover` para ser percetível (o estado de repouso já
+       tem contorno e cor próprios): é utilizável em ecrã tátil.
+   ══════════════════════════════════════════════════════════════════ */
+
+.me {
+  /* Variáveis LOCAIS do componente (prefixo `me-`), derivadas dos tokens. */
+  --me-espaco: var(--sp-2, 8px);
+  --me-raio: var(--radius-sm, 8px);
+  --me-altura: var(--ctl-h, 36px);
+}
+
+/* ── Cabeçalho do bloco ───────────────────────────────────────────── */
+.me-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--me-espaco);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3, 12px);
+}
+
+.me-titulo {
+  margin: 0;
+  font-size: calc(14px * var(--font-scale, 1));
+  font-weight: 600;
+}
+
+/* ── Estado de CONSULTA — só texto, nenhum controlo editável ──────── */
+.me-lista { display: grid; gap: 6px; margin: 0; }
+
+.me-linha {
+  display: flex;
+  align-items: baseline;
+  gap: var(--me-espaco);
+  flex-wrap: wrap;
+}
+
+.me-rotulo {
+  flex: 0 0 auto;
+  min-width: 150px;
+  margin: 0;
+  color: var(--c-text-muted, #56707f);
+  font-size: calc(12.5px * var(--font-scale, 1));
+}
+
+.me-valor {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--c-text, #102b46);
+  font-size: calc(13px * var(--font-scale, 1));
+}
+
+/* Máscara de um valor sensível: o componente nunca imprime o valor. */
+.me-mascara {
+  font-family: ui-monospace, "Courier New", monospace;
+  letter-spacing: 0.14em;
+}
+
+.me-estado {
+  margin-left: 6px;
+  color: var(--c-text-muted, #56707f);
+  font-size: calc(12px * var(--font-scale, 1));
+}
+
+/* Só para leitores de ecrã (anuncia «valor protegido» na máscara). Próprio,
+   para não depender de utilitários do Bootstrap. */
+.me-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Estado de EDIÇÃO ─────────────────────────────────────────────── */
+.me-form { margin: 0; }
+
+/* ⛔ Garantia explícita: o `hidden` manda. Sem isto, qualquer regra que
+   definisse `display` no formulário anularia o atributo (a regra `[hidden]`
+   do browser tem especificidade baixa) e o formulário apareceria em consulta. */
+.me-form[hidden],
+.me-consulta[hidden] { display: none; }
+
+.me-acoes {
+  display: flex;
+  align-items: center;
+  gap: var(--me-espaco);
+  flex-wrap: wrap;
+  margin-top: var(--sp-4, 16px);
+}
+
+/* Botão do padrão: geometria PRÓPRIA (não estende `.btn`) para o componente
+   ficar autónomo; as medidas vêm dos mesmos tokens, para não divergir. */
+.me-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--me-altura);
+  padding: 8px 16px;
+  border: 1px solid var(--c-border-strong, #cbd5e1);
+  border-radius: var(--me-raio);
+  background: var(--c-surface, #ffffff);
+  color: var(--c-text, #102b46);
+  font-family: inherit;
+  font-size: calc(13px * var(--font-scale, 1));
+  font-weight: 500;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.me-icone {
+  font-size: calc(18px * var(--font-scale, 1));
+  line-height: 1;
+  height: 18px;
+  overflow: visible;
+}
+
+/* O `:hover` é reforço, nunca a única pista: em repouso o botão já tem
+   contorno e cor próprios (utilizável ao toque). */
+.me-btn:hover {
+  background: var(--c-surface-2, #f1f5f9);
+  border-color: var(--c-border-strong, #94a3b8);
+}
+
+.me-btn:focus-visible {
+  outline: 2px solid var(--c-focus-ring, currentColor);
+  outline-offset: 2px;
+}
+
+.me-btn-editar {
+  color: var(--c-primary, #075b9b);
+  border-color: var(--c-primary, #075b9b);
+}
+.me-btn-editar:hover { background: var(--c-primary-light, #e6f2fb); }
+
+.me-btn-guardar {
+  background: var(--c-primary, #075b9b);
+  border-color: var(--c-primary, #075b9b);
+  color: var(--c-on-primary, #ffffff);
+}
+.me-btn-guardar:hover {
+  background: var(--c-primary-dark, #054a7d);
+  border-color: var(--c-primary-dark, #054a7d);
+}
+
+/* Desativado por COR, não por transparência (mesma regra do design system):
+   `opacity` diluiria o texto contra o fundo e torná-lo-ia ilegível. */
+.me-btn:disabled {
+  opacity: 1;
+  background: var(--c-disabled-bg, #e8eff5);
+  border-color: var(--c-disabled-border, #d7e4ed);
+  color: var(--c-disabled-text, #4e687d);
+  cursor: not-allowed;
+}
+
+/* ── Ecrã estreito: ações utilizáveis, empilhadas, alvo tátil ─────── */
+@media (max-width: 575.98px) {
+  .me-topo { flex-direction: column; align-items: stretch; }
+  .me-linha { flex-direction: column; gap: 2px; }
+  .me-rotulo { min-width: 0; }
+  .me-acoes { flex-direction: column; align-items: stretch; }
+  .me-btn { width: 100%; min-height: var(--ctl-h-touch, 48px); }
+}

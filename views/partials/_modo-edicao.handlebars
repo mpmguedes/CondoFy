@@ -1,0 +1,91 @@
+{{!-- ══════════════════════════════════════════════════════════════════
+     P54-0 — PADRÃO «CONSULTA → EDITAR → CANCELAR → GUARDAR»
+     ══════════════════════════════════════════════════════════════════
+     Fundação reutilizável para as configurações sensíveis (P54). NÃO aplica
+     o padrão a nenhuma página: quem o usa é o P54-2 e seguintes.
+
+     Por omissão o bloco está em CONSULTA: os valores aparecem como TEXTO e o
+     formulário está oculto (`hidden`). Só o botão `Editar` o revela.
+     ⛔ Sem JavaScript o formulário fica oculto e não há edição — a falha é
+     para o lado SEGURO (nunca se edita por acidente), que é o objetivo do P54.
+
+     ── Parâmetros ────────────────────────────────────────────────────
+       id            (OBRIGATÓRIO) identificador único do bloco. Prefixa o id do
+                     formulário (`<id>-form`), alvo do `aria-controls`.
+       acao          (OBRIGATÓRIO) URL do POST. NUNCA inventada aqui: quem usa
+                     passa a rota que já existe.
+       titulo        texto do cabeçalho (opcional).
+       linhas        array de { rotulo, valor, sensivel, mascara, estado } para a
+                     consulta. ⛔ Ver a regra de segredos em baixo.
+       metodo        `post` (omissão) ou `get`.
+       rotuloEditar / rotuloGuardar / rotuloCancelar  (opcionais)
+       confirmarAbandono  texto do aviso ao cancelar com alterações pendentes.
+                          Sem ele usa-se a mensagem por omissão do JS.
+
+     ── Uso (o conteúdo do bloco são os CAMPOS do formulário) ─────────
+       {{#> _modo-edicao id="smtp" acao="/admin/config/email/smtp"
+                        titulo="Configuração SMTP" linhas=linhasSmtp}}
+         <div class="mb-3">
+           <label class="form-label" for="smtp-host">Servidor</label>
+           <input class="form-control" id="smtp-host" name="host" value="{{smtp.host}}">
+         </div>
+       {{/_modo-edicao}}
+
+     ── ⛔ REGRA DE SEGREDOS (não negociável) ──────────────────────────
+     Uma linha com `sensivel: true` imprime a MÁSCARA e IGNORA `valor` — o
+     componente nunca revela um segredo por iniciativa própria, mesmo que o
+     chamador lhe passe o valor. Para dizer se está definida, usar `estado`
+     (ex.: «Definida» / «Em falta»), que é texto seguro.
+     Os CAMPOS do formulário são responsabilidade do chamador: a password
+     NUNCA é pré-preenchida (P54 §4.2) e o `value` não se escreve no HTML.
+     ══════════════════════════════════════════════════════════════════ --}}
+<div class="me" id="{{id}}" data-modo-edicao data-me-estado="consulta"
+     {{#if confirmarAbandono}}data-me-confirmar-abandono="{{confirmarAbandono}}"{{/if}}>
+
+  <div class="me-topo">
+    {{#if titulo}}<h3 class="me-titulo">{{titulo}}</h3>{{/if}}
+    <button type="button" class="me-btn me-btn-editar" data-me-editar
+            aria-expanded="false" aria-controls="{{id}}-form">
+      <span class="material-symbols-outlined me-icone" aria-hidden="true">edit</span>{{#if rotuloEditar}}{{rotuloEditar}}{{else}}Editar{{/if}}
+    </button>
+  </div>
+
+  {{!-- Estado de CONSULTA: valores como texto, sem um único input. --}}
+  <div class="me-consulta" data-me-consulta>
+    <dl class="me-lista">
+      {{#each linhas}}
+      <div class="me-linha">
+        <dt class="me-rotulo">{{rotulo}}</dt>
+        <dd class="me-valor">
+          {{#if sensivel}}
+          <span class="me-mascara" aria-hidden="true">{{#if mascara}}{{mascara}}{{else}}•••••{{/if}}</span>
+          <span class="me-visually-hidden">valor protegido</span>
+          {{else}}
+          {{#if valor}}{{valor}}{{else}}—{{/if}}
+          {{/if}}
+          {{#if estado}}<span class="me-estado">{{estado}}</span>{{/if}}
+        </dd>
+      </div>
+      {{else}}
+      <div class="me-linha"><dt class="me-rotulo">Sem dados a apresentar</dt><dd class="me-valor"></dd></div>
+      {{/each}}
+    </dl>
+  </div>
+
+  {{!-- Estado de EDIÇÃO: oculto por omissão. O `hidden` é o que impede a
+       submissão acidental enquanto em consulta (nada dentro é focável nem
+       clicável); o JS troca-o pelo estado e não duplica a informação. --}}
+  <form class="me-form" id="{{id}}-form" data-me-form
+        method="{{#if metodo}}{{metodo}}{{else}}post{{/if}}" action="{{acao}}" hidden>
+    {{#if @partial-block}}{{> @partial-block}}{{/if}}
+
+    <div class="me-acoes">
+      <button type="submit" class="me-btn me-btn-guardar" data-me-guardar>
+        <span class="material-symbols-outlined me-icone" aria-hidden="true">save</span>{{#if rotuloGuardar}}{{rotuloGuardar}}{{else}}Guardar{{/if}}
+      </button>
+      <button type="button" class="me-btn me-btn-cancelar" data-me-cancelar>
+        <span class="material-symbols-outlined me-icone" aria-hidden="true">close</span>{{#if rotuloCancelar}}{{rotuloCancelar}}{{else}}Cancelar{{/if}}
+      </button>
+    </div>
+  </form>
+</div>
