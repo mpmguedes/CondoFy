@@ -53,7 +53,16 @@ function registarFalha(acao, entidade, err) {
 
 // Regista uma operação importante no log de auditoria.
 // Nunca lança erro para não interromper o fluxo principal.
-async function audit({ userId, acao, entidade, entidadeId, detalhes }) {
+//
+// P54-3 — duas opções novas, ambas opcionais e sem efeito por omissão:
+//   · `transaction` — escreve o evento DENTRO da transação do chamador, para
+//     que configuração e auditoria sejam atómicas (ou ficam as duas, ou
+//     nenhuma);
+//   · `rigoroso` — em falha, RELANÇA em vez de engolir. Só faz sentido dentro
+//     de uma transação: aí a auditoria faz parte da operação e uma falha tem de
+//     reverter tudo. Fora dela mantém-se a regra histórica (a auditoria nunca
+//     derruba a ação que está a ser auditada).
+async function audit({ userId, acao, entidade, entidadeId, detalhes, transaction, rigoroso = false }) {
   try {
     await AuditLog.create({
       user_id: userId || null,
@@ -61,11 +70,12 @@ async function audit({ userId, acao, entidade, entidadeId, detalhes }) {
       entidade: entidade || null,
       entidade_id: entidadeId || null,
       detalhes: detalhes ? JSON.stringify(detalhes) : null,
-    });
+    }, transaction ? { transaction } : undefined);
     falhasSeguidas = 0;
     avisoEmitido = false;
   } catch (err) {
     registarFalha(acao, entidade, err);
+    if (rigoroso) throw err;
   }
 }
 

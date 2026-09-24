@@ -20,7 +20,6 @@
 // GesCondu continua válida para os restantes condomínios.
 // ─────────────────────────────────────────────────────────────────────
 const express = require('express');
-const bcrypt = require('bcryptjs');
 const { Op } = require('sequelize');
 const { UserCondominio, Fracao } = require('../models');
 const { eAutenticado } = require('../helpers/eAdmin');
@@ -28,7 +27,7 @@ const tenant = require('../helpers/tenant');
 const titularidades = require('../helpers/titularidades');
 const { construirExportacao } = require('../helpers/exportacao-dados');
 const { audit } = require('../helpers/audit');
-const doisfatores = require('../helpers/doisfatores');
+const { reautenticacaoValida } = require('../helpers/reautenticacao');
 const cabecalhos = require('../helpers/cabecalhos-ficheiro');
 const { getCondominio } = require('../helpers/condominio');
 
@@ -75,22 +74,10 @@ async function nGestoresAtivos(condominioId) {
 }
 
 // Reautenticação: palavra-passe e, quando o 2FA por aplicação está ativo,
-// também o código atual. Usa os mecanismos que já existem (nada paralelo).
-function reautenticacaoValida(req) {
-  const password = String(req.body.password || '');
-  if (!password) return { ok: false, erro: 'Indique a sua palavra-passe para confirmar.' };
-  if (!req.user.password_hash || !bcrypt.compareSync(password, req.user.password_hash)) {
-    return { ok: false, erro: 'Palavra-passe incorreta.' };
-  }
-  if (req.user.two_fa_ativo && req.user.two_fa_metodo === 'totp') {
-    const codigo = String(req.body.codigo_2fa || '').replace(/\s+/g, '');
-    if (!codigo) return { ok: false, erro: 'Indique o código da aplicação de autenticação.' };
-    if (!req.user.two_fa_totp_secret || !doisfatores.verificarTOTP(req.user.two_fa_totp_secret, codigo)) {
-      return { ok: false, erro: 'Código de autenticação inválido.' };
-    }
-  }
-  return { ok: true };
-}
+// também o código atual. O mecanismo é UM só — vive em
+// `helpers/reautenticacao.js` e é partilhado com a alteração de credenciais
+// SMTP (P54-3). Aqui era local; passou a ser importado (ver o `require` no
+// topo) para não existirem duas implementações da mesma regra.
 
 // Estado do fluxo, partilhado pelas páginas.
 async function estadoDoFluxo(req) {

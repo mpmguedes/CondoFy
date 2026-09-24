@@ -512,9 +512,14 @@ function testesFluxoSaida() {
   assert.ok(/router\.post\('\/saida\/exportar'/.test(rota), 'saída: exportação por POST (não por link)');
   assert.ok(/router\.post\('\/saida\/concluir'/.test(rota), 'saída: conclusão por POST');
 
-  // Reautenticação forte com os mecanismos existentes.
-  assert.ok(/bcrypt\.compareSync\(password, req\.user\.password_hash\)/.test(rota), 'saída: confirma a palavra-passe');
-  assert.ok(/doisfatores\.verificarTOTP\(req\.user\.two_fa_totp_secret, codigo\)/.test(rota), 'saída: usa o 2FA existente quando ativo');
+  // Reautenticação forte com os mecanismos existentes. O mecanismo passou a
+  // viver em `helpers/reautenticacao.js` (P54-3) e é partilhado com a alteração
+  // das credenciais SMTP: a rota USA-O, e a REGRA prova-se onde ela vive — para
+  // o teste não voltar a fixar o SÍTIO do código em vez da sua existência.
+  const reauth = ler('helpers/reautenticacao.js');
+  assert.ok(/reautenticacaoValida/.test(rota), 'saída: usa a reautenticação partilhada');
+  assert.ok(/bcrypt\.compareSync\(password, hash\)/.test(reauth), 'saída: confirma a palavra-passe');
+  assert.ok(/doisfatores\.verificarTOTP\(req\.user\.two_fa_totp_secret, codigo\)/.test(reauth), 'saída: usa o 2FA existente quando ativo');
   assert.ok(/req\.body\.confirmo !== 'on'/.test(rota), 'saída: exige confirmação explícita');
   assert.ok(/if \(estado\.bloqueio\)/.test(rota), 'saída: respeita o bloqueio (último administrador)');
 
@@ -1018,8 +1023,8 @@ function testesAcessoEConta() {
   // ── 12: preparar saída continua exatamente como estava ─────────────
   assert.ok(/titularidades\.cessarTitularidadesAtivas\(\{/.test(saida), 'F2/teste 12: a saída continua a encerrar as titularidades');
   assert.ok(/UserCondominio\.update\(\s*\{ estado: 'inativo' \}/.test(saida), 'F2/teste 12: a saída continua a encerrar a associação');
-  assert.ok(/doisfatores\.verificarTOTP/.test(saida) && /req\.body\.confirmo !== 'on'/.test(saida),
-    'F2/teste 12: a saída mantém reautenticação, 2FA e declaração');
+  assert.ok(/reautenticacaoValida\(/.test(saida) && /req\.body\.confirmo !== 'on'/.test(saida),
+    'F2/teste 12: a saída mantém reautenticação (helper partilhado), declaração explícita e 2FA');
 
   // ── 13–14: vender uma fração não mexe em conta/associação (Fase 1) ─
   assert.ok(!/UserCondominio/.test(ler('helpers/titularidades.js')),

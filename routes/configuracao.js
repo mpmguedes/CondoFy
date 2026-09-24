@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
-const { Condominio, BackupLog, AuditLog, User } = require('../models');
+const { Condominio, BackupLog, AuditLog, User, sequelize } = require('../models');
 const tenant = require('../helpers/tenant');
 const { audit } = require('../helpers/audit');
 const { getCondominio, clearCondominioCache } = require('../helpers/condominio');
@@ -20,6 +20,14 @@ const { validarNif, validarIban } = require('../public/js/validacao-fiscal');
 // condomínio (não operação da fila) — vive neste router. O envio do email de
 // teste reutiliza o MESMO mailer: não existe uma segunda configuração.
 const mailer = require('../helpers/mailer');
+// ── P54-3 — proteção SERVER-SIDE da alteração de credenciais ─────────
+// Reutiliza o que já existe: o limitador de `helpers/seguranca` (o mesmo do
+// login) e a reautenticação extraída de `saida-condominio` para
+// `helpers/reautenticacao`. O único mecanismo novo é o da confirmação, que não
+// existia em lado nenhum — ver `helpers/confirmacao-sensivel`.
+const { createLimiter, identidadeAutenticada } = require('../helpers/seguranca');
+const confirmacao = require('../helpers/confirmacao-sensivel');
+const reautenticacao = require('../helpers/reautenticacao');
 // Tips contextuais da área de armazenamento (motor único: helpers/tips.js).
 const { tipsDaPagina } = require('../helpers/tips/contexto');
 
@@ -27,6 +35,67 @@ const router = express.Router();
 // Isolamento: a configuração edita o condomínio ATIVO (sessão).
 router.use(tenant.comCondominioAtivo);
 router.use(tenant.comPapel('admin'));
+
+// ── P54-3 (V12) — limites por IDENTIDADE, não por IP ────────────────
+// O limite por IP serve o login, onde ainda não há identidade. Aqui já há: a
+// chave é o UTILIZADOR. Um atacante com sessão válida não escapa mudando de
+// rede, e vários administradores atrás do mesmo NAT não se bloqueiam entre si.
+// Cada gravação custa DOIS pedidos (preparar + gravar), pelo que o limite é
+// expresso em operações, não em pedidos: 20 pedidos = 10 tentativas de guardar
+// em 10 minutos. Continua muito abaixo do que qualquer uso legítimo precisa —
+// corrigir uma gralha e voltar a guardar não chega perto disto — e trava uma
+// tentativa repetida de forçar a configuração.
+const limiteSmtpGravar = createLimiter({
+  rotulo: 'smtp-gravar',
+  max: 20,
+  janelaMs: 10 * 60 * 1000,
+  chaveDe: identidadeAutenticada,
+  msg: 'Demasiadas tentativas de alteração da configuração de email. Aguarde alguns minutos.',
+});
+const limiteSmtpAcoes = createLimiter({
+  rotulo: 'smtp-acoes',
+  max: 30,
+  janelaMs: 10 * 60 * 1000,
+  chaveDe: identidadeAutenticada,
+  msg: 'Demasiadas operações de email. Aguarde alguns minutos.',
+});
+
+// ── P54-3 (V10) — a operação confirmável e o payload que ela liga ────
+const OPERACAO_SMTP = 'smtp-config';
+
+// Impressão do pedido: é isto que liga a confirmação ao CONTEÚDO. Tem de ser
+// calculada de forma IDÊNTICA na preparação e na gravação — qualquer diferença
+// de normalização faria a gravação legítima ser recusada por «payload alterado».
+function impressaoDoPedido(body) {
+  const b = body || {};
+  const texto = (v) => (v === undefined || v === null ? '' : String(v));
+  return confirmacao.impressao({
+    host: texto(b.host),
+    port: texto(b.port),
+    user: texto(b.user),
+    tls: texto(b.tls),
+    from: texto(b.from),
+    from_name: texto(b.from_name),
+    // Digest do segredo (NUNCA o valor): muda se a password mudar, e é o mínimo
+    // necessário para detetar uma password trocada entre confirmar e gravar.
+    pass: confirmacao.impressaoSegredo(b.pass),
+  });
+}
+
+// Os campos que o mailer recebe — um só sítio, para a preparação e a gravação
+// não poderem divergir no mapeamento dos nomes do formulário.
+function corpoSmtp(body) {
+  const b = body || {};
+  return {
+    host: b.host,
+    port: b.port,
+    user: b.user,
+    pass: b.pass,
+    tls: b.tls,
+    from: b.from,
+    fromName: b.from_name,
+  };
+}
 
 // Provedores ligados pelo fluxo OAuth genérico (o Google Drive mantém as
 // rotas históricas /admin/config/drive/*, sem alterações).
@@ -144,9 +213,44 @@ router.get('/config/armazenamento', async (req, res) => {
     console.error('[tips] armazenamento:', err.message);
   }
 
+  // ── P54-4 — linhas do estado de CONSULTA (padrão P54-0) ───────────
+  // O parcial `_modo-edicao` mostra estes valores como TEXTO enquanto o bloco
+  // está em consulta; os campos só existem depois de `Editar`. Construídas
+  // AQUI (e não na vista) porque o Handlebars não compõe arrays — é o mesmo
+  // caminho do `linhasSmtp` do P54-2.
+  //
+  // ⛔ Nenhuma linha é `sensivel: true`, e isso é deliberado: nesta área NÃO
+  // há um único segredo editável por formulário. As credenciais OAuth vivem no
+  // `.env` (`*_CLIENT_SECRET`) e os tokens em `configuracoes` só mudam pelo
+  // fluxo OAuth — nunca por um campo. Um segredo que aparecesse aqui seria um
+  // defeito, não uma linha a mais (spec P54 §6).
+  const provedoresLigados = (dados.armazenamento.provedores || []).filter((p) => p.ligado);
+  const principal = provedoresLigados.find((p) => p.principal) || null;
+  const backup = dados.armazenamento.backup || {};
+
+  const linhasPrincipal = [
+    {
+      rotulo: 'Serviço de armazenamento',
+      valor: principal ? principal.rotulo : null,
+      estado: principal ? 'Em uso' : 'Por escolher',
+    },
+  ];
+  const linhasBackup = [
+    { rotulo: 'Destino dos backups', valor: backup.destino ? backup.rotulo : 'Só neste servidor' },
+    // A conta só se mostra quando há destino externo: sem ele a linha seria um
+    // «—» que não informa nada.
+    ...(backup.destino && backup.conta ? [{ rotulo: 'Conta', valor: backup.conta }] : []),
+  ];
+  const linhasDrive = [
+    { rotulo: 'Pasta de destino', valor: dados.driveOpcoes.pastaRaiz || 'GesCondu' },
+  ];
+
   res.render('admin/configuracao/armazenamento', {
     titulo: 'Armazenamento e Backups',
     ...dados,
+    linhasPrincipal,
+    linhasBackup,
+    linhasDrive,
     // `voltar` diz à rota de dispensa para onde regressar (validado no servidor).
     tips: { ...contextoDeTips, voltar: '/admin/config/armazenamento' },
   });
@@ -531,32 +635,130 @@ router.get('/config/email', async (req, res) => {
     { rotulo: 'Segurança', valor: estadoSmtp.seguranca },
     { rotulo: 'Password', sensivel: true, estado: estadoSmtp.temPassword ? 'Definida' : 'Em falta' },
   ];
-  res.render('admin/configuracao/email', { titulo: 'Email / SMTP', estadoSmtp, linhasSmtp });
+  res.render('admin/configuracao/email', {
+    titulo: 'Email / SMTP',
+    estadoSmtp,
+    linhasSmtp,
+    // P54-3 (V11) — a vista pede o código 2FA apenas a quem o tem ativo.
+    exige2fa: reautenticacao.exigeSegundoFator(req.user),
+  });
 });
 
-// ── Guardar a configuração SMTP ────────────────────────────────────
-router.post('/config/email/smtp', async (req, res) => {
-  try {
-    await mailer.guardarConfigSmtp({
-      host: req.body.host,
-      port: req.body.port,
-      user: req.body.user,
-      pass: req.body.pass, // vazio → mantém a existente
-      tls: req.body.tls,
-      from: req.body.from,
-      fromName: req.body.from_name,
+// ── P54-3 — preparar a confirmação (emite o token ligado ao payload) ─
+// É o passo que a interface faz quando o utilizador confirma na caixa do P54-2.
+// Devolve JSON (é chamado por `fetch`) e NÃO grava nada.
+//
+// A ordem é deliberada: identidade → conteúdo → token.
+//   · a identidade prova-se com a password da conta (e 2FA quando ativo), pelo
+//     que um token NUNCA é emitido a quem não a conheça;
+//   · o conteúdo é validado com o MESMO validador da gravação, para não se
+//     confirmar aquilo que já se sabe que vai ser recusado;
+//   · só então se emite o token, ligado à impressão do payload.
+router.post('/config/email/smtp/preparar', limiteSmtpGravar, async (req, res) => {
+  const re = reautenticacao.reautenticacaoValida(req);
+  if (!re.ok) return res.status(403).json({ ok: false, erro: 'reautenticacao', mensagem: re.erro });
+
+  const v = await mailer.validarConfigSmtp(corpoSmtp(req.body));
+  if (!v.ok) {
+    return res.status(400).json({
+      ok: false,
+      erro: 'invalido',
+      // Só CÓDIGOS e a mensagem FIXA do catálogo — nunca valores.
+      campos: v.erros.map((e) => ({ campo: e.campo, codigo: e.codigo, mensagem: e.mensagem })),
     });
-    await audit({ userId: req.user.id, acao: 'configurar_smtp', entidade: 'Configuracao' });
+  }
+
+  const t = confirmacao.emitir(req, { operacao: OPERACAO_SMTP, impressao: impressaoDoPedido(req.body) });
+  if (!t.ok) return res.status(409).json({ ok: false, erro: t.erro });
+
+  return res.json({ ok: true, token: t.valor, expiraEm: t.expiraEm });
+});
+
+// Mensagens de recusa da confirmação. FIXAS, sem valores — a confirmação é um
+// segredo de uso único e não pode aparecer em texto nenhum.
+function mensagemDeConfirmacao(erro) {
+  const M = {
+    sem_confirmacao: 'A alteração tem de ser confirmada na página de configuração.',
+    confirmacao_ausente: 'A alteração tem de ser confirmada na página de configuração.',
+    confirmacao_invalida: 'A confirmação não é válida. Repita a alteração a partir da página.',
+    confirmacao_expirada: 'A confirmação expirou. Repita a alteração.',
+    confirmacao_de_outro_utilizador: 'A confirmação não pertence a esta conta.',
+    payload_alterado: 'Os valores mudaram depois da confirmação. Reveja e confirme de novo.',
+    operacao_obrigatoria: 'A alteração tem de ser confirmada na página de configuração.',
+  };
+  return M[erro] || 'A alteração tem de ser confirmada na página de configuração.';
+}
+
+// ── Guardar a configuração SMTP ────────────────────────────────────
+// P54-3 — a gravação exige, TODAS:
+//   · confirmação emitida pelo SERVIDOR (V10), ligada a esta sessão, a este
+//     utilizador, a ESTA operação e AO PAYLOAD enviado, de uso único e com
+//     prazo;
+//   · reautenticação com a password da conta (V11);
+//   · dentro do limite por utilizador (V12);
+//   · tudo dentro de uma TRANSAÇÃO (V9): configuração + auditoria, ou nada.
+//
+// ⛔ Um `POST` direto ao endpoint, sem passar pela interface, não traz o token e
+//    é recusado — a proteção não depende da página.
+router.post('/config/email/smtp', limiteSmtpGravar, async (req, res) => {
+  // 1. Confirmação server-side. É consumida mesmo que algo falhe a seguir.
+  const conf = confirmacao.validarEConsumir(req, {
+    operacao: OPERACAO_SMTP,
+    valor: req.body._confirmacao,
+    impressao: impressaoDoPedido(req.body),
+  });
+  if (!conf.ok) {
+    console.error('[smtp] gravação recusada — confirmação: %s', conf.erro);
+    req.flash('error_msg', mensagemDeConfirmacao(conf.erro));
+    return res.redirect('/admin/config/email');
+  }
+
+  // 2. Reautenticação. É a barreira que uma sessão roubada não vence.
+  const re = reautenticacao.reautenticacaoValida(req);
+  if (!re.ok) {
+    // Fica registado o MOTIVO da recusa (nunca o valor submetido): sem isto,
+    // uma gravação recusada era indistinguível de uma falha de BD no log.
+    console.error('[smtp] gravação recusada — reautenticação');
+    req.flash('error_msg', re.erro);
+    return res.redirect('/admin/config/email');
+  }
+
+  // 3. Transação: a configuração e o evento de auditoria vivem ou morrem juntos.
+  const t = await sequelize.transaction();
+  try {
+    const r = await mailer.guardarConfigSmtp(corpoSmtp(req.body), { transaction: t });
+
+    // V14 — registar QUE CAMPOS mudaram: nomes apenas. Nenhum valor entra aqui,
+    // e a password entra pelo NOME, nunca pelo conteúdo nem por um digest.
+    await audit({
+      userId: req.user.id,
+      acao: 'configurar_smtp',
+      entidade: 'Configuracao',
+      detalhes: { campos_alterados: r.alterados },
+      transaction: t,
+      rigoroso: true,
+    });
+
+    await t.commit();
+    // ⛔ Só DEPOIS do commit: limpar a cache antes serviria uma configuração
+    // que ainda podia reverter.
+    mailer.limparCache();
     req.flash('success_msg', 'Configuração SMTP guardada.');
   } catch (err) {
-    console.error('[smtp] erro ao guardar:', err.message);
-    req.flash('error_msg', 'Não foi possível guardar a configuração SMTP.');
+    await t.rollback().catch(() => {});
+    if (err && err.name === 'ErroValidacaoSmtp') {
+      console.error('[smtp] gravação recusada pela validação');
+      req.flash('error_msg', 'Configuração inválida — nada foi alterado.');
+    } else {
+      console.error('[smtp] erro ao guardar:', err.message);
+      req.flash('error_msg', 'Não foi possível guardar a configuração SMTP. Nada foi alterado.');
+    }
   }
   res.redirect('/admin/config/email');
 });
 
 // ── Testar a ligação (verificação, sem enviar nada) ────────────────
-router.post('/config/email/smtp/testar', async (req, res) => {
+router.post('/config/email/smtp/testar', limiteSmtpAcoes, async (req, res) => {
   try {
     const r = await mailer.testarLigacao();
     if (r.ok) {
@@ -572,7 +774,7 @@ router.post('/config/email/smtp/testar', async (req, res) => {
 });
 
 // ── Enviar email de teste (envio IMEDIATO, fora da fila) ───────────
-router.post('/config/email/teste', async (req, res) => {
+router.post('/config/email/teste', limiteSmtpAcoes, async (req, res) => {
   const para = String(req.body.para || '').trim();
   if (!para) {
     req.flash('error_msg', 'Indique o email de destino do teste.');
@@ -705,12 +907,54 @@ router.post('/config/drive/desligar', async (req, res) => {
 
 // Guarda opções de armazenamento: pasta raiz do Drive e backups automáticos.
 router.post('/config/drive/opcoes', async (req, res) => {
-  try {
+  // ── P54-4 — campo OMITIDO preserva o valor; valor inválido é recusado ──
+  // A regra do P54 §5 é explícita: «campo omitido → manter existente». Antes,
+  // este handler escrevia SEMPRE as duas chaves, pelo que guardar apenas a
+  // pasta (o formulário da vista só envia `pasta_raiz`) gravava
+  // `drive_auto_backups='0'` — desligava a cópia automática dos backups para o
+  // Drive sem o utilizador o pedir. Era uma alteração SILENCIOSA a uma opção
+  // de PLATAFORMA (`configuracoes` não tem `condominio_id`).
+  // Agora cada chave só é escrita quando o campo vem mesmo no corpo.
+  const campos = {};
+
+  if (Object.prototype.hasOwnProperty.call(req.body, 'pasta_raiz')) {
     const pastaRaiz = String(req.body.pasta_raiz || '').trim();
-    const backupsDrive = req.body.backups_drive === 'on' || req.body.backups_drive === '1';
-    await setConfig('google_drive_root_folder', pastaRaiz);
-    await setConfig('drive_auto_backups', backupsDrive ? '1' : '0');
-    await audit({ userId: req.user.id, acao: 'configurar_armazenamento_drive', entidade: 'GoogleDrive', detalhes: { pastaRaiz, backupsDrive } }).catch(() => {});
+    // É um NOME de pasta, não um caminho: sem separadores nem caracteres de
+    // controlo, com limite de comprimento. Vazio é aceite e significa «usar a
+    // omissão da instalação» (`.env` ou «GesCondu»), como já acontecia.
+    if (pastaRaiz.length > 100) {
+      req.flash('error_msg', 'Não foi possível guardar: o nome da pasta não pode ter mais de 100 caracteres.');
+      return res.redirect('/admin/config/armazenamento#google-drive');
+    }
+    if (/[/\\\u0000-\u001f]/.test(pastaRaiz)) {
+      req.flash('error_msg', 'Não foi possível guardar: o nome da pasta não pode conter «/», «\\» nem caracteres de controlo.');
+      return res.redirect('/admin/config/armazenamento#google-drive');
+    }
+    campos.google_drive_root_folder = pastaRaiz;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body, 'backups_drive')) {
+    campos.drive_auto_backups = (req.body.backups_drive === 'on' || req.body.backups_drive === '1') ? '1' : '0';
+  }
+
+  if (Object.keys(campos).length === 0) {
+    req.flash('error_msg', 'Não foi possível guardar: o pedido não trazia nenhum campo de configuração.');
+    return res.redirect('/admin/config/armazenamento#google-drive');
+  }
+
+  try {
+    for (const [chave, valor] of Object.entries(campos)) await setConfig(chave, valor);
+    // Auditoria: os NOMES dos campos alterados e o nome da pasta (não é
+    // segredo). Nesta área não existe nenhum valor que o seja.
+    await audit({
+      userId: req.user.id,
+      acao: 'configurar_armazenamento_drive',
+      entidade: 'GoogleDrive',
+      detalhes: {
+        campos: Object.keys(campos),
+        pastaRaiz: campos.google_drive_root_folder === undefined ? null : campos.google_drive_root_folder,
+      },
+    }).catch(() => {});
     req.flash('success_msg', 'Opções de armazenamento guardadas.');
   } catch (err) {
     console.error('[drive] opções:', err.message);

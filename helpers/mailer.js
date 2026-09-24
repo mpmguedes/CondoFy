@@ -312,6 +312,28 @@ async function lerGuardadosSmtp() {
   return mapa;
 }
 
+// Contexto de ESTADO para as regras que dele dependem (V1 parte 2, V8): o host
+// é obrigatório em função do remetente/utilizador EFETIVOS, não só dos enviados.
+function contextoAtual(guardados) {
+  const g = guardados || {};
+  return {
+    host: g[CHAVES.host],
+    port: g[CHAVES.port],
+    user: g[CHAVES.user],
+    tls: g[CHAVES.tls],
+    from: g[CHAVES.from],
+  };
+}
+
+// Validação SEM escrever. Existe para o endpoint de PREPARAÇÃO da confirmação
+// (P54-3): um payload inválido tem de ser recusado ANTES de o servidor emitir
+// um token — não faz sentido confirmar o que já se sabe que não pode ser
+// gravado. Não lança: devolve o resultado do validador puro.
+async function validarConfigSmtp(dados) {
+  const guardados = await lerGuardadosSmtp();
+  return validacaoSmtp.validarConfigSmtp(dados || {}, { atual: contextoAtual(guardados) });
+}
+
 // Guarda a configuração SMTP na BD. A password só é alterada se for
 // fornecida (nunca é mostrada nem devolvida).
 //
@@ -324,24 +346,23 @@ async function lerGuardadosSmtp() {
 // Um campo AUSENTE continua a significar «não mexer» — é o contrato que a
 // interface e os chamadores já têm, e é o que torna a mudança retrocompatível.
 //
+// P54-3 (V9) — aceita `{ transaction }`. Quando é dada, TODAS as escritas
+// acontecem dentro dela e o `limparCache()` passa a ser responsabilidade do
+// CHAMADOR, **depois do commit**: limpar a cache antes de a transação confirmar
+// deixaria a aplicação a ler a configuração NOVA de uma gravação que ainda
+// podia reverter — o pior dos dois mundos.
+//
 // Devolve `{ ok, alterados, avisos }`:
 //   · `alterados` — NOMES dos campos que mudaram (V14). Nunca valores: a
 //     password aparece como `pass`, jamais o seu conteúdo;
 //   · `avisos` — coerências que NÃO bloqueiam: V8 (TLS numa porta não
 //     habitual), V13 (segredo ilegível preservado), V5 (nome saneado).
-async function guardarConfigSmtp(dados) {
+async function guardarConfigSmtp(dados, { transaction } = {}) {
   const d = dados || {};
+  const opcoes = transaction ? { transaction } : undefined;
 
   const guardados = await lerGuardadosSmtp();
-  const atual = {
-    host: guardados[CHAVES.host],
-    port: guardados[CHAVES.port],
-    user: guardados[CHAVES.user],
-    tls: guardados[CHAVES.tls],
-    from: guardados[CHAVES.from],
-  };
-
-  const v = validacaoSmtp.validarConfigSmtp(d, { atual });
+  const v = validacaoSmtp.validarConfigSmtp(d, { atual: contextoAtual(guardados) });
 
   // ⛔ Fronteira: nada foi escrito até aqui.
   if (!v.ok) throw new validacaoSmtp.ErroValidacaoSmtp(v.erros);
@@ -397,13 +418,21 @@ async function guardarConfigSmtp(dados) {
   }
 
   for (const [chave, valor] of Object.entries(mapa)) {
-    const [reg] = await Configuracao.findOrCreate({ where: { chave }, defaults: { valor } });
+    const [reg] = await Configuracao.findOrCreate({
+      where: { chave },
+      defaults: { valor },
+      ...(opcoes || {}),
+    });
     if (reg.valor !== valor) {
       reg.valor = valor;
-      await reg.save();
+      await reg.save(opcoes);
     }
   }
-  limparCache();
+
+  // Com transação, a cache só é limpa pelo CHAMADOR, depois do commit (ver o
+  // comentário da função): limpar agora serviria uma configuração que ainda
+  // pode reverter.
+  if (!transaction) limparCache();
 
   return { ok: true, alterados, avisos };
 }
@@ -424,6 +453,7 @@ module.exports = {
   enviarEmailTeste,
   obterEstadoSmtp,
   guardarConfigSmtp,
+  validarConfigSmtp,
   obterNomeRemetente,
   nomeDoCondominioParaRemetente,
   resolverNomeRemetente,

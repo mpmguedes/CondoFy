@@ -13,6 +13,7 @@ const assert = require('assert');
 const http = require('http');
 const path = require('path');
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const { engine } = require('express-handlebars');
 
 // ── Duplos de teste (BD e integrações) ─────────────────────────────
@@ -45,7 +46,18 @@ models.UserCondominio.findOne = async () => ({ role: 'admin', condominio_id: 1 }
 models.BackupLog.findOne = async () => null;
 // As rotas de gravação chamam `audit()` → `AuditLog.create`. Sem este duplo, o
 // teste (que se quer SEM BD) tentaria escrever no log de auditoria real.
-models.AuditLog.create = async () => ({});
+// P54-3 (V14) — as gravações passam a ser auditadas com os CAMPOS alterados.
+// Captura-se o payload para o poder afirmar (nomes apenas, nunca valores).
+const auditoriaGravada = [];
+models.AuditLog.create = async (dados) => { auditoriaGravada.push(dados); return {}; };
+
+// P54-3 — a gravação da configuração SMTP corre dentro de uma TRANSAÇÃO (V9).
+// Sem BD, substitui-se por uma transação em memória: o teste HTTP só precisa de
+// provar que o fluxo a abre e a fecha; a atomicidade real prova-se no
+// `test-smtp-validacao.js`, que exercita o mailer a sério.
+if (models.sequelize && models.sequelize.transaction) {
+  models.sequelize.transaction = async () => ({ commit: async () => {}, rollback: async () => {} });
+}
 models.AuditLog.findAll = async () => ([
   { data_hora: new Date('2026-09-09T10:15:00Z'), user: { nome: 'Administrador', email: 'admin@exemplo.pt' }, acao: 'editar_configuração', entidade: 'Condominio', entidade_id: 1, detalhes: null },
   { data_hora: new Date('2026-09-08T18:02:00Z'), user: null, acao: 'criar_quota', entidade: 'Quota', entidade_id: 42, detalhes: '{"mes":9}' },
@@ -83,7 +95,14 @@ let estadoSmtpStub = {
   temPassword: true,
 };
 mailer.obterEstadoSmtp = async () => ({ ...estadoSmtpStub });
-mailer.guardarConfigSmtp = async (dados) => { smtpGuardado.push(dados); };
+// P54-3 (V14) — o contrato do mailer passou a incluir os NOMES dos campos
+// alterados; o duplo tem de o imitar, senão o teste mediria um contrato que já
+// não existe. O teste da rota só verifica que os nomes CHEGAM à auditoria — o
+// cálculo real é provado no `test-smtp-validacao.js`.
+mailer.guardarConfigSmtp = async (dados) => {
+  smtpGuardado.push(dados);
+  return { ok: true, alterados: ['host', 'port', 'user', 'pass', 'tls', 'from', 'fromName'], avisos: [] };
+};
 mailer.testarLigacao = async () => { smtpTestado.push(true); return { ok: true, servidor: 'smtp.gmail.com' }; };
 mailer.enviarEmailTeste = async (dados) => { smtpEnviado.push(dados); return { ok: true, messageId: '<teste@exemplo.pt>' }; };
 
@@ -124,14 +143,24 @@ app.set('views', path.join(__dirname, '..', 'views'));
 // O utilizador autenticado é MUTÁVEL: a maioria das rotas é de um admin de
 // condomínio, mas as operações da INSTALAÇÃO (destino dos backups) exigem
 // Super Admin (`users.role_global = 'super_admin'`) — ver A6.1.
-const UTILIZADOR_ADMIN = { id: 1, nome: 'Administrador', email: 'admin@exemplo.pt', role_global: 'admin' };
-const UTILIZADOR_SUPER = { id: 9, nome: 'Super Admin', email: 'super@exemplo.pt', role_global: 'super_admin' };
+// P54-3 (V11) — a gravação exige reautenticação: as contas de teste têm de ter
+// um hash REAL, contra o qual o helper compara a password submetida. Custo 4 (e
+// não 10) porque é um teste: o que se prova é a comparação, não o custo.
+const PASSWORD_TESTE = 'palavra-passe-de-teste';
+const HASH_TESTE = bcrypt.hashSync(PASSWORD_TESTE, 4);
+const UTILIZADOR_ADMIN = { id: 1, nome: 'Administrador', email: 'admin@exemplo.pt', role_global: 'admin', password_hash: HASH_TESTE };
+const UTILIZADOR_SUPER = { id: 9, nome: 'Super Admin', email: 'super@exemplo.pt', role_global: 'super_admin', password_hash: HASH_TESTE };
 let UTILIZADOR = UTILIZADOR_ADMIN;
+
+// Sessão PARTILHADA entre pedidos: a confirmação server-side (P54-3) vive na
+// sessão e o fluxo real é «preparar num pedido → gravar no seguinte». Uma
+// sessão nova por pedido tornaria esse fluxo impossível de exercitar.
+const sessaoTeste = { condominio_ativo_id: 1 };
 
 app.use((req, res, next) => {
   req.isAuthenticated = () => true;
   req.user = UTILIZADOR;
-  req.session = { condominio_ativo_id: 1 };
+  req.session = sessaoTeste;
   req.flash = () => req;
   // Locais que o app.js define para o layout (navegação lateral, etc.).
   res.locals.user = req.user;
@@ -180,6 +209,15 @@ const enviar = (url, corpo) => new Promise((resolve, reject) => {
     req.end(dados);
   });
 });
+
+// Como `enviar`, mas com o corpo já interpretado como JSON: as rotas de
+// preparação da confirmação (P54-3) respondem JSON, não um redirect.
+const enviarJson = async (url, corpo) => {
+  const r = await enviar(url, corpo);
+  let dados = null;
+  try { dados = JSON.parse(r.corpo); } catch (err) { dados = null; }
+  return { ...r, dados };
+};
 
 const TAB1 = 'href="/admin/config"';
 const TAB2 = 'href="/admin/config/armazenamento"';
@@ -330,14 +368,51 @@ const TAB5 = 'href="/admin/config/auditoria"';
     'P50: a linha «Segurança» e o select concordam quando o TLS está desligado');
   estadoSmtpStub = { ...estadoSmtpStub, tls: true, seguranca: 'STARTTLS (587)' };
 
-  // 4.1 As rotas de escrita reutilizam o MESMO mailer (sem segunda configuração).
+  // 4.1 P54-3 — o fluxo passou a ser PREPARAR (o servidor emite a confirmação)
+  // e só depois GRAVAR. As rotas de escrita continuam a reutilizar o MESMO
+  // mailer (sem segunda configuração).
   let postEmail;
+  const CORPO_SMTP = {
+    host: 'smtp.exemplo.pt', port: '465', user: 'u@exemplo.pt', pass: 'segredo',
+    tls: 'true', from: 'geral@exemplo.pt', from_name: 'Administração',
+  };
+
+  // ⛔ POST direto, como faria quem tentasse contornar a interface: sem
+  // confirmação e sem palavra-passe. Tem de ser RECUSADO e não gravar nada.
   smtpGuardado.length = 0;
-  postEmail = await enviar('/admin/config/email/smtp', { host: 'smtp.exemplo.pt', port: '465', user: 'u@exemplo.pt', pass: 'segredo', tls: 'true', from: 'geral@exemplo.pt', from_name: 'Administração' });
+  postEmail = await enviar('/admin/config/email/smtp', CORPO_SMTP);
+  assert.strictEqual(postEmail.status, 302, 'P54-3: POST direto responde 302 (não rebenta)');
+  assert.strictEqual(postEmail.location, '/admin/config/email', 'P54-3: POST direto volta ao separador');
+  assert.strictEqual(smtpGuardado.length, 0, '⛔ P54-3: POST direto sem confirmação NÃO grava nada');
+
+  // V11 — a preparação exige a palavra-passe da conta.
+  const prepMau = await enviarJson('/admin/config/email/smtp/preparar', { ...CORPO_SMTP, password: 'palavra-passe-errada' });
+  assert.strictEqual(prepMau.status, 403, 'P54-3: preparação com palavra-passe errada ⇒ 403');
+  assert.ok(!prepMau.dados || !prepMau.dados.token, 'P54-3: e não emite token nenhum');
+
+  // V10 — com a identidade provada, o SERVIDOR emite a confirmação.
+  const prep = await enviarJson('/admin/config/email/smtp/preparar', { ...CORPO_SMTP, password: PASSWORD_TESTE });
+  assert.strictEqual(prep.status, 200, 'P54-3: preparação válida ⇒ 200');
+  assert.ok(prep.dados && typeof prep.dados.token === 'string' && prep.dados.token.length >= 32,
+    'P54-3: o servidor devolve um token de confirmação');
+
+  // Com o token, a gravação passa e chega ao mailer com os campos certos.
+  auditoriaGravada.length = 0;
+  smtpGuardado.length = 0;
+  postEmail = await enviar('/admin/config/email/smtp', { ...CORPO_SMTP, password: PASSWORD_TESTE, _confirmacao: prep.dados.token });
   assert.strictEqual(postEmail.status, 302, 'email: guardar SMTP responde 302');
   assert.strictEqual(postEmail.location, '/admin/config/email', 'email: guardar SMTP volta ao separador');
   assert.deepStrictEqual(smtpGuardado, [{ host: 'smtp.exemplo.pt', port: '465', user: 'u@exemplo.pt', pass: 'segredo', tls: 'true', from: 'geral@exemplo.pt', fromName: 'Administração' }],
     'email: guardar SMTP passa os campos ao mailer existente');
+
+  // V14 — a auditoria regista os NOMES dos campos alterados e NENHUM valor.
+  const evSmtp = auditoriaGravada.filter((e) => e.acao === 'configurar_smtp');
+  assert.strictEqual(evSmtp.length, 1, 'P54-3: a gravação é auditada exatamente uma vez');
+  const detSmtp = JSON.parse(evSmtp[0].detalhes);
+  assert.ok(Array.isArray(detSmtp.campos_alterados), 'V14: o evento tem `campos_alterados`');
+  assert.ok(detSmtp.campos_alterados.includes('host'), 'V14: o host alterado aparece na lista');
+  assert.ok(!JSON.stringify(evSmtp[0]).includes('segredo'),
+    '⛔ V14: nenhum valor (e muito menos a password) entra no evento de auditoria');
 
   // 4.1b P54-1 — uma gravação RECUSADA pela validação não pode derrubar a rota.
   // `guardarConfigSmtp` passou a lançar `ErroValidacaoSmtp` ANTES de escrever

@@ -87,6 +87,30 @@
       <input type="text" class="form-control form-control-sm" id="smtp_from_name" name="from_name" value="{{estadoSmtp.nomeRemetente}}" placeholder="Administração do Condomínio" />
     </div>
   </div>
+
+  {{!-- ── P54-3 — confirmação SERVER-SIDE ──────────────────────────────
+       O token é emitido pelo servidor e fica LIGADO a estes valores: se o
+       corpo do pedido mudar depois de o utilizador confirmar, a gravação é
+       recusada. É preenchido pelo script no momento em que a caixa de
+       confirmação abre — que é quando os valores ficam definitivos. --}}
+  <input type="hidden" name="_confirmacao" id="smtp_confirmacao" value="" />
+
+  <div class="row g-3 mt-1">
+    <div class="col-12 col-md-6">
+      <label class="form-label small" for="smtp_password">A sua palavra-passe</label>
+      {{!-- P54-3 (V11) — reautenticação. Alterar as credenciais de email de
+           TODA a instalação exige provar quem está a pedir: uma sessão aberta
+           não chega. Nunca é guardada, registada, auditada nem devolvida. --}}
+      <input type="password" class="form-control form-control-sm" id="smtp_password" name="password" autocomplete="current-password" placeholder="••••••••" />
+    </div>
+    {{#if exige2fa}}
+    <div class="col-12 col-md-6">
+      <label class="form-label small" for="smtp_codigo_2fa">Código da aplicação (2FA)</label>
+      <input type="text" class="form-control form-control-sm" id="smtp_codigo_2fa" name="codigo_2fa" inputmode="numeric" autocomplete="one-time-code" placeholder="000000" />
+    </div>
+    {{/if}}
+  </div>
+
   <p class="form-text mt-2 mb-0">
     Guardar passa a usar estas credenciais em <strong>todos</strong> os envios do condomínio.
     Deixar a password vazia mantém a atual.
@@ -287,8 +311,10 @@
       }
     }
 
-    function avisar(texto) {
-      if (typeof window.GesConduAviso === 'function') window.GesConduAviso(texto, { titulo: 'Sem alterações' });
+    // `titulo` é opcional: sem ele mantém-se o texto histórico, para os avisos
+    // que já existiam (sem alterações a guardar) não mudarem de aspeto.
+    function avisar(texto, titulo) {
+      if (typeof window.GesConduAviso === 'function') window.GesConduAviso(texto, { titulo: titulo || 'Sem alterações' });
       else if (typeof window.alert === 'function') window.alert(texto);
     }
 
@@ -312,7 +338,43 @@
       }
       pintar(dados);
       modal.show();
+      // ── P54-3 — pedir ao servidor a confirmação LIGADA a estes valores ──
+      // Faz-se AQUI, quando o diff abre: é o momento em que os valores ficam
+      // definitivos, e o utilizador ainda vai ler o diff antes de confirmar,
+      // pelo que o pedido tem tempo de chegar. O botão de confirmar fica
+      // travado até o token existir — nunca se submete sem confirmação válida.
+      prepararConfirmacao();
     });
+
+    // Pede o token de confirmação server-side (P54-3), já ligado ao payload
+    // que está no formulário. Sem `fetch` (DOM falso dos testes, browsers muito
+    // antigos) não se inventa nada: o servidor recusará a gravação. É uma
+    // falha FECHADA — nunca uma gravação sem confirmação.
+    function prepararConfirmacao() {
+      var campoToken = form.querySelector('input[name="_confirmacao"]');
+      if (!campoToken) return;
+      campoToken.value = '';
+      if (typeof fetch !== 'function') return;
+      botaoConfirmar.disabled = true;
+      fetch(form.getAttribute('action') + '/preparar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(new FormData(form)).toString(),
+        credentials: 'same-origin'
+      }).then(function (r) {
+        return r.json().then(function (d) { return { ok: r.ok, dados: d }; });
+      }).then(function (r) {
+        if (!r.ok || !r.dados || !r.dados.ok) {
+          var msg = (r.dados && r.dados.mensagem) || 'Não foi possível confirmar a alteração.';
+          avisar(msg, 'Confirmação recusada');
+          return;
+        }
+        campoToken.value = r.dados.token || '';
+        botaoConfirmar.disabled = false;
+      }).catch(function () {
+        avisar('Não foi possível contactar o servidor para confirmar a alteração. Tente novamente.', 'Confirmação recusada');
+      });
+    }
 
     botaoConfirmar.addEventListener('click', function () {
       modal.hide();

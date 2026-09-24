@@ -255,6 +255,86 @@ function varrerBackupsOrfaos() {
     script: 'test-smtp-validacao.js',
   });
 
+  // ── P54-3 — proteção server-side da alteração SMTP ────────────────
+  // Cada mutação repõe uma das defesas que o P54-3 introduziu. Todas têm de ser
+  // DETETADAS por `test-p54-3-smtp-protecao.js` — é isso que prova que a
+  // proteção não é decorativa.
+  titulo('P54-3 — a confirmação server-side');
+  mutacao({
+    nome: '17. a confirmação deixa de bloquear a gravação (POST direto passa)',
+    ficheiro: 'routes/configuracao.js',
+    de: '  if (!conf.ok) {',
+    para: '  if (false) {',
+    script: 'test-p54-3-smtp-protecao.js',
+  });
+
+  titulo('P54-3 — a confirmação deixa de estar ligada ao PAYLOAD');
+  mutacao({
+    nome: '18. a confirmação deixa de verificar o payload (payload adulterado passa)',
+    ficheiro: 'helpers/confirmacao-sensivel.js',
+    de: "  if (String(registo.impressao) !== String(imp || '')) {\n"
+      + "    return { ok: false, erro: 'payload_alterado' };\n"
+      + '  }',
+    para: '  // mutação: ligação ao payload removida',
+    script: 'test-p54-3-smtp-protecao.js',
+  });
+
+  titulo('P54-3 — o rate limit da gravação');
+  mutacao({
+    nome: '19. o limite de tentativas desaparece da rota de gravação',
+    ficheiro: 'routes/configuracao.js',
+    de: "router.post('/config/email/smtp', limiteSmtpGravar, async (req, res) => {",
+    para: "router.post('/config/email/smtp', async (req, res) => {",
+    script: 'test-p54-3-smtp-protecao.js',
+  });
+
+  titulo('P54-3 — a reautenticação');
+  mutacao({
+    nome: '20. a reautenticação deixa de ser exigida na gravação',
+    ficheiro: 'routes/configuracao.js',
+    de: '  const re = reautenticacao.reautenticacaoValida(req);\n'
+      + '  if (!re.ok) {\n'
+      + '    // Fica registado o MOTIVO',
+    para: '  const re = { ok: true };\n'
+      + '  if (!re.ok) {\n'
+      + '    // Fica registado o MOTIVO',
+    script: 'test-p54-3-smtp-protecao.js',
+  });
+
+  titulo('P54-3 — a auditoria da gravação');
+  mutacao({
+    nome: '21. o evento de auditoria da gravação deixa de ser escrito',
+    ficheiro: 'routes/configuracao.js',
+    de: '    await audit({\n'
+      + '      userId: req.user.id,\n'
+      + "      acao: 'configurar_smtp',\n"
+      + "      entidade: 'Configuracao',\n"
+      + '      detalhes: { campos_alterados: r.alterados },\n'
+      + '      transaction: t,\n'
+      + '      rigoroso: true,\n'
+      + '    });',
+    para: '    // mutação: auditoria removida',
+    script: 'test-p54-3-smtp-protecao.js',
+  });
+
+  titulo('P54-3 — segredos no evento de auditoria');
+  mutacao({
+    nome: '22. a palavra-passe da conta passa a ser gravada na auditoria',
+    ficheiro: 'routes/configuracao.js',
+    de: '      detalhes: { campos_alterados: r.alterados },',
+    para: '      detalhes: { campos_alterados: r.alterados, password: req.body.password },',
+    script: 'test-p54-3-smtp-protecao.js',
+  });
+
+  titulo('P54-3 — a atomicidade da gravação');
+  mutacao({
+    nome: '23. a transação desaparece (deixa de haver rollback)',
+    ficheiro: 'routes/configuracao.js',
+    de: '  const t = await sequelize.transaction();',
+    para: '  const t = { commit: async () => {}, rollback: async () => {} };',
+    script: 'test-p54-3-smtp-protecao.js',
+  });
+
   console.log(`\n✓ Testes de mutação de Email/SMTP, comunicações e lembretes passaram (${nTestes} mutações, todas detetadas e revertidas por sha256).`);
 })().catch((e) => {
   console.error('\n✗ FALHA:', e.message);
