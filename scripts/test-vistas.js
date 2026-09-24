@@ -188,7 +188,19 @@ assert.ok(!html.includes('href="/admin/emails"'), 'config: atalho de emails acom
 // 6.2 Separador 2 — Armazenamento e Backups (serviços, principal e backups)
 // `armazenamento` é o estado que a fachada entrega à vista
 // (helpers/storage.estadoDoCondominio).
-const ctxArm = { titulo: 'Armazenamento e Backups' };
+const ctxArm = {
+  titulo: 'Armazenamento e Backups',
+  // P54-4 — o estado de CONSULTA do padrão P54-0 é construído na ROTA
+  // (`routes/configuracao.js`), porque o Handlebars não compõe arrays. Aqui
+  // reproduzem-se as mesmas linhas, senão a vista renderizaria «Sem dados a
+  // apresentar» e o teste mediria um contexto que a aplicação nunca produz.
+  linhasPrincipal: [{ rotulo: 'Serviço de armazenamento', valor: 'Google Drive', estado: 'Em uso' }],
+  linhasBackup: [
+    { rotulo: 'Destino dos backups', valor: 'Dropbox' },
+    { rotulo: 'Conta', valor: 'gestao@exemplo.pt' },
+  ],
+  linhasDrive: [{ rotulo: 'Pasta de destino', valor: 'GesCondu' }],
+};
 const estadoArm = (over = {}) => ({
   principal: 'google_drive',
   temLigacoes: true,
@@ -249,7 +261,11 @@ assert.ok(html.includes('value="nenhum"'), 'armazenamento: opção de guardar s�
 assert.ok(/value="dropbox"\s+checked/.test(html), 'armazenamento: destino de backups selecionado (Dropbox)');
 assert.ok(!html.includes('Ligar para backups'), 'armazenamento: não volta a pedir autorização para os backups');
 assert.ok(!html.includes('ambito=plataforma'), 'armazenamento: sem ligações de plataforma duplicadas');
-assert.ok(html.includes('Destino atual') && html.includes('Último backup'), 'armazenamento: destino e último backup visíveis');
+// P54-4 — o destino passou a ser a linha de CONSULTA do bloco `_modo-edicao`
+// (deixou de haver um parágrafo «Destino atual» duplicado, que divergiria da
+// consulta). O que se verifica é que o dado continua VISÍVEL na página.
+assert.ok(html.includes('Destino dos backups') && html.includes('Último backup'),
+  'armazenamento: destino e último backup visíveis');
 assert.ok(!html.includes('Ligue um serviço acima para escolher onde guardar os documentos.'), 'armazenamento: com ligações não pede para ligar um serviço');
 
 // Ligação de PLATAFORMA (B3): a página tem de oferecer uma ação EXPLÍCITA para
@@ -331,7 +347,13 @@ html = armazenamento({
     backup: { destino: null, rotulo: null, icone: null, conta: null, origem: null, usavel: false, avisoPartilhado: false },
   }),
 });
-const blocoBackups = html.slice(html.indexOf('name="provedor" value="nenhum"'), html.indexOf('Guardar destino'));
+// ⛔ O fim do recorte tem de ser procurado A PARTIR do início: `data-me-guardar`
+// existe nos três blocos `_modo-edicao` da página (P54-4), e um `indexOf` global
+// encontrava o do bloco do armazenamento principal — que fica ANTES — deixando o
+// recorte vazio. O rótulo «Guardar destino» já não serve de âncora: aparece no
+// `data-confirmar-acao` do próprio `<form>`, também antes dos campos.
+const inicioBackups = html.indexOf('name="provedor" value="nenhum"');
+const blocoBackups = html.slice(inicioBackups, html.indexOf('data-me-guardar', inicioBackups));
 assert.ok(/name="provedor" value="dropbox"/.test(blocoBackups), 'armazenamento: ligação de plataforma disponível para backups');
 assert.ok(blocoBackups.includes('conta da plataforma'), 'armazenamento: identifica a ligação de plataforma');
 assert.ok(!/value="google_drive"/.test(blocoBackups), 'armazenamento: serviço sem ligação nenhuma continua fora da escolha');
@@ -384,7 +406,11 @@ html = armazenamento({
 });
 assert.ok(html.includes('Ligue um serviço acima para escolher onde guardar os documentos.'), 'armazenamento: escolha explica que é preciso ligar');
 assert.ok(html.includes('Disponível após configuração pelo administrador do GesCondu.'), 'armazenamento: mensagem amigável sem credenciais');
-assert.ok(html.includes('Só neste servidor'), 'armazenamento: backups locais por omissão');
+// P54-4 — sem nenhuma ligação não há opções a oferecer (o bloco de
+// consulta/edição precisa dos serviços), pelo que a escolha passa a explicar
+// que os backups ficam no servidor. O rótulo «Só neste servidor» continua a
+// existir na opção de escolha — verificada acima, com ligações (`value="nenhum"`).
+assert.ok(html.includes('só neste servidor'), 'armazenamento: backups locais por omissão');
 
 // Documentos guardados num serviço que NÃO está ligado (ex.: 70 documentos no
 // Google Drive depois de a conta ter sido removida/revogada): a página avisa e

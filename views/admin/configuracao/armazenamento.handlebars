@@ -136,23 +136,47 @@
       os documentos não são copiados para os outros serviços.
     </p>
     {{#if armazenamento.temLigacoes}}
-    <form action="/admin/config/armazenamento/principal" method="POST">
-      <div class="row g-2">
-        {{#each armazenamento.provedores}}
-        {{#if ligado}}
-        <div class="col-12 col-md-4">
-          <label class="border rounded p-3 d-flex align-items-center gap-2 w-100 h-100 {{#if principal}}border-primary border-2{{/if}}">
-            <input class="form-check-input m-0" type="radio" name="provedor" value="{{nome}}" {{#if principal}}checked{{/if}} />
-            <i class="{{icone}} fs-5" aria-hidden="true"></i>
-            <span class="fw-semibold">{{rotulo}}</span>
-            {{#if principal}}<span class="badge text-bg-primary ms-auto">Em uso</span>{{/if}}
-          </label>
+    {{!-- ── P54-4 — CONSULTA → EDITAR → GUARDAR/CANCELAR ──────────────
+         A escolha do serviço passou a viver no padrão do P54-0
+         (`views/partials/_modo-edicao.handlebars`): nasce em CONSULTA, com o
+         serviço atual como TEXTO; os botões de rádio só existem depois de
+         `Editar`. Deixa de haver um formulário permanentemente armado à espera
+         de um clique acidental — era o risco central do P54.
+
+         `confirmar` acrescenta a confirmação adicional (o `data-confirmar` da
+         aplicação, não um segundo diálogo): mudar o serviço faz os documentos
+         NOVOS passarem a ir para outro lado, e é uma alteração com impacto em
+         suporte e auditoria. ⛔ É proteção de INTERFACE — a autoridade
+         continua a ser o servidor (`POST /config/armazenamento/principal`
+         valida o serviço e exige que esteja ligado AO CONDOMÍNIO da sessão). --}}
+    {{#> _modo-edicao id="armazenamentoPrincipal" acao="/admin/config/armazenamento/principal"
+                     titulo="Onde ficam os documentos" linhas=linhasPrincipal
+                     rotuloGuardar="Guardar armazenamento"
+                     confirmar="Mudar o serviço de armazenamento? Os documentos novos passam a ser guardados no serviço escolhido. Os documentos já guardados não são movidos nem apagados."
+                     confirmarTitulo="Confirmar armazenamento dos documentos"
+                     confirmarAcao="Guardar armazenamento"
+                     confirmarAbandono="Há uma alteração ao armazenamento dos documentos por guardar. Se sair agora, perde-se."}}
+      <fieldset class="border-0 p-0 m-0">
+        <legend class="form-label small mb-2">Serviço de armazenamento</legend>
+        <div class="row g-2">
+          {{#each armazenamento.provedores}}
+          {{#if ligado}}
+          <div class="col-12 col-md-4">
+            <label class="border rounded p-3 d-flex align-items-center gap-2 w-100 h-100">
+              <input class="form-check-input m-0" type="radio" name="provedor" value="{{nome}}" {{#if principal}}checked{{/if}} required />
+              <i class="{{icone}} fs-5" aria-hidden="true"></i>
+              <span class="fw-semibold">{{rotulo}}</span>
+            </label>
+          </div>
+          {{/if}}
+          {{/each}}
         </div>
-        {{/if}}
-        {{/each}}
-      </div>
-      <button type="submit" class="btn btn-primary mt-3" data-ajuda="Define qual é o serviço de armazenamento principal. Os documentos novos passam a ser guardados lá." data-ajuda-titulo="Guardar armazenamento principal"><i class="bi bi-check2 me-1"></i>Guardar</button>
-    </form>
+      </fieldset>
+      <p class="form-text mt-2 mb-0">
+        Os documentos novos passam a ser guardados no serviço escolhido. Os já guardados não são
+        movidos nem copiados para os outros serviços.
+      </p>
+    {{/_modo-edicao}}
     {{else}}
     <p class="mb-0 text-muted small">Ligue um serviço acima para escolher onde guardar os documentos.</p>
     {{/if}}
@@ -169,37 +193,51 @@
     </p>
 
     {{#if armazenamento.temLigacoes}}
-    <form action="/admin/config/armazenamento/backups" method="POST">
-      <div class="row g-2">
-        <div class="col-12 col-md-4">
-          <label class="border rounded p-3 d-flex align-items-center gap-2 w-100 h-100 {{#unless armazenamento.backup.destino}}border-primary border-2{{/unless}}">
-            <input class="form-check-input m-0" type="radio" name="provedor" value="nenhum" {{#unless armazenamento.backup.destino}}checked{{/unless}} />
-            <i class="bi bi-hdd fs-5" aria-hidden="true"></i>
-            <span class="fw-semibold">Só neste servidor</span>
-            {{#unless armazenamento.backup.destino}}<span class="badge text-bg-primary ms-auto">Em uso</span>{{/unless}}
-          </label>
+    {{!-- ── P54-4 — destino dos backups (CONSULTA → EDITAR) ─────────────
+         Esta escolha é da INSTALAÇÃO (o dump contém dados de todos os
+         condomínios), pelo que é a alteração de maior alcance desta página e
+         leva CONFIRMAÇÃO ADICIONAL ao guardar (`confirmarPerigo`). O servidor
+         volta a validar tudo — `tenant.apenasSuperAdmin` mais «ligação
+         utilizável» — pelo que a caixa é proteção de INTERFACE e não a
+         autoridade. --}}
+    {{#> _modo-edicao id="backupDestino" acao="/admin/config/armazenamento/backups"
+                     titulo="Destino dos backups" linhas=linhasBackup
+                     rotuloGuardar="Guardar destino"
+                     confirmar="Alterar o destino dos backups da instalação? A alteração aplica-se a todos os condomínios e ao próximo backup agendado. Os backups já guardados não são movidos nem apagados."
+                     confirmarTitulo="Confirmar destino dos backups"
+                     confirmarAcao="Guardar destino"
+                     confirmarPerigo="1"
+                     confirmarAbandono="Há uma alteração ao destino dos backups por guardar. Se sair agora, perde-se."}}
+      <fieldset class="border-0 p-0 m-0">
+        <legend class="form-label small mb-2">Onde guardar os backups</legend>
+        <div class="row g-2">
+          <div class="col-12 col-md-4">
+            <label class="border rounded p-3 d-flex align-items-center gap-2 w-100 h-100">
+              <input class="form-check-input m-0" type="radio" name="provedor" value="nenhum" {{#unless armazenamento.backup.destino}}checked{{/unless}} required />
+              <i class="bi bi-hdd fs-5" aria-hidden="true"></i>
+              <span class="fw-semibold">Só neste servidor</span>
+            </label>
+          </div>
+          {{#each armazenamento.provedores}}
+          {{!-- Um serviço serve para backups quando tem QUALQUER ligação
+               utilizável: a da plataforma (a que o job de backups prefere) ou a
+               de um condomínio. Antes só apareciam os ligados ao condomínio, pelo
+               que uma ligação de plataforma criada para os backups não podia ser
+               escolhida aqui. --}}
+          {{#if (or ligado ligadoPlataforma)}}
+          <div class="col-12 col-md-4">
+            <label class="border rounded p-3 d-flex align-items-center gap-2 w-100 h-100">
+              <input class="form-check-input m-0" type="radio" name="provedor" value="{{nome}}" {{#if (eq nome ../armazenamento.backup.destino)}}checked{{/if}} required />
+              <i class="{{icone}} fs-5" aria-hidden="true"></i>
+              <span class="fw-semibold">{{rotulo}}</span>
+              {{#if ligadoPlataforma}}{{#unless ligado}}<span class="badge text-bg-light border ms-auto">conta da plataforma</span>{{/unless}}{{/if}}
+            </label>
+          </div>
+          {{/if}}
+          {{/each}}
         </div>
-        {{#each armazenamento.provedores}}
-        {{!-- Um serviço serve para backups quando tem QUALQUER ligação
-             utilizável: a da plataforma (a que o job de backups prefere) ou a
-             de um condomínio. Antes só apareciam os ligados ao condomínio, pelo
-             que uma ligação de plataforma criada para os backups não podia ser
-             escolhida aqui. --}}
-        {{#if (or ligado ligadoPlataforma)}}
-        <div class="col-12 col-md-4">
-          <label class="border rounded p-3 d-flex align-items-center gap-2 w-100 h-100 {{#if (eq nome ../armazenamento.backup.destino)}}border-primary border-2{{/if}}">
-            <input class="form-check-input m-0" type="radio" name="provedor" value="{{nome}}" {{#if (eq nome ../armazenamento.backup.destino)}}checked{{/if}} />
-            <i class="{{icone}} fs-5" aria-hidden="true"></i>
-            <span class="fw-semibold">{{rotulo}}</span>
-            {{#if (eq nome ../armazenamento.backup.destino)}}<span class="badge text-bg-primary ms-auto">Em uso</span>
-            {{else}}{{#if ligadoPlataforma}}{{#unless ligado}}<span class="badge text-bg-light border ms-auto">conta da plataforma</span>{{/unless}}{{/if}}{{/if}}
-          </label>
-        </div>
-        {{/if}}
-        {{/each}}
-      </div>
-      <button type="submit" class="btn btn-primary mt-3" data-ajuda="Define onde são guardados os backups. Aplica-se ao próximo backup agendado." data-ajuda-titulo="Guardar destino de backups"><i class="bi bi-check2 me-1"></i>Guardar destino</button>
-    </form>
+      </fieldset>
+    {{/_modo-edicao}}
 
     {{#if armazenamento.backup.avisoPartilhado}}
     <div class="alert alert-warning small mt-3 mb-0">
@@ -211,49 +249,51 @@
     </div>
     {{/if}}
     {{else}}
-    <p class="mb-0 text-muted small">Ligue um serviço acima para poder guardar backups fora do servidor.</p>
+    {{!-- Sem nenhuma ligação não há opções a oferecer (o bloco de consulta/edição
+         precisa dos serviços para as apresentar), mas o DESTINO continuava a ser
+         informação útil: antes vivia num parágrafo fora desta guarda. Diz-se aqui
+         em vez de o perder. --}}
+    <p class="mb-0 text-muted small">
+      Ligue um serviço acima para poder guardar backups fora do servidor.
+      {{#if armazenamento.backup.destino}}
+      O destino configurado é <strong>{{armazenamento.backup.rotulo}}</strong>, mas não tem nenhuma ligação
+      utilizável: os backups ficam <strong>só neste servidor</strong>.
+      {{else}}
+      Os backups ficam <strong>só neste servidor</strong>.
+      {{/if}}
+    </p>
+    {{/if}}
+
+    {{!-- O «Destino atual» em texto deixou de estar aqui: passou a ser a linha
+         de CONSULTA do bloco acima (uma só verdade para o mesmo dado — duas
+         cópias divergiriam). O que fica é o que a consulta NÃO pode dizer: o
+         aviso de ligação inutilizável e o estado do último backup. --}}
+    {{#if armazenamento.backup.destino}}
+    {{#unless armazenamento.backup.usavel}}
+    <div class="alert alert-warning small mt-3 mb-0">
+      <span class="material-symbols-outlined me-1" aria-hidden="true">warning</span>
+      Este destino não tem nenhuma ligação utilizável: os backups estão a ser guardados
+      <strong>apenas neste servidor</strong>. Ligue uma conta a {{armazenamento.backup.rotulo}} para a cópia cloud voltar a ser feita.
+    </div>
+    {{/unless}}
     {{/if}}
 
     <hr />
-    <div class="row g-3">
-      <div class="col-12 col-lg-6">
-        <div class="fw-semibold small mb-1">Destino atual</div>
-        <p class="small mb-0">
-          {{#if armazenamento.backup.destino}}
-            <i class="{{armazenamento.backup.icone}} me-1" aria-hidden="true"></i>{{armazenamento.backup.rotulo}}
-            {{#if armazenamento.backup.conta}}<span class="text-muted">· {{armazenamento.backup.conta}}</span>{{/if}}
-          {{else}}
-            <i class="bi bi-hdd me-1" aria-hidden="true"></i>Só neste servidor
-          {{/if}}
-        </p>
-        {{#if armazenamento.backup.destino}}
-        {{#unless armazenamento.backup.usavel}}
-        <div class="alert alert-warning small mt-2 mb-0">
-          <span class="material-symbols-outlined me-1" aria-hidden="true">warning</span>
-          Este destino não tem nenhuma ligação utilizável: os backups estão a ser guardados
-          <strong>apenas neste servidor</strong>. Ligue uma conta a {{armazenamento.backup.rotulo}} para a cópia cloud voltar a ser feita.
-        </div>
-        {{/unless}}
-        {{/if}}
-      </div>
-      <div class="col-12 col-lg-6">
-        <div class="fw-semibold small mb-1">Último backup</div>
-        {{#if ultimoBackupEstado.data}}
-        <p class="small mb-0">
-          {{formatDateTime ultimoBackupEstado.data}}
-          <span class="text-muted">· {{ultimoBackupEstado.tipo}}</span>
-          <span class="badge text-bg-{{ultimoBackupEstado.cor}} ms-1" {{#if ultimoBackupEstado.erro}}title="{{ultimoBackupEstado.erro}}"{{/if}}>{{ultimoBackupEstado.rotulo}}</span>
-          {{#if ultimoBackupEstado.temCloud}}<span class="text-muted">cópia local + {{#if ultimoBackupEstado.cloud.rotulo}}{{ultimoBackupEstado.cloud.rotulo}}{{else}}cloud{{/if}}</span>
-          {{else if ultimoBackupEstado.temLocal}}<span class="text-muted">cópia local</span>{{/if}}
-        </p>
-        {{#if ultimoBackupEstado.detalhe}}
-        <p class="small text-warning mb-0">{{#if ultimoBackupEstado.erro}}{{ultimoBackupEstado.erro}}{{else}}{{ultimoBackupEstado.detalhe}}{{/if}}</p>
-        {{/if}}
-        {{else}}
-        <p class="small mb-0 text-muted">Ainda não existem backups registados.</p>
-        {{/if}}
-      </div>
-    </div>
+    <div class="fw-semibold small mb-1">Último backup</div>
+    {{#if ultimoBackupEstado.data}}
+    <p class="small mb-0">
+      {{formatDateTime ultimoBackupEstado.data}}
+      <span class="text-muted">· {{ultimoBackupEstado.tipo}}</span>
+      <span class="badge text-bg-{{ultimoBackupEstado.cor}} ms-1" {{#if ultimoBackupEstado.erro}}title="{{ultimoBackupEstado.erro}}"{{/if}}>{{ultimoBackupEstado.rotulo}}</span>
+      {{#if ultimoBackupEstado.temCloud}}<span class="text-muted">cópia local + {{#if ultimoBackupEstado.cloud.rotulo}}{{ultimoBackupEstado.cloud.rotulo}}{{else}}cloud{{/if}}</span>
+      {{else if ultimoBackupEstado.temLocal}}<span class="text-muted">cópia local</span>{{/if}}
+    </p>
+    {{#if ultimoBackupEstado.detalhe}}
+    <p class="small text-warning mb-0">{{#if ultimoBackupEstado.erro}}{{ultimoBackupEstado.erro}}{{else}}{{ultimoBackupEstado.detalhe}}{{/if}}</p>
+    {{/if}}
+    {{else}}
+    <p class="small mb-0 text-muted">Ainda não existem backups registados.</p>
+    {{/if}}
 
     {{!-- Ligação de PLATAFORMA: conta própria da INSTALAÇÃO, separada das
          contas de cada condomínio. É a que os backups usam (o dump contém
@@ -287,19 +327,27 @@
 <h2 class="h6 mt-4 mb-2">Opções avançadas do Google Drive</h2>
 <div class="card mb-4">
   <div class="card-body">
-    <form action="/admin/config/drive/opcoes" method="POST" id="formPasta" class="row g-3 align-items-end">
-      <div class="col-12 col-lg-7">
-        <label class="form-label small" for="pastaRaiz">Pasta de destino no Google Drive</label>
-        <input type="text" class="form-control" id="pastaRaiz" name="pasta_raiz" value="{{driveOpcoes.pastaRaiz}}" placeholder="ex.: GesCondu" />
+    {{!-- ── P54-4 — pasta de destino (CONSULTA → EDITAR) ───────────────
+         O campo deixou de estar permanentemente armado à espera de uma
+         gravação acidental. O `maxlength` acompanha o limite do servidor (que
+         recusa nomes com separadores, caracteres de controlo ou mais de 100
+         caracteres). Vazio é válido e significa «usar a omissão da instalação».
+         Não leva confirmação adicional: é reversível e não move nada. --}}
+    {{#> _modo-edicao id="drivePasta" acao="/admin/config/drive/opcoes"
+                     titulo="Pasta de destino no Google Drive" linhas=linhasDrive
+                     rotuloGuardar="Guardar pasta"
+                     confirmarAbandono="Há uma alteração à pasta de destino por guardar. Se sair agora, perde-se."}}
+      <div class="mb-3">
+        <label class="form-label small" for="pastaRaiz">Pasta de destino</label>
+        <input type="text" class="form-control form-control-sm" id="pastaRaiz" name="pasta_raiz" value="{{driveOpcoes.pastaRaiz}}" placeholder="ex.: GesCondu" maxlength="100" />
         <div class="form-text">
-          Pasta raiz da conta Google. Se já existir, é reutilizada (nunca são criadas pastas duplicadas).
-          Os documentos de cada condomínio ficam sempre numa subpasta própria.
+          Pasta raiz da conta Google. Se já existir, é reutilizada (nunca são criadas pastas
+          duplicadas). Os documentos de cada condomínio ficam sempre numa subpasta própria.
+          Deixar vazio usa a omissão da instalação.
         </div>
       </div>
-      <div class="col-12 col-lg-5">
-        <button type="submit" class="btn btn-outline-primary w-100" data-ajuda="Guarda o nome da pasta raiz no armazenamento. Se a pasta já existir, é reutilizada em vez de duplicada." data-ajuda-titulo="Guardar pasta"><i class="bi bi-check2 me-1"></i>Guardar pasta</button>
-      </div>
-    </form>
+    {{/_modo-edicao}}
+
     <hr />
     <div class="d-flex flex-wrap gap-2">
       <form action="/admin/config/drive/estrutura" method="POST">

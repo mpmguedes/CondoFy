@@ -971,6 +971,21 @@ router.get('/armazenamento', async (req, res) => {
       limiteGb: config.limiteLocalGb,
       limpezaAutomatica: config.limpezaAutomatica,
     },
+    // ── P54-4 — linhas do estado de CONSULTA (padrão P54-0) ──────────
+    // A retenção é a configuração mais destrutiva da instalação: é ela que
+    // decide o que a limpeza apaga. Passa a nascer em CONSULTA, com os valores
+    // como TEXTO, e leva confirmação adicional ao guardar. Construídas aqui
+    // porque o Handlebars não compõe arrays (mesmo caminho do `linhasSmtp`).
+    linhasRetencao: [
+      { rotulo: 'Backups locais', valor: `${config.retencaoLocal} dias` },
+      { rotulo: 'Backups cloud', valor: `${config.retencaoCloud} dias` },
+      {
+        rotulo: 'Limite informativo local',
+        valor: config.limiteLocalGb ? `${config.limiteLocalGb} GB` : 'Sem limite',
+        estado: config.limiteLocalGb ? null : 'só avisa — nunca apaga',
+      },
+      { rotulo: 'Eliminação automática', valor: config.limpezaAutomatica ? 'Ativa' : 'Desativada' },
+    ],
     presets: backupRetencao.PRESETS,
     diasMinimo: backupRetencao.DIAS_MINIMO,
     diasMaximo: backupRetencao.DIAS_MAXIMO,

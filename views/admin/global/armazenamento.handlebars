@@ -103,8 +103,22 @@
       local não toca em ficheiros da cloud e a limpeza cloud não toca em ficheiros locais.
       O mínimo é de {{diasMinimo}} dias. O <strong>último backup local válido é sempre preservado</strong>.
     </p>
-    <form action="/global/armazenamento/retencao" method="POST">
-      <div class="row g-3 align-items-end">
+    {{!-- ── P54-4 — retenção (CONSULTA → EDITAR) ───────────────────────
+         É a configuração MAIS destrutiva da instalação: decide o que a limpeza
+         apaga. Nasce em CONSULTA (os valores como texto) e leva confirmação
+         adicional ao guardar. A autoridade continua a ser o servidor: a rota
+         `/global/armazenamento/retencao` é de Super Admin e valida os dois
+         valores com `backupRetencao.gravarConfiguracao` (mínimo 30, máximo
+         36500, inteiros) — recusando TUDO sem gravar nada. --}}
+    {{#> _modo-edicao id="retencaoBackups" acao="/global/armazenamento/retencao"
+                     titulo="Retenção dos backups" linhas=linhasRetencao
+                     rotuloGuardar="Guardar retenção"
+                     confirmar="Guardar esta retenção? É esta configuração que decide o que a limpeza apaga: a partir de agora, os backups com mais de X dias podem ser eliminados. O último backup local válido é sempre preservado."
+                     confirmarTitulo="Confirmar retenção dos backups"
+                     confirmarAcao="Guardar retenção"
+                     confirmarPerigo="1"
+                     confirmarAbandono="Há alterações à retenção por guardar. Se sair agora, perdem-se."}}
+      <div class="row g-3">
         <div class="col-12 col-md-3">
           <label class="form-label small" for="retencaoLocal">Backups locais (dias)</label>
           <input type="number" class="form-control" id="retencaoLocal" name="retencao_local"
@@ -131,10 +145,9 @@
               Eliminar automaticamente os backups antigos
             </label>
           </div>
-          <button type="submit" class="btn btn-primary btn-sm mt-2"><i class="bi bi-check2 me-1"></i>Guardar retenção</button>
         </div>
       </div>
-    </form>
+    {{/_modo-edicao}}
 
     <hr />
     <div class="row g-3">

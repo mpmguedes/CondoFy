@@ -21,6 +21,19 @@
        rotuloEditar / rotuloGuardar / rotuloCancelar  (opcionais)
        confirmarAbandono  texto do aviso ao cancelar com alterações pendentes.
                           Sem ele usa-se a mensagem por omissão do JS.
+       confirmar          texto da confirmação adicional ao GUARDAR. Reservado a
+                          alterações CRÍTICAS (P54-4: mudar o armazenamento
+                          principal, mudar o destino dos backups). Sem ele não
+                          há confirmação — não se inventa confirmação onde o
+                          risco não a justifica.
+       confirmarTitulo / confirmarAcao / confirmarPerigo  opcionais, só com
+                          `confirmar` (título, rótulo do botão e estilo de
+                          perigo da mesma caixa).
+
+     ── Confirmação adicional: mecanismo ÚNICO ────────────────────────
+     `confirmar` escreve o `data-confirmar` que a aplicação já usa
+     (`public/js/app.js`) — não há um segundo diálogo. É proteção de
+     INTERFACE: a autoridade continua a ser o servidor.
 
      ── Uso (o conteúdo do bloco são os CAMPOS do formulário) ─────────
        {{#> _modo-edicao id="smtp" acao="/admin/config/email/smtp"
@@ -76,7 +89,11 @@
        submissão acidental enquanto em consulta (nada dentro é focável nem
        clicável); o JS troca-o pelo estado e não duplica a informação. --}}
   <form class="me-form" id="{{id}}-form" data-me-form
-        method="{{#if metodo}}{{metodo}}{{else}}post{{/if}}" action="{{acao}}" hidden>
+        method="{{#if metodo}}{{metodo}}{{else}}post{{/if}}" action="{{acao}}" hidden
+        {{#if confirmar}}data-confirmar="{{confirmar}}"{{/if}}
+        {{#if confirmarTitulo}}data-confirmar-titulo="{{confirmarTitulo}}"{{/if}}
+        {{#if confirmarAcao}}data-confirmar-acao="{{confirmarAcao}}"{{/if}}
+        {{#if confirmarPerigo}}data-confirmar-perigo="1"{{/if}}>
     {{#if @partial-block}}{{> @partial-block}}{{/if}}
 
     <div class="me-acoes">

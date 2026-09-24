@@ -214,6 +214,17 @@
     var bloco = form.closest('[data-modo-edicao]');
     if (!bloco) return;
 
+    // ⛔ Se outro handler JÁ cancelou este envio (`ev.defaultPrevented`), a
+    // submissão NÃO aconteceu: limpar aqui o estado sujo e a cópia dos
+    // originais deixaria o `Cancelar` sem valores para restaurar (e o bloco
+    // ficava em edição sem forma de voltar ao que estava guardado).
+    //
+    // Acontece quando o formulário tem confirmação adicional
+    // (`data-confirmar`): o `public/js/app.js` interceta o `submit` na fase de
+    // CAPTURA — logo antes deste handler, que é de bolha — e mostra a caixa.
+    // Só o envio REAL (já confirmado) chega aqui sem `defaultPrevented`.
+    if (ev.defaultPrevented) return;
+
     // ⛔ Em consulta NÃO se submete. É a garantia contra o envio acidental
     // (Enter, autofill, script) mesmo que o `hidden` seja anulado por CSS de
     // fora: a decisão não depende do aspeto visual.
