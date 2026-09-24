@@ -518,7 +518,20 @@ router.post('/config/automacoes', async (req, res) => {
 router.get('/config/email', async (req, res) => {
   // `obterEstadoSmtp` nunca devolve a password — apenas o indicador «definida».
   const estadoSmtp = await mailer.obterEstadoSmtp();
-  res.render('admin/configuracao/email', { titulo: 'Email / SMTP', estadoSmtp });
+  // ── P54-2 — linhas da CONSULTA para o padrão P54-0 ────────────────
+  // Só o que o utilizador pode ver: valores de configuração e, para a password,
+  // o ESTADO («Definida»/«Em falta»). ⛔ Não há aqui nenhum caminho que ponha a
+  // password na vista: `obterEstadoSmtp` não a devolve, e a linha da password é
+  // marcada `sensivel` para o parcial imprimir a máscara e IGNORAR o valor.
+  const linhasSmtp = [
+    { rotulo: 'Servidor', valor: estadoSmtp.servidor },
+    { rotulo: 'Porta', valor: estadoSmtp.porta },
+    { rotulo: 'Utilizador', valor: estadoSmtp.utilizador },
+    { rotulo: 'Remetente', valor: estadoSmtp.remetente, estado: estadoSmtp.nomeRemetente },
+    { rotulo: 'Segurança', valor: estadoSmtp.seguranca },
+    { rotulo: 'Password', sensivel: true, estado: estadoSmtp.temPassword ? 'Definida' : 'Em falta' },
+  ];
+  res.render('admin/configuracao/email', { titulo: 'Email / SMTP', estadoSmtp, linhasSmtp });
 });
 
 // ── Guardar a configuração SMTP ────────────────────────────────────

@@ -9,6 +9,20 @@
 
   O envio de teste usa a configuração JÁ GUARDADA (`helpers/mailer.js`): não há
   uma segunda configuração nem lógica duplicada.
+
+  ── P54-2 — MODO CONSULTA / EDIÇÃO ─────────────────────────────────
+  A área 1 usa o padrão P54-0 (`views/partials/_modo-edicao.handlebars`): nasce
+  em CONSULTA e só o botão `Editar` abre os campos. Não há um segundo mecanismo
+  de edição.
+
+  ⛔ SEGREDOS. A password nunca é pré-preenchida, nunca é devolvida ao browser e
+  nunca entra no HTML, em `data-*`, no `value` de um campo, no diff, em logs ou
+  em mensagens. Na consulta aparece apenas o ESTADO («Definida»/«Em falta»), que
+  vem de `estadoSmtp.temPassword` — `obterEstadoSmtp()` nunca devolve o valor.
+
+  A confirmação com diff (D4b) é uma proteção de INTERFACE: mostra o que vai
+  mudar antes de enviar. ⛔ NÃO é um controlo de segurança — a confirmação
+  server-side é o P54-3. Nada aqui é confiado pelo servidor.
 --}}
 {{> _config-tabs ativo='email'}}
 
@@ -23,70 +37,61 @@
 {{!-- ══ ÁREA 1 — Configuração do serviço (campos guardados) ══ --}}
 <div class="section-title">Configuração do serviço de email</div>
 
-<div class="card" id="smtp">
-  <div class="card-header bg-white"><i class="bi bi-gear me-1"></i>Configuração SMTP</div>
-  <div class="card-body">
-    {{#if estadoSmtp.configurado}}
-    <p class="mb-1"><span class="badge text-bg-success">🟢 SMTP configurado</span></p>
-    {{else}}
-    <p class="mb-1"><span class="badge text-bg-danger">🔴 Não configurado</span></p>
-    {{/if}}
-    <dl class="row small mb-0">
-      <dt class="col-sm-4 col-lg-3">Servidor</dt><dd class="col-sm-8 col-lg-9">{{#if estadoSmtp.servidor}}{{estadoSmtp.servidor}}{{else}}—{{/if}}</dd>
-      <dt class="col-sm-4 col-lg-3">Porta</dt><dd class="col-sm-8 col-lg-9">{{#if estadoSmtp.porta}}{{estadoSmtp.porta}}{{else}}—{{/if}}</dd>
-      <dt class="col-sm-4 col-lg-3">Utilizador</dt><dd class="col-sm-8 col-lg-9">{{#if estadoSmtp.utilizador}}{{estadoSmtp.utilizador}}{{else}}—{{/if}}</dd>
-      <dt class="col-sm-4 col-lg-3">Remetente</dt><dd class="col-sm-8 col-lg-9">{{#if estadoSmtp.remetente}}{{estadoSmtp.remetente}}{{#if estadoSmtp.nomeRemetente}}<br />{{estadoSmtp.nomeRemetente}}{{/if}}{{else}}—{{/if}}</dd>
-      <dt class="col-sm-4 col-lg-3">Segurança</dt><dd class="col-sm-8 col-lg-9">{{estadoSmtp.seguranca}}</dd>
-      <dt class="col-sm-4 col-lg-3">Password</dt><dd class="col-sm-8 col-lg-9">{{#if estadoSmtp.temPassword}}Definida{{else}}Em falta{{/if}}</dd>
-    </dl>
-  </div>
-</div>
+{{#if estadoSmtp.configurado}}
+<p class="mb-2"><span class="badge text-bg-success">🟢 SMTP configurado</span></p>
+{{else}}
+<p class="mb-2"><span class="badge text-bg-danger">🔴 Não configurado</span></p>
+{{/if}}
 
-<div class="card mt-3">
-  <div class="card-header bg-white"><i class="bi bi-sliders me-1"></i>Credenciais do servidor</div>
-  <div class="card-body">
-    <form action="/admin/config/email/smtp" method="POST">
-      <div class="row g-3">
-        <div class="col-12 col-md-8">
-          <label class="form-label small" for="smtp_host">Servidor SMTP</label>
-          <input type="text" class="form-control form-control-sm" id="smtp_host" name="host" value="{{estadoSmtp.servidor}}" placeholder="smtp.gmail.com" />
-        </div>
-        <div class="col-6 col-md-2">
-          <label class="form-label small" for="smtp_port">Porta</label>
-          <input type="text" class="form-control form-control-sm" id="smtp_port" name="port" value="{{estadoSmtp.porta}}" placeholder="587" />
-        </div>
-        <div class="col-6 col-md-2">
-          <label class="form-label small" for="smtp_tls">Segurança</label>
-          {{!-- ⛔ O `selected` reflete o valor GUARDADO (`estadoSmtp.tls`). Uma opção
-               fixa em `selected` fazia o formulário contradizer a linha «Segurança»
-               logo acima e, ao gravar, religava o TLS sem intenção (P50). As duas
-               opções são exclusivas: `if`/`unless` garantem sempre uma só. --}}
-          <select class="form-select form-select-sm" id="smtp_tls" name="tls">
-            <option value="true" {{#if estadoSmtp.tls}}selected{{/if}}>Usar TLS (587/465)</option>
-            <option value="false" {{#unless estadoSmtp.tls}}selected{{/unless}}>Sem TLS</option>
-          </select>
-        </div>
-        <div class="col-12 col-md-6">
-          <label class="form-label small" for="smtp_user">Utilizador</label>
-          <input type="text" class="form-control form-control-sm" id="smtp_user" name="user" value="{{estadoSmtp.utilizador}}" autocomplete="off" />
-        </div>
-        <div class="col-12 col-md-6">
-          <label class="form-label small" for="smtp_pass">Password (deixe vazio para manter a atual)</label>
-          <input type="password" class="form-control form-control-sm" id="smtp_pass" name="pass" autocomplete="new-password" placeholder="••••••••" />
-        </div>
-        <div class="col-12 col-md-6">
-          <label class="form-label small" for="smtp_from">Email do remetente</label>
-          <input type="email" class="form-control form-control-sm" id="smtp_from" name="from" value="{{estadoSmtp.remetente}}" placeholder="condominio@gmail.com" />
-        </div>
-        <div class="col-12 col-md-6">
-          <label class="form-label small" for="smtp_from_name">Nome do remetente</label>
-          <input type="text" class="form-control form-control-sm" id="smtp_from_name" name="from_name" value="{{estadoSmtp.nomeRemetente}}" placeholder="Administração do Condomínio" />
-        </div>
-      </div>
-      <button type="submit" class="btn btn-primary mt-3" data-ajuda="Guarda as credenciais do servidor de email. Passam a ser usadas em todos os envios do condomínio." data-ajuda-titulo="Guardar SMTP"><i class="bi bi-check2 me-1"></i>Guardar SMTP</button>
-    </form>
+{{#> _modo-edicao id="smtp" acao="/admin/config/email/smtp"
+                 titulo="Configuração SMTP"
+                 linhas=linhasSmtp
+                 rotuloGuardar="Guardar SMTP"
+                 confirmarAbandono="Há alterações à configuração SMTP por guardar. Se sair agora, perdem-se."}}
+  <div class="row g-3">
+    <div class="col-12 col-md-8">
+      <label class="form-label small" for="smtp_host">Servidor SMTP</label>
+      <input type="text" class="form-control form-control-sm" id="smtp_host" name="host" value="{{estadoSmtp.servidor}}" placeholder="smtp.gmail.com" />
+    </div>
+    <div class="col-6 col-md-2">
+      <label class="form-label small" for="smtp_port">Porta</label>
+      <input type="text" class="form-control form-control-sm" id="smtp_port" name="port" value="{{estadoSmtp.porta}}" placeholder="587" />
+    </div>
+    <div class="col-6 col-md-2">
+      <label class="form-label small" for="smtp_tls">Segurança</label>
+      {{!-- ⛔ O `selected` reflete o valor GUARDADO (`estadoSmtp.tls`). Uma opção
+           fixa em `selected` fazia o formulário contradizer a linha «Segurança»
+           logo acima e, ao gravar, religava o TLS sem intenção (P50). As duas
+           opções são exclusivas: `if`/`unless` garantem sempre uma só. --}}
+      <select class="form-select form-select-sm" id="smtp_tls" name="tls">
+        <option value="true" {{#if estadoSmtp.tls}}selected{{/if}}>Usar TLS (587/465)</option>
+        <option value="false" {{#unless estadoSmtp.tls}}selected{{/unless}}>Sem TLS</option>
+      </select>
+    </div>
+    <div class="col-12 col-md-6">
+      <label class="form-label small" for="smtp_user">Utilizador</label>
+      <input type="text" class="form-control form-control-sm" id="smtp_user" name="user" value="{{estadoSmtp.utilizador}}" autocomplete="off" />
+    </div>
+    <div class="col-12 col-md-6">
+      <label class="form-label small" for="smtp_pass">Password (deixe vazio para manter a atual)</label>
+      {{!-- ⛔ Nunca pré-preenchida e sem `value`: o servidor não devolve a
+           password ao browser. Vazio significa «manter a atual». --}}
+      <input type="password" class="form-control form-control-sm" id="smtp_pass" name="pass" autocomplete="new-password" placeholder="••••••••" />
+    </div>
+    <div class="col-12 col-md-6">
+      <label class="form-label small" for="smtp_from">Email do remetente</label>
+      <input type="email" class="form-control form-control-sm" id="smtp_from" name="from" value="{{estadoSmtp.remetente}}" placeholder="condominio@gmail.com" />
+    </div>
+    <div class="col-12 col-md-6">
+      <label class="form-label small" for="smtp_from_name">Nome do remetente</label>
+      <input type="text" class="form-control form-control-sm" id="smtp_from_name" name="from_name" value="{{estadoSmtp.nomeRemetente}}" placeholder="Administração do Condomínio" />
+    </div>
   </div>
-</div>
+  <p class="form-text mt-2 mb-0">
+    Guardar passa a usar estas credenciais em <strong>todos</strong> os envios do condomínio.
+    Deixar a password vazia mantém a atual.
+  </p>
+{{/_modo-edicao}}
 
 <div class="card mt-3">
   <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-2">
@@ -137,3 +142,198 @@
     </form>
   </div>
 </div>
+
+{{!-- ══════════════════════════════════════════════════════════════════
+     D4b — CONFIRMAÇÃO COM DIFF (só de INTERFACE)
+     Mostra o que vai mudar antes de enviar. ⛔ A password nunca aparece com o
+     seu conteúdo: o diff diz `(mantida)` ou `(alterada)`. O TLS é apresentado
+     pelo texto legível da opção, não pelo valor `true`/`false`.
+     ⛔ Esta caixa NÃO substitui a confirmação server-side (P54-3): não é um
+     controlo de segurança e o servidor não confia em nada do que vem daqui.
+     ══════════════════════════════════════════════════════════════════ --}}
+<div class="modal fade" id="smtpDiffModal" tabindex="-1" aria-labelledby="smtpDiffTitulo" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="smtpDiffTitulo">Confirmar alterações à configuração SMTP</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted">Vão ser guardados os campos abaixo. Nenhuma password é mostrada.</p>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <caption class="visually-hidden">Campos que vão ser alterados</caption>
+            <thead>
+              <tr><th scope="col">Campo</th><th scope="col">Antes</th><th scope="col">Depois</th></tr>
+            </thead>
+            <tbody id="smtpDiffCorpo"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="smtpDiffConfirmar">Guardar alterações</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{!-- Script SEM expressões Handlebars (puro), para poder ser extraído e testado
+     num DOM falso. Os rótulos vêm do próprio formulário, não de uma lista
+     duplicada aqui (que envelheceria quando um campo mudasse). --}}
+<script>
+// ⛔ ORDEM DE CARREGAMENTO — o layout põe o Bootstrap no FIM do <body>, DEPOIS
+// do conteúdo da vista: quando este script corre, `bootstrap` ainda NÃO existe.
+// A guarda que o testava abandonava o script EM SILÊNCIO e a confirmação com
+// diff nunca acontecia — defeito medido no browser real (o teste com DOM falso
+// não o apanhava, porque lá o `bootstrap` já estava definido).
+// Espera-se pelo `DOMContentLoaded`, que corre depois de todos os scripts do
+// layout — tanto os normais (Bootstrap) como os `defer` (app.js).
+(function () {
+  'use strict';
+
+  function arrancar() {
+    // O parcial P54-0 gera o id do formulário como `<id>-form` (aqui, `smtp-form`).
+    var form = document.getElementById('smtp-form');
+    var modalEl = document.getElementById('smtpDiffModal');
+    if (!form || !modalEl) return;
+    if (typeof bootstrap === 'undefined' || !bootstrap.Modal) return;
+
+    var modal = new bootstrap.Modal(modalEl);
+    var corpo = document.getElementById('smtpDiffCorpo');
+    var botaoConfirmar = document.getElementById('smtpDiffConfirmar');
+
+    // Nome legível de um campo: o texto do <label> associado. Sem lista própria,
+    // um campo novo passa a ter nome no diff sem editar este script.
+    function rotuloDe(campo) {
+      var id = campo.getAttribute('id');
+      var lab = id ? form.querySelector('label[for="' + id + '"]') : null;
+      if (lab && lab.textContent) return lab.textContent.replace(/\s+/g, ' ').trim();
+      return campo.getAttribute('name') || 'Campo';
+    }
+
+    // Valor ORIGINAL = o que o servidor renderizou (atributo `value` / opção com
+    // `selected`), não o que está no ecrã depois de o utilizador escrever.
+    function originalDe(campo) {
+      if (campo.tagName === 'SELECT') {
+        var escolhida = campo.querySelector('option[selected]');
+        return escolhida ? escolhida.value : '';
+      }
+      var attr = campo.getAttribute('value');
+      return attr === null ? '' : attr;
+    }
+
+    // Como o valor é MOSTRADO no diff. Num `select` mostra-se o texto da opção
+    // (ex.: «Usar TLS (587/465)»), nunca o `true`/`false` cru.
+    function apresentar(campo, valor) {
+      if (campo.tagName === 'SELECT') {
+        var ops = campo.querySelectorAll('option') || [];
+        for (var i = 0; i < ops.length; i++) {
+          if (ops[i].value === valor) return String(ops[i].textContent || '').replace(/\s+/g, ' ').trim();
+        }
+        return valor === '' ? '—' : String(valor);
+      }
+      return (valor === null || valor === undefined || valor === '') ? '—' : String(valor);
+    }
+
+    // Recolhe as alterações. ⛔ Da password lê-se apenas se está PREENCHIDA — o
+    // conteúdo nunca é copiado, guardado nem mostrado.
+    function recolher() {
+      var alteracoes = [];
+      var passwordAlterada = false;
+      var campos = form.elements || [];
+      for (var i = 0; i < campos.length; i++) {
+        var campo = campos[i];
+        var nome = campo.getAttribute('name');
+        if (!nome) continue;
+        if (nome === 'pass') {
+          passwordAlterada = String(campo.value || '').length > 0;
+          continue;
+        }
+        var antes = originalDe(campo);
+        var depois = campo.value === undefined ? '' : String(campo.value);
+        if (String(antes) !== depois) {
+          alteracoes.push({
+            rotulo: rotuloDe(campo),
+            antes: apresentar(campo, antes),
+            depois: apresentar(campo, depois)
+          });
+        }
+      }
+      return { alteracoes: alteracoes, passwordAlterada: passwordAlterada };
+    }
+
+    function pintar(dados) {
+      while (corpo.firstChild) corpo.removeChild(corpo.firstChild);
+      var linhas = dados.alteracoes.slice();
+      // A password entra SEMPRE que há algo a confirmar, com o estado — nunca
+      // com o conteúdo: `(mantida)` ou `(alterada)`.
+      linhas.push({
+        rotulo: 'Password',
+        antes: '(mantida)',
+        depois: dados.passwordAlterada ? '(alterada)' : '(mantida)'
+      });
+      for (var i = 0; i < linhas.length; i++) {
+        var tr = document.createElement('tr');
+        var th = document.createElement('th');
+        th.setAttribute('scope', 'row');
+        th.textContent = linhas[i].rotulo;
+        var tdA = document.createElement('td');
+        tdA.textContent = linhas[i].antes;
+        var tdD = document.createElement('td');
+        tdD.textContent = linhas[i].depois;
+        tr.appendChild(th); tr.appendChild(tdA); tr.appendChild(tdD);
+        corpo.appendChild(tr);
+      }
+    }
+
+    function avisar(texto) {
+      if (typeof window.GesConduAviso === 'function') window.GesConduAviso(texto, { titulo: 'Sem alterações' });
+      else if (typeof window.alert === 'function') window.alert(texto);
+    }
+
+    form.addEventListener('submit', function (ev) {
+      // Segundo envio (já confirmado na caixa): segue sem travar e deixa o
+      // padrão P54-0 limpar o estado sujo no mesmo evento.
+      if (form.getAttribute('data-smtp-confirmado') === '1') {
+        form.removeAttribute('data-smtp-confirmado');
+        return;
+      }
+      // ⛔ `stopPropagation` é essencial: sem ele o handler do P54-0 limparia o
+      // estado sujo (e a cópia dos originais) num envio que ainda NÃO aconteceu
+      // — e o `Cancelar` deixaria de restaurar valores.
+      ev.preventDefault();
+      ev.stopPropagation();
+
+      var dados = recolher();
+      if (dados.alteracoes.length === 0 && !dados.passwordAlterada) {
+        avisar('Não há alterações a guardar — a configuração SMTP mantém-se.');
+        return;
+      }
+      pintar(dados);
+      modal.show();
+    });
+
+    botaoConfirmar.addEventListener('click', function () {
+      modal.hide();
+      form.setAttribute('data-smtp-confirmado', '1');
+      if (typeof form.requestSubmit === 'function') {
+        form.requestSubmit();
+        return;
+      }
+      // Sem `requestSubmit` (browser antigo): `form.submit()` não dispara o
+      // evento `submit`, pelo que o estado sujo do P54-0 ficaria por limpar e o
+      // aviso de saída apareceria depois de o utilizador já ter confirmado.
+      // Despacha-se o evento (o P54-0 limpa o estado) e só depois se submete.
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      form.submit();
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', arrancar);
+  } else {
+    arrancar();
+  }
+})();
+</script>

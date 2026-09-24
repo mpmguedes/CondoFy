@@ -375,6 +375,60 @@ const TAB5 = 'href="/admin/config/auditoria"';
   assert.strictEqual(postEmail.location, '/admin/config/email', 'email: teste sem destinatário volta ao separador');
   assert.deepStrictEqual(smtpEnviado, [], 'email: teste sem destinatário não envia');
 
+  // ── 4.2 P54-2 — modo CONSULTA/EDIÇÃO e proteção de segredos ────────
+  // A página nasce em consulta: o formulário está `hidden` e o botão `Editar` é
+  // o único caminho para os campos. Sem isto, o P54 não existe nesta página.
+  r = await pedir('/admin/config/email');
+  assert.ok(r.corpo.includes('data-modo-edicao'), 'P54-2: a área SMTP usa o padrão P54-0');
+  assert.ok(r.corpo.includes('data-me-estado="consulta"'), 'P54-2: a página nasce em modo CONSULTA');
+  const blocoSmtp = r.corpo.slice(r.corpo.indexOf('id="smtp"'), r.corpo.indexOf('id="teste"'));
+  assert.ok(blocoSmtp.length > 0, 'P54-2: o bloco SMTP existe antes da área de teste');
+  assert.ok(/<form[^>]*data-me-form[^>]*\bhidden\b/.test(blocoSmtp),
+    'P54-2: o formulário SMTP nasce `hidden` (nada submetível sem Editar)');
+  assert.ok(blocoSmtp.includes('data-me-editar'), 'P54-2: existe o botão Editar');
+  assert.ok(/aria-controls="smtp-form"/.test(blocoSmtp), 'P54-2: o Editar tem `aria-controls`');
+  assert.ok(/id="smtp-form"/.test(blocoSmtp), 'P54-2: o `aria-controls` aponta para o id real do formulário');
+  assert.ok(/aria-expanded="false"/.test(blocoSmtp), 'P54-2: o Editar nasce com `aria-expanded="false"`');
+  // Os campos continuam TODOS lá dentro (nomes preservados) — o padrão é uma
+  // camada de apresentação, não uma reescrita do formulário.
+  for (const campo of ['name="host"', 'name="port"', 'name="tls"', 'name="user"', 'name="pass"', 'name="from"', 'name="from_name"']) {
+    assert.ok(blocoSmtp.includes(campo), `P54-2: o campo ${campo} mantém-se dentro do formulário`);
+  }
+  // A consulta apresenta a password por ESTADO, com máscara — nunca por valor.
+  assert.ok(blocoSmtp.includes('Definida'), 'P54-2: a consulta mostra o estado da password');
+  assert.ok(blocoSmtp.includes('me-mascara'), 'P54-2: a password é apresentada com máscara');
+
+  // ⛔ Nenhum caminho pode pôr a password no HTML. Prova-se com um SENTINELA:
+  // injeta-se um valor no estado que a vista recebe e exige-se que ele NÃO
+  // apareça em lado nenhum da página. Se a vista o imprimisse, apareceria aqui.
+  const SENTINELA = 'SEGREDO-QUE-NAO-PODE-SAIR-9f3a';
+  estadoSmtpStub = { ...estadoSmtpStub, password: SENTINELA, pass: SENTINELA };
+  const rSentinela = await pedir('/admin/config/email');
+  assert.ok(!rSentinela.corpo.includes(SENTINELA),
+    'P54-2: um valor de password presente no estado NUNCA chega ao HTML');
+  estadoSmtpStub = { ...estadoSmtpStub };
+  delete estadoSmtpStub.password;
+  delete estadoSmtpStub.pass;
+
+  assert.ok(!/name="pass"[^>]*value="[^"]+"/.test(r.corpo), 'P54-2: o campo da password não leva `value`');
+  assert.ok(!/data-[a-z-]*pass[a-z-]*\s*=/i.test(r.corpo), 'P54-2: nenhum atributo `data-*` transporta a password');
+
+  // A confirmação com diff (D4b) existe, é acessível e não inventa rotas.
+  assert.ok(r.corpo.includes('id="smtpDiffModal"'), 'P54-2: existe a caixa de confirmação com diff');
+  assert.ok(/aria-labelledby="smtpDiffTitulo"/.test(r.corpo), 'P54-2: a caixa tem título associado');
+  assert.ok(r.corpo.includes('id="smtpDiffCorpo"'), 'P54-2: a caixa tem um corpo onde pintar o diff');
+  assert.ok(r.corpo.includes('id="smtpDiffConfirmar"'), 'P54-2: a confirmação é uma ação explícita (botão próprio)');
+  assert.ok(r.corpo.includes('action="/admin/config/email/smtp"'),
+    'P54-2: a rota de gravação NÃO mudou (nenhum endpoint novo)');
+  assert.ok(r.corpo.includes('action="/admin/config/email/smtp/testar"'), 'P54-2: a rota de teste mantém-se');
+  assert.ok(r.corpo.includes('action="/admin/config/email/teste"'), 'P54-2: a rota de envio de teste mantém-se');
+  // O script do diff é PURO (sem expressões Handlebars), para poder ser extraído
+  // e corrido num DOM falso pelo teste específico do P54-2.
+  const scriptDiff = (r.corpo.match(/<script>[\s\S]*?<\/script>/g) || [])
+    .filter((s) => s.includes('smtpDiffModal'))[0] || '';
+  assert.ok(scriptDiff.length > 0, 'P54-2: o script do diff está na página');
+  assert.ok(!/\{\{/.test(scriptDiff), 'P54-2: o script do diff não tem expressões Handlebars');
+
   // 5. Separador 5 — Auditoria (antes com entrada própria no menu principal)
   r = await pedir('/admin/config/auditoria');
   assert.strictEqual(r.status, 200, 'GET /admin/config/auditoria responde 200');
