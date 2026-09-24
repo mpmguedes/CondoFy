@@ -49,6 +49,26 @@ function registar(modelo, where) {
 // pedido. Se o `where` não tiver `condominio_id`, devolve-se uma linha com a
 // MARCA de B — é a armadilha que o isolamento tem de impedir.
 const Sequelize = require('sequelize');
+
+// ⛔ `config/database` tem de ser neutralizado NO SEU CONSTRUTOR DE SQL, antes
+// de `models` ser carregado: `routes/quotas-modulo.js:14` faz um
+// `require('../config/database')` DIRETO (não via `models`) e usa
+// `sequelize.fn('DISTINCT', sequelize.col('ano'))` dentro de
+// `anosDisponiveis()` — a ligação REAL, sem BD, é `ECONNREFUSED :3306`. O duplo
+// de `models` não cobre isto (só substitui os MODELOS). Estende-se o módulo
+// REAL (que precisa de continuar a `define`-ir os modelos) e trocam-se só
+// `fn`/`col` por marcadores inertes. Ver `test-allow-list-suporte.js` para a
+// explicação completa do encadeamento (ordem de montagem → handler real).
+{
+  const dbPath = require.resolve(path.join(RAIZ, 'config/database'));
+  const dbReal = require(dbPath);
+  dbReal.fn = (...a) => ({ _fn: a });
+  dbReal.col = (c) => ({ _col: c });
+  dbReal.literal = (s) => ({ _literal: s });
+  dbReal.query = async () => [];
+  dbReal.transaction = async () => ({ commit: async () => {}, rollback: async () => {} });
+}
+
 const modelsPath = require.resolve(path.join(RAIZ, 'models'));
 const modelosReais = require(modelsPath);
 
@@ -188,7 +208,19 @@ const stubs = {
     },
   },
   'helpers/email-fila': { ...require(path.join(RAIZ, 'helpers/email-fila')), contarFila: async () => ({ pendentes: 0, enviados: 0, erros: 0, cancelados: 0 }), filtroFilaPorCondominio: (cid) => ({ condominio_id: cid }) },
-  'helpers/notificacoes': { listarPreferencias: async () => ({}), guardarPreferencias: async () => ({}) },
+  // `listarPreferencias` devolve um ARRAY de `{evento, rotulo, email, drive}`
+  // (ver `helpers/notificacoes.js`), não um objeto. O duplo devolvia `{}` desde
+  // antes de o P54-7 (`193c739`) fazer `preferencias.map(...)` em
+  // `routes/emails.js:115` — e o teste nunca chegava a `/admin/emails` por
+  // rebentar antes (o ECONNREFUSED do módulo de quotas), pelo que o duplo
+  // desatualizado ficou invisível. Com a ordem de montagem corrigida, o pedido
+  // chega aqui: o duplo tem de respeitar o contrato real.
+  'helpers/notificacoes': {
+    listarPreferencias: async () => ([
+      { evento: 'novo_documento', rotulo: 'Novo documento', email: true, drive: false },
+    ]),
+    guardarPreferencias: async () => ({ ok: true }),
+  },
 };
 
 for (const [rel, valor] of Object.entries(stubs)) {
@@ -280,7 +312,24 @@ const MODULOS = allowlistReal.MODULOS.slice();
     'a LISTA tem de declarar um router existente para cada módulo (ver ROUTERS no allow-list)'
   );
 }
-for (const m of MODULOS) app.use('/admin', require(`../routes/${allowlistReal.routerDo(m).replace(/^routes\//, '')}`));
+// ⛔ A ORDEM de montagem TEM DE SER a de `app.js`. A allow-list admite por
+// CAMINHO; um caminho admitido pode ser servido por um router diferente do que
+// o módulo sugere, e o que decide qual é a ORDEM de montagem. `MODULOS` (ordem
+// de `LISTA`) põe `financeiro` antes de `quotas-modulo` — o OPOSTO de
+// `app.js:280-284`. Com essa ordem invertida, `GET /admin/quotas` caía no
+// handler REAL de `quotas-modulo` (que consulta a BD: `ECONNREFUSED :3306`) em
+// vez de ser servido como produção faz. Ordena-se pela posição real em `app.js`.
+const ORDEM_APP = require('fs')
+  .readFileSync(path.join(RAIZ, 'app.js'), 'utf8')
+  .match(/app\.use\('\/admin',\s*require\('\.\/routes\/([a-z-]+)'\)\)/g)
+  .map((s) => s.match(/routes\/([a-z-]+)/)[1]);
+const moduloMontadoDe = (modulo) => allowlistReal.routerDo(modulo).replace(/^routes\//, '').replace(/\.js$/, '');
+const MODULOS_ORDENADOS = MODULOS.slice().sort((a, b) => {
+  const ia = ORDEM_APP.indexOf(moduloMontadoDe(a));
+  const ib = ORDEM_APP.indexOf(moduloMontadoDe(b));
+  return (ia === -1 ? 1e9 : ia) - (ib === -1 ? 1e9 : ib);
+});
+for (const m of MODULOS_ORDENADOS) app.use('/admin', require(`../routes/${allowlistReal.routerDo(m).replace(/^routes\//, '')}`));
 app.use((err, req, res, next) => {
   console.error('[erro no handler]', err.message);
   res.status(500).send('ERRO_NO_HANDLER: ' + err.message);

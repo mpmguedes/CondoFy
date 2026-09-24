@@ -38,8 +38,30 @@ const OPERADOR = { id: 9, nome: 'Sup Ort', email: 'sup@plataforma.pt', role: nul
 // Os modelos NÃO são substituídos por um Proxy: o router guarda referências
 // diretas, pelo que o duplo tem de ser um objeto com os métodos usados. Um
 // `require.cache` do módulo `models` serve todos os consumidores.
-const modelsPath = require.resolve(path.join(RAIZ, 'models'));
 const Sequelize = require('sequelize');
+
+// ⛔ `config/database` tem de ser duplicado ANTES de `models`: o
+// `require('../models')` seguinte carrega `config/database` a sério e deixa-o
+// em cache — a partir daí qualquer `require('../config/database')` DIRETO
+// (como o de `routes/quotas-modulo.js:14`) recebe a ligação real e tenta
+// `127.0.0.1:3306`. O duplo de `models` só cobre quem desestrutura os modelos;
+// não cobre `sequelize.fn/col`, que é como `anosDisponiveis()` constrói o
+// `DISTINCT ano`. ESTENDE-SE o módulo REAL (que continua a `define`-ir os
+// modelos) e substituem-se só os construtores de SQL `fn`/`col` por marcadores
+// inertes — a LIGAÇÃO nunca é exercitada. Mesmo padrão de
+// `test-orcamento-distribuicao.js` / `test-fcr-orcamento.js` (que duplicam o
+// `config/database` inteiro porque lá não precisam de `define`).
+{
+  const dbPath = require.resolve(path.join(RAIZ, 'config/database'));
+  const dbReal = require(dbPath);
+  dbReal.fn = (...a) => ({ _fn: a });
+  dbReal.col = (c) => ({ _col: c });
+  dbReal.literal = (s) => ({ _literal: s });
+  dbReal.query = async () => [];
+  dbReal.transaction = async () => ({ commit: async () => {}, rollback: async () => {} });
+}
+
+const modelsPath = require.resolve(path.join(RAIZ, 'models'));
 const vazio = async () => null;
 const lista = async () => [];
 const conta = async () => 0;
@@ -280,6 +302,22 @@ modelosDuplo.Fracao = {
   ...modelVazio(),
   findOne: async () => ({ id: 5, condominio_id: 1, identificacao: 'A', pessoas: [], toJSON() { return { id: 5, condominio_id: 1, identificacao: 'A' }; } }),
 };
+// Uma quota mínima: `financeiro GET /quotas/:id` faz `Quota.findOne` com âmbito
+// e, SEM registo, devolve 302 para `/admin/quotas` — o que aqui se leria como
+// «recusado» quando é, na verdade, «admitido mas inexistente». Com a quota
+// presente, o handler RENDERIZA e o pedido conclui como admissão real. (É o
+// mesmo raciocínio do `Fracao` acima: testa-se o ACESSO à rota, não o conteúdo.)
+// ⚠️ A quota traz `condominio_id: 1` para casar com o âmbito do `where` — o
+// handler filtra por `{ id, condominio_id }` e um stub sem o campo devolveria
+// o mesmo 302. `toJSON` mantém o contrato do modelo real.
+modelosDuplo.Quota = {
+  ...modelVazio(),
+  findOne: async () => ({
+    id: 1, condominio_id: 1, fracao_id: 5, valor: 25, ano: 2026, mes: 1,
+    estado: 'pendente', numero_documento: 'Q/2026/1', data_vencimento: null,
+    toJSON() { return { id: 1, condominio_id: 1, fracao_id: 5, valor: 25 }; },
+  }),
+};
 // Rotas admitidas do módulo `admin` — espelha `LISTA.admin`. `/fracoes/:id`
 // NÃO consta (deliberadamente excluído: ficha que junta identidade e finanças).
 const ROTAS_PERMITIDAS_ADMIN = ['/', '/fracoes', '/condominos', '/tarefas'];
@@ -293,10 +331,17 @@ const ROTAS_PERMITIDAS_ADMIN = ['/', '/fracoes', '/condominos', '/tarefas'];
 const MODULOS = [
   { ficheiro: 'admin', rotas: ['/', '/fracoes', '/condominos', '/tarefas'],
     fora: ['/fracoes/nova', '/fracoes/5', '/fracoes/5/editar', '/condominos/nova', '/condominos/5/editar', '/utilizadores', '/utilizadores/nova', '/suporte'] },
-  { ficheiro: 'financeiro', rotas: ['/quotas', '/quotas/1', '/quotas/grelha', '/pagamentos', '/pagamentos/1', '/despesas', '/movimentos', '/contas'],
-    fora: ['/quotas/gerar', '/quotas/enviar', '/pagamentos/nova', '/despesas/nova', '/contas/nova', '/contas/transferir-fcr', '/categorias'] },
+  // ⛔ A ORDEM DESTA LISTA É A ORDEM DE MONTAGEM (ver o `for` abaixo) e TEM DE
+  // ESPELHAR `app.js`: `quotas-modulo` é montado ANTES de `financeiro`. É essa
+  // ordem que torna `GET /quotas` de `financeiro` código morto — foi por isso
+  // que o C6 (`809e92f`) o removeu. Montar `financeiro` primeiro (como este
+  // teste fazia) punha o pedido a cair no handler REAL de `quotas-modulo`, que
+  // consulta a BD a sério: um ECONNREFUSED a esconder um problema de ORDEM, não
+  // de dados. `/quotas` deixa de constar de `financeiro` (já não vive lá).
   { ficheiro: 'quotas-modulo', rotas: ['/quotas', '/quotas/grelha', '/quotas/conta-corrente'],
     fora: ['/quotas/comprovativos', '/quotas/recibos', '/quotas/transitados'] },
+  { ficheiro: 'financeiro', rotas: ['/quotas/1', '/quotas/grelha', '/pagamentos', '/pagamentos/1', '/despesas', '/movimentos', '/contas'],
+    fora: ['/quotas/gerar', '/quotas/enviar', '/pagamentos/nova', '/despesas/nova', '/contas/nova', '/contas/transferir-fcr', '/categorias'] },
   { ficheiro: 'extra-quotas', rotas: ['/quotas-extra', '/quotas-extra/1'],
     fora: ['/quotas-extra/nova', '/quotas-extra/1/editar'] },
   { ficheiro: 'orcamento', rotas: ['/orcamento', '/orcamento/1'],
@@ -316,6 +361,31 @@ const MODULOS = [
 
 for (const m of MODULOS) {
   app.use('/admin', require(`../routes/${m.ficheiro}`));
+}
+
+// ── A ORDEM acima TEM DE ser a de `app.js` ─────────────────────────
+// A allow-list admite por CAMINHO, não por router — logo um caminho admitido
+// pode ser servido por um router diferente do que o teste tem em mente, e o
+// que decide qual é a ORDEM de montagem. Montar por uma ordem diferente da de
+// produção testava um encadeamento que NÃO existe: com `financeiro` antes de
+// `quotas-modulo`, `GET /admin/quotas` caía no handler REAL de `quotas-modulo`
+// (que consulta a BD) em vez do `financeiro` (que já não o tinha) — o teste
+// passava a exercitar um pedido que produção nunca faz. Guarda-se a
+// invariante, tal como `test-quotas-isolamento.js` a guarda em `app.js`.
+{
+  const fonteApp = require('fs').readFileSync(path.join(RAIZ, 'app.js'), 'utf8');
+  const ordemApp = fonteApp
+    .match(/app\.use\('\/admin',\s*require\('\.\/routes\/[a-z-]+'\)\)/g)
+    .map((s) => s.match(/routes\/([a-z-]+)/)[1]);
+  const montados = MODULOS.map((m) => m.ficheiro);
+  const soOrdenaveis = montados.filter((f) => ordemApp.includes(f));
+  assert.deepStrictEqual(
+    soOrdenaveis,
+    ordemApp.filter((f) => montados.includes(f)),
+    'a ORDEM de montagem de `MODULOS` tem de ser a de `app.js` — sem isso o '
+    + 'teste exercita um encadeamento que produção não faz (era o defeito que '
+    + 'escondia `GET /admin/quotas` atrás de um ECONNREFUSED)'
+  );
 }
 
 // ── Coerência: a lista montada AQUI tem de ser a `LISTA` real ──────
@@ -493,21 +563,34 @@ async function criarSessao(caminho = '/admin/') {
       assert.notStrictEqual(resp.status, 500, `suporte [${m.ficheiro}]: ${r} não rebenta`);
       assert.ok(!/ERRO_NO_HANDLER/.test(resp.html), `suporte [${m.ficheiro}]: ${r} sem exceção`);
       // ADMITIDO = de facto servido ao suporte. Uma rota que caia na guarda de
-      // papel devolve 302 para `/`/`/condominios` — isso é uma RECUSA e não
-      // pode passar por admissão (era o ponto cego que deixava uma remoção da
-      // allow-list passar despercebida).
+      // papel devolve 302 para `/`/`/condominios`/`/login` — e a REDE DE
+      // SEGURANÇA de `routes/admin.js` (:1688) devolve 302 para `/admin`
+      // EXATO. Nenhum destes é uma admissão: é uma RECUSA, e não pode passar
+      // por admissão (era o ponto cego que deixava uma remoção da allow-list
+      // passar despercebida).
       //
-      // Um 302 só é admissão quando o DESTINO é a própria rota admitida (ou uma
-      // rota admitida do mesmo módulo, ex.: `/quotas/grelha` → `/quotas`).
-      // Em particular, um 302 para `/admin` A PARTIR de uma rota que não é `/`
-      // é a REDE DE SEGURANÇA do router-frente a intercetar um pedido que devia
-      // ter chegado ao router seguinte — ou seja, uma não-admissão disfarçada.
-      // Era exatamente o defeito que a rede de segurança sem exceção criava.
+      // ⛔ A comparção com o destino de recusa tem de ser EXATA e incluir
+      // `/admin` (bare): a rede de segurança redireciona para lá. Um
+      // `startsWith('/admin')` daria este destino por «admitido» e cegava o
+      // teste à mutação #7 de `test-mutacao-suporte.js` (falso verde detetado).
+      //
+      // Passando esse crivo, o destino é uma página SERVIDA da aplicação — a
+      // própria rota admitida, um caminho admitido de OUTRO módulo (a admissão
+      // é por CAMINHO, não por router: `/quotas/grelha` é servido por
+      // `quotas-modulo` e reencaminha para `/quotas`), ou um redirecionamento
+      // de compatibilidade do backoffice (ex.: `/pagamentos` →
+      // `/admin/quotas/comprovativos`, que por decisão não está na lista).
       if (resp.status === 302) {
         const destino = resp.local || '';
-        const destinosAdmitidos = new Set([`/admin${r}`, ...m.rotas.map((x) => `/admin${x}`)]);
-        assert.ok(!['/condominios', '/login', '/'].includes(destino)
-          && destinosAdmitidos.has(destino),
+        const RECUSAS = ['/', '/admin', '/condominios', '/login'];
+        const semAdmin = destino.replace(/^\/admin/, '') || '/';
+        const eAdmitido = !RECUSAS.includes(destino)
+          && (destino === `/admin${r}`
+            || allowlistReal.caminhoAdmitidoEmAlgumModulo(semAdmin)
+            // Página concreta do backoffice (uma SUBROTA de `/admin`) —
+            // exclui o próprio `/admin` e já está fora das RECUSAS acima.
+            || /^\/admin\/[a-z-]/.test(destino));
+        assert.ok(eAdmitido,
           `suporte [${m.ficheiro}]: ${r} foi RECUSADO (302 ${destino}) — não é admitido`);
       }
       feito(`[${m.ficheiro}] GET /admin${r} → admitido (${resp.status}${resp.local ? ' ' + resp.local : ''})`);

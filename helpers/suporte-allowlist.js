@@ -124,11 +124,17 @@ const LISTA = {
   ],
 
   // Financeiro — ver `routes/financeiro.js`. Diagnóstico de quotas,
-  // pagamentos, despesas, movimentos e contas. `/quotas` exige scoping
-  // explícito na consulta (foi corrigido: `where` sem `condominio_id`
-  // devolveria dados de todos os condomínios).
+  // pagamentos, despesas, movimentos e contas. As consultas exigem scoping
+  // explícito (`where` sem `condominio_id` devolveria dados de todos os
+  // condomínios).
+  //
+  // ⛔ `/quotas` NÃO consta aqui: o handler de `financeiro.js` foi REMOVIDO no
+  // **C6** (`809e92f`) por ser código MORTO — `quotas-modulo` está montado
+  // ANTES em `app.js` e é ele que serve a rota. Manter a entrada aqui não
+  // admitia nada: apontava para um handler que já não existe, e o verificador
+  // `verificar-readonly-admitidos.js` recusava-se a localizá-lo. A admissão de
+  // `/quotas` vive, e basta, em `quotas-modulo`.
   financeiro: [
-    { padrao: /^\/quotas$/, rotulo: '/quotas' },
     { padrao: /^\/quotas\/\d+$/, rotulo: '/quotas/:id' },
     { padrao: /^\/quotas\/grelha$/, rotulo: '/quotas/grelha' },
     { padrao: /^\/pagamentos$/, rotulo: '/pagamentos' },
@@ -140,12 +146,13 @@ const LISTA = {
 
   // Módulo de quotas (conta-corrente). Ver `routes/quotas-modulo.js`.
   //
-  // ⚠️ `/quotas` e `/quotas/grelha` têm handlers em DOIS routers: este e
-  // `financeiro.js`. A montagem em `app.js` põe `quotas-modulo` ANTES de
-  // `financeiro`, por isso é AQUI que o pedido HTTP é servido. A rota tem de
-  // constar das DUAS listas para que o suporte seja admitido independentemente
-  // de qual dos routers a serve — se a ordem de montagem mudar, a admissão não
-  // se perde. (A duplicação de rotas é anterior a esta fase; não foi alterada.)
+  // ⚠️ `/quotas` e `/quotas/grelha` tiveram handlers em DOIS routers (este e
+  // `financeiro.js`) e a montagem em `app.js` sempre pôs `quotas-modulo` ANTES
+  // de `financeiro` — logo era AQUI que o pedido HTTP era servido e o de
+  // `financeiro` era código morto. O C6 (`809e92f`) removeu o `/quotas` morto
+  // de `financeiro`; `/quotas/grelha` mantém-se lá (também sombreado) e por
+  // isso continua listado nos dois módulos. A admissão do suporte vive na lista
+  // do router que de facto serve a rota.
   'quotas-modulo': [
     { padrao: /^\/quotas$/, rotulo: '/quotas' },
     { padrao: /^\/quotas\/grelha$/, rotulo: '/quotas/grelha' },
