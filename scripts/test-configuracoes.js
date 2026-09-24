@@ -339,6 +339,25 @@ const TAB5 = 'href="/admin/config/auditoria"';
   assert.deepStrictEqual(smtpGuardado, [{ host: 'smtp.exemplo.pt', port: '465', user: 'u@exemplo.pt', pass: 'segredo', tls: 'true', from: 'geral@exemplo.pt', fromName: 'Administração' }],
     'email: guardar SMTP passa os campos ao mailer existente');
 
+  // 4.1b P54-1 — uma gravação RECUSADA pela validação não pode derrubar a rota.
+  // `guardarConfigSmtp` passou a lançar `ErroValidacaoSmtp` ANTES de escrever
+  // (porta não numérica, CR/LF no remetente, TLS inesperado). É um modo de falha
+  // NOVO para a rota: sem esta prova, um `throw` não apanhado daria 500 ao
+  // administrador em vez de voltar ao separador com um erro.
+  const guardarSmtpOriginal = mailer.guardarConfigSmtp;
+  mailer.guardarConfigSmtp = async () => {
+    const erro = new Error('Configuração SMTP inválida (port)');
+    erro.name = 'ErroValidacaoSmtp';
+    erro.validacao = true;
+    erro.erros = [{ campo: 'port', codigo: 'porta_invalida', mensagem: 'A porta tem de ser um número inteiro.' }];
+    throw erro;
+  };
+  const postRecusado = await enviar('/admin/config/email/smtp', { host: 'smtp.exemplo.pt', port: 'abc', from: 'geral@exemplo.pt' });
+  mailer.guardarConfigSmtp = guardarSmtpOriginal;
+  assert.strictEqual(postRecusado.status, 302, 'P54-1: gravação recusada responde 302 (nunca 500)');
+  assert.strictEqual(postRecusado.location, '/admin/config/email', 'P54-1: a gravação recusada volta ao separador');
+  assert.strictEqual(mailer.guardarConfigSmtp, guardarSmtpOriginal, 'P54-1: o duplo da gravação foi reposto');
+
   smtpTestado.length = 0;
   postEmail = await enviar('/admin/config/email/smtp/testar', {});
   assert.strictEqual(postEmail.location, '/admin/config/email', 'email: testar ligação volta ao separador');

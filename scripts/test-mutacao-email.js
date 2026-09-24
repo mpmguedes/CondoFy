@@ -215,6 +215,46 @@ function varrerBackupsOrfaos() {
     script: 'test-lembretes-automaticos.js',
   });
 
+  // ── P54-1 — validação da configuração SMTP ────────────────────────
+  // As três regressões que o P54-1 fecha: gravação sem validação (L1), injeção
+  // de cabeçalho por CR/LF (L2) e TLS desligado em silêncio (L3).
+  titulo('P54-1 — a validação é aplicada ANTES de gravar');
+  mutacao({
+    nome: '13. a validação deixa de bloquear a gravação (entra configuração inválida)',
+    ficheiro: 'helpers/mailer.js',
+    de: '  if (!v.ok) throw new validacaoSmtp.ErroValidacaoSmtp(v.erros);',
+    para: '  if (!v.ok) { /* mutação: validação não aplicada */ }',
+    script: 'test-smtp-validacao.js',
+  });
+
+  titulo('P54-1 — a rejeição de CR/LF');
+  mutacao({
+    nome: '14. a rejeição de CR/LF desaparece (cabeçalho injetável)',
+    ficheiro: 'helpers/smtp-validacao.js',
+    de: 'const temQuebraDeLinha = (s) => /[\\r\\n]/.test(s);',
+    para: 'const temQuebraDeLinha = () => false;',
+    script: 'test-smtp-validacao.js',
+  });
+
+  titulo('P54-1 — o conjunto fechado do TLS');
+  mutacao({
+    nome: '15. o TLS volta a aceitar qualquer valor como «false» (L3: desliga em silêncio)',
+    ficheiro: 'helpers/smtp-validacao.js',
+    de: "    if (TLS_ACEITES.has(d.tls)) valores.tls = TLS_ACEITES.get(d.tls);\n"
+      + "    else erro('tls', 'tls_invalido');",
+    para: "    valores.tls = TLS_ACEITES.has(d.tls) ? TLS_ACEITES.get(d.tls) : 'false';",
+    script: 'test-smtp-validacao.js',
+  });
+
+  titulo('P54-1 — o saneamento do nome do remetente');
+  mutacao({
+    nome: '16. o saneamento do fromName desaparece (o CR/LF chega ao cabeçalho From:)',
+    ficheiro: 'helpers/smtp-validacao.js',
+    de: "    const limpo = bruto.replace(/[\\r\\n]+/g, '').replace(/\\s+/g, ' ').trim();",
+    para: '    const limpo = bruto.trim();',
+    script: 'test-smtp-validacao.js',
+  });
+
   console.log(`\n✓ Testes de mutação de Email/SMTP, comunicações e lembretes passaram (${nTestes} mutações, todas detetadas e revertidas por sha256).`);
 })().catch((e) => {
   console.error('\n✗ FALHA:', e.message);

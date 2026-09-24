@@ -18,6 +18,10 @@ const nodemailer = require('nodemailer');
 const { Op } = require('sequelize');
 const { Configuracao } = require('../models');
 const segredos = require('./segredos');
+// P54-1 — validador PURO da configuração. Não lê BD nem ambiente: recebe os
+// valores e devolve `{ ok, valores, erros, avisos }`. Mantê-lo fora daqui é o
+// que permite testá-lo sem base de dados e sem duplos.
+const validacaoSmtp = require('./smtp-validacao');
 
 const CHAVES = {
   host: 'smtp_host',
@@ -282,21 +286,114 @@ async function obterEstadoSmtp() {
   };
 }
 
+// Lê os valores GUARDADOS de `smtp_*` (brutos, sem decifrar a password).
+//
+// Serve três coisas que dependem do ESTADO e não só da entrada:
+//   · V1 (parte 2) e V8 — as regras avaliam o estado EFETIVO (guardado + novo);
+//     sem isto, um formulário que só altere o `from` era recusado por «falta de
+//     host» mesmo quando já havia um host guardado;
+//   · V14 — saber que campos mudaram de facto (nomes, nunca valores);
+//   · V13 — detetar que o segredo guardado está ILEGÍVEL.
+//
+// Leitura estreita (só `smtp_%`) e tolerante: sem BD devolve vazio, e as regras
+// passam a avaliar apenas o que foi submetido — nunca se inventam valores.
+async function lerGuardadosSmtp() {
+  const mapa = {};
+  try {
+    const rows = await Configuracao.findAll({
+      where: { chave: { [Op.like]: 'smtp_%' } },
+      attributes: ['chave', 'valor'],
+    });
+    for (const r of rows) mapa[r.chave] = r.valor;
+  } catch (err) {
+    // BD indisponível: segue sem estado. A validação continua a correr sobre a
+    // entrada submetida e a gravação falhará adiante, como falhava antes.
+  }
+  return mapa;
+}
+
 // Guarda a configuração SMTP na BD. A password só é alterada se for
 // fornecida (nunca é mostrada nem devolvida).
+//
+// P54-1 — a configuração é VALIDADA antes de qualquer escrita (V1–V8). Uma
+// entrada inválida lança `ErroValidacaoSmtp` e **nada** é gravado. Antes desta
+// frente, uma porta `abc`, um `fromName` com `\r\n` ou um `tls='1'` chegavam
+// intactos à BD e só se manifestavam no envio seguinte (ou desligavam o TLS em
+// silêncio, como no P50).
+//
+// Um campo AUSENTE continua a significar «não mexer» — é o contrato que a
+// interface e os chamadores já têm, e é o que torna a mudança retrocompatível.
+//
+// Devolve `{ ok, alterados, avisos }`:
+//   · `alterados` — NOMES dos campos que mudaram (V14). Nunca valores: a
+//     password aparece como `pass`, jamais o seu conteúdo;
+//   · `avisos` — coerências que NÃO bloqueiam: V8 (TLS numa porta não
+//     habitual), V13 (segredo ilegível preservado), V5 (nome saneado).
 async function guardarConfigSmtp(dados) {
+  const d = dados || {};
+
+  const guardados = await lerGuardadosSmtp();
+  const atual = {
+    host: guardados[CHAVES.host],
+    port: guardados[CHAVES.port],
+    user: guardados[CHAVES.user],
+    tls: guardados[CHAVES.tls],
+    from: guardados[CHAVES.from],
+  };
+
+  const v = validacaoSmtp.validarConfigSmtp(d, { atual });
+
+  // ⛔ Fronteira: nada foi escrito até aqui.
+  if (!v.ok) throw new validacaoSmtp.ErroValidacaoSmtp(v.erros);
+
+  const avisos = v.avisos.slice();
+
   const mapa = {};
-  if (dados.host !== undefined) mapa[CHAVES.host] = String(dados.host).trim();
-  if (dados.port !== undefined) mapa[CHAVES.port] = String(dados.port || '587').trim();
-  if (dados.user !== undefined) mapa[CHAVES.user] = String(dados.user).trim();
-  if (dados.tls !== undefined) mapa[CHAVES.tls] = dados.tls === 'on' || dados.tls === 'true' || dados.tls === true ? 'true' : 'false';
-  if (dados.from !== undefined) mapa[CHAVES.from] = String(dados.from).trim();
-  if (dados.fromName !== undefined) mapa[CHAVES.fromName] = String(dados.fromName).trim();
-  if (dados.pass !== undefined && String(dados.pass).trim() !== '') {
+  if (d.host !== undefined) mapa[CHAVES.host] = v.valores.host;
+  // `port` mantém o comportamento anterior: um valor presente mas vazio cai na
+  // porta padrão (`587`), tal como `String(dados.port || '587')` fazia.
+  if (d.port !== undefined) mapa[CHAVES.port] = v.valores.port;
+  if (d.user !== undefined) mapa[CHAVES.user] = v.valores.user;
+  if (d.tls !== undefined) mapa[CHAVES.tls] = v.valores.tls;
+  if (d.from !== undefined) mapa[CHAVES.from] = v.valores.from;
+  if (d.fromName !== undefined) mapa[CHAVES.fromName] = v.valores.fromName;
+
+  if (v.passDefinida) {
     // Só quando o administrador introduz uma password nova (nunca é mostrada
     // nem devolvida). É guardada CIFRADA em repouso; sem chave de cifra fica em
     // texto simples (comportamento anterior) e é emitido um aviso.
-    mapa[CHAVES.pass] = segredos.protegerPasswordSmtp(String(dados.pass));
+    mapa[CHAVES.pass] = segredos.protegerPasswordSmtp(String(d.pass));
+  } else {
+    // ── V13 — segredo ilegível preservado, com AVISO ────────────────
+    // Campo vazio ⇒ a password existente NÃO é apagada (comportamento de
+    // sempre). Mas se o valor guardado estiver ILEGÍVEL (chave de cifra
+    // diferente, valor adulterado), o operador tem de o SABER: sem o aviso fica
+    // convencido de que há uma password configurada quando já não há nenhuma
+    // utilizável, e o sintoma aparece só no próximo envio.
+    const lido = segredos.lerPasswordSmtp(guardados[CHAVES.pass]);
+    if (lido && lido.erro) {
+      avisos.push({
+        campo: 'pass',
+        codigo: 'password_ilegivel_preservada',
+        mensagem: 'A password guardada não pôde ser decifrada e foi PRESERVADA sem alterações; '
+          + 'introduza uma nova password para a substituir.',
+      });
+    }
+  }
+
+  // V14 — que campos mudam de facto. Nomes apenas; a password nunca é
+  // comparada (o que está guardado é cifrado, logo a comparação seria vazia) e
+  // entra na lista pelo NOME quando é fornecida uma nova.
+  const alterados = [];
+  for (const [campo, chave] of Object.entries(CHAVES)) {
+    if (campo === 'pass') {
+      if (v.passDefinida) alterados.push(campo);
+      continue;
+    }
+    if (mapa[chave] === undefined) continue;
+    const antigo = guardados[chave];
+    const antigoTxt = antigo === undefined || antigo === null ? '' : String(antigo);
+    if (antigoTxt !== String(mapa[chave])) alterados.push(campo);
   }
 
   for (const [chave, valor] of Object.entries(mapa)) {
@@ -307,6 +404,8 @@ async function guardarConfigSmtp(dados) {
     }
   }
   limparCache();
+
+  return { ok: true, alterados, avisos };
 }
 
 // Pré-aquece a cache (chamado no arranque da aplicação).
