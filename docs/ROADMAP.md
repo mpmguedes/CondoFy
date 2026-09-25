@@ -38,17 +38,17 @@ menores registados e deliberadamente não corrigidos (secção 4).
 
 | Item                  | Valor                                                                                                                                                                                                      |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `HEAD`                | `76cfdae` — «C1: corrigir autorização de backups» (2026-09-24) — **local, por publicar**; o commit anterior `cb64cb4` («docs: atualizar roadmap após ciclo 6408732») também está **local, por publicar**. `6408732` (A7 UI) e todos os anteriores estão **publicados**. ⛔ A mensagem diz «corrigir» mas **só o ficheiro de teste** foi alterado — ver **§4.10** |
-| Remoto `origin/main`  | `cb64cb4` — confirmado por `git ls-remote origin main` (2026-09-24) ⇒ **1 commit por publicar** (`76cfdae`, C1) — mais **este documento**, que fica ` M` até ser commitado. Foram publicados os 7 commits do bloco de 2026-09-23 (P53 harnesses, homepage, menu mobile, convocatória, **P53-FOLLOWUP**, páginas legais, **A7**) e o ROADMAP pós-ciclo (`cb64cb4`). O ciclo A1–A8, a frente R10/Q11 (`9b422eb` + `34bd5d3`), a frente P56 (`1cd3846` + `73f367e`) e a frente de branding (`0a606ca` + `4aa7f3f`) estão publicados. A lista de commits está no **§7**; o número exato **não se fixa aqui** de propósito — este documento é editado pelos próprios commits que descreve |
-| Working tree          | **stage vazio**; medido a 2026-09-24: **5 ` M` + 28 ` ??`** (4 de frentes + **este documento**, que fica ` M` até ser commitado — é a razão de serem 5 e não 4). Os 4 ` M` de frentes são **todos da frente EPD/DPO** (Encarregado de Proteção de Dados, art. 37.º do RGPD) — ver a nota de desambiguação abaixo. Os ficheiros são `routes/publicas.js`, `scripts/test-paginas-publicas.js`, `views/publicas/politica-privacidade.handlebars` e `views/partials/_pagina-legal.handlebars` — **pré-existentes e preservados**; as frentes de branding, R10/Q11, P56, páginas legais e A7 já **não** estão aqui (publicadas). Em `??` estão **19 ficheiros de arte de marca na raiz** (não servidos), **6 auditorias/especificações** não rastreadas, `docs/documentos/`, `docs/mobile/` e `.workbuddy-ai/`. O resíduo `.commit-c3.tmp.txt` **já não existe**. Os resíduos `.mutation-backup-*` e `ORFAO-*` das campanhas de mutação continuam **ignorados** por `.gitignore` |
-| Migrations            | 80 (`migrations/20260101000001…00080`; a `…00079-segredos-em-repouso` é a migração da frente A1 e a `…00080-extra-quota-acerto` a da frente R10/Q11)                                                                                                                                                                     |
+| `HEAD`                | `aae2731` — «fix: atualizar âncora da mutação do modo de edição após P54-4» (2026-09-24) — **PUBLICADO**. O ciclo de 2026-09-24 fechou com **19 commits** (`cb64cb4..aae2731`) e **foi publicado na íntegra**. Ver §7 |
+| Remoto `origin/main`  | `aae2731` — confirmado por `git ls-remote origin main` (2026-09-24) ⇒ **sincronizado: 0 à frente, 0 atrás**. O **deploy não foi decidido**. Foram publicados, além dos 7 commits do bloco de 2026-09-23 (P53 harnesses, homepage, menu mobile, convocatória, **P53-FOLLOWUP**, páginas legais, **A7**), mais **19 commits** de 2026-09-24: **C1** (`76cfdae`), o ROADMAP (`6df7652`), a correção do endpoint global (`6b1a775`), **C6** (`809e92f`), **A7** (`72796d0`), **P58** (`4e64895`), **A7 fases 4–6** (`4f9524f`) e todo o **P54** (`a0c698a`…`7c6f61f`), o **P30** (`babf0f6`) e a **estabilização** (`59c89e0`, `cfaff07`, `aae2731`). O ciclo A1–A8, a frente R10/Q11 (`9b422eb` + `34bd5d3`), a frente P56 (`1cd3846` + `73f367e`) e a frente de branding (`0a606ca` + `4aa7f3f`) estão publicados. A lista de commits está no **§7**; o número exato **não se fixa aqui** de propósito — este documento é editado pelos próprios commits que descreve |
+| Working tree          | **stage vazio**; medido a 2026-09-24 (pós-push): **4 ` M` + 30 ` ??`**. Os 4 ` M` são **todos da frente EPD/DPO** (Encarregado de Proteção de Dados, art. 37.º do RGPD) — ver a nota de desambiguação abaixo. Os ficheiros são `routes/publicas.js`, `scripts/test-paginas-publicas.js`, `views/publicas/politica-privacidade.handlebars` e `views/partials/_pagina-legal.handlebars` — **pré-existentes e preservados**; as frentes de branding, R10/Q11, P56, páginas legais, A7 e **todo o ciclo P54/P30/P58** já **não** estão aqui (publicadas). Em `??` estão **19 ficheiros de arte de marca na raiz** (não servidos), **8 auditorias/especificações** não rastreadas, `docs/documentos/`, `docs/mobile/` e `.workbuddy-ai/`. Os resíduos `.mutation-backup-*` e `ORFAO-*` das campanhas de mutação continuam **ignorados** por `.gitignore` |
+| Migrations            | **81** (`migrations/20260101000001…00081`; a `…00079-segredos-em-repouso` é da frente A1, a `…00080-extra-quota-acerto` da frente R10/Q11 e a **`…00081-um-acesso-suporte-vigente`** da frente **P58**)   |
 | Modelos               | 47 ficheiros em `models/`                                                                                                                                                                                  |
 | Routers               | 28 ficheiros em `routes/`                                                                                                                                                                                  |
-| Vistas Handlebars     | 151                                                                                                                                                                                                        |
-| Helpers               | **88** ficheiros `.js` em `helpers/`: **76** na raiz + **6** em `armazenamento/` (4 deles em `provedores/`) + **2** em `tips/`                                                                                                     |
-| Scripts               | **138** ficheiros em `scripts/` (+3 em `scripts/helpers/`)                                                                                                                                                                                |
-| Documentação          | **34** `.md` em `docs/` (28 rastreados + 6 não rastreados, incl. este documento) + `docs/documentos/` (13 PDF de amostra) + `docs/mobile/` (6 PNG)                                                                  |
-| Cadeia `test:offline` | **109 passos** (medido a 2026-09-23, **pós-A7**) — **0 entradas órfãs** e **0 duplicados** (109 scripts únicos). Passos-chave: **30** `test-menu-mobile-altura.js`, **35–37** os três `test-orcamento-quota-p56*.js` (frente P56), **43** `test-quotas-r10.js` (frente R10), **90–94** os cinco harnesses de mutação ligados à cadeia. ⛔ Os harnesses de mutação **deixaram de bloquear**: a frente **P53** (`12a06b7`) tornou-os independentes do `safe-delete` e a **P53-FOLLOWUP** (`793ef32`) eliminou o falso-verde do `spawn` (EBUSY) — os **8** harnesses completam com **EXIT 0** (60 mutações detetadas). Ver §4.6 |
+| Vistas Handlebars     | **152**                                                                                                                                                                                                    |
+| Helpers               | **92** ficheiros `.js` em `helpers/`: **80** na raiz + **6** em `armazenamento/` (4 deles em `provedores/`) + **2** em `tips/` + os novos do ciclo P54/P30 (`helpers/config-ambito.js`, `helpers/reautenticacao.js`, `helpers/seguranca.js` entre outros) |
+| Scripts               | **152** ficheiros em `scripts/` (+3 em `scripts/helpers/`)                                                                                                                                                                                |
+| Documentação          | **36** `.md` em `docs/` (28 rastreados + 8 não rastreados, incl. este documento) + `docs/documentos/` (13 PDF de amostra) + `docs/mobile/` (6 PNG)                                                                  |
+| Cadeia `test:offline` | **111 passos** — **109** em `HEAD` = `aae2731` (medido a 2026-09-24, **pós-P54**) e **111** na **working tree** (medido a 2026-09-25, **pós-A14 §18**); **0 entradas órfãs** e **0 duplicados**. Passos-chave: **30** `test-menu-mobile-altura.js`, **35–37** os três `test-orcamento-quota-p56*.js` (frente P56), **43** `test-quotas-r10.js` (frente R10), **90–94** os cinco harnesses de mutação ligados à cadeia, **110** `test-a11y-a14.js` e **111** `test-mutacao-dashboard-a14.js` (A14 — ver §4.12(f)). ⛔ Os harnesses de mutação **deixaram de bloquear**: a frente **P53** (`12a06b7`) tornou-os independentes do `safe-delete` e a **P53-FOLLOWUP** (`793ef32`) eliminou o falso-verde do `spawn` (EBUSY) — os **8** harnesses completam com **EXIT 0** (60 mutações detetadas). Ver §4.6. ⛔ **A cadeia NÃO cresceu no ciclo de 2026-09-24**: `package.json` **não foi tocado por nenhum dos 19 commits** ⇒ todos os testes novos do P54/P30/P58 e das fases 4–6 do A7 estão **fora** dela. Ver **§4.11**. O **único** crescimento posterior (**109 → 111**) é do A14 e está **por publicar**. |
 
 > **Nota sobre o `git status`:** o cabeçalho mostra `main...origin/main [gone]`. É **falso**  
 > neste clone (`refs/remotes/` está vazio e um `push` bem-sucedido **não** o popula — a árvore
@@ -487,7 +487,7 @@ agente possa retomar sem recomeçar do zero.
 
 | Funcionalidade                                  | Estado | Implementação                                                                                                         | Testes                                                                                                                               | Documentação                                          | Próximo passo                                                                                      |
 | ----------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Cadeia `test:offline`                           | 🟢     | `package.json` → `scripts['test:offline']` (**fonte única**, não repetir em documentação)                             | **109 passos** (`HEAD` = `6408732`) / **108** em `73f367e` / **105** em `9b422eb` (a frente R10/Q11) / 89 em `bf4b6f5` (a frente Tips acrescentou os 4 `test-tips*`) / 85 em `f2e5345`; **0 entradas órfãs** | —                                                     | A antiga falha A3-1 (**3 entradas órfãs** em `7f3f59a`/`8cc6750`) está **RESOLVIDA** em `4c34532`. |
+| Cadeia `test:offline`                           | 🟢     | `package.json` → `scripts['test:offline']` (**fonte única**, não repetir em documentação)                             | **111 passos** na **working tree** (medido a 2026-09-25) / **109** em `HEAD` = `aae2731` (medido a 2026-09-24) / 109 em `6408732` / **108** em `73f367e` (não medido — ver §4.11(c)); **0 entradas órfãs** e **0 duplicados** | —                                                     | ⛔ **`package.json` NÃO foi tocado por nenhum dos 19 commits do ciclo de 2026-09-24** ⇒ o trabalho desse ciclo está todo fora da cadeia, e **11 suites estão órfãs**. Ver **§4.11(b)**. A antiga falha A3-1 (**3 entradas órfãs** em `7f3f59a`/`8cc6750`) está **RESOLVIDA** em `4c34532`. **Exceção posterior:** o A14 tocou `package.json` **só** para ligar os passos 110 e 111 (§4.12(f)) — **por publicar**. |
 | Testes de mutação (provam que os testes mordem) | 🟢     | `scripts/test-mutacao-{suporte,fcr,mensal,fcr-orcamento,email,p56,despesa-transacao,exportacao,botoes}.js` — **9** harnesses; **5 na cadeia** (passos 90–94) | `test-correr-processo.js`, `test-falha-spawn.js` (auto-testes do helper) | `docs/GIT-E-MUTACAO.md` (memória)                     | Usar sempre antes de concluir «sem regressão». **60 mutações detetadas** na passagem de 2026-09-23. Ver **§4.6** (P53) e **§4.8** (P53-FOLLOWUP). |
 | Verificadores read-only de produção             | 🟢     | `scripts/verificar-{readonly-admitidos,pre-commit-suporte,titularidades,provedores-reais}.js`                         | —                                                                                                                                    | —                                                     | Escrevem-se aqui, correm em `/opt/condofy`.                                                        |
 | `check-templates.js` (todas as vistas)          | 🟢     | `scripts/check-templates.js`                                                                                          | na cadeia                                                                                                                            | —                                                     | —                                                                                                  |
@@ -531,7 +531,7 @@ corrigidos**. Nenhum foi inventado. Cada item indica onde está e o que falta de
 | **P20**      | Quotas                     | `views/admin/quotas/gerar.handlebars:158-199`                                                                                                            | A pré-visualização do browser **reimplementa** a fórmula do servidor                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Risco de deriva entre vista e cálculo real                                                                                                                                                                                                                                                                                                                | Usar o resultado do servidor na pré-visualização                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | **P25**      | Backups / Dropbox          | `helpers/armazenamento/provedores/dropbox.js`                                                                                                            | Não exporta `apagarArquivo`; `storage.apagarArquivo` devolve `false`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | **Retenção cloud é um no-op no Dropbox** — as cópias acumulam                                                                                                                                                                                                                                                                                             | Implementar `apagarArquivo` no Dropbox (como foi feito no OneDrive). `docs/BACKUPS.md` §8                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | **P29**      | Avisos                     | `models/Aviso.data_programada`, `jobs/scheduler.js`                                                                                                      | O calendário mostra avisos programados, mas **não há job** que os dispare                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Aviso «programado» só sai com envio manual                                                                                                                                                                                                                                                                                                                | Criar job de disparo por `data_programada`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| **P30**      | Email                      | `models/Configuracao.js` (chave-valor **global**)                                                                                                        | SMTP é da **plataforma**, não por condomínio (só o nome do remetente é contextualizado)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Vários condomínios partilham credenciais SMTP                                                                                                                                                                                                                                                                                                             | Decisão de produto: manter ou tornar por condomínio                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| **P30**      | Email                      | `models/Configuracao.js` (chave-valor **global**)                                                                                                        | SMTP é da **plataforma**, não por condomínio (só o nome do remetente é contextualizado)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Vários condomínios partilham credenciais SMTP                                                                                                                                                                                                                                                                                                             | **RESOLVIDO** em `babf0f6` (2026-09-24, «P30: separar SMTP global e overrides por condomínio») — **Modelo C**: a configuração **global** da plataforma mantém-se e cada condomínio passa a poder ter **overrides**. Decisão em `docs/DECISAO-P30-SMTP-2026-09-24.md` (**não rastreado**). ⛔ `test-p30-smtp-ambito.js` está **órfão** — ver **§4.11(b)** |
 | **P35**      | Automações                 | `helpers/background-jobs.js`                                                                                                                             | Fila de tarefas **em memória** (teto 200)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Estado perdido no restart                                                                                                                                                                                                                                                                                                                                 | Persistir ou documentar a limitação                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | **P26**      | Armazenamento              | `docs/AUDITORIA-ONEDRIVE-2026-09-21.md`                                                                                                                  | Auditoria **desatualizada**: B1/B2/B3/B8 já estão tratados no código (`User.Read`, `apagarArquivo`, botão de plataforma)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Risco de reabrir trabalho já feito                                                                                                                                                                                                                                                                                                                        | Anotar a auditoria como superada; falta a **configuração real da conta Microsoft** (Fase 2)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | **P33**      | Tips                       | `routes/admin-tips.js:36`                                                                                                                                | Destino de dispensa validado por **lista fechada** (`/admin`, `/admin/config/armazenamento`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Nova página com tips ⇒ dispensa cai para `/admin`                                                                                                                                                                                                                                                                                                         | Acrescentar o destino à lista ao introduzir novas páginas com tips                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
@@ -577,7 +577,7 @@ corrigidos**. Nenhum foi inventado. Cada item indica onde está e o que falta de
 | **Q11**    | Efeito financeiro de um **acerto** que reduza o valor                                                      | Infraestrutura implementada (migração `20260101000080`, `helpers/quota-acerto.js`); **decisão em aberto**                                      | §3.6 e §4.4 deste documento                                                                                                                              | Decidir: (a) uma **redução** gera crédito (nota de crédito) ou fica apenas registada sem efeito de cobrança; (b) o acerto a mais é cobrado de uma só vez ou como quota extra **parcelável**. Hoje `valor_total` cobra só a **diferença positiva** |
 | **P47**    | Espaço cloud não medível                                                                            | Aberto                                                                             | `docs/BACKUPS.md`                                                                                                                                        | Os provedores não expõem listagem de pasta ⇒ «não disponível»                                                                        |
 | **P57**    | **Transferir administração** (passar a função de `admin` a outra pessoa)                            | **Não existe** — declarado em `routes/saida-condominio.js:7` e na UI como «a entregar em breve» | `docs/AUDITORIA-2026-09-17.md`                                                                                                                           | **Lacuna descoberta na auditoria de 2026-09-23 e não registada até agora.** Decidir: quem pode transferir, se o recetor aceita, e o destino da associação antiga. Ver §3.22 |
-| **P58**    | `acessos_suporte` **sem índice `unique`** e `iniciar()` não fecha o acesso ativo anterior           | **Aberto** (ACHADO-04 da auditoria de suporte)                                     | `docs/AUDITORIA-SEGURANCA-SUPORTE-2026-09-18.md`                                                                                                         | Re-verificado em 2026-09-23: `models/AcessoSuporte.js` tem **3 índices, nenhum `unique`**. Decidir se se força **um** acesso ativo por (utilizador, condomínio) — hoje pode haver vários |
+| **P58**    | `acessos_suporte` **sem índice `unique`** e `iniciar()` não fecha o acesso ativo anterior           | **RESOLVIDO** em `4e64895` (2026-09-24) — coluna gerada `vigente_chave` + UNIQUE `(utilizador_id, condominio_id, vigente_chave)`, migração `…00081` com deduplicação prévia | `docs/AUDITORIA-SEGURANCA-SUPORTE-2026-09-18.md`                                                                                                         | ⚠️ **A migration NÃO foi executada contra MariaDB real.** ⛔ `scripts/test-suporte-unicidade.js` está **fora da cadeia e é órfã** (nenhum script npm a invoca) — ver **§4.11(b)** |
 
 ### 4.3 Itens **resolvidos** (para não serem reabertos)
 
@@ -666,9 +666,15 @@ Tudo o que se segue foi **corrigido e provado nesta árvore** (frentes A1–A8, 
 - **P17/P21** (residual de arredondamento das quotas e desvio próprio do FCR): desenho e impacto documentados; **não corrigidos** — mexeriam na lógica de quota em produção.
 
 
-### 4.5 P54 — Configurações sensíveis permanentemente em modo de edição (novo)
+### 4.5 P54 — Configurações sensíveis permanentemente em modo de edição · **IMPLEMENTADO em 2026-09-24**
 
-> **Registado em 2026-09-22 (fecho do ciclo A1–A8). NÃO implementado.** É uma questão de **arquitetura / UX / segurança** para um ciclo posterior — a integrar com os itens de segurança já levantados (P39/P40, P42).
+> **Registado em 2026-09-22 (fecho do ciclo A1–A8) e IMPLEMENTADO em 2026-09-24.** O padrão
+> proposto abaixo («consulta → `Editar` → alteração → confirmação») foi construído como infraestrutura
+> reutilizável (**P54-0**) e aplicado às áreas SMTP (**P54-1/2/3**), armazenamento/backups (**P54-4**)
+> e notificações/automações (**P54-7**) — tudo **publicado**. O registo do que foi entregue, do que
+> ficou por cobrir e dos defeitos reais corrigidos está em **§4.11**. As áreas abaixo que **não** foram
+> tocadas (utilizadores/administradores, configurações estruturais do condomínio, chaves de assinatura,
+> `ENCRYPTION_KEY`) **continuam por inventariar**.
 
 **O que se observa.** Várias áreas de configuração apresentam dados **estruturais ou sensíveis** diretamente em campos editáveis. Isso aumenta o risco de **alterações acidentais**, sobretudo em credenciais e integrações já funcionais (uma gravação involuntária pode sobrepor uma integração a funcionar — foi exatamente o que aconteceu no **P50**, onde o formulário religava o TLS sem intenção).
 
@@ -685,7 +691,8 @@ Tudo o que se segue foi **corrigido e provado nesta árvore** (frentes A1–A8, 
 
 **Áreas a inventariar:** SMTP (`/admin/config/email`), armazenamento/cloud (`/admin/config/armazenamento`, credenciais OAuth), utilizadores/administradores (`/admin/utilizadores`, Administração Global), configurações **estruturais do condomínio** (frações/permilagens, dados do condomínio, automações) e restantes configurações sensíveis (chaves de assinatura, retenção de backups, `ENCRYPTION_KEY`).
 
-**Não implementar nesta fase** — registado para não se perder.
+**Não implementar nesta fase** — registado para não se perder. · ✅ **Superado em 2026-09-24:**
+implementado para SMTP, armazenamento/backups e notificações/automações — ver **§4.11**.
 
 ### 4.6 R10/Q11 — Congelamento do cálculo de quotas (2026-09-22)
 
@@ -733,7 +740,7 @@ redirect. Sem as mutações, ambos passariam por protecção que não existia.
   acerto; a operação existe como domínio (`helpers/quota-acerto.js`) e está provada por testes.
 - **Efeito financeiro de uma redução está por decidir** — ver **Q11** em §4.2.
 - **P56 — Orçamento → Quota: FECHADO** (implementação em `1cd3846`, testes reforçados em `73f367e`;
-  ambos **locais, por publicar**). Ver o detalhe na **§4.7**.
+  ambos **publicados** por arrastamento — ver a nota de atribuição abaixo). Ver o detalhe na **§4.7**.
 - ✅ **Correção factual (2026-09-23):** a frase «`orcamento_id` ainda não é gravado na emissão» era
   **FALSA**. `POST /orcamento/:id/emitir` **sempre** gravou o vínculo (`routes/orcamento.js:870`,
   desde `23c6fadb`). A lacuna real era no caminho **manual** (`POST /admin/quotas/gerar` com
@@ -804,7 +811,7 @@ em definitivo. Fechado.
 dados antigos**: apanha orçamentos criados antes da regra e impede que a 13.ª quota chegue a ser
 planeada. Todas as consultas filtram por `condominio_id` (§4.1: multitenancy).
 
-**(e) Testes.** Quatro suites, **todas na cadeia `test:offline`** (passos 106–108 para as três
+**(e) Testes.** Quatro suites, **todas na cadeia `test:offline`** (passos **35–37** para as três
 `...p56*`; o harness de mutação corre por via própria).
 
 | Suite | Verificações | EXIT |
@@ -825,7 +832,7 @@ existente ignorada, falha a meio do lote sem resíduo parcial e multitenancy.
 - `scripts/test-mutacao-p56.js` **não** está na cadeia `test:offline` (só **5** dos **9** harnesses
   estão: passos **90–94**). A razão **já não** é o bloqueio do `safe-delete` — esse foi resolvido por
   **P53** + **P53-FOLLOWUP** (§4.6); é que a integração dos restantes harnesses na cadeia **não foi
-  feita**. Ver **§4.8**.
+  feita**. Ver **§4.8** e, para o registo agregado deste ciclo, **§4.11**.
 - Falta um **teste de rota HTTP real** para o caminho `POST /admin/quotas/gerar` que **não** seja
   duplo — o existente cobre o comportamento por duplo reversível, que é o padrão do projeto, mas a
   gravação do vínculo fora do emissor continua a ter cobertura mais fina.
@@ -872,8 +879,13 @@ Regressão: `test-contraste.js`, `test-tipografia.js`, `test-vistas.js`, `check-
 | **6** — restante | F10 (`.btn-grande` sem definição — **6 usos**), F16 (tamanhos de ícone **inline**), F19/F20 (`filter: brightness` como hover), F21 (`px-1` avulso em botões) | **Por fazer** |
 
 **(d) Pendência de processo: `test-botoes-a11y.js` ainda FORA da cadeia.** Os dois testes novos estão
-**no commit** mas **não** em `test:offline` (a cadeia mantém-se em **109 passos**). Integrá-los exige
+**no commit** mas **não** em `test:offline` (a cadeia mantém-se em **111 passos** — o único crescimento,
+**109 → 111**, é do A14 e **não** é este teste; ver §4.12(f)). Integrá-los exige
 editar `package.json` — e a contagem de passos documentada aqui — num passo **separado e autorizado**.
+⛔ **Fases 4–6 (abaixo) foram implementadas em `4f9524f` (2026-09-24) e a pendência mantém-se:**
+`test-botoes-a11y.js` e `test-mutacao-botoes.js` seguem **fora** da cadeia. Ver o registo agregado em
+**§4.11(b)**. *(O A14 mostrou que o passo autorizado é barato: 1 linha em `package.json`, teste
+acrescentado no fim, prova por mutação. É o mesmo procedimento a aplicar aqui.)*
 
 **(e) Dívidas declaradas (não fechadas por esta frente).**
 
@@ -958,6 +970,174 @@ hoje, nenhum item **P0** aberto neste ROADMAP.
 **(e) Lição de processo.** Uma mensagem de commit que diz «corrigir» deve corresponder a código de
 aplicação alterado. Quando o commit é **só teste**, a mensagem deve dizer **«cobrir»**/«provar» — senão o
 histórico passa a afirmar correções que nunca aconteceram.
+
+---
+
+### 4.11 Fecho do ciclo de 2026-09-24 (P54 · P30 · P58 · A7 fases 4–6) · **PUBLICADO, com dívida de cobertura**
+
+> Esta secção **não corrige** nenhum defeito: fecha o registo do ciclo que foi publicado em
+> `cb64cb4..aae2731` e **regista o que ficou por fazer**, como exige a regra essencial do documento.
+
+**(a) O que o ciclo entregou.** Cinco frentes, todas **publicadas** em 2026-09-24:
+
+| Frente | Commits | O que fez | Testes novos | Na cadeia? |
+|---|---|---|---|---|
+| **P54-0** — padrão consulta/edição | `a0c698a` | Infraestrutura reutilizável: `views/partials/_modo-edicao.handlebars` (parcial de **bloco**), `public/js/modo-edicao.js`, `public/css/modo-edicao.css`. **Não aplica o padrão a nenhuma página** | `test-modo-edicao.js`, `test-mutacao-modo-edicao.js` | ❌ **fora** |
+| **P54-1/2/3** — SMTP | `90735fd`, `22a07e2`, `4be58b6` | Validação no backend; modo de edição integrado; **alteração protegida**: confirmação com diff, reautenticação, uso único do token, transação, auditoria **sem valores** | `test-p54-3-smtp-protecao.js`, `test-modo-edicao-smtp.js` · `test-mutacao-email.js` (23 mutações) | ❌ **fora** (a mutação de email **está** na cadeia, passo 94) |
+| **P54-4** — storage/backups | `83e9f06`, `f56193e` | Modo consulta/edição no armazenamento; **dois defeitos REAIS corrigidos** (campo omitido apagava `drive_auto_backups`; `pasta_raiz` sem validação); guardas `?ambito=plataforma` decididas por `tenant.eSuperAdmin` | `test-armazenamento-p54.js`, `test-mutacao-armazenamento-p54.js` (7/7) | ❌ **fora** |
+| **P54-7** — notificações e automações | `193c739`, `7c6f61f` | Isolamento por condomínio via `helpers/config-ambito.js` (convenção `:c<ID>`, leitura com precedência `:c<ID>` → global → padrão, escrita **recusa** sem âmbito). Antes, o admin do condomínio A alterava as definições de **todos** | `test-notificacoes-isolamento.js`, `test-automacoes-isolamento.js`, `test-mutacao-notificacoes.js`, `test-mutacao-automacoes.js` | ❌ **fora** |
+| **P30** — SMTP global vs por condomínio | `babf0f6` | Separação do SMTP **global** e dos **overrides** por condomínio (`helpers/mailer.js` +404, `routes/configuracao.js` +346). Fecha o **P30** como **decisão tomada** (ver nota abaixo) | `test-p30-smtp-ambito.js`, `test-mutacao-email.js` (+105) | ❌ **fora** |
+| **P58 / C2** | `4e64895` | **Um só acesso de suporte vigente** por (utilizador, condomínio): coluna **GERADA** `vigente_chave` + índice UNIQUE `(utilizador_id, condominio_id, vigente_chave)` na migração **`…00081`**, que **deduplica antes** de criar o índice | `test-suporte-unicidade.js` (14), `test-mutacao-suporte.js` (18/18) | ✅ a mutação **está** (passo 90); a unicidade ❌ **fora** |
+| **A7 fases 4–6 + F27/F28** | `4f9524f` | Geometria canónica aplicada, `.quick-action` consolidado, `.mes-btn:disabled` por cor | `test-botoes-a11y.js`, `test-mutacao-botoes.js` | ❌ **fora** (pendência **§4.8(d)**) |
+| **C6** / **A7 focus ring** / **C1** | `809e92f`, `72796d0`, `76cfdae` | Remoção da rota morta `GET /quotas`; correção do anel de foco da homepage no **tema claro**; cobertura da autorização de backups | (ver §4.8, §4.10) | ✅ |
+
+**(b) ⛔ ACHADO NOVO — 11 suites deste ciclo estão «órfãs»: existem, estão commitadas e não correm em lado nenhum.**
+
+Medido a 2026-09-24 sobre a `HEAD` publicada: `package.json` **não foi tocado por nenhum dos 19 commits**
+(verificado com `git log --oneline cb64cb4..HEAD -- package.json` → vazio). Consequência: dos ficheiros de
+teste que este ciclo **criou e commitou**, uma parte **não é referenciada por nenhum script npm**:
+
+| Suites órfãs (nenhuma referência em `package.json`) |
+|---|
+| `scripts/test-armazenamento-p54.js` · `scripts/test-automacoes-isolamento.js` · `scripts/test-modo-edicao.js` · `scripts/test-modo-edicao-smtp.js` · `scripts/test-notificacoes-isolamento.js` · `scripts/test-p30-smtp-ambito.js` · `scripts/test-p54-3-smtp-protecao.js` |
+| `scripts/test-mutacao-armazenamento-p54.js` · `scripts/test-mutacao-automacoes.js` · `scripts/test-mutacao-modo-edicao.js` · `scripts/test-mutacao-notificacoes.js` |
+
+⛔ **«Órfã» aqui é mais grave do que «fora da cadeia».** Uma suite «fora da cadeia» mas referenciada por um
+script npm (ex.: `test-botoes-a11y.js`) corre quando alguém se lembra dela. Uma suite **órfã** só corre se
+alguém souber o nome do ficheiro: **não há comando que a invoque**. O trabalho de prova deste ciclo —
+incluindo **4 harnesses de mutação** novos — está, hoje, **ininvocável por comando**.
+
+**Números de referência (medidos, para não se perderem):** 132 ficheiros `scripts/test-*.js`;
+**13** harnesses `test-mutacao-*.js`; **5** na cadeia (passos 90–94).
+
+**O que falta decidir/fazer:** integrar as suites na cadeia **e/ou** criar um script npm agregador que as
+invoque (ex.: `test:p54`) — qualquer das duas exige editar `package.json` num passo **separado e
+autorizado**, e atualizar a contagem de passos aqui documentada. **Não foi feito neste trabalho.**
+
+**(c) ⛔ Incoerência de contagem na §3.31 (não corrigida).** A linha «Cadeia `test:offline`» da §3.31
+descreve o ponto de partida como «**105 passos** em `9b422eb`», mas a §1 e a §4.7 dizem **108** para
+`73f367e` — e `9b422eb` é a frente **R10/Q11**, **anterior** ao P56, pelo que o número tem de ser **≤ 108**.
+As duas medições não podem estar ambas certas. **Não corrigido** por não ter sido possível medir a cadeia
+nesse commit sem checkouts destrutivos; **a cadeia medida — 111 passos na working tree (2026-09-25) e
+109 em `HEAD` = `aae2731` — é a que vale**.
+
+**(d) Dívida herdada — `views/admin/quotas/listar.handlebars` é órfã de rota e não pode ser apagada.**
+O **C6** (`809e92f`) removeu o handler morto `GET /quotas` de `routes/financeiro.js`. A vista que ele
+renderizava fica **sem rota nenhuma** — mas **não se apaga**: é lida por `test-fcr-base.js:251`,
+`test-fcr-orcamento.js:402`, `test-mutacao-fcr-orcamento.js:121` e enumerada por `test-vistas.js:773`.
+Decisão pendente do A9.
+
+**(e) ⛔ Armadilha medida neste ciclo (vale para todo o projeto).** `helpers/seguranca.js` tinha **DOIS
+`module.exports`** — o segundo, no fim do ficheiro, **anulava** o primeiro ⇒ `identidadeAutenticada`
+chegava **`undefined`** a `routes/configuracao.js` e o limitador de tentativas caía **em silêncio** para o
+IP (chave `smtp-gravar:127.0.0.1` em vez de `u:<id>`). **Duplicar `module.exports` é um falso verde de
+exportação:** o ficheiro carrega, o `require` devolve um objeto plausível, e só um teste que **verifique a
+chave** o apanha. Corrigido em `4be58b6` (um só export). **Regra:** ao acrescentar uma função a um módulo,
+procurar por `module.exports` **a ocorrências**, não a uma.
+
+**(f) Exceção conhecida e não bloqueante.** `scripts/test-suporte.js` (passo **84/111**) é
+**não-determinístico** (flutua no ACHADO-02, `0 !== 1`) e correlaciona com **I/O concorrente**, não com CPU.
+É **pré-existente** aos 19 commits e a **decisão do utilizador foi NÃO tocar** (não reabrir um ciclo fechado).
+**Endurecer antes de haver CI.**
+
+### 4.12 A14 — Refinamento UX/UI (encomenda de 2026-09-24) · **EM CURSO, NÃO PUBLICADO**
+
+Encomenda do utilizador: refinar a **aplicação real** («o mesmo produto, mas mais refinado, mais claro e
+mais agradável de utilizar»), princípio **«Consultar deve permitir compreender. Editar deve permitir
+alterar.»** Não é nova auditoria nem protótipo — **nada de `simulacoes.html` novo**. A working tree mantém
+**27 ficheiros modificados + 4 novos** desta frente, **à espera de autorização** para commit.
+
+**Fases fechadas e provadas (evidência em browser real, Edge):**
+· **Fase 1** — Bootstrap Icons como família única no sidebar/drawer/bottom nav; estado ativo com
+  **três sinais não-cromáticos** (barra `inset 3px`, fundo, `font-weight: 600`).
+· **Fase 2** — `[Guardar] [Cancelar]` no topo, com **Cancelar a ocupar o lugar exato do Editar**
+  (borda direita medida: 1336 = 1336) e Gravar à esquerda; 16 mutações detetadas.
+· **Fase 3** — portal do condómino: **35 badges → componente `.estado`**; `bg-white` a **zero** no
+  portal; contraste medido das 5 variantes × 2 temas = **4.66 .. 7.73** (todas WCAG AA).
+· **Fase 4** — Configuração em 4 secções independentes de `_modo-edicao`; 3 mutações detetadas.
+· **Fase 5** — Dashboard separado em **«Precisa de atenção»** (problema operacional) vs
+  **«Preparação do condomínio»** (configuração por concluir; **não é wizard**); o sinal `assembleias`
+  saiu por já ter cartão próprio; «Automações: Configuradas» (escrito à mão) passou a valor real.
+· **§12** — componentes: verificado por **medição** que F10/F14/F15/F28 já estavam fechados por trabalho
+  anterior (`4f9524f`) e que `.estado` escala corretamente com `--font-scale`. **Nada a corrigir.**
+· **§13** — **três casos de estado vazio** distintos no `_empty-state` (`inicial` · `filtro` ·
+  `indisponivel`), com `role="status"`; **18 pontos de chamada** convertidos (portal + admin + suporte);
+  teste em `test-vistas.js` (7 asserções) provado por mutação.
+· **§14** — acessibilidade: **151 ícones `material-symbols` + 49 `bi`** passaram a `aria-hidden="true"`;
+  **2 controlos só-ícone sem nome** corrigidos (orçamento admin); **`aria-current="page"` na navegação**
+  (sidebar + bottom bar) via helper `ariaCurrent` com predicado **partilhado** com `isActive`;
+  novo `scripts/test-a11y-a14.js` (**673 verificações**), provado por 3 mutações.
+· **§17** — validação executada sobre a **aplicação real** (não protótipo): **19 PNGs** em
+  `condofy-auditoria-ux/evidencia-a14-fase-17/`, **0 erros de página** por shot; medição DOM de
+  **36 combinações** (6 páginas × 2 temas × 3 escalas) = **0 erros** e invariantes de a11y a **0**.
+  Escala efetiva medida: raiz **16 / 17,28 / 18,56 px**; título **22 / 23,76 / 25,52 px**.
+· **§18** — fecho apresentado; **nada commitado nem publicado** (ver decisões pendentes no fim desta §).
+· `npm run test:offline` = **rc 0 (111 passos)** após todas as fases — os passos **110** e **111** são o
+  `test-a11y-a14.js` e o `test-mutacao-dashboard-a14.js`, integrados a **2026-09-25** (ver **(f)**).
+
+**(e) ACHADO NOVO (2026-09-25, §14) — a navegação NÃO anunciava o item ativo.** O sidebar e a barra
+inferior marcavam o item ativo **só por classe** (`active` / `mb-item-ativo`) — **24 elementos ativos sem
+`aria-current`**, medidos no DOM. Corrigido com o helper `ariaCurrent` (predicado partilhado com
+`isActive`, para a cor e a semântica nunca divergirem). ⛔ **Armadilha medida:** `{{ariaCurrent …}}`
+(chaveta dupla) **escapa** o valor — o browser cria um atributo com o NOME
+`aria-current&#x3D;&quot;page&quot;` e valor vazio, e `getAttribute('aria-current')` devolve **`null`**;
+tem de ser **`{{{ }}}`**. O teste morde nas duas pontas.
+
+**(f) ✅ FECHADA (2026-09-25) — `test-a11y-a14.js` E `test-mutacao-dashboard-a14.js` na cadeia.**
+Autorizado pelo utilizador; `package.json` foi tocado **só** para isso: `test:offline` passou de
+**109 → 110 → 111 passos**. Os dois testes A14 foram **acrescentados no FIM**:
+
+```text
+… && node scripts/check-templates.js && node scripts/test-a11y-a14.js && node scripts/test-mutacao-dashboard-a14.js
+```
+
+| Passo | Suite | Saída esperada |
+|---|---|---|
+| **110** | `scripts/test-a11y-a14.js` | `✓ A14 §14 — acessibilidade: 673 verificações passaram (ícones: 518, controlos só-ícone: 99, sem BD)` |
+| **111** | `scripts/test-mutacao-dashboard-a14.js` | `✓ 4/4 mutações detetadas pela razão certa.` + `✓ 2 alvos restaurados byte a byte (sha256 conferido).` |
+
+⛔ **Acrescentar no fim é deliberado:** inserir a meio deslocaria todos os números de passo posteriores e
+invalidaria os passos-chave documentados (30, 35–37, 43, 90–94, e a exceção 84 do `test-suporte`).
+⛔ O **111 é um harness de mutação**: partilha a convenção de cópias de segurança com os passos 90–94,
+pelo que **nunca pode correr em paralelo** com eles — a cadeia é `&&`, logo sequencial, e é por isso que
+pode estar lá. O seu próprio cabeçalho o declara.
+**Prova de que cada elo morde** (mutações reais, restauradas por hash):
+· passo 110 — retirar **1** `aria-hidden` de `views/admin/calendario.handlebars:20` ⇒ `check-templates.js`
+  **rc 0** mas `test-a11y-a14.js` **rc 1** («1 falha(s): ícone sem aria-hidden»), e a cadeia **propaga**.
+  Reposto byte-a-byte (`sha256 904fefc5…643e`).
+· passo 111 — passar o sinal `drive` de `categoria: 'preparacao'` para `'atencao'` em `helpers/dashboard.js`
+  ⇒ o oráculo `test-dashboard-painel.js` falha (`actual: 'atencao', expected: 'preparacao'`), o harness
+  acusa «já falhava ANTES das mutações» e a cadeia **propaga** o rc 1. Reposto byte-a-byte
+  (`sha256 b9811fd5…985ff`).
+Isto **não** fecha a classe do §4.11(b): as **11 suites órfãs** continuam fora.
+*(Histórico: antes de 2026-09-25 este era o mesmo problema do §4.11(b).)*
+
+**(g) Dívida registada (§13) — chamadas `_empty-state` ainda `inicial` por omissão, mas de filtro.**
+Ficaram por converter os casos cujo texto não nomeia um filtro mas cuja origem é um filtro implícito
+(ex.: `admin/quotas/listar` «Sem quotas»). Classificados por leitura; não medidos em browser.
+
+**(a) Dívida — fonte de estado das assembleias DUPLICADA (registada, não corrigida).**
+`ESTADOS_ASSEMBLEIA` vive em **dois** sítios: `helpers/calendario.js:27` e `routes/condomino.js:763`.
+As duas cópias ganharam a chave `variante` (A14 §8) e **têm de andar juntas**. Unificar é um passo
+separado (mexe em rotas de outra frente) ⇒ **não feito neste ciclo**.
+
+**(b) Dívida — `bg-white` no ADMIN (A14 §15).** O portal do condómino ficou a zero, mas há **87
+ocorrências reais** de `class="...bg-white"` na árvore: **84 em `views/admin/**` + 3 em
+`views/partials/**` (`_convocatoria-editor.handlebars`) + 0 em `views/publicas/**`**. A classe **parte o
+modo escuro**. É uma frente própria (admin), não foi tocada.
+*(Números medidos em 2026-09-25 contra a árvore final — ver `A14-UX.md`. ⛔ O portal do condómino tem
+**0 usos reais**: os 2 `bg-white` que um `grep` encontra em `views/condomino/` são **comentários** que
+documentam a remoção.)*
+
+**(c) Decisão de produto pendente.** Os `badge text-bg-*` que restam no calendário do admin são
+**etiquetas de CATEGORIA** (`tipoRotulo` = «Assembleia»/«Aviso», «Relevante»), **não estados de ciclo
+de vida**. Não foram convertidos para `.estado` de propósito: misturá-los diluiria a linguagem de
+estado do §8. Confirmar se devem ter tratamento visual próprio.
+
+**(d) Convenção nova e vinculativa.** `scripts/test-tipografia.js` rejeita **qualquer** `font-size` em
+px/pt fora da folha do documento que não use `var(--font-scale)`. O CSS do §2 (`.bi { font-size: 20px }`)
+violava-o e foi corrigido para `calc(20px * var(--font-scale))` — provado: 21,6 px a escala 1,08 e
+23,2 px a 1,16. **Ao acrescentar CSS com tamanho fixo, a cadeia apanha-o.**
 
 ---
 
@@ -1071,13 +1251,34 @@ Trabalho que **não pertence ao ciclo A1–A8** e que, por isso, **não entrou n
 
 ## 7. Histórico de implementações
 
-Hashtags reais obtidos de `git log` (nenhum hash inventado). «Estado» = relação com `origin/main`  
-(que está em `6405039`; o `HEAD` local está **um commit à frente**, em `9b422eb`): **publicado** = já em `origin/main`; **local** = só no clone.
-O remoto `origin/main` está em `6405039` e o `HEAD` local em `9b422eb`. Todos os commits abaixo (do ciclo A1–A8, mais a documentação do fecho, que é o que introduz este documento) **estão publicados** — **nada
-ficou por publicar**; o único commit **local** é `9b422eb` (R10/Q11), registado no §4.6.
+Hashes reais obtidos de `git log` (nenhum hash inventado). «Estado» = relação com `origin/main`,
+**medida por rede** com `git ls-remote origin main` (nunca por `refs/remotes/`, que está vazio neste
+clone): **publicado** = já em `origin/main`; **local** = só no clone.
+**Verificado a 2026-09-24 (pós-push):** `origin/main` = `HEAD` = **`aae2731`** ⇒ **0 à frente, 0 atrás**.
+Todos os commits abaixo estão **publicados** — **nada ficou por publicar**.
 
 | Data       | Área                     | Implementação                                                                | Commit    | Estado    |
 | ---------- | ------------------------ | ---------------------------------------------------------------------------- | --------- | --------- |
+| 2026-09-24 | Estabilização (A9)       | Atualizar âncora da mutação do modo de edição após P54-4                     | `aae2731` | publicado |
+| 2026-09-24 | Estabilização (A9)       | Alinhar testes de suporte com C6 (ordem de montagem e rota canónica)         | `cfaff07` | publicado |
+| 2026-09-24 | Estabilização (A9)       | Corrigir regressão do rate limit P54-3 no teste de segurança                 | `59c89e0` | publicado |
+| 2026-09-24 | Email / SMTP (P30)       | Separar SMTP global e overrides por condomínio                               | `babf0f6` | publicado |
+| 2026-09-24 | Armazenamento / Segurança (P54-4) | Reforçar autorização de storage global                             | `f56193e` | publicado |
+| 2026-09-24 | Automações (P54-7)       | Proteger automações de documentos                                            | `7c6f61f` | publicado |
+| 2026-09-24 | Armazenamento (P54-4)    | Proteger configuração de storage e backups                                   | `83e9f06` | publicado |
+| 2026-09-24 | Email / Segurança (P54-3) | Proteger alteração SMTP no backend                                          | `4be58b6` | publicado |
+| 2026-09-24 | Notificações (P54-7)     | Proteger as notificações por condomínio                                      | `193c739` | publicado |
+| 2026-09-24 | Email / UI (P54-2)       | Integrar modo de edição na configuração SMTP                                 | `22a07e2` | publicado |
+| 2026-09-24 | UI / Configuração (P54-0) | Criar padrão consulta e modo de edição                                      | `a0c698a` | publicado |
+| 2026-09-24 | Email / Validação (P54-1) | Validar configuração SMTP no backend                                        | `90735fd` | publicado |
+| 2026-09-24 | UI (A7 fases 4–6)        | Concluir fases 4 a 6 e F27/F28                                               | `4f9524f` | publicado |
+| 2026-09-24 | Suporte (P58 / C2)       | Garantir um acesso de suporte ativo por utilizador e condomínio              | `4e64895` | publicado |
+| 2026-09-24 | UI (A7, F29)             | Corrigir focus ring da homepage no tema claro                                | `72796d0` | publicado |
+| 2026-09-24 | Quotas (C6)              | Remover rota `GET /quotas` obsoleta                                          | `809e92f` | publicado |
+| 2026-09-24 | Documentação             | Corrigir referência ao endpoint global                                       | `6b1a775` | publicado |
+| 2026-09-24 | Documentação             | Fechar C1 e P9/P10 no roadmap                                                | `6df7652` | publicado |
+| 2026-09-24 | Backups / Autorização (C1) | Cobertura da autorização de backups (só teste)                             | `76cfdae` | publicado |
+| 2026-09-23 | Documentação             | Atualizar roadmap após o ciclo de 2026-09-23                        | `cb64cb4` | publicado |
 | 2026-09-22 | Integração final A1–A8   | Integração final A1-A8 e fecho do ciclo (inclui este documento)               | `ebd864f` — o commit que introduz `docs/ROADMAP.md` | publicado |
 | 2026-09-22 | Exportação / Testes (A8) | Exportação RGPD, confirmação do orçamento e higiene de testes                 | `f9f63f6` | publicado |
 | 2026-09-22 | Portal do condómino (A3) | Portal do condómino: comprovativo de pagamento, seletor de ano e tabelas acessíveis | `9034e08` | publicado |
@@ -1157,16 +1358,16 @@ ficou por publicar**; o único commit **local** é `9b422eb` (R10/Q11), registad
 | Bootstrap                          | `app.js`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Sessão, flash, passport, `res.locals`, montagem de routers (a **ordem importa**), `currentYear` em `app.js:197`, `express.urlencoded({extended:true})` em `app.js:67` |
 | Modelos                            | `models/` (47)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Associações centralizadas em `models/index.js`                                                                                                                        |
 | Routers                            | `routes/` (28)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `placeholders.js` tem `/:modulo` genérico — montar **antes** dele                                                                                                     |
-| Helpers                            | `helpers/` (**88** ficheiros `.js`: 76 na raiz + 6 `armazenamento/` + 2 `tips/`) |
-| Vistas                             | `views/` (151)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `layouts/{main,blank}.handlebars`; parciais em `views/partials/`                                                                                                      |
+| Helpers                            | `helpers/` (**92** ficheiros `.js`: **80** na raiz + 6 `armazenamento/` + 2 `tips/` + os novos do ciclo P54/P30) |
+| Vistas                             | `views/` (**152**)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `layouts/{main,blank}.handlebars`; parciais em `views/partials/`                                                                                                      |
 | Jobs                               | `jobs/{scheduler,automatizacao,backup}.js`                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | node-cron                                                                                                                                                             |
-| Migrations                         | `migrations/` (80, `…00001`–`…00080`) |
+| Migrations                         | `migrations/` (**81**, `…00001`–`…00081`) |
 | Seeds                              | `seeders/` (6)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Admin, categorias, métodos de pagamento, condomínio, config de quota, frações demo                                                                                    |
-| Testes                             | `scripts/` (**138** + 3 em `scripts/helpers/`) |
+| Testes                             | `scripts/` (**152** + 3 em `scripts/helpers/`) |
 | Comandos                           | `npm start` · `dev` · `db:migrate` · `db:seed` · `db:setup` · `preflight` · `verificar:titularidades` · `verificar:provedores` · `test:offline`                                                                                                                                                                                                                                                                                                                                                                       | `scripts/preflight.js` valida as migrations                                                                                                                           |
 | Documentação de topo               | `README.md`, `docs/PLANO.md`, `docs/MODELO-DADOS.md`, `docs/EVOLUCAO-COMPLETA.md`, `docs/MIGRACAO-FINANCEIRA.md`, `docs/MIGRACAO-UI.md`, `docs/EVOLUCAO-FINANCEIRA.md`, `docs/DEPLOY-MULTITENANT.md`                                                                                                                                                                                                                                                                                                                  | Visão geral e histórico                                                                                                                                               |
 | Documentação de área               | `docs/ARMAZENAMENTO.md`, `docs/BACKUPS.md`, `docs/GOOGLE_DRIVE.md`, `docs/ONEDRIVE.md`, `docs/EMAIL_SMTP.md`, `docs/TIPS-CONTEXTUAIS.md`, `docs/DESENHO-SUPORTE-DIAGNOSTICO.md`                                                                                                                                                                                                                                                                                                                                       | Referência técnica por área                                                                                                                                           |
-| Auditorias                         | `docs/AUDITORIA-2026-09-17.md`, `docs/AUDITORIA-ALLOWLIST-SUPORTE.md`, `docs/AUDITORIA-SEGURANCA-SUPORTE-2026-09-18.md`, `docs/AUDITORIA-PORTAL-CONDOMINO-2026-09-20.md`, `docs/AUDITORIA-ARREDONDAMENTO-QUOTAS-2026-09-20.md`, `docs/ANALISE-DESENHO-ARREDONDAMENTO-2026-09-20.md`, `docs/AUDITORIA-BACKUPS-2026-09-21.md`, `docs/AUDITORIA-ONEDRIVE-2026-09-21.md`, `docs/AJUDA-CONTEXTUAL-TOOLTIPS-INVENTARIO-2026-09-20.md`, `docs/FASE-A-PRE-CONDICAO-V1-V6-2026-09-20.md`, `docs/C1-BLOQUEIO-I08-2026-09-20.md`, `docs/ESPECIFICACAO-A7-UI-BOTOES-TABS-2026-09-23.md`, `docs/DIVIDA-TECNICA-E-IMPORTACAO-2026-09-22.md`, `docs/AUDITORIA-COBERTURA-TESTES-2026-09-23.md` | **Ler a auditoria da área antes de mexer**; verificar se os achados continuam válidos. ⛔ `docs/AUDITORIA-ONEDRIVE-2026-09-21.md` está **desatualizada** (ver P26). A **especificação A7** é a fonte dos itens **F1–F31** (§4.8) |
+| Auditorias                         | `docs/AUDITORIA-2026-09-17.md`, `docs/AUDITORIA-ALLOWLIST-SUPORTE.md`, `docs/AUDITORIA-SEGURANCA-SUPORTE-2026-09-18.md`, `docs/AUDITORIA-PORTAL-CONDOMINO-2026-09-20.md`, `docs/AUDITORIA-ARREDONDAMENTO-QUOTAS-2026-09-20.md`, `docs/ANALISE-DESENHO-ARREDONDAMENTO-2026-09-20.md`, `docs/AUDITORIA-BACKUPS-2026-09-21.md`, `docs/AUDITORIA-ONEDRIVE-2026-09-21.md`, `docs/AJUDA-CONTEXTUAL-TOOLTIPS-INVENTARIO-2026-09-20.md`, `docs/FASE-A-PRE-CONDICAO-V1-V6-2026-09-20.md`, `docs/C1-BLOQUEIO-I08-2026-09-20.md`, `docs/ESPECIFICACAO-A7-UI-BOTOES-TABS-2026-09-23.md`, `docs/DIVIDA-TECNICA-E-IMPORTACAO-2026-09-22.md`, `docs/AUDITORIA-COBERTURA-TESTES-2026-09-23.md`, `docs/ESPECIFICACAO-P54-SMTP-2026-09-23.md`, `docs/DECISAO-P30-SMTP-2026-09-24.md`, `docs/AUDITORIA-C9-VOTACOES-QUORUM-2026-09-24.md` | **Ler a auditoria da área antes de mexer**; verificar se os achados continuam válidos. ⛔ `docs/AUDITORIA-ONEDRIVE-2026-09-21.md` está **desatualizada** (ver P26). A **especificação A7** é a fonte dos itens **F1–F31** (§4.8); a **especificação P54** e a **decisão P30** (ambas **não rastreadas**) são as fontes do ciclo de 2026-09-24 (§4.11) |
 | Memória operacional (fora do repo) | `.workbuddy-ai/memory/{DOMINIO,AUTORIZACAO-E-CICLO-VIDA,GIT-E-MUTACAO,FASES-ESTADO}.md`                                                                                                                                                                                                                                                                                                                                                                                                                               | Armadilhas de domínio, autorização, git/mutação, estado das fases                                                                                                     |
 
 
@@ -1174,13 +1375,16 @@ ficou por publicar**; o único commit **local** é `9b422eb` (R10/Q11), registad
 ---
 
 *Documento de levantamento. Nenhuma alteração funcional foi feita ao criar este ficheiro.  
-Estado verificado em **2026-09-24**: `HEAD` = **`76cfdae`** («C1: corrigir autorização de backups» —
-**local, por publicar**; ⛔ a mensagem diz «corrigir» mas **só o teste** foi alterado, ver **§4.10**);
-`origin/main` = **`cb64cb4`** ⇒ **1 commit por publicar** (mais este documento, que fica ` M`);
-working tree com **5 ` M` + 28 ` ??`** (4 ` M` são da frente **EPD/DPO**, **pré-existentes e preservados**;
-a frente «páginas legais», que partilha esses caminhos, foi publicada em `5f16016`).
-A frente R10/Q11 foi commitada em `9b422eb` e publicada em `34bd5d3`; a de branding em
-`0a606ca` + `4aa7f3f`; a P56 em `1cd3846` + `73f367e`; a P53 em `12a06b7`; a P53-FOLLOWUP em `793ef32`;
-o bloco de 2026-09-23 (`12a06b7`…`6408732`) e o ROADMAP pós-ciclo (`cb64cb4`) estão **publicados**.
-O P56 está registado na **§4.7**, o A7 na **§4.8**, a P53/P53-FOLLOWUP na **§4.9** e a C1/P9-P10 na
-**§4.10**; a lista de commits está no **§7**.*
+Estado verificado em **2026-09-24** (pós-push): `HEAD` = **`aae2731`** = **`origin/main`** ⇒
+**sincronizado, 0 à frente, 0 atrás** (confirmado **por rede** com `git ls-remote origin main`;
+o `[gone]` do `git status` é **falso**); o **deploy não foi decidido**.
+Working tree com **4 ` M` + 30 ` ??`** — os 4 ` M` são da frente **EPD/DPO**, **pré-existentes e
+preservados**; a frente «páginas legais», que partilha esses caminhos, foi publicada em `5f16016`.
+O ciclo de 2026-09-24 (**19 commits**, `cb64cb4..aae2731`) **foi publicado na íntegra**: **C1**
+(`76cfdae`), ROADMAP (`6df7652`), endpoint global (`6b1a775`), **C6** (`809e92f`), **A7** fases 4–6
+(`72796d0`, `4f9524f`), **P58** (`4e64895`), **P54** (`a0c698a`…`7c6f61f`), **P30** (`babf0f6`) e a
+**estabilização** (`59c89e0`, `cfaff07`, `aae2731`). A frente R10/Q11 foi publicada em `34bd5d3`;
+a de branding em `0a606ca` + `4aa7f3f`; a P56 em `1cd3846` + `73f367e`; a P53 em `12a06b7`; a
+P53-FOLLOWUP em `793ef32`; o bloco de 2026-09-23 (`12a06b7`…`6408732`) em `78e32c6`…`6408732`.
+O P56 está registado na **§4.7**, o A7 na **§4.8**, a P53/P53-FOLLOWUP na **§4.9**, a C1/P9-P10 na
+**§4.10** e o fecho do ciclo P54/P30/P58 na **§4.11**; a lista de commits está no **§7**.*
