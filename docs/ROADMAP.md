@@ -48,7 +48,7 @@ menores registados e deliberadamente não corrigidos (secção 4).
 | Helpers               | **92** ficheiros `.js` em `helpers/`: **80** na raiz + **6** em `armazenamento/` (4 deles em `provedores/`) + **2** em `tips/` + os novos do ciclo P54/P30 (`helpers/config-ambito.js`, `helpers/reautenticacao.js`, `helpers/seguranca.js` entre outros) |
 | Scripts               | **152** ficheiros em `scripts/` (+3 em `scripts/helpers/`)                                                                                                                                                                                |
 | Documentação          | **36** `.md` em `docs/` (28 rastreados + 8 não rastreados, incl. este documento) + `docs/documentos/` (13 PDF de amostra) + `docs/mobile/` (6 PNG)                                                                  |
-| Cadeia `test:offline` | **111 passos** — **109** em `HEAD` = `aae2731` (medido a 2026-09-24, **pós-P54**) e **111** na **working tree** (medido a 2026-09-25, **pós-A14 §18**); **0 entradas órfãs** e **0 duplicados**. Passos-chave: **30** `test-menu-mobile-altura.js`, **35–37** os três `test-orcamento-quota-p56*.js` (frente P56), **43** `test-quotas-r10.js` (frente R10), **90–94** os cinco harnesses de mutação ligados à cadeia, **110** `test-a11y-a14.js` e **111** `test-mutacao-dashboard-a14.js` (A14 — ver §4.12(f)). ⛔ Os harnesses de mutação **deixaram de bloquear**: a frente **P53** (`12a06b7`) tornou-os independentes do `safe-delete` e a **P53-FOLLOWUP** (`793ef32`) eliminou o falso-verde do `spawn` (EBUSY) — os **8** harnesses completam com **EXIT 0** (60 mutações detetadas). Ver §4.6. ⛔ **A cadeia NÃO cresceu no ciclo de 2026-09-24**: `package.json` **não foi tocado por nenhum dos 19 commits** ⇒ todos os testes novos do P54/P30/P58 e das fases 4–6 do A7 estão **fora** dela. Ver **§4.11**. O **único** crescimento posterior (**109 → 111**) é do A14 e está **por publicar**. |
+| Cadeia `test:offline` | **111 passos** — **109** em `HEAD` = `aae2731` (medido a 2026-09-24, **pós-P54**) e **111** na **working tree** (medido a 2026-09-25, **pós-A14 §18**); **0 entradas órfãs** e **0 duplicados**. Passos-chave: **30** `test-menu-mobile-altura.js`, **35–37** os três `test-orcamento-quota-p56*.js` (frente P56), **43** `test-quotas-r10.js` (frente R10), **90–94** os cinco harnesses de mutação ligados à cadeia, **110** `test-a11y-a14.js` e **111** `test-mutacao-dashboard-a14.js` (A14 — ver §4.12(f)). ⛔ Os harnesses de mutação **deixaram de bloquear**: a frente **P53** (`12a06b7`) tornou-os independentes do `safe-delete` e a **P53-FOLLOWUP** (`793ef32`) eliminou o falso-verde do `spawn` (EBUSY) — os **8** harnesses completam com **EXIT 0** (60 mutações detetadas). Ver §4.6. ⛔ **A cadeia NÃO cresceu no ciclo de 2026-09-24**: `package.json` **não foi tocado por nenhum dos 19 commits** ⇒ todos os testes novos do P54/P30/P58 e das fases 4–6 do A7 estão **fora** dela. Ver **§4.11**. O **único** crescimento posterior (**109 → 111**) é do A14 e está **publicado** (`7985607` + `8a8cab6`). |
 
 > **Nota sobre o `git status`:** o cabeçalho mostra `main...origin/main [gone]`. É **falso**  
 > neste clone (`refs/remotes/` está vazio e um `push` bem-sucedido **não** o popula — a árvore
@@ -487,7 +487,7 @@ agente possa retomar sem recomeçar do zero.
 
 | Funcionalidade                                  | Estado | Implementação                                                                                                         | Testes                                                                                                                               | Documentação                                          | Próximo passo                                                                                      |
 | ----------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Cadeia `test:offline`                           | 🟢     | `package.json` → `scripts['test:offline']` (**fonte única**, não repetir em documentação)                             | **111 passos** na **working tree** (medido a 2026-09-25) / **109** em `HEAD` = `aae2731` (medido a 2026-09-24) / 109 em `6408732` / **108** em `73f367e` (não medido — ver §4.11(c)); **0 entradas órfãs** e **0 duplicados** | —                                                     | ⛔ **`package.json` NÃO foi tocado por nenhum dos 19 commits do ciclo de 2026-09-24** ⇒ o trabalho desse ciclo está todo fora da cadeia, e **11 suites estão órfãs**. Ver **§4.11(b)**. A antiga falha A3-1 (**3 entradas órfãs** em `7f3f59a`/`8cc6750`) está **RESOLVIDA** em `4c34532`. **Exceção posterior:** o A14 tocou `package.json` **só** para ligar os passos 110 e 111 (§4.12(f)) — **por publicar**. |
+| Cadeia `test:offline`                           | 🟢     | `package.json` → `scripts['test:offline']` (**fonte única**, não repetir em documentação)                             | **111 passos** na **working tree** (medido a 2026-09-25) / **109** em `HEAD` = `aae2731` (medido a 2026-09-24) / 109 em `6408732` / **108** em `73f367e` (não medido — ver §4.11(c)); **0 entradas órfãs** e **0 duplicados** | —                                                     | ⛔ **`package.json` NÃO foi tocado por nenhum dos 19 commits do ciclo de 2026-09-24** ⇒ o trabalho desse ciclo está todo fora da cadeia, e **11 suites estão órfãs**. Ver **§4.11(b)**. A antiga falha A3-1 (**3 entradas órfãs** em `7f3f59a`/`8cc6750`) está **RESOLVIDA** em `4c34532`. **Exceção posterior:** o A14 tocou `package.json` **só** para ligar os passos 110 e 111 (§4.12(f)) — **publicado** (`7985607` + `8a8cab6`). |
 | Testes de mutação (provam que os testes mordem) | 🟢     | `scripts/test-mutacao-{suporte,fcr,mensal,fcr-orcamento,email,p56,despesa-transacao,exportacao,botoes}.js` — **9** harnesses; **5 na cadeia** (passos 90–94) | `test-correr-processo.js`, `test-falha-spawn.js` (auto-testes do helper) | `docs/GIT-E-MUTACAO.md` (memória)                     | Usar sempre antes de concluir «sem regressão». **60 mutações detetadas** na passagem de 2026-09-23. Ver **§4.6** (P53) e **§4.8** (P53-FOLLOWUP). |
 | Verificadores read-only de produção             | 🟢     | `scripts/verificar-{readonly-admitidos,pre-commit-suporte,titularidades,provedores-reais}.js`                         | —                                                                                                                                    | —                                                     | Escrevem-se aqui, correm em `/opt/condofy`.                                                        |
 | `check-templates.js` (todas as vistas)          | 🟢     | `scripts/check-templates.js`                                                                                          | na cadeia                                                                                                                            | —                                                     | —                                                                                                  |
@@ -1040,12 +1040,15 @@ procurar por `module.exports` **a ocorrências**, não a uma.
 É **pré-existente** aos 19 commits e a **decisão do utilizador foi NÃO tocar** (não reabrir um ciclo fechado).
 **Endurecer antes de haver CI.**
 
-### 4.12 A14 — Refinamento UX/UI (encomenda de 2026-09-24) · **EM CURSO, NÃO PUBLICADO**
+### 4.12 A14 — Refinamento UX/UI (encomenda de 2026-09-24) · **PUBLICADO** (2026-09-25)
 
 Encomenda do utilizador: refinar a **aplicação real** («o mesmo produto, mas mais refinado, mais claro e
 mais agradável de utilizar»), princípio **«Consultar deve permitir compreender. Editar deve permitir
-alterar.»** Não é nova auditoria nem protótipo — **nada de `simulacoes.html` novo**. A working tree mantém
-**27 ficheiros modificados + 4 novos** desta frente, **à espera de autorização** para commit.
+alterar.»** Não é nova auditoria nem protótipo — **nada de `simulacoes.html` novo**.
+
+**Estado: PUBLICADO.** A implementação foi commitada em **`7985607`** («Refinar UX/UI e acessibilidade
+do A14» — **103 ficheiros modificados + 5 novos**, **+1991 −566**) e a documentação desta § em
+**`8a8cab6`** («Atualizar documentação do ciclo A14»). Ambos estão em **`origin/main`**.
 
 **Fases fechadas e provadas (evidência em browser real, Edge):**
 · **Fase 1** — Bootstrap Icons como família única no sidebar/drawer/bottom nav; estado ativo com
@@ -1071,7 +1074,8 @@ alterar.»** Não é nova auditoria nem protótipo — **nada de `simulacoes.htm
   `condofy-auditoria-ux/evidencia-a14-fase-17/`, **0 erros de página** por shot; medição DOM de
   **36 combinações** (6 páginas × 2 temas × 3 escalas) = **0 erros** e invariantes de a11y a **0**.
   Escala efetiva medida: raiz **16 / 17,28 / 18,56 px**; título **22 / 23,76 / 25,52 px**.
-· **§18** — fecho apresentado; **nada commitado nem publicado** (ver decisões pendentes no fim desta §).
+· **§18** — fecho apresentado. *(No momento, **nada commitado nem publicado**; ✅ superado a 2026-09-25
+  — ver o estado no início desta §. As decisões pendentes continuam no fim da §.)*
 · `npm run test:offline` = **rc 0 (111 passos)** após todas as fases — os passos **110** e **111** são o
   `test-a11y-a14.js` e o `test-mutacao-dashboard-a14.js`, integrados a **2026-09-25** (ver **(f)**).
 
@@ -1117,7 +1121,7 @@ Ficaram por converter os casos cujo texto não nomeia um filtro mas cuja origem 
 (ex.: `admin/quotas/listar` «Sem quotas»). Classificados por leitura; não medidos em browser.
 
 **(a) Dívida — fonte de estado das assembleias DUPLICADA (registada, não corrigida).**
-`ESTADOS_ASSEMBLEIA` vive em **dois** sítios: `helpers/calendario.js:27` e `routes/condomino.js:763`.
+`ESTADOS_ASSEMBLEIA` vive em **dois** sítios: `helpers/calendario.js:31` e `routes/condomino.js:766`.
 As duas cópias ganharam a chave `variante` (A14 §8) e **têm de andar juntas**. Unificar é um passo
 separado (mexe em rotas de outra frente) ⇒ **não feito neste ciclo**.
 
