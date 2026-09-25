@@ -16,7 +16,7 @@
 </div>
 
 <div class="alert alert-info d-flex align-items-start gap-2">
-  <span class="material-symbols-outlined">info</span>
+  <span class="material-symbols-outlined" aria-hidden="true">info</span>
   <div class="small">
     Vista de diagnóstico. Destinatários mascarados e sem conteúdo de mensagem.
     Não é possível reenviar, cancelar nem alterar a configuração SMTP.
@@ -154,5 +154,5 @@
   </div>
 </div>
 {{else}}
-{{> _empty-state icon="mail" titulo="Sem emails" descricao="Não há registos na fila para este filtro."}}
+{{> _empty-state tipo="filtro" icon="mail" titulo="Sem emails" descricao="Não há registos na fila para este filtro." link="/admin/emails" linkTexto="Limpar filtros"}}
 {{/if}}

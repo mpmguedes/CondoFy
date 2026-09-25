@@ -14,7 +14,7 @@
 </div>
 
 {{#unless driveLigado}}
-<div class="alert alert-warning"><span class="material-symbols-outlined me-1">info</span>Sem serviço de armazenamento ligado — o upload de ficheiros fica indisponível até ligar um serviço em Configurações → Armazenamento e Backups.</div>
+<div class="alert alert-warning"><span class="material-symbols-outlined me-1" aria-hidden="true">info</span>Sem serviço de armazenamento ligado — o upload de ficheiros fica indisponível até ligar um serviço em Configurações → Armazenamento e Backups.</div>
 {{/unless}}
 
 {{#if categorias}}
@@ -68,5 +68,5 @@
 {{/if}}
 
 {{#unless categorias}}{{#unless personalizadas}}
-<div class="alert alert-light border small">Sem categorias nem pastas definidas.</div>
+{{> _empty-state icon="folder_open" titulo="Sem categorias nem pastas definidas" descricao="Organize a biblioteca criando categorias ou pastas para agrupar os documentos."}}
 {{/unless}}{{/unless}}

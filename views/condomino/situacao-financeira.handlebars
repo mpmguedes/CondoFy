@@ -28,9 +28,7 @@
 {{!-- ── Resumo financeiro ─────────────────────────────────────────── --}}
 <h2 class="h6 text-uppercase portal-titulo-seccao">Resumo financeiro</h2>
 {{#unless temDadosFinanceiros}}
-<div class="alert alert-light border small mb-2">
-  Ainda não existem dados financeiros registados neste condomínio para {{ano}}. Os valores aparecem quando a administração registar quotas, despesas ou movimentos de conta.
-</div>
+{{> _empty-state titulo="Sem dados financeiros" ano=ano descricao="Ainda não existem dados financeiros registados neste condomínio para este ano. Os valores aparecem quando a administração registar quotas, despesas ou movimentos de conta." icon="insights"}}
 {{/unless}}
 <div class="portal-financas mb-2">
   <div class="card portal-financa-card">

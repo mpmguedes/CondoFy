@@ -6,7 +6,7 @@
 {{!-- ═══ 1. Dados do condomínio ═══ --}}
 <div class="card mb-4">
   <div class="card-header bg-white">
-    <span class="material-symbols-outlined me-1 text-muted">apartment</span> Dados do condomínio
+    <span class="material-symbols-outlined me-1 text-muted" aria-hidden="true">apartment</span> Dados do condomínio
   </div>
   <div class="card-body">
     <div class="row g-3">
@@ -44,7 +44,7 @@
 {{!-- ═══ 2. Dados da assembleia ═══ --}}
 <div class="card mb-4">
   <div class="card-header bg-white">
-    <span class="material-symbols-outlined me-1 text-muted">event_available</span> Dados da assembleia
+    <span class="material-symbols-outlined me-1 text-muted" aria-hidden="true">event_available</span> Dados da assembleia
   </div>
   <div class="card-body">
     <div class="row g-3">
@@ -66,7 +66,7 @@
     </div>
 
     <div class="alert alert-light border cv-segunda mt-3 mb-0">
-      <span class="material-symbols-outlined me-1">schedule</span>
+      <span class="material-symbols-outlined me-1" aria-hidden="true">schedule</span>
       <span class="me-2">2.ª convocatória (automática, 30 minutos depois):</span>
       <strong id="segundaHora" class="cv-segunda-hora">—:——</strong>
     </div>
@@ -96,7 +96,7 @@
 {{!-- ═══ 3. Ordem de trabalhos ═══ --}}
 <div class="card mb-4">
   <div class="card-header bg-white">
-    <span class="material-symbols-outlined me-1 text-muted">format_list_numbered</span> Ordem de Trabalhos
+    <span class="material-symbols-outlined me-1 text-muted" aria-hidden="true">format_list_numbered</span> Ordem de Trabalhos
   </div>
   <div class="card-body">
     <div id="listaPontos" class="cv-pontos">
@@ -104,9 +104,9 @@
       <div class="cv-ponto-linha">
         <span class="cv-ponto-num">{{inc @index}}</span>
         <input type="text" class="form-control cv-ponto-input" name="pontos[]" value="{{this}}" placeholder="Descreva o ponto da ordem de trabalhos…" />
-        <button aria-label="Subir na ordem" type="button" class="btn btn-outline-secondary btn-sm cv-ponto-btn" data-accao="subir" title="Subir na ordem"><span class="material-symbols-outlined">arrow_upward</span></button>
-        <button aria-label="Descer na ordem" type="button" class="btn btn-outline-secondary btn-sm cv-ponto-btn" data-accao="descer" title="Descer na ordem"><span class="material-symbols-outlined">arrow_downward</span></button>
-        <button aria-label="Eliminar ponto" type="button" class="btn btn-outline-danger btn-sm cv-ponto-btn" data-accao="remover" title="Eliminar ponto"><span class="material-symbols-outlined">close</span></button>
+        <button aria-label="Subir na ordem" type="button" class="btn btn-outline-secondary btn-sm cv-ponto-btn" data-accao="subir" title="Subir na ordem"><span class="material-symbols-outlined" aria-hidden="true">arrow_upward</span></button>
+        <button aria-label="Descer na ordem" type="button" class="btn btn-outline-secondary btn-sm cv-ponto-btn" data-accao="descer" title="Descer na ordem"><span class="material-symbols-outlined" aria-hidden="true">arrow_downward</span></button>
+        <button aria-label="Eliminar ponto" type="button" class="btn btn-outline-danger btn-sm cv-ponto-btn" data-accao="remover" title="Eliminar ponto"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
       </div>
       {{/each}}
     </div>
@@ -128,7 +128,7 @@
     <span class="material-symbols-outlined me-1" aria-hidden="true">picture_as_pdf</span>Gerar PDF
   </button>
   {{#if driveLigado}}
-  <span class="small text-muted ms-lg-auto"><span class="material-symbols-outlined me-1" style="font-size:.95rem">cloud_done</span>Ao gerar o PDF, a convocatória é guardada automaticamente nos Documentos.</span>
+  <span class="small text-muted ms-lg-auto"><span class="material-symbols-outlined me-1" aria-hidden="true" style="font-size:.95rem">cloud_done</span>Ao gerar o PDF, a convocatória é guardada automaticamente nos Documentos.</span>
   {{else}}
   <span class="small text-muted ms-lg-auto">Sem serviço de armazenamento ligado — o PDF é gerado sem ficar guardado nos Documentos.</span>
   {{/if}}

@@ -1,0 +1,23 @@
+{{!-- ══════════════════════════════════════════════════════════════════
+     P54-0 — SLOT do corpo de CONSULTA desenhado por quem chama.
+
+     É a contrapartida do parâmetro `consultaPersonalizada` do parcial
+     `_modo-edicao`: quando uma vista o usa, o parcial invoca a parcial em
+     linha `me-consulta-corpo`, que a vista define com `{{#*inline ...}}`.
+
+     ── Por que existe este ficheiro ──────────────────────────────────
+     Uma parcial em linha sobrepõe-se a uma parcial registada com o mesmo
+     nome, mas NÃO a cria: se a vista usar `consultaPersonalizada` e se
+     esquecer de definir `me-consulta-corpo`, o Handlebars rebenta com
+     «The partial me-consulta-corpo could not be found» — um 500 em runtime.
+     Este ficheiro é a REDE: nesse caso a página continua a nascer e mostra
+     o aviso em baixo, em vez de morrer.
+
+     ⛔ Também é o que satisfaz a guarda do P36 em `scripts/test-vistas.js`:
+     todo o parcial invocado nas vistas tem de ter ficheiro em
+     `views/partials/`. Sem este ficheiro, a invocação dentro de
+     `_modo-edicao` seria dada como parcial inexistente.
+     (A guarda lê o TEXO das vistas — incluindo comentários — pelo que aqui
+     não se escreve uma invocação de exemplo nem em comentário.)
+     ══════════════════════════════════════════════════════════════════ --}}
+<p class="me-valor">Falta o corpo de consulta desta secção.</p>

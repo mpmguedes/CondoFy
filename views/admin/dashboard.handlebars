@@ -91,12 +91,20 @@
   </div>
 </div>
 
-{{!-- O QUE PRECISA DE ATENÇÃO HOJE (Fase 2H.2)
+{{!-- O QUE PRECISA DE ATENÇÃO HOJE (Fase 2H.2, A14 §9)
 
-     Uma lista única de sinais acionáveis: só aparece o que existe realmente a
-     tratar (nenhum zero é apresentado como problema) e cada linha leva à ação
-     correspondente. A decisão do que entra é do ajudante `helpers/dashboard.js`
-     (lógica pura, testada offline); aqui só se apresenta.
+     Só PROBLEMAS e situações operacionais que exigem intervenção. O que falta
+     CONFIGURAR não aparece aqui — está no bloco de preparação mais abaixo,
+     para que «ainda não configurou X» nunca pareça um erro.
+
+     ⛔ O texto deste comentário NÃO pode conter o rótulo da secção seguinte
+     («Preparação» + «do condomínio» seguidos): testes e cortes de vista usam
+     essa frase como âncora e apanhariam o comentário em vez do título.
+
+     Só aparece o que existe realmente a tratar (nenhum zero é apresentado como
+     problema) e cada linha leva à ação correspondente. A decisão de que sinais
+     existem e a que lista pertencem é do ajudante `helpers/dashboard.js`
+     (lógica pura, testada offline); aqui só se apresenta o que ele já separou.
 
      O estado dos serviços (armazenamento, email, backups) continua onde já
      estava — no cartão «Estado do condomínio» —, para não repetir a mesma
@@ -104,9 +112,9 @@
 <div class="section-title">Precisa de atenção</div>
 <div class="card mb-3">
   <div class="card-body py-2">
-    {{#if sinais.length}}
+    {{#if sinaisAtencao.length}}
     <ul class="atencao-lista">
-      {{#each sinais}}
+      {{#each sinaisAtencao}}
       <li class="atencao-item">
         <a class="atencao-sinal atencao-{{gravidade}}" href="{{destino.url}}">
           <span class="atencao-marca" aria-hidden="true"></span>
@@ -131,6 +139,48 @@
       <div>Fila de emails: {{sistema.filaPendentes}} por enviar · <span class="{{#if (gt sistema.filaErros 0)}}text-danger{{/if}}">{{sistema.filaErros}} com erro</span></div>
       {{/if}}
     </div>
+    {{/if}}
+  </div>
+</div>
+
+{{!-- PREPARAÇÃO DO CONDOMÍNIO (A14 §9)
+
+     O que ainda falta CONFIGURAR — e não o que está mal. Fica separado de
+     «Precisa de atenção» de propósito: «ainda não configurou X» não é um
+     problema e não deve ser lido como tal (nem com a mesma cor, nem na mesma
+     lista).
+
+     ⛔ ISTO NÃO É UM WIZARD: não há passos sequenciais, não há barra de
+     progresso nem ordem obrigatória. É uma lista de orientação que persiste
+     até cada item ficar concluído — e que desaparece quando deixa de ser
+     precisa. Quando não falta nada, o bloco diz que está configurado em vez de
+     mostrar uma lista vazia.
+
+     Cada linha tem ÍCONE + TEXTO + COR (A14 §8): o estado nunca é só um ponto
+     colorido, e o rótulo textual («Requer configuração») é o que o leitor de
+     ecrã anuncia. --}}
+<div class="section-title">Preparação do condomínio</div>
+<div class="card mb-3">
+  <div class="card-header">
+    <span class="fw-semibold">O que falta configurar</span>
+    <div class="small text-muted">Orientação permanente, não um problema do condomínio.</div>
+  </div>
+  <div class="card-body py-2">
+    {{#if sinaisPreparacao.length}}
+    <ul class="atencao-lista">
+      {{#each sinaisPreparacao}}
+      <li class="atencao-item">
+        <a class="atencao-sinal atencao-info" href="{{destino.url}}">
+          <span class="atencao-marca" aria-hidden="true"></span>
+          <span class="atencao-texto">{{texto}}</span>
+          <span class="estado estado-requer-config">{{estadoRotulo}}</span>
+          <span class="atencao-acao">{{destino.texto}}<span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span></span>
+        </a>
+      </li>
+      {{/each}}
+    </ul>
+    {{else}}
+    <div class="text-success small py-1"><i class="bi bi-check-circle me-1"></i>O condomínio está configurado — não falta nada de essencial.</div>
     {{/if}}
   </div>
 </div>
@@ -266,8 +316,18 @@
       <a class="strip-item text-decoration-none" href="/admin/emails"><div class="strip-label">Emails</div><div class="strip-value">{{nEmailsEnviados}}<span class="text-muted small"> · {{sistema.filaErros}} erros</span></div></a>
       {{/if}}
       <a class="strip-item text-decoration-none" href="/admin/fornecedores"><div class="strip-label">Fornecedores</div><div class="strip-value">{{nFornecedores}} <span class="text-muted small">ativos</span></div></a>
+      {{!-- A14 §15 — «Automações: Configuradas» estava ESCRITO À MÃO na vista e
+           continuava a dizê-lo depois de alguém desligar tudo. Agora o número
+           vem de `helpers/automacoes.js` (`resumo`), que lê o estado real.
+           Sem esse resumo (leitura indisponível) NÃO se inventa um valor:
+           mostra-se só a ligação. --}}
       {{#if (ne condominioAtivo.role 'gestor')}}
-      <a class="strip-item text-decoration-none" href="/admin/config/automacoes"><div class="strip-label">Automações</div><div class="strip-value">Configuradas</div></a>
+      <a class="strip-item text-decoration-none" href="/admin/config/automacoes">
+        <div class="strip-label">Automações</div>
+        <div class="strip-value">
+          {{#if automacoesResumo}}{{automacoesResumo.ativos}} <span class="text-muted small">de {{automacoesResumo.tipos}} tipos</span>{{else}}Configurar{{/if}}
+        </div>
+      </a>
       {{/if}}
     </div>
   </div>

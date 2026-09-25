@@ -24,12 +24,16 @@ const { Op } = require('sequelize');
 const { Assembleia, Aviso, Evento } = require('../models');
 
 // Rótulos de estado da assembleia (os mesmos da listagem de assembleias).
+// `variante` é a variante do componente `.estado` do A14 §8 — a linguagem única
+// de estado da aplicação (ícone + texto + cor). `classe` mantém-se enquanto
+// houver vistas a usar badges Bootstrap; as duas viajam juntas para não haver
+// duas fontes de verdade para o mesmo estado.
 const ESTADOS_ASSEMBLEIA = {
-  rascunho: { rotulo: 'Rascunho', classe: 'text-bg-secondary' },
-  agendada: { rotulo: 'Agendada', classe: 'text-bg-warning' },
-  convocada: { rotulo: 'Convocada', classe: 'text-bg-info' },
-  realizada: { rotulo: 'Realizada', classe: 'text-bg-success' },
-  cancelada: { rotulo: 'Cancelada', classe: 'text-bg-dark' },
+  rascunho: { rotulo: 'Rascunho', classe: 'text-bg-secondary', variante: 'estado-neutro' },
+  agendada: { rotulo: 'Agendada', classe: 'text-bg-warning', variante: 'estado-recomendado' },
+  convocada: { rotulo: 'Convocada', classe: 'text-bg-info', variante: 'estado-requer-config' },
+  realizada: { rotulo: 'Realizada', classe: 'text-bg-success', variante: 'estado-concluido' },
+  cancelada: { rotulo: 'Cancelada', classe: 'text-bg-dark', variante: 'estado-erro' },
 };
 
 const TIPOS_ASSEMBLEIA = {
@@ -65,7 +69,7 @@ function hojeISO(referencia) {
 }
 
 function estadoAssembleia(estado) {
-  return ESTADOS_ASSEMBLEIA[estado] || { rotulo: estado || '—', classe: 'text-bg-light border' };
+  return ESTADOS_ASSEMBLEIA[estado] || { rotulo: estado || '—', classe: 'text-bg-light border', variante: 'estado-neutro' };
 }
 
 // Uma assembleia cancelada nunca aparece no calendário; as restantes aparecem
@@ -94,6 +98,7 @@ function eventoDeAssembleia(assembleia) {
     descricao: a.ordem_trabalhos || null,
     estadoRotulo: estado.rotulo,
     estadoClasse: estado.classe,
+    estadoVariante: estado.variante,
     encerrado: ['realizada', 'cancelada'].includes(String(a.estado || '')),
     // Relevante: uma assembleia é sempre um acontecimento relevante do
     // condomínio — é uma reunião formal dos condóminos.

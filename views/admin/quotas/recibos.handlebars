@@ -67,7 +67,7 @@
   </div>
 </div>
 {{else}}
-<div class="alert alert-light border small">Sem valores pagos por emitir recibo. Os recibos são criados a partir dos pagamentos já recebidos.</div>
+{{> _empty-state tipo="indisponivel" icon="receipt_long" titulo="Sem valores pagos por emitir recibo" descricao="Os recibos são criados a partir dos pagamentos já recebidos. Registe um pagamento para poder emitir o respetivo recibo."}}
 {{/if}}
 
 {{!-- 3.2 Recibos emitidos --}}
@@ -112,14 +112,14 @@
             {{/if}}
           </td>
           <td class="text-center text-nowrap">
-            <a aria-label="Ver PDF" href="/admin/quotas/recibos/{{id}}/pdf" target="_blank" class="btn btn-sm btn-outline-primary px-1" title="Ver PDF" data-ajuda="Abre o recibo em PDF, numa nova aba." data-ajuda-titulo="Ver recibo (PDF)"><span class="material-symbols-outlined" style="font-size:1rem">picture_as_pdf</span></a>
+            <a aria-label="Ver PDF" href="/admin/quotas/recibos/{{id}}/pdf" target="_blank" class="btn btn-sm btn-outline-primary px-1" title="Ver PDF" data-ajuda="Abre o recibo em PDF, numa nova aba." data-ajuda-titulo="Ver recibo (PDF)"><span class="material-symbols-outlined" aria-hidden="true" style="font-size:1rem">picture_as_pdf</span></a>
             {{#if (eq estado 'emitido')}}
               {{#unless enviado_at}}
               <form action="/admin/quotas/recibos/{{id}}/enviar" method="POST" class="d-inline">
-                <button aria-label="Enviar recibo por email" class="btn btn-sm btn-outline-success px-1" title="Enviar recibo por email" data-ajuda="Envia este recibo por email ao condómino, com o PDF anexado." data-ajuda-titulo="Enviar recibo por email"><span class="material-symbols-outlined" style="font-size:1rem">mail</span></button>
+                <button aria-label="Enviar recibo por email" class="btn btn-sm btn-outline-success px-1" title="Enviar recibo por email" data-ajuda="Envia este recibo por email ao condómino, com o PDF anexado." data-ajuda-titulo="Enviar recibo por email"><span class="material-symbols-outlined" aria-hidden="true" style="font-size:1rem">mail</span></button>
               </form>
               {{/unless}}
-              <button aria-label="Anular recibo" type="button" class="btn btn-sm btn-outline-danger px-1 btn-anular" data-bs-toggle="modal" data-bs-target="#modalAnular" data-id="{{id}}" data-codigo="{{codigo}}" title="Anular recibo" data-ajuda="Anula este recibo. O registo mantém-se permanentemente marcado como anulado e os meses voltam a poder ser faturados." data-ajuda-titulo="Anular recibo"><span class="material-symbols-outlined" style="font-size:1rem">block</span></button>
+              <button aria-label="Anular recibo" type="button" class="btn btn-sm btn-outline-danger px-1 btn-anular" data-bs-toggle="modal" data-bs-target="#modalAnular" data-id="{{id}}" data-codigo="{{codigo}}" title="Anular recibo" data-ajuda="Anula este recibo. O registo mantém-se permanentemente marcado como anulado e os meses voltam a poder ser faturados." data-ajuda-titulo="Anular recibo"><span class="material-symbols-outlined" aria-hidden="true" style="font-size:1rem">block</span></button>
             {{/if}}
           </td>
         </tr>
@@ -129,7 +129,7 @@
   </div>
 </div>
 {{else}}
-<div class="alert alert-light border small">Ainda não há recibos emitidos.</div>
+{{> _empty-state icon="draft" titulo="Ainda não há recibos emitidos" descricao="Os recibos emitidos aparecem nesta lista, com o estado de envio e as ações disponíveis."}}
 {{/if}}
 
 {{!-- Dados por emitir (para a modal) — todos os meses da fração com saldos.

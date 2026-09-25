@@ -89,11 +89,11 @@
           <td>{{periodicidade}}</td>
           <td class="text-end text-nowrap">
             {{#unless (eq ../orcamento.estado 'anulado')}}
-            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#edit{{id}}"><i class="bi bi-pencil"></i></button>
+            <button class="btn btn-sm btn-outline-secondary" aria-label="Editar rubrica" data-bs-toggle="collapse" data-bs-target="#edit{{id}}"><i class="bi bi-pencil" aria-hidden="true"></i></button>
             {{/unless}}
             {{#if (eq ../orcamento.estado 'rascunho')}}
             <form action="/admin/orcamento/{{../orcamento.id}}/rubricas/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Remover esta rubrica?" data-confirmar-perigo="1">
-              <button class="btn btn-sm btn-outline-danger" data-ajuda="Remove esta rubrica do orçamento. O total do orçamento é recalculado sem ela." data-ajuda-titulo="Remover rubrica"><i class="bi bi-trash"></i></button>
+              <button class="btn btn-sm btn-outline-danger" aria-label="Remover rubrica" data-ajuda="Remove esta rubrica do orçamento. O total do orçamento é recalculado sem ela." data-ajuda-titulo="Remover rubrica"><i class="bi bi-trash" aria-hidden="true"></i></button>
             </form>
             {{/if}}
           </td>

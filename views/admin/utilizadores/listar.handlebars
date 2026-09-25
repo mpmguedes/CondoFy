@@ -47,15 +47,15 @@
           <td class="text-end">
             {{#if podeConvite}}
             <form action="/admin/utilizadores/{{id}}/reenviar-convite" method="POST" class="d-inline">
-              <button aria-label="Reenviar convite" class="btn btn-sm btn-outline-primary" title="Reenviar convite" data-ajuda="Envia um novo convite por email. O convite anterior deixa de ser válido." data-ajuda-titulo="Reenviar convite"><span class="material-symbols-outlined">forward_to_inbox</span></button>
+              <button aria-label="Reenviar convite" class="btn btn-sm btn-outline-primary" title="Reenviar convite" data-ajuda="Envia um novo convite por email. O convite anterior deixa de ser válido." data-ajuda-titulo="Reenviar convite"><span class="material-symbols-outlined" aria-hidden="true">forward_to_inbox</span></button>
             </form>
             <form action="/admin/utilizadores/{{id}}/revogar-convite" method="POST" class="d-inline" data-confirmar="Revogar este convite?" data-confirmar-perigo="1">
-              <button aria-label="Revogar convite" class="btn btn-sm btn-outline-secondary" title="Revogar convite" data-ajuda="Invalida o convite por aceitar. O utilizador deixa de poder criar conta com ele." data-ajuda-titulo="Revogar convite"><span class="material-symbols-outlined">block</span></button>
+              <button aria-label="Revogar convite" class="btn btn-sm btn-outline-secondary" title="Revogar convite" data-ajuda="Invalida o convite por aceitar. O utilizador deixa de poder criar conta com ele." data-ajuda-titulo="Revogar convite"><span class="material-symbols-outlined" aria-hidden="true">block</span></button>
             </form>
             {{/if}}
-            <a aria-label="Editar" href="/admin/utilizadores/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
+            <a aria-label="Editar" href="/admin/utilizadores/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined" aria-hidden="true">edit</span></a>
             <form action="/admin/utilizadores/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Eliminar este utilizador?" data-confirmar-perigo="1">
-              <button aria-label="Eliminar" class="btn btn-sm btn-outline-danger" title="Eliminar" data-ajuda="Elimina definitivamente este utilizador da plataforma." data-ajuda-titulo="Eliminar utilizador"><span class="material-symbols-outlined">delete</span></button>
+              <button aria-label="Eliminar" class="btn btn-sm btn-outline-danger" title="Eliminar" data-ajuda="Elimina definitivamente este utilizador da plataforma." data-ajuda-titulo="Eliminar utilizador"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
             </form>
           </td>
         </tr>

@@ -45,10 +45,10 @@
           <td class="font-monospace small">{{#if iban}}{{iban}}{{else}}—{{/if}}</td>
           <td>{{#if ativo}}<span class="badge text-bg-success">Ativo</span>{{else}}<span class="badge text-bg-secondary">Inativo</span>{{/if}}</td>
           <td class="text-end text-nowrap">
-            <a aria-label="Ver" href="/admin/fornecedores/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
-            <a aria-label="Editar" href="/admin/fornecedores/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
+            <a aria-label="Ver" href="/admin/fornecedores/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined" aria-hidden="true">visibility</span></a>
+            <a aria-label="Editar" href="/admin/fornecedores/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined" aria-hidden="true">edit</span></a>
             <form action="/admin/fornecedores/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Eliminar este fornecedor? As despesas associadas ficam sem fornecedor." data-confirmar-perigo="1">
-              <button aria-label="Apagar" class="btn btn-sm btn-outline-danger" title="Apagar" data-ajuda="Elimina este fornecedor. As despesas associadas mantêm-se, mas ficam sem fornecedor." data-ajuda-titulo="Eliminar fornecedor"><span class="material-symbols-outlined">delete</span></button>
+              <button aria-label="Apagar" class="btn btn-sm btn-outline-danger" title="Apagar" data-ajuda="Elimina este fornecedor. As despesas associadas mantêm-se, mas ficam sem fornecedor." data-ajuda-titulo="Eliminar fornecedor"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
             </form>
           </td>
         </tr>

@@ -287,8 +287,22 @@ function testeVistaRotaConsumidores() {
   assert.ok(/action="\/admin\/config\/automacoes"/.test(vista) === false
     || /_modo-edicao id="automacoes" acao="\/admin\/config\/automacoes"/.test(vista),
     'a rota de gravação é a do componente (não inventada na vista)');
-  assert.ok(/name="auto_\{\{tipo\}\}_drive"/.test(vista),
+  // A14 §6 (2026-09-24): o markup da tabela passou para o parcial partilhado
+  // `_automacoes-tabela` (é o que faz consulta e edição terem a MESMA
+  // estrutura). A invariante é sobre os NOMES dos campos — onde quer que o
+  // markup viva — e sobre a consulta não ter um único input.
+  const tabelaAutomacoes = ler('views/partials/_automacoes-tabela.handlebars');
+  assert.ok(/name="auto_\{\{tipo\}\}_drive"/.test(vista + tabelaAutomacoes),
     'os nomes dos campos (`auto_<tipo>_<canal>`) mantêm-se inalterados');
+  assert.ok(/\{\{#> _modo-edicao id="automacoes"[\s\S]*consultaPersonalizada=true/.test(vista),
+    'a consulta é a do parcial partilhado (`consultaPersonalizada`), não a lista solta');
+  // ⛔ Cada célula tem um ramo de EDIÇÃO e um de CONSULTA: no de consulta não
+  // pode haver um único `input` — senão a consulta voltava a ser editável.
+  const ramos = [...tabelaAutomacoes.matchAll(
+    /\{\{#if \.\.\/\.\.\/editando\}\}([\s\S]*?)\{\{else\}\}([\s\S]*?)\{\{\/if\}\}/g)];
+  assert.ok(ramos.length >= 3, `a tabela tem ramos edição/consulta por célula (${ramos.length})`);
+  assert.ok(ramos.every(([, edicao, consulta]) => /<input/.test(edicao) && !/<input/.test(consulta)),
+    'em CONSULTA nenhuma célula tem `input` (só pílulas de estado)');
 
   const rota = ler('routes/configuracao.js');
   assert.ok(/listarAutomacoes\(req\.condominioId\)/.test(rota),

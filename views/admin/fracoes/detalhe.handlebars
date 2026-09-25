@@ -93,7 +93,7 @@
       </div>
     </div>
     {{else}}
-    {{> _empty-state icon="receipt_long" titulo="Sem quotas" descricao="Esta fração ainda não tem quotas emitidas."}}
+    {{> _empty-state tipo="indisponivel" icon="receipt_long" titulo="Sem quotas" descricao="Esta fração ainda não tem quotas emitidas."}}
     {{/if}}
   </div>
 
@@ -118,7 +118,7 @@
       </div>
     </div>
     {{else}}
-    {{> _empty-state icon="payments" titulo="Sem pagamentos" descricao="Esta fração ainda não tem pagamentos registados."}}
+    {{> _empty-state tipo="indisponivel" icon="payments" titulo="Sem pagamentos" descricao="Esta fração ainda não tem pagamentos registados."}}
     {{/if}}
   </div>
 
@@ -128,14 +128,14 @@
       <ul class="list-group list-group-flush">
         {{#each documentos}}
         <li class="list-group-item d-flex justify-content-between align-items-center">
-          <span><span class="material-symbols-outlined me-2 text-muted">description</span>{{nome}}</span>
+          <span><span class="material-symbols-outlined me-2 text-muted" aria-hidden="true">description</span>{{nome}}</span>
           <span class="text-muted small">{{formatDate data}}</span>
         </li>
         {{/each}}
       </ul>
     </div>
     {{else}}
-    {{> _empty-state icon="folder" titulo="Sem documentos" descricao="Esta fração ainda não tem documentos associados."}}
+    {{> _empty-state tipo="indisponivel" icon="folder" titulo="Sem documentos" descricao="Esta fração ainda não tem documentos associados."}}
     {{/if}}
   </div>
 
@@ -145,14 +145,14 @@
       <ul class="list-group list-group-flush">
         {{#each avisos}}
         <li class="list-group-item d-flex justify-content-between align-items-center">
-          <span><span class="material-symbols-outlined me-2 text-muted">campaign</span>{{#if aviso}}{{aviso.assunto}}{{else}}—{{/if}}</span>
+          <span><span class="material-symbols-outlined me-2 text-muted" aria-hidden="true">campaign</span>{{#if aviso}}{{aviso.assunto}}{{else}}—{{/if}}</span>
           <span class="text-muted small">{{#if aviso}}{{formatDateTime aviso.createdAt}}{{/if}}</span>
         </li>
         {{/each}}
       </ul>
     </div>
     {{else}}
-    {{> _empty-state icon="campaign" titulo="Sem comunicações" descricao="Esta fração ainda não recebeu avisos."}}
+    {{> _empty-state tipo="indisponivel" icon="campaign" titulo="Sem comunicações" descricao="Esta fração ainda não recebeu avisos."}}
     {{/if}}
   </div>
 </div>

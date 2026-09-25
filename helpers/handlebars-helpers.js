@@ -23,6 +23,13 @@ function formatBytes(valor) {
   return `${x.toFixed(casas).replace('.', ',')} ${UNIDADES[i]}`;
 }
 
+// Predicado ÚNICO do «item ativo» da navegação. `isActive` (a classe) e
+// `ariaCurrent` (a semântica) partilham-no: se cada um tivesse a sua cópia, a
+// cor e o anúncio do leitor de ecrã podiam discordar sem que ninguém notasse.
+function eAtivo(path, prefix) {
+  return path === prefix || Boolean(path && path.startsWith(prefix + '/'));
+}
+
 // Helpers Handlebars usados nas views.
 module.exports = {
   eq: (a, b) => String(a) === String(b),
@@ -50,7 +57,13 @@ module.exports = {
   // checked(a) → 'checked' se verdadeiro
   checked: (a) => (a ? 'checked' : ''),
   // isActive(path, prefix) → 'active' se o path atual pertence a esse item
-  isActive: (path, prefix) => (path === prefix || (path && path.startsWith(prefix + '/'))) ? 'active' : '',
+  isActive: (path, prefix) => (eAtivo(path, prefix) ? 'active' : ''),
+  // ariaCurrent(path, prefix) → `aria-current="page"` se o path atual pertence
+  // a esse item. A14 §2/§14: o estado ativo NÃO pode depender só da cor — um
+  // leitor de ecrã não vê a classe `active`. O predicado é PARTILHADO com
+  // `isActive` (uma única regra: se divergissem, a cor e a semântica
+  // discordariam em silêncio).
+  ariaCurrent: (path, prefix) => (eAtivo(path, prefix) ? 'aria-current="page"' : ''),
   // urlDocumento(doc, area) → rota INTERNA de acesso ao ficheiro do documento.
   // Os documentos nunca são servidos por links do fornecedor (Drive/Dropbox/
   // OneDrive): o ficheiro passa sempre pelo backend, que verifica sessão,

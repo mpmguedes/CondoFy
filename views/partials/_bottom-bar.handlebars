@@ -1,44 +1,44 @@
 {{!-- Barra inferior para ecrãs pequenos (acessos rápidos). --}}
 <nav class="mobile-bottom-bar" aria-label="Acessos rápidos">
   {{#if isAdmin}}
-  <a class="mb-item {{#if (eq currentPath '/admin')}}mb-item-ativo{{/if}}" href="/admin" title="Painel">
-    <span class="material-symbols-outlined" aria-hidden="true">dashboard</span><span class="mb-label">Painel</span>
+  <a class="mb-item {{#if (eq currentPath '/admin')}}mb-item-ativo{{/if}}" href="/admin" {{#if (eq currentPath '/admin')}}aria-current="page"{{/if}} title="Painel">
+    <span class="si" aria-hidden="true"><i class="bi bi-grid-1x2-fill" aria-hidden="true"></i></span><span class="mb-label">Painel</span>
   </a>
-  <a class="mb-item {{#if (and (startsPath currentPath '/admin/quotas') (not (startsPath currentPath '/admin/quotas/recibos')))}}mb-item-ativo{{/if}}" href="/admin/quotas/conta-corrente" title="Quotas">
-    <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span><span class="mb-label">Quotas</span>
+  <a class="mb-item {{#if (and (startsPath currentPath '/admin/quotas') (not (startsPath currentPath '/admin/quotas/recibos')))}}mb-item-ativo{{/if}}" href="/admin/quotas/conta-corrente" {{#if (and (startsPath currentPath '/admin/quotas') (not (startsPath currentPath '/admin/quotas/recibos')))}}aria-current="page"{{/if}} title="Quotas">
+    <span class="si" aria-hidden="true"><i class="bi bi-receipt" aria-hidden="true"></i></span><span class="mb-label">Quotas</span>
   </a>
-  <a class="mb-item {{#if (startsPath currentPath '/admin/quotas/recibos')}}mb-item-ativo{{/if}}" href="/admin/quotas/recibos" title="Recibos">
-    <span class="material-symbols-outlined" aria-hidden="true">confirmation_number</span><span class="mb-label">Recibos</span>
+  <a class="mb-item {{#if (startsPath currentPath '/admin/quotas/recibos')}}mb-item-ativo{{/if}}" href="/admin/quotas/recibos" {{#if (startsPath currentPath '/admin/quotas/recibos')}}aria-current="page"{{/if}} title="Recibos">
+    <span class="si" aria-hidden="true"><i class="bi bi-receipt-cutoff" aria-hidden="true"></i></span><span class="mb-label">Recibos</span>
   </a>
-  <a class="mb-item {{#if (startsPath currentPath '/admin/avisos')}}mb-item-ativo{{/if}}" href="/admin/avisos" title="Comunicações">
-    <span class="material-symbols-outlined" aria-hidden="true">campaign</span><span class="mb-label">Avisos</span>
+  <a class="mb-item {{#if (startsPath currentPath '/admin/avisos')}}mb-item-ativo{{/if}}" href="/admin/avisos" {{#if (startsPath currentPath '/admin/avisos')}}aria-current="page"{{/if}} title="Comunicações">
+    <span class="si" aria-hidden="true"><i class="bi bi-megaphone-fill" aria-hidden="true"></i></span><span class="mb-label">Avisos</span>
   </a>
   {{else}}
   {{!-- Área do condómino: as funções do dia a dia a um toque. O resto (assembleias,
        calendário, orçamento, situação financeira, condomínios, perfil) fica no
        menu lateral, aberto pelo item «Menu». --}}
-  <a class="mb-item {{#if (eq currentPath '/condomino')}}mb-item-ativo{{/if}}" href="/condomino" title="Início" aria-label="Início">
-    <span class="material-symbols-outlined" aria-hidden="true">home</span><span class="mb-label">Início</span>
+  <a class="mb-item {{#if (eq currentPath '/condomino')}}mb-item-ativo{{/if}}" href="/condomino" {{#if (eq currentPath '/condomino')}}aria-current="page"{{/if}} title="Início" aria-label="Início">
+    <span class="si" aria-hidden="true"><i class="bi bi-house-fill" aria-hidden="true"></i></span><span class="mb-label">Início</span>
   </a>
   {{#if (or (startsPath currentPath '/condomino/quotas') (or (startsPath currentPath '/condomino/pagamentos') (startsPath currentPath '/condomino/recibos')))}}
   <a class="mb-item mb-item-ativo" href="/condomino/quotas" title="Quotas, pagamentos e recibos" aria-label="Quotas, pagamentos e recibos" aria-current="page">
-    <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span><span class="mb-label">Quotas</span>
+    <span class="si" aria-hidden="true"><i class="bi bi-receipt" aria-hidden="true"></i></span><span class="mb-label">Quotas</span>
   </a>
   {{else}}
   <a class="mb-item" href="/condomino/quotas" title="Quotas, pagamentos e recibos" aria-label="Quotas, pagamentos e recibos">
-    <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span><span class="mb-label">Quotas</span>
+    <span class="si" aria-hidden="true"><i class="bi bi-receipt" aria-hidden="true"></i></span><span class="mb-label">Quotas</span>
   </a>
   {{/if}}
-  <a class="mb-item {{#if (startsPath currentPath '/condomino/documentos')}}mb-item-ativo{{/if}}" href="/condomino/documentos" title="Documentos" aria-label="Documentos">
-    <span class="material-symbols-outlined" aria-hidden="true">folder</span><span class="mb-label">Documentos</span>
+  <a class="mb-item {{#if (startsPath currentPath '/condomino/documentos')}}mb-item-ativo{{/if}}" href="/condomino/documentos" {{#if (startsPath currentPath '/condomino/documentos')}}aria-current="page"{{/if}} title="Documentos" aria-label="Documentos">
+    <span class="si" aria-hidden="true"><i class="bi bi-folder-fill" aria-hidden="true"></i></span><span class="mb-label">Documentos</span>
   </a>
-  <a class="mb-item {{#if (startsPath currentPath '/condomino/avisos')}}mb-item-ativo{{/if}}" href="/condomino/avisos" title="Avisos" aria-label="Avisos">
-    <span class="material-symbols-outlined" aria-hidden="true">campaign</span><span class="mb-label">Avisos</span>
+  <a class="mb-item {{#if (startsPath currentPath '/condomino/avisos')}}mb-item-ativo{{/if}}" href="/condomino/avisos" {{#if (startsPath currentPath '/condomino/avisos')}}aria-current="page"{{/if}} title="Avisos" aria-label="Avisos">
+    <span class="si" aria-hidden="true"><i class="bi bi-megaphone-fill" aria-hidden="true"></i></span><span class="mb-label">Avisos</span>
   </a>
   {{/if}}
   {{!-- Item "Menu": reutiliza exatamente o menu lateral do cabeçalho
        (mesmo drawer, mesmo botão #sidebarToggle, controlado em /js/app.js). --}}
   <button type="button" class="mb-item mb-item-menu" id="sidebarToggleBottom" data-sidebar-toggle aria-label="Abrir menu principal" aria-expanded="false" aria-controls="sidebar" title="Menu">
-    <span class="material-symbols-outlined" aria-hidden="true">more_horiz</span><span class="mb-label">Menu</span>
+    <span class="si" aria-hidden="true"><i class="bi bi-three-dots" aria-hidden="true"></i></span><span class="mb-label">Menu</span>
   </button>
 </nav>

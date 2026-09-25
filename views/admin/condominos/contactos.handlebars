@@ -22,11 +22,11 @@
             <div class="d-flex gap-1 align-items-center">
               {{#unless principal}}
               <form action="/admin/condominos/contactos/{{id}}/principal" method="POST" class="d-inline">
-                <button aria-label="Definir principal" class="btn btn-sm btn-outline-primary" title="Definir principal" data-ajuda="Define este contacto como principal — é o usado por omissão nas comunicações e no envio de quotas." data-ajuda-titulo="Definir contacto principal"><span class="material-symbols-outlined">star</span></button>
+                <button aria-label="Definir principal" class="btn btn-sm btn-outline-primary" title="Definir principal" data-ajuda="Define este contacto como principal — é o usado por omissão nas comunicações e no envio de quotas." data-ajuda-titulo="Definir contacto principal"><span class="material-symbols-outlined" aria-hidden="true">star</span></button>
               </form>
               {{/unless}}
               <form action="/admin/condominos/contactos/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Eliminar este contacto?" data-confirmar-perigo="1">
-                <button aria-label="Eliminar contacto" class="btn btn-sm btn-outline-danger" data-ajuda="Elimina este contacto do condómino. Se for o principal, escolha outro para o substituir." data-ajuda-titulo="Eliminar contacto"><span class="material-symbols-outlined">delete</span></button>
+                <button aria-label="Eliminar contacto" class="btn btn-sm btn-outline-danger" data-ajuda="Elimina este contacto do condómino. Se for o principal, escolha outro para o substituir." data-ajuda-titulo="Eliminar contacto"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
               </form>
             </div>
           </div>
@@ -61,11 +61,11 @@
             <div class="d-flex gap-1 align-items-center">
               {{#unless principal}}
               <form action="/admin/condominos/contactos/{{id}}/principal" method="POST" class="d-inline">
-                <button aria-label="Definir principal" class="btn btn-sm btn-outline-primary" title="Definir principal" data-ajuda="Define este contacto como principal — é o usado por omissão nas comunicações e no envio de quotas." data-ajuda-titulo="Definir contacto principal"><span class="material-symbols-outlined">star</span></button>
+                <button aria-label="Definir principal" class="btn btn-sm btn-outline-primary" title="Definir principal" data-ajuda="Define este contacto como principal — é o usado por omissão nas comunicações e no envio de quotas." data-ajuda-titulo="Definir contacto principal"><span class="material-symbols-outlined" aria-hidden="true">star</span></button>
               </form>
               {{/unless}}
               <form action="/admin/condominos/contactos/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Eliminar este contacto?" data-confirmar-perigo="1">
-                <button aria-label="Eliminar contacto" class="btn btn-sm btn-outline-danger" data-ajuda="Elimina este contacto do condómino. Se for o principal, escolha outro para o substituir." data-ajuda-titulo="Eliminar contacto"><span class="material-symbols-outlined">delete</span></button>
+                <button aria-label="Eliminar contacto" class="btn btn-sm btn-outline-danger" data-ajuda="Elimina este contacto do condómino. Se for o principal, escolha outro para o substituir." data-ajuda-titulo="Eliminar contacto"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
               </form>
             </div>
           </div>

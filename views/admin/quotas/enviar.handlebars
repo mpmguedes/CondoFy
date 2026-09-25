@@ -68,10 +68,10 @@
             <td class="small">{{#if emails}}{{emails}}{{else}}<span class="text-muted">Sem email</span>{{/if}}</td>
             <td class="text-nowrap">{{periodo}}</td>
             <td class="text-end">{{eur valor}}</td>
-            <td><a aria-label="Aviso PDF" href="/admin/quotas/{{id}}/aviso" target="_blank" class="btn btn-sm btn-outline-primary" title="Aviso PDF"><span class="material-symbols-outlined">picture_as_pdf</span></a>
+            <td><a aria-label="Aviso PDF" href="/admin/quotas/{{id}}/aviso" target="_blank" class="btn btn-sm btn-outline-primary" title="Aviso PDF"><span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span></a>
               {{#if ../driveLigado}}
               <form action="/admin/quotas/{{id}}/aviso/drive" method="POST" class="d-inline">
-                <button aria-label="Guardar aviso no Google Drive" class="btn btn-sm btn-outline-secondary" title="Guardar aviso no Google Drive" data-ajuda="Gera o aviso em PDF e guarda-o no serviço de armazenamento do condomínio." data-ajuda-titulo="Guardar aviso no armazenamento"><span class="material-symbols-outlined">cloud_upload</span></button>
+                <button aria-label="Guardar aviso no Google Drive" class="btn btn-sm btn-outline-secondary" title="Guardar aviso no Google Drive" data-ajuda="Gera o aviso em PDF e guarda-o no serviço de armazenamento do condomínio." data-ajuda-titulo="Guardar aviso no armazenamento"><span class="material-symbols-outlined" aria-hidden="true">cloud_upload</span></button>
               </form>
               {{/if}}
             </td>
@@ -103,7 +103,7 @@
   </form>
 </div>
 {{else}}
-{{> _empty-state icon="mail" titulo="Sem quotas neste período" descricao="Escolha outro mês/ano ou gere quotas primeiro." link="/admin/quotas/gerar" linkTexto="Gerar quotas"}}
+{{> _empty-state tipo="filtro" icon="mail" titulo="Sem quotas neste período" descricao="Escolha outro mês/ano ou gere quotas primeiro." link="/admin/quotas/gerar" linkTexto="Gerar quotas"}}
 {{/if}}
 
 <script>

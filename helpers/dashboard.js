@@ -115,15 +115,36 @@ async function orcamentoDoAno(ano, condominioId) {
   };
 }
 
-// ── Sinais de atenção do painel ─────────────────────────────────────
+// ── Sinais do painel ────────────────────────────────────────────────
 //
 // Parte PURA (sem consultas): recebe o que o handler já carregou e devolve a
 // lista de sinais que exigem decisão da administração, por ordem de prioridade.
 // Só entram os sinais com algo real a tratar — nunca se mostram zeros, porque um
 // zero não é um problema. Cada sinal traz a quantidade e o destino da ação.
 //
+// ── A14 §9 — DUAS LISTAS QUE NÃO SE MISTURAM ────────────────────────
+// Cada sinal declara `categoria`, e é essa declaração — NEM a gravidade nem o
+// tipo — que decide em que lista do painel aparece:
+//
+//   · 'atencao'    → «Precisa de atenção»: um PROBLEMA ou uma situação
+//                    operacional que exige intervenção (quotas em atraso,
+//                    comprovativos por validar, backup falhado, emails com
+//                    erro, quotas do mês ainda não geradas).
+//   · 'preparacao' → «Preparação do condomínio»: CONFIGURAÇÃO que ainda não foi
+//                    concluída (armazenamento dos documentos, email/SMTP,
+//                    orçamento do ano por concluir).
+//
+// A regra é SEMÂNTICA: «ainda não configurou X» nunca é apresentado ao lado de
+// «existe um problema». `separarSinais` é o único sítio que conhece as duas
+// listas; a vista recebe-as já separadas e nunca as volta a misturar.
+//
+// ⛔ Um sinal que já tenha APRESENTAÇÃO PRÓPRIA no painel não entra em nenhuma
+//    das duas listas: apareceria duas vezes. Foi por isso que «assembleias»
+//    saiu daqui — as próximas assembleias têm cartão próprio no painel.
+//
 // Prioridade: segurança/estado do condomínio → dinheiro a receber → trabalho
-// pendente → configuração. Números maiores aparecem primeiro.
+// pendente → configuração. Números maiores aparecem primeiro. (Só ordena a
+// lista; não decide a categoria.)
 const PRIORIDADE_SINAL = {
   quotas_vencidas: 100,
   comprovativos: 90,
@@ -131,12 +152,15 @@ const PRIORIDADE_SINAL = {
   pagamentos_fornecedor: 70,
   documentos: 60,
   orcamento: 50,
-  assembleias: 45,
   email_erros: 40,
   backup: 35,
   drive: 30,
   smtp: 30,
 };
+
+// As duas categorias. Um sinal sem categoria válida é um ERRO DE PROGRAMAÇÃO:
+// falha alto aqui (nos testes) em vez de aparecer calado na lista errada.
+const CATEGORIAS_SINAL = new Set(['atencao', 'preparacao']);
 
 // Sinais cujo DESTINO exige `comPapel('admin')` nos routers de `/admin`
 // (`routes/emails.js` → email_erros/smtp; `routes/configuracao.js` →
@@ -149,7 +173,10 @@ const SINAIS_SO_ADMIN = new Set(['email_erros', 'backup', 'drive', 'smtp']);
 //  · nVencidas {number}, comprovativosPendentes {number}
 //  · quotasMesEmitidas {number}, documentosPorDisponibilizar {number}
 //  · orcamentoEstadoAberto {string|null}
-//  · proximasAssembleias {Array<{id, numero, data, designacao}>}
+//  · proximasAssembleias — ⛔ NÃO gera sinal (A14 §9): as próximas assembleias
+//    já têm cartão próprio no painel; um sinal aqui repetia a informação e não
+//    é nem um problema nem uma falta de configuração. O campo continua a ser
+//    aceite para não partir quem já o passa.
 //  · pagamentosFornecedorPendentes {number}, filaErros {number}
 //  · documentosLigado {boolean} — os DOCUMENTOS do condomínio têm um serviço
 //    de armazenamento ligado? (é o armazenamento principal do condomínio; não
@@ -162,16 +189,24 @@ const SINAIS_SO_ADMIN = new Set(['email_erros', 'backup', 'drive', 'smtp']);
 //    Omisso ⇒ true (compatibilidade: quem não passa o contexto mantém o
 //    comportamento anterior). Com `false`, são omitidos os sinais cujo destino
 //    exige `admin` — ver SINAIS_SO_ADMIN.
-function sinaisDeAtencao(dados = {}) {
+function sinaisDoPainel(dados = {}) {
   const sinais = [];
   const podeAdmin = dados.podeAdmin !== false;
   const juntar = (id, campos) => {
     if (!podeAdmin && SINAIS_SO_ADMIN.has(id)) return;
+    // ⛔ Falha alto: um sinal novo sem `categoria` seria classificado por
+    // omissão e podia ir parar à lista errada — exatamente a mistura que o
+    // A14 §9 proíbe.
+    if (!CATEGORIAS_SINAL.has(campos.categoria)) {
+      throw new Error(`sinaisDoPainel: o sinal «${id}» não declara categoria ('atencao' ou 'preparacao')`);
+    }
     sinais.push({ id, tipo: campos.tipo || 'trabalho', quantidade: Number(campos.quantidade) || 0, prioridade: PRIORIDADE_SINAL[id] || 0, ...campos });
   };
 
+  // ══ «PRECISA DE ATENÇÃO» — problema real ═══════════════════════════
   if (Number(dados.nVencidas) > 0) {
     juntar('quotas_vencidas', {
+      categoria: 'atencao',
       tipo: 'financeiro',
       gravidade: 'critico',
       texto: `${dados.nVencidas} quota(s) em atraso`,
@@ -181,6 +216,7 @@ function sinaisDeAtencao(dados = {}) {
   }
   if (Number(dados.comprovativosPendentes) > 0) {
     juntar('comprovativos', {
+      categoria: 'atencao',
       tipo: 'financeiro',
       gravidade: 'atencao',
       texto: `${dados.comprovativosPendentes} comprovativo(s) por validar`,
@@ -190,6 +226,9 @@ function sinaisDeAtencao(dados = {}) {
   }
   if (Number(dados.quotasMesEmitidas) === 0) {
     juntar('quotas_mes', {
+      // «Ainda não geradas» mas NÃO é falta de configuração: é trabalho
+      // operacional do mês. Fica em Atenção (decisão de 2026-09-24).
+      categoria: 'atencao',
       tipo: 'trabalho',
       gravidade: 'atencao',
       texto: 'Quotas do mês ainda não geradas',
@@ -199,6 +238,7 @@ function sinaisDeAtencao(dados = {}) {
   }
   if (Number(dados.pagamentosFornecedorPendentes) > 0) {
     juntar('pagamentos_fornecedor', {
+      categoria: 'atencao',
       tipo: 'financeiro',
       gravidade: 'atencao',
       texto: `${dados.pagamentosFornecedorPendentes} pagamento(s) a fornecedores pendentes`,
@@ -208,6 +248,7 @@ function sinaisDeAtencao(dados = {}) {
   }
   if (Number(dados.documentosPorDisponibilizar) > 0) {
     juntar('documentos', {
+      categoria: 'atencao',
       tipo: 'trabalho',
       gravidade: 'info',
       texto: `${dados.documentosPorDisponibilizar} documento(s) deste ano ainda não disponibilizados aos condóminos`,
@@ -215,28 +256,9 @@ function sinaisDeAtencao(dados = {}) {
       destino: { url: '/admin/documentos', texto: 'Ver documentos' },
     });
   }
-  if (dados.orcamentoEstadoAberto) {
-    juntar('orcamento', {
-      tipo: 'trabalho',
-      gravidade: 'info',
-      texto: `Orçamento de ${dados.ano || ''} em ${dados.orcamentoEstadoRotulo || 'rascunho'}`.trim(),
-      quantidade: 0,
-      destino: { url: dados.orcamentoId ? `/admin/orcamento/${dados.orcamentoId}` : '/admin/orcamento', texto: 'Abrir orçamento' },
-    });
-  }
-  const proximas = Array.isArray(dados.proximasAssembleias) ? dados.proximasAssembleias : [];
-  if (proximas.length) {
-    const primeira = proximas[0];
-    juntar('assembleias', {
-      tipo: 'trabalho',
-      gravidade: 'info',
-      texto: `Assembleia a ${primeira.data}`,
-      quantidade: 0,
-      destino: { url: `/admin/assembleias/${primeira.id}`, texto: 'Ver assembleia' },
-    });
-  }
   if (Number(dados.filaErros) > 0) {
     juntar('email_erros', {
+      categoria: 'atencao',
       tipo: 'sistema',
       gravidade: 'atencao',
       texto: `${dados.filaErros} email(s) com erro`,
@@ -244,27 +266,12 @@ function sinaisDeAtencao(dados = {}) {
       destino: { url: '/admin/emails?estado=erros', texto: 'Ver emails' },
     });
   }
-  // Serviços: só se assinala o que está EXPLICITAMENTE desligado. Sem
-  // informação (`undefined`) não se inventa um problema — evita alarmes falsos
-  // se o contexto vier incompleto.
-  //
-  // `documentosLigado` refere-se ao armazenamento principal DOS DOCUMENTOS do
-  // condomínio (por condomínio) — nunca ao destino dos backups, que é uma
-  // configuração da instalação e não depende deste condomínio.
-  if (dados.documentosLigado === false) {
-    juntar('drive', {
-      tipo: 'sistema',
-      gravidade: 'info',
-      texto: 'Sem serviço de armazenamento para os documentos',
-      quantidade: 0,
-      destino: { url: '/admin/config/armazenamento', texto: 'Ligar armazenamento' },
-    });
-  }
   // Último backup: só é um problema quando falhou por completo ou quando a
   // cópia cloud não foi criada. Em ambos os casos a cópia LOCAL é sempre
   // feita, por isso a mensagem di-lo explicitamente.
   if (dados.backupEstado === 'erro') {
     juntar('backup', {
+      categoria: 'atencao',
       tipo: 'sistema',
       gravidade: 'atencao',
       texto: 'O último backup falhou',
@@ -273,6 +280,7 @@ function sinaisDeAtencao(dados = {}) {
     });
   } else if (dados.backupEstado === 'local_copia_cloud_falhada') {
     juntar('backup', {
+      categoria: 'atencao',
       tipo: 'sistema',
       gravidade: 'info',
       texto: 'A cópia cloud do último backup não foi criada (a cópia local existe)',
@@ -280,8 +288,30 @@ function sinaisDeAtencao(dados = {}) {
       destino: { url: '/admin/config/armazenamento', texto: 'Ver backups' },
     });
   }
+
+  // ══ «PREPARAÇÃO DO CONDÓMINIO» — configuração ainda não concluída ══
+  // Nenhum destes é um erro: são o que falta para o condomínio estar pronto.
+  // Serviços: só se assinala o que está EXPLICITAMENTE desligado. Sem
+  // informação (`undefined`) não se inventa uma falta — evita alarmes falsos
+  // se o contexto vier incompleto.
+  //
+  // `documentosLigado` refere-se ao armazenamento principal DOS DOCUMENTOS do
+  // condomínio (por condomínio) — nunca ao destino dos backups, que é uma
+  // configuração da instalação e não depende deste condomínio.
+  if (dados.documentosLigado === false) {
+    juntar('drive', {
+      categoria: 'preparacao',
+      tipo: 'sistema',
+      gravidade: 'info',
+      texto: 'Sem serviço de armazenamento para os documentos',
+      quantidade: 0,
+      destino: { url: '/admin/config/armazenamento', texto: 'Ligar armazenamento' },
+      ...estadoDePreparacao('requer-configuracao'),
+    });
+  }
   if (dados.smtp === false) {
     juntar('smtp', {
+      categoria: 'preparacao',
       tipo: 'sistema',
       gravidade: 'info',
       texto: 'Email/SMTP não configurado',
@@ -289,10 +319,49 @@ function sinaisDeAtencao(dados = {}) {
       // A configuração SMTP passou para Configuração → Email / SMTP; a Central
       // de Emails ficou só com a operação da fila.
       destino: { url: '/admin/config/email', texto: 'Configurar' },
+      ...estadoDePreparacao('requer-configuracao'),
+    });
+  }
+  if (dados.orcamentoEstadoAberto) {
+    juntar('orcamento', {
+      // O orçamento do ano por concluir é PREPARAÇÃO, não um problema
+      // (decisão de 2026-09-24): falta fechar o ano, não há nada errado.
+      categoria: 'preparacao',
+      tipo: 'trabalho',
+      gravidade: 'info',
+      texto: `Orçamento de ${dados.ano || ''} em ${dados.orcamentoEstadoRotulo || 'rascunho'}`.trim(),
+      quantidade: 0,
+      destino: { url: dados.orcamentoId ? `/admin/orcamento/${dados.orcamentoId}` : '/admin/orcamento', texto: 'Abrir orçamento' },
+      ...estadoDePreparacao('por-concluir'),
     });
   }
 
   return sinais.sort((a, b) => b.prioridade - a.prioridade);
+}
+
+// Rótulo do estado de um sinal de PREPARAÇÃO (A14 §8). «Falta de configuração
+// não deve parecer um erro» — por isso o texto diz o que é, sem dramatizar.
+function estadoDePreparacao(estado) {
+  const ROTULOS = {
+    'requer-configuracao': 'Requer configuração',
+    'por-concluir': 'Por concluir',
+  };
+  const rotulo = ROTULOS[estado];
+  if (!rotulo) throw new Error(`estadoDePreparacao: estado desconhecido «${estado}»`);
+  return { estado, estadoRotulo: rotulo };
+}
+
+// Separa os sinais nas DUAS listas do painel (A14 §9). Único sítio que conhece
+// as duas categorias: a vista recebe-as já separadas e nunca volta a juntá-las.
+// Um sinal fora destas duas categorias nunca chegou aqui (`juntar` recusa-o).
+function separarSinais(sinais) {
+  const atencao = [];
+  const preparacao = [];
+  for (const s of sinais || []) {
+    if (s.categoria === 'preparacao') preparacao.push(s);
+    else atencao.push(s);
+  }
+  return { atencao, preparacao };
 }
 
 // Rótulos legíveis dos estados do orçamento (os mesmos da interface).
@@ -395,7 +464,10 @@ module.exports = {
   resumoFinanceiroMes,
   resumoEmAtraso,
   orcamentoDoAno,
-  sinaisDeAtencao,
+  // ⛔ `sinaisDeAtencao` passou a chamar-se `sinaisDoPainel`: agora devolve as
+  // DUAS categorias (atenção e preparação), por isso o nome antigo mentia.
+  sinaisDoPainel,
+  separarSinais,
   orcamentoPorConcluir,
   ROTULOS_ESTADO_ORCAMENTO,
   ATIVIDADE,

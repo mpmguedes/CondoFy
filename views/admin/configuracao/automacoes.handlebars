@@ -29,6 +29,12 @@
      existem depois de `Editar`, e o `Cancelar` repõe os valores capturados sem
      submeter nada. ⛔ NÃO existe um segundo sistema de modo de edição.
 
+     ── A14 §6 (2026-09-24): a consulta deixou de ser uma lista de 33 linhas
+     soltas. Consulta e edição passaram a partilhar o MESMO esqueleto
+     (`_automacoes-tabela`): os mesmos grupos, as mesmas linhas, as mesmas
+     colunas; em consulta as células são pílulas de estado (A14 §8), em edição
+     são os mesmos interruptores no mesmo sítio. Ver o parcial.
+
      O que se mostra em consulta é o estado EFETIVO — o da chave do condomínio
      quando existe, senão o herdado, senão o padrão do código. É a mesma
      verdade que o formulário apresenta, porque ambas vêm de `listarAutomacoes`
@@ -36,9 +42,14 @@
 
      Depois de guardar, a página volta a nascer em consulta: ver o
      `res.redirect` do `POST /admin/config/automacoes`. --}}
+{{#*inline "_me-consulta-corpo"}}
+  {{> _automacoes-tabela grupos=grupos editando=false
+                         armazenamentoRotulo=@root.armazenamentoRotulo
+                         armazenamentoIcone=@root.armazenamentoIcone}}
+{{/inline}}
 {{#> _modo-edicao id="automacoes" acao="/admin/config/automacoes"
                  titulo="Automações por tipo de documento"
-                 linhas=linhasAutomacoes
+                 consultaPersonalizada=true
                  rotuloEditar="Editar automações"
                  rotuloGuardar="Guardar automações"
                  confirmarAbandono="Há automações por guardar. Se sair agora, perdem-se."}}
@@ -49,54 +60,9 @@
        sem ele (`helpers/automacoes.js`). --}}
   <input type="hidden" name="_automacoes" value="1" />
 
-  {{#each grupos}}
-  <div class="card mb-4">
-    <div class="card-header bg-white fw-semibold">{{rotulo}}</div>
-    <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr>
-            <th>Documento</th>
-            <th style="width:180px"><i class="{{@root.armazenamentoIcone}} me-1" aria-hidden="true"></i>Guardar no {{@root.armazenamentoRotulo}}</th>
-            <th style="width:180px"><i class="bi bi-send me-1" aria-hidden="true"></i>Disponível para email</th>
-            <th style="width:180px"><i class="bi bi-lightning-charge me-1" aria-hidden="true"></i>Enviar automaticamente</th>
-            <th style="width:110px">Estado</th>
-          </tr>
-        </thead>
-        <tbody>
-          {{#each tipos}}
-          <tr>
-            <td class="fw-semibold">{{rotulo}}</td>
-            <td>
-              <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" role="switch" id="auto_{{tipo}}_drive" name="auto_{{tipo}}_drive" value="on" {{#if drive}}checked{{/if}} />
-                <label class="form-check-label small" for="auto_{{tipo}}_drive">Guardar</label>
-              </div>
-            </td>
-            <td>
-              <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" role="switch" id="auto_{{tipo}}_email" name="auto_{{tipo}}_email" value="on" {{#if email}}checked{{/if}} />
-                <label class="form-check-label small" for="auto_{{tipo}}_email">Email</label>
-              </div>
-            </td>
-            <td>
-              <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" role="switch" id="auto_{{tipo}}_automatico" name="auto_{{tipo}}_automatico" value="on" {{#if automatico}}checked{{/if}} />
-                <label class="form-check-label small" for="auto_{{tipo}}_automatico">Automático</label>
-              </div>
-            </td>
-            <td>
-              {{#if automatico}}<span class="badge text-bg-info">Automático</span>
-              {{else if drive}}<span class="badge text-bg-primary">Guardar</span>
-              {{else}}<span class="badge text-bg-secondary">Manual</span>{{/if}}
-            </td>
-          </tr>
-          {{/each}}
-        </tbody>
-      </table>
-    </div>
-  </div>
-  {{/each}}
+  {{> _automacoes-tabela grupos=grupos editando=true
+                         armazenamentoRotulo=@root.armazenamentoRotulo
+                         armazenamentoIcone=@root.armazenamentoIcone}}
 
   <p class="form-text mb-0">
     <i class="bi bi-info-circle me-1" aria-hidden="true"></i>

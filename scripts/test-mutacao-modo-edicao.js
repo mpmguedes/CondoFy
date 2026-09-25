@@ -205,6 +205,54 @@ const MUTACOES = [
     para: '',
     espera: /aria-expanded/,
   },
+  {
+    // ── A14 §4 — posição das ações (as mutações novas) ───────────────
+    // ⛔ Fora do formulário, um `type="submit"` sem `form=` NÃO submete
+    // nada: o botão ficava bonito e inerte. É o defeito que esta regra
+    // introduz e que só a mutação apanha.
+    nome: 'o botão Guardar perde a associação `form=` ao formulário',
+    ficheiro: PARCIAL,
+    de: ' data-me-guardar form="{{id}}-form">',
+    para: ' data-me-guardar>',
+    espera: /associado ao formulário/,
+  },
+  {
+    // ⛔ Sem `hidden`, o par aparecia em CONSULTA: a edição deixava de
+    // exigir o clique em `Editar` (a falha deixa de ser para o lado seguro).
+    nome: 'o par de ações deixa de nascer `hidden`',
+    ficheiro: PARCIAL,
+    de: '<div class="me-acoes" data-me-acoes hidden>',
+    para: '<div class="me-acoes" data-me-acoes>',
+    espera: /nasce `hidden`/,
+  },
+  {
+    // ⛔ A regra do utilizador é explícita: «Gravar aparece imediatamente à
+    // esquerda de Cancelar». Inverter a ordem no DOM inverte o que se vê.
+    nome: '`Cancelar` passa a vir antes de `Guardar` no cabeçalho',
+    ficheiro: PARCIAL,
+    de: '      <button type="submit" class="me-btn me-btn-guardar" data-me-guardar form="{{id}}-form">\n'
+      + '        <span class="material-symbols-outlined me-icone" aria-hidden="true">save</span>{{#if rotuloGuardar}}{{rotuloGuardar}}{{else}}Guardar{{/if}}\n'
+      + '      </button>\n'
+      + '      <button type="button" class="me-btn me-btn-cancelar" data-me-cancelar>\n'
+      + '        <span class="material-symbols-outlined me-icone" aria-hidden="true">close</span>{{#if rotuloCancelar}}{{rotuloCancelar}}{{else}}Cancelar{{/if}}\n'
+      + '      </button>\n',
+    para: '      <button type="button" class="me-btn me-btn-cancelar" data-me-cancelar>\n'
+      + '        <span class="material-symbols-outlined me-icone" aria-hidden="true">close</span>{{#if rotuloCancelar}}{{rotuloCancelar}}{{else}}Cancelar{{/if}}\n'
+      + '      </button>\n'
+      + '      <button type="submit" class="me-btn me-btn-guardar" data-me-guardar form="{{id}}-form">\n'
+      + '        <span class="material-symbols-outlined me-icone" aria-hidden="true">save</span>{{#if rotuloGuardar}}{{rotuloGuardar}}{{else}}Guardar{{/if}}\n'
+      + '      </button>\n',
+    espera: /vem ANTES/,
+  },
+  {
+    // ⛔ O cabeçalho fixo é o que impede «procurar o Guardar depois de fazer
+    // scroll» num formulário comprido.
+    nome: 'o JS deixa de fixar o cabeçalho do bloco em edição',
+    ficheiro: JS,
+    de: '    fixarCabecalho(bloco, emEdicao);\n',
+    para: '',
+    espera: /cabeçalho fixo/,
+  },
 ];
 
 console.log('P54-0 — testes de mutação: padrão consulta / edição / cancelar / guardar');

@@ -3,7 +3,7 @@
     {{#if user}}
     <div class="d-flex align-items-center gap-2 flex-wrap">
       <span class="auth-sessao">
-        <span class="material-symbols-outlined" style="font-size:1rem">lock</span>
+        <span class="material-symbols-outlined" aria-hidden="true" style="font-size:1rem">lock</span>
         Sessão iniciada
       </span>
       <span class="fw-semibold small">{{user.nome}}</span>
@@ -37,14 +37,14 @@
               </div>
               {{#if local}}
               <p class="auth-cond-meta">
-                <span class="material-symbols-outlined">location_on</span>
+                <span class="material-symbols-outlined" aria-hidden="true">location_on</span>
                 {{local}}
               </p>
               {{else}}
               <p class="auth-cond-meta">Sem morada registada</p>
               {{/if}}
               <p class="auth-cond-meta">
-                <span class="material-symbols-outlined">domain</span>
+                <span class="material-symbols-outlined" aria-hidden="true">domain</span>
                 {{fracoes}} {{#if (eq fracoes 1)}}fração{{else}}frações{{/if}}
               </p>
               <div class="auth-cond-cta">
@@ -57,7 +57,7 @@
           </div>
           {{else}}
           <div class="auth-vazio text-center py-4">
-            <span class="material-symbols-outlined d-block mx-auto mb-2">apartment</span>
+            <span class="material-symbols-outlined d-block mx-auto mb-2" aria-hidden="true">apartment</span>
             <p class="mb-0">Ainda não está associado a nenhum condomínio.</p>
           </div>
           {{/if}}

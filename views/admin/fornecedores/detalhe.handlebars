@@ -75,7 +75,7 @@
               <td class="text-end fw-semibold">{{eur valor}}</td>
               <td class="text-end">
                 <form action="/admin/fornecedores/{{../fornecedor.id}}/saldos/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Remover este saldo inicial?" data-confirmar-perigo="1">
-                  <button aria-label="Remover" class="btn btn-sm btn-outline-danger" title="Remover" data-ajuda="Remove este saldo inicial do fornecedor. Deixa de contar para o saldo em dívida." data-ajuda-titulo="Remover saldo inicial"><span class="material-symbols-outlined">delete</span></button>
+                  <button aria-label="Remover" class="btn btn-sm btn-outline-danger" title="Remover" data-ajuda="Remove este saldo inicial do fornecedor. Deixa de contar para o saldo em dívida." data-ajuda-titulo="Remover saldo inicial"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
                 </form>
               </td>
             </tr>
@@ -186,7 +186,7 @@
               </td>
               <td>{{#if comprovativo}}<span class="badge text-bg-success">☁</span>{{else}}—{{/if}}</td>
               <td class="text-end">
-                <a aria-label="Ver" href="/admin/fornecedores/{{../fornecedor.id}}/pagamentos/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
+                <a aria-label="Ver" href="/admin/fornecedores/{{../fornecedor.id}}/pagamentos/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined" aria-hidden="true">visibility</span></a>
               </td>
             </tr>
             {{else}}

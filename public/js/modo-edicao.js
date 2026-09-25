@@ -84,12 +84,28 @@
     return {
       consulta: bloco.querySelector('[data-me-consulta]'),
       form: bloco.querySelector('[data-me-form]'),
-      editar: bloco.querySelector('[data-me-editar]')
+      editar: bloco.querySelector('[data-me-editar]'),
+      acoes: bloco.querySelector('[data-me-acoes]')
     };
   }
 
   function estadoDe(bloco) {
     return bloco.getAttribute('data-me-estado') || CONSULTA;
+  }
+
+  // A14 §4 — só UM bloco tem o cabeçalho fixo: o que entrou em edição por
+  // último. Dois cabeçalhos fixos ao mesmo tempo sobrepunham-se. Guarda-se o
+  // bloco numa variável (e não num `querySelectorAll`) para isto funcionar
+  // com qualquer DOM que respeite `setAttribute`/`removeAttribute`.
+  var fixo = null;
+  function fixarCabecalho(bloco, emEdicao) {
+    if (!emEdicao) {
+      if (fixo === bloco) { bloco.removeAttribute('data-me-sticky'); fixo = null; }
+      return;
+    }
+    if (fixo && fixo !== bloco) fixo.removeAttribute('data-me-sticky');
+    bloco.setAttribute('data-me-sticky', '1');
+    fixo = bloco;
   }
 
   // Troca o estado. A consulta e o formulário nunca ficam ativos ao mesmo
@@ -103,10 +119,14 @@
     if (p.editar) {
       // `aria-expanded` reflete o estado real do formulário controlado.
       p.editar.setAttribute('aria-expanded', emEdicao ? 'true' : 'false');
-      // Em edição o botão fica inerte (não desaparece: um controlo que some
-      // deixa o utilizador sem referência). `Cancelar` é o caminho de volta.
-      p.editar.disabled = emEdicao;
+      // A14 §4 — em edição, o lugar de `Editar` é ocupado pelo par
+      // `[Guardar][Cancelar]` (`Cancelar` exatamente onde `Editar` estava,
+      // `Guardar` à sua esquerda). `Editar` sai e o par entra: o que muda é o
+      // par de botões, nunca o sítio onde eles estão.
+      p.editar.hidden = emEdicao;
     }
+    if (p.acoes) p.acoes.hidden = !emEdicao;
+    fixarCabecalho(bloco, emEdicao);
     return p;
   }
 

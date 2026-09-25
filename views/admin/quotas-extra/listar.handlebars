@@ -43,9 +43,9 @@
             {{else}}<span class="badge text-bg-primary">🟠 Processada</span>{{/if}}
           </td>
           <td class="text-end text-nowrap">
-            <a aria-label="Ver" href="/admin/quotas-extra/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
+            <a aria-label="Ver" href="/admin/quotas-extra/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined" aria-hidden="true">visibility</span></a>
             {{#if (eq estado 'pendente')}}
-            <a aria-label="Editar" href="/admin/quotas-extra/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
+            <a aria-label="Editar" href="/admin/quotas-extra/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined" aria-hidden="true">edit</span></a>
             {{/if}}
           </td>
         </tr>

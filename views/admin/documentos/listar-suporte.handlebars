@@ -14,7 +14,7 @@
 </div>
 
 <div class="alert alert-info d-flex align-items-start gap-2">
-  <span class="material-symbols-outlined">info</span>
+  <span class="material-symbols-outlined" aria-hidden="true">info</span>
   <div class="small">
     Vista de diagnóstico. O estado de armazenamento é apresentado em detalhe — nomeadamente
     os erros de envio para o serviço de armazenamento — mas não há ações disponíveis.
@@ -23,12 +23,12 @@
 
 {{#if driveLigado}}
 <div class="alert alert-success d-flex align-items-center gap-2 small">
-  <span class="material-symbols-outlined">cloud_done</span>
+  <span class="material-symbols-outlined" aria-hidden="true">cloud_done</span>
   <div>Serviço de armazenamento ligado para este condomínio.</div>
 </div>
 {{else}}
 <div class="alert alert-warning d-flex align-items-center gap-2 small">
-  <span class="material-symbols-outlined">cloud_off</span>
+  <span class="material-symbols-outlined" aria-hidden="true">cloud_off</span>
   <div>Sem serviço de armazenamento ligado — os documentos não estão a ser enviados para a nuvem.</div>
 </div>
 {{/if}}
@@ -105,5 +105,5 @@
   </div>
 </div>
 {{else}}
-{{> _empty-state icon="folder" titulo="Sem documentos" descricao="Esta categoria/pasta ainda não tem documentos."}}
+{{> _empty-state tipo="indisponivel" icon="folder" titulo="Sem documentos" descricao="Esta categoria/pasta ainda não tem documentos."}}
 {{/if}}

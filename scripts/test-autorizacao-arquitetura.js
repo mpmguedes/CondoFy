@@ -563,7 +563,7 @@ const DADOS_SINAIS = {
   backupEstado: 'erro',
   smtp: false,
 };
-const idsDe = (extra) => dashHelper.sinaisDeAtencao({ ...DADOS_SINAIS, ...extra }).map((s) => s.id);
+const idsDe = (extra) => dashHelper.sinaisDoPainel({ ...DADOS_SINAIS, ...extra }).map((s) => s.id);
 const idsAdmin = idsDe({ podeAdmin: true });
 const idsGestor = idsDe({ podeAdmin: false });
 const SO_ADMIN = ['email_erros', 'backup', 'drive', 'smtp'];
@@ -582,7 +582,7 @@ feito(`helpers/dashboard.js: admin recebe os sinais admin-only (${SO_ADMIN.join(
 
 // Sem `podeAdmin` explícito mantém-se o comportamento anterior (compatibilidade).
 assert.deepStrictEqual(
-  dashHelper.sinaisDeAtencao({ ...DADOS_SINAIS, podeAdmin: undefined }).map((s) => s.id),
+  dashHelper.sinaisDoPainel({ ...DADOS_SINAIS, podeAdmin: undefined }).map((s) => s.id),
   idsAdmin,
   'sem podeAdmin: comportamento anterior preservado'
 );
@@ -599,7 +599,7 @@ feito(`helpers/dashboard.js: gestor mantém os ${soGestor.length} sinais não-ad
 
 // Os sinais filtrados têm destino que exige admin — a razão do filtro.
 for (const id of SO_ADMIN) {
-  const s = dashHelper.sinaisDeAtencao(DADOS_SINAIS).find((x) => x.id === id);
+  const s = dashHelper.sinaisDoPainel(DADOS_SINAIS).find((x) => x.id === id);
   assert.ok(s, `sinal '${id}' existe para o admin`);
   assert.ok(
     /^\/admin\/(emails|config)/.test(s.destino.url),

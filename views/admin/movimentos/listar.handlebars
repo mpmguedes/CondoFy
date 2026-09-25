@@ -12,7 +12,7 @@
 
 {{#if suporteDiagnostico}}
 <div class="alert alert-info d-flex align-items-center gap-2 small">
-  <span class="material-symbols-outlined">info</span>
+  <span class="material-symbols-outlined" aria-hidden="true">info</span>
   <div>Vista de diagnóstico — apenas leitura. Os movimentos não podem ser anulados nem alterados aqui.</div>
 </div>
 {{/if}}
@@ -55,7 +55,7 @@
 {{#if temMovimentos}}
 {{#unless contaSelecionada}}
 <div class="alert alert-secondary d-flex align-items-center gap-2 py-2" role="status">
-  <span class="material-symbols-outlined">summarize</span>
+  <span class="material-symbols-outlined" aria-hidden="true">summarize</span>
   <span>Está a ver todas as contas: os totais abaixo somam todas elas. A coluna <strong>Saldo</strong> mostra o saldo da conta de cada movimento.</span>
 </div>
 {{/unless}}
@@ -88,7 +88,7 @@
 
 {{#if resumo.nAnulados}}
 <div class="alert alert-secondary d-flex align-items-center gap-2 py-2" role="status">
-  <span class="material-symbols-outlined">info</span>
+  <span class="material-symbols-outlined" aria-hidden="true">info</span>
   <span>{{resumo.nAnulados}} movimento(s) anulado(s) incluído(s) no extrato para histórico. Não afetam o saldo.</span>
 </div>
 {{/if}}
@@ -122,12 +122,12 @@
           </td>
           <td>
             <span class="badge text-bg-light border d-inline-flex align-items-center gap-1">
-              <span class="material-symbols-outlined" style="font-size:1rem">{{categoriaIcone}}</span>{{categoriaEtiqueta}}
+              <span class="material-symbols-outlined" aria-hidden="true" style="font-size:1rem">{{categoriaIcone}}</span>{{categoriaEtiqueta}}
             </span>
             {{!-- Transferência com par determinável: mostra «De → Para». Sem par, fica só o badge. --}}
             {{#if transferenciaTemPar}}
             <span class="small text-muted ms-1 d-inline-flex align-items-center gap-1">
-              {{transferenciaDe}}<span class="material-symbols-outlined" style="font-size:1rem">arrow_forward</span>{{transferenciaPara}}
+              {{transferenciaDe}}<span class="material-symbols-outlined" aria-hidden="true" style="font-size:1rem">arrow_forward</span>{{transferenciaPara}}
             </span>
             {{/if}}
             {{#if pagamentoId}}
@@ -158,7 +158,7 @@
             <span class="text-muted small">—</span>
             {{else if editavel}}
             <form action="/admin/movimentos/{{id}}/anular" method="POST" class="d-inline" data-confirmar="Anular este movimento?" data-confirmar-perigo="1">
-              <button aria-label="Anular movimento" class="btn btn-sm btn-outline-danger" title="Anular movimento" data-ajuda="Anula este movimento de ajuste: continua visível no extrato e deixa de contar para o saldo. Movimentos com origem noutro registo são corrigidos na origem." data-ajuda-titulo="Anular movimento"><span class="material-symbols-outlined">block</span></button>
+              <button aria-label="Anular movimento" class="btn btn-sm btn-outline-danger" title="Anular movimento" data-ajuda="Anula este movimento de ajuste: continua visível no extrato e deixa de contar para o saldo. Movimentos com origem noutro registo são corrigidos na origem." data-ajuda-titulo="Anular movimento"><span class="material-symbols-outlined" aria-hidden="true">block</span></button>
             </form>
             {{else}}
             <span class="text-muted small" title="Este movimento tem origem noutro registo; corrija-o na origem.">origem</span>
@@ -176,5 +176,5 @@
   a correção faz-se no registo de origem, para o extrato e a origem nunca ficarem divergentes.
 </p>
 {{else}}
-{{> _empty-state icon="receipt_long" titulo="Sem movimentos" descricao="Não existem movimentos bancários no período e nos filtros selecionados."}}
+{{> _empty-state tipo="filtro" icon="receipt_long" titulo="Sem movimentos" descricao="Não existem movimentos bancários no período e nos filtros selecionados. Experimente alargar o período." link="/admin/movimentos" linkTexto="Limpar filtros"}}
 {{/if}}

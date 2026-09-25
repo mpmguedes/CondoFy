@@ -89,12 +89,12 @@
                 {{#if (ne condominioAtivo.role 'gestor')}}
                 {{#if (or (eq estado 'pendente') (eq estado 'erro'))}}
                 <form action="/admin/emails/{{id}}/reenviar" method="POST" class="d-inline">
-                  <button class="btn btn-sm btn-outline-primary" title="Reenviar" aria-label="Reenviar email" data-ajuda="Volta a colocar este email na fila de envio. É útil quando o envio anterior falhou." data-ajuda-titulo="Reenviar email"><span class="material-symbols-outlined">refresh</span></button>
+                  <button class="btn btn-sm btn-outline-primary" title="Reenviar" aria-label="Reenviar email" data-ajuda="Volta a colocar este email na fila de envio. É útil quando o envio anterior falhou." data-ajuda-titulo="Reenviar email"><span class="material-symbols-outlined" aria-hidden="true">refresh</span></button>
                 </form>
                 {{/if}}
                 {{#if (and (ne estado 'enviado') (ne estado 'cancelado'))}}
                 <form action="/admin/emails/{{id}}/cancelar" method="POST" class="d-inline" data-confirmar="Cancelar este envio?" data-confirmar-perigo="1">
-                  <button class="btn btn-sm btn-outline-danger" title="Cancelar" aria-label="Cancelar envio" data-ajuda="Cancela este envio enquanto ainda está pendente. Um email já enviado não pode ser cancelado." data-ajuda-titulo="Cancelar envio"><span class="material-symbols-outlined">close</span></button>
+                  <button class="btn btn-sm btn-outline-danger" title="Cancelar" aria-label="Cancelar envio" data-ajuda="Cancela este envio enquanto ainda está pendente. Um email já enviado não pode ser cancelado." data-ajuda-titulo="Cancelar envio"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
                 </form>
                 {{/if}}
                 {{else}}

@@ -24,7 +24,7 @@
         <div class="stat-label">{{#if proxima.tipoRotulo}}{{proxima.tipoRotulo}}{{else}}Assembleia{{/if}}{{#if proxima.numero}} {{proxima.numero}}{{/if}}</div>
         {{#if proxima.data}}<div class="portal-hero-vinculo">{{diaSemana proxima.data}}</div>{{/if}}
       </div>
-      <span class="badge {{proxima.estadoClasse}}">{{proxima.estadoRotulo}}</span>
+      <span class="estado {{#if proxima.estadoVariante}}{{proxima.estadoVariante}}{{else}}estado-neutro{{/if}}">{{proxima.estadoRotulo}}</span>
     </div>
 
     <div class="portal-hero-valor">{{formatDate proxima.data}}</div>
@@ -90,7 +90,7 @@
       <a class="btn btn-primary portal-btn" href="/condomino/assembleias/{{id}}">
         <span class="material-symbols-outlined" aria-hidden="true">visibility</span>Ver detalhe
       </a>
-      <span class="badge {{estadoClasse}} align-self-center">{{estadoRotulo}}</span>
+      <span class="estado {{#if estadoVariante}}{{estadoVariante}}{{else}}estado-neutro{{/if}} align-self-center">{{estadoRotulo}}</span>
     </div>
   </li>
   {{/each}}
@@ -128,7 +128,7 @@
         <td class="text-nowrap">{{formatDate data}}</td>
         <td>{{#if hora}}{{hora}}{{else}}—{{/if}}</td>
         <td class="small">{{#if local}}{{local}}{{else}}—{{/if}}</td>
-        <td><span class="badge {{estadoClasse}}">{{estadoRotulo}}</span></td>
+        <td><span class="estado {{#if estadoVariante}}{{estadoVariante}}{{else}}estado-neutro{{/if}}">{{estadoRotulo}}</span></td>
         <td class="text-end"><a href="/condomino/assembleias/{{id}}" class="btn btn-sm btn-outline-primary">Ver</a></td>
       </tr>
       {{/each}}

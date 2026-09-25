@@ -432,11 +432,33 @@ async function testarEliminacaoFracao() {
     assert.ok(/2 pagamento\(s\) a fornecedores pendentes/.test(r.html), 'painel: sinal de fornecedores');
     assert.ok(/4 documento\(s\) deste ano ainda não disponibilizados/.test(r.html), 'painel: sinal de documentos');
     assert.ok(/Orçamento de \d{4} em rascunho/.test(r.html), 'painel: sinal do orçamento por concluir');
-    assert.ok(/Assembleia a \d{2}\/12\/\d{4}/.test(r.html), 'painel: sinal da próxima assembleia');
-    // Ligações diretas de cada sinal.
+    // ⛔ A14 §9 — a assembleia futura NÃO é sinal: já tem cartão próprio no
+    // painel. Um sinal aqui repetia a informação.
+    assert.ok(!/Assembleia a \d{2}\/\d{2}\/\d{4}/.test(r.html), 'painel: a assembleia futura não entra na lista de sinais');
+    // Ligações diretas de cada sinal (a da assembleia sai: já não há sinal).
     for (const url of ['/admin/quotas', '/admin/quotas/comprovativos', '/admin/quotas/gerar', '/admin/fornecedores',
-      '/admin/documentos', '/admin/orcamento/12', '/admin/assembleias/30']) {
+      '/admin/documentos', '/admin/orcamento/12']) {
       assert.ok(r.html.includes(`href="${url}"`), `painel: ligação direta para ${url}`);
+    }
+
+    // ── A14 §9: as DUAS listas, separadas na prática ───────────────
+    // «Ainda não configurou X» nunca aparece ao lado de «existe um problema».
+    const iAtencao = r.html.indexOf('Precisa de atenção');
+    const iPreparacao = r.html.indexOf('Preparação do condomínio');
+    const iTop = r.html.indexOf('Top devedores');
+    assert.ok(iAtencao >= 0 && iPreparacao > iAtencao && iTop > iPreparacao,
+      'painel: as três âncoras (atenção, preparação, devedores) na ordem esperada');
+    const blocoAtencao = r.html.slice(iAtencao, iPreparacao);
+    const blocoPreparacao = r.html.slice(iPreparacao, iTop);
+    // O orçamento por concluir é PREPARAÇÃO, não um problema.
+    assert.ok(/Orçamento de \d{4} em rascunho/.test(blocoPreparacao), 'painel: o orçamento por concluir está na PREPARAÇÃO');
+    assert.ok(!/Orçamento de \d{4} em rascunho/.test(blocoAtencao), 'painel: o orçamento por concluir NÃO está na atenção');
+    assert.ok(/Requer configuração|Por concluir/.test(blocoPreparacao), 'painel: a preparação diz o estado por TEXTO (não só cor)');
+    // Os problemas reais ficam na ATENÇÃO e nunca na preparação.
+    for (const problema of ['1 quota(s) em atraso', '2 comprovativo(s) por validar', 'Quotas do mês ainda não geradas',
+      '2 pagamento(s) a fornecedores pendentes', '4 documento(s) deste ano ainda não disponibilizados']) {
+      assert.ok(blocoAtencao.includes(problema), `painel: «${problema}» está na ATENÇÃO`);
+      assert.ok(!blocoPreparacao.includes(problema), `painel: «${problema}» NÃO está na preparação`);
     }
     assert.ok(!/Nada a tratar neste momento/.test(r.html), 'painel: com sinais não mostra o estado tranquilo');
 

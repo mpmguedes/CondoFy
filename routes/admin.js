@@ -36,6 +36,7 @@ const { resumoCondominio, resumoFracao, estadoEfetivo } = require('../helpers/sa
 const { resumoFinanceiroMes, resumoEmAtraso, orcamentoDoAno } = require('../helpers/dashboard');
 // Ajudante completo do painel (sinais de atenção, atividade recente, orçamento).
 const dashboardHelpers = require('../helpers/dashboard');
+const automacoes = require('../helpers/automacoes');
 // Histórico de titularidade da fração (relação temporal pessoa/conta ↔ fração).
 const titularidades = require('../helpers/titularidades');
 const { validarNif } = require('../public/js/validacao-fiscal');
@@ -320,7 +321,10 @@ router.get('/', async (req, res) => {
   // não mostrar ao gestor sinais que o levariam a módulos reservados ao admin.
   const podeAdmin = tenant.papelMaiorOuIgual(req.papelCondominio, 'admin');
   const orcamentoPorConcluir = dashboardHelpers.orcamentoPorConcluir(orcamentoAno);
-  const sinais = dashboardHelpers.sinaisDeAtencao({
+  // A14 §9 — os sinais saem do motor já CLASSIFICADOS; aqui só se separam nas
+  // duas listas que o painel apresenta. Misturar «ainda não configurou X» com
+  // «existe um problema» era exactamente o que se quer evitar.
+  const sinais = dashboardHelpers.sinaisDoPainel({
     podeAdmin,
     nVencidas,
     comprovativosPendentes,
@@ -342,6 +346,17 @@ router.get('/', async (req, res) => {
     backupEstado: ultimoBackupEstado.estado,
     smtp: smtpConfigured(),
   });
+  const { atencao: sinaisAtencao, preparacao: sinaisPreparacao } = dashboardHelpers.separarSinais(sinais);
+
+  // A14 §15 — o painel dizia «Automações: Configuradas» escrito à mão. Lê-se o
+  // estado real (uma consulta). Tolerante a falha: se não se conseguir ler, a
+  // vista não inventa um número — mostra só a ligação.
+  let automacoesResumo = null;
+  try {
+    automacoesResumo = await automacoes.resumo(req.condominioId);
+  } catch (e) {
+    console.warn('[tips] automações: resumo indisponível —', e && e.message ? e.message : e);
+  }
 
   // ── Tips contextuais (orientação, distinta dos sinais) ─────────────
   // Reúne os factos que o motor precisa e deixa-o decidir. Tolerante a falha:
@@ -427,7 +442,12 @@ router.get('/', async (req, res) => {
     emAtraso,
     orcamentoAno: orcamentoAno,
     // Fase 2H.2 — o que exige decisão hoje + o que aconteceu recentemente.
+    // A14 §9: as duas listas chegam SEPARADAS à vista. `sinais` continua a ser
+    // passado porque há testes que medem o conjunto; a vista usa as duas.
     sinais,
+    sinaisAtencao,
+    sinaisPreparacao,
+    automacoesResumo,
     // Tips contextuais (orientação): só aparece o que a situação real justifica.
     // `voltar` é o destino de regresso da dispensa (validado na rota).
     tips: { ...contextoDeTips, voltar: '/admin' },

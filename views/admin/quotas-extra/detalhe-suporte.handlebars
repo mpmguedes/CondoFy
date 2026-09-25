@@ -16,7 +16,7 @@
 </div>
 
 <div class="alert alert-info d-flex align-items-center gap-2 small">
-  <span class="material-symbols-outlined">info</span>
+  <span class="material-symbols-outlined" aria-hidden="true">info</span>
   <div>Vista de diagnóstico — apenas leitura. Não é possível aprovar, processar, pagar nem anular.</div>
 </div>
 
@@ -102,5 +102,5 @@
 </div>
 {{/each}}
 {{else}}
-{{> _empty-state icon="savings" titulo="Sem parcelas" descricao="Esta quota extraordinária não tem parcelas."}}
+{{> _empty-state tipo="indisponivel" icon="savings" titulo="Sem parcelas" descricao="Esta quota extraordinária não tem parcelas."}}
 {{/if}}

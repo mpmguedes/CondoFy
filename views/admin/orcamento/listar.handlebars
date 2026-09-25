@@ -8,7 +8,7 @@
 
 {{#unless temAnoAtual}}
 <div class="alert alert-info d-flex justify-content-between align-items-center flex-wrap gap-2">
-  <span><span class="material-symbols-outlined me-1">info</span>Não existe orçamento para {{anoAtual}}</span>
+  <span><span class="material-symbols-outlined me-1" aria-hidden="true">info</span>Não existe orçamento para {{anoAtual}}</span>
   <a href="/admin/orcamento/nova" class="btn btn-primary btn-sm"><span class="material-symbols-outlined me-1" aria-hidden="true">add</span>Criar Orçamento</a>
 </div>
 {{/unless}}
@@ -44,9 +44,9 @@
             {{else if (eq estado 'anulado')}}<span class="badge text-bg-danger">Anulado</span>{{/if}}
           </td>
           <td class="text-end">
-            <a aria-label="Ver" href="/admin/orcamento/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
+            <a aria-label="Ver" href="/admin/orcamento/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined" aria-hidden="true">visibility</span></a>
             {{#if (eq estado 'rascunho')}}
-            <a aria-label="Editar" href="/admin/orcamento/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
+            <a aria-label="Editar" href="/admin/orcamento/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined" aria-hidden="true">edit</span></a>
             {{/if}}
           </td>
         </tr>

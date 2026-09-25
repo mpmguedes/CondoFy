@@ -27,14 +27,14 @@
 
 {{#if suporteDiagnostico}}
 <div class="alert alert-info d-flex align-items-center gap-2 small">
-  <span class="material-symbols-outlined">info</span>
+  <span class="material-symbols-outlined" aria-hidden="true">info</span>
   <div>Vista de diagnóstico — apenas leitura. A geração, o envio de avisos e os valores transitados não estão disponíveis.</div>
 </div>
 {{/if}}
 
 {{#unless permilagem.ok}}
 <div class="alert alert-warning py-2 px-3 small d-flex align-items-center gap-2 mt-3">
-  <span class="material-symbols-outlined" style="font-size:1.1rem">warning</span>
+  <span class="material-symbols-outlined" aria-hidden="true" style="font-size:1.1rem">warning</span>
   <span>A soma das permilagens é <strong>{{permilagem.total}}‰</strong> (recomendado 1000‰).</span>
 </div>
 {{/unless}}

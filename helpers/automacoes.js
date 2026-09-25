@@ -34,7 +34,7 @@
 // todas as automações em silêncio. O formulário envia `_automacoes=1` e a
 // gravação recusa qualquer corpo sem ele.
 // ─────────────────────────────────────────────────────────────────────
-const { idCondominio, lerComPrecedencia, gravarNoAmbito } = require('./config-ambito');
+const { idCondominio, chaveDoCondominio, lerComPrecedencia, gravarNoAmbito } = require('./config-ambito');
 
 const CATEGORIAS = {
   assembleias: 'ASSEMBLEIAS',
@@ -202,6 +202,62 @@ async function guardarAutomacoes(body, condominioId) {
   return { tipos: Object.keys(TIPOS).length, canais: CANAIS.length, alterados };
 }
 
+// ── Resumo para o painel (A14 §15) ─────────────────────────────────────
+// O painel mostrava «Automações: Configuradas» escrito à mão na vista: continuava
+// a dizê-lo depois de alguém desligar tudo, e era indistinguível de um estado
+// realmente lido. Este resumo devolve o estado REAL.
+//
+// ⛔ NÃO é um segundo cálculo do estado: usa os mesmos `chaveDe`, `canalPadrao`
+//    e a mesma precedência (condomínio → global → padrão) que `estaAtivo`. Só
+//    muda a forma de ler a base de dados: UMA consulta em vez de 33 (uma por
+//    chave), que é o que `listarAutomacoes` faria se fosse chamado do painel.
+//
+// Conta-se um tipo como «automatizado» quando `drive` ou `automatico` está
+// ativo. O canal `email` NÃO conta: significa apenas «disponível por email»,
+// não é automatização — e como é '1' por omissão em 6 tipos, contá-lo daria um
+// número inflado que não corresponde a nada que o utilizador tenha decidido.
+async function resumo(condominioId) {
+  // ⛔ `require` DENTRO da função, de propósito: este módulo é carregado por
+  //    testes que correm sem base de dados e que substituem `helpers/config.js`.
+  //    Exigir os modelos no topo mudaria o comportamento de carga deles.
+  const { Configuracao } = require('../models');
+  const { Op } = require('sequelize');
+  // Sem o modelo (testes que correm sem base de dados) não há resumo: devolve-se
+  // `null` e a vista mostra só a ligação. ⛔ Nunca se inventa um número.
+  if (!Configuracao || typeof Configuracao.findAll !== 'function') return null;
+
+  const id = idCondominio(condominioId);
+  const base = chavesConhecidas();
+  const procurar = id ? base.concat(base.map((c) => chaveDoCondominio(c, id))) : base.slice();
+  const registos = await Configuracao.findAll({
+    attributes: ['chave', 'valor'],
+    where: { chave: { [Op.in]: procurar } },
+    raw: true,
+  });
+  const porChave = new Map(registos.map((r) => [r.chave, r.valor]));
+
+  // A mesma precedência de `lerComPrecedencia`: específica → global → padrão.
+  const valorDe = (chave) => {
+    if (id) {
+      const proprio = porChave.get(chaveDoCondominio(chave, id));
+      if (proprio !== undefined && proprio !== null && proprio !== '') return proprio;
+    }
+    const global = porChave.get(chave);
+    if (global === undefined || global === null || global === '') return undefined;
+    return global;
+  };
+
+  const tipos = Object.keys(TIPOS);
+  let ativos = 0;
+  for (const tipo of tipos) {
+    for (const canal of ['drive', 'automatico']) {
+      const v = valorDe(chaveDe(tipo, canal));
+      if (v === undefined ? canalPadrao(tipo, canal) : v === '1') { ativos += 1; break; }
+    }
+  }
+  return { tipos: tipos.length, ativos };
+}
+
 // Converte um tipo de documento lógico (Documento.tipo ou slug) na chave
 // de automação correspondente (mapeamento usado nos módulos).
 function tipoAutomacao(tipoDocumento) {
@@ -224,4 +280,5 @@ module.exports = {
   CATEGORIAS, TIPOS, CANAIS, CANAIS_ROTULO, MARCADOR,
   chaveDe, chavesConhecidas,
   estaAtivo, listarAutomacoes, linhasDeConsulta, validarCorpo, guardarAutomacoes, tipoAutomacao,
+  resumo,
 };

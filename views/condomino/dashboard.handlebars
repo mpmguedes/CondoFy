@@ -52,10 +52,11 @@
             <div class="stat-label">Fração {{designacao}}</div>
             {{#if vinculo}}<div class="portal-hero-vinculo">{{vinculo}}</div>{{/if}}
           </div>
+          {{!-- A14 §8 — o estado é ícone + texto + cor, nunca só uma cor. --}}
           {{#if (gt resumo.emDivida 0)}}
-          <span class="badge text-bg-danger">Quota em atraso</span>
+          <span class="estado estado-erro">Quota em atraso</span>
           {{else}}
-          <span class="badge text-bg-success">Tudo pago</span>
+          <span class="estado estado-concluido">Tudo pago</span>
           {{/if}}
         </div>
 
@@ -137,7 +138,8 @@
   <div class="col-12 col-lg-5">
     {{!-- ── Atividade recente ──────────────────────────────────────── --}}
     <div class="card mb-3">
-      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      {{!-- A14 §15 — sem `bg-white`: essa classe parte o modo escuro. --}}
+      <div class="card-header d-flex justify-content-between align-items-center">
         <span class="stat-label">Atividade recente</span>
         <a class="small" href="/condomino/avisos">Ver avisos</a>
       </div>
@@ -162,13 +164,21 @@
         {{/each}}
       </ul>
       {{else}}
-      <div class="card-body text-muted small">Ainda sem atividade recente neste condomínio.</div>
+      {{!-- A14 §13 — «ainda não há dados», e não um erro: diz-se o que não há
+           e oferece-se a ação que existe. --}}
+      <div class="card-body text-muted small">
+        Ainda sem atividade recente neste condomínio.
+        <a class="d-inline-flex align-items-center gap-1" href="/condomino/avisos">
+          <i class="bi bi-megaphone" aria-hidden="true"></i>Ver avisos
+        </a>
+      </div>
       {{/if}}
     </div>
 
     {{!-- ── Próximos eventos ───────────────────────────────────────── --}}
     <div class="card mb-3">
-      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      {{!-- A14 §15 — sem `bg-white`: essa classe parte o modo escuro. --}}
+      <div class="card-header d-flex justify-content-between align-items-center">
         <span class="stat-label">Próximos eventos</span>
         <a class="small" href="/condomino/calendario">Calendário</a>
       </div>
@@ -181,7 +191,12 @@
         {{/each}}
       </ul>
       {{else}}
-      <div class="card-body text-muted small">Sem eventos agendados neste condomínio.</div>
+      <div class="card-body text-muted small">
+        Sem eventos agendados neste condomínio.
+        <a class="d-inline-flex align-items-center gap-1" href="/condomino/calendario">
+          <i class="bi bi-calendar3" aria-hidden="true"></i>Abrir calendário
+        </a>
+      </div>
       {{/if}}
     </div>
   </div>
@@ -236,7 +251,7 @@
     <ul class="list-group list-group-flush mb-3">
       {{#each titularidadesTerminadas}}
       <li class="list-group-item d-flex justify-content-between px-0">
-        <span>Fração {{fracao}} <span class="badge text-bg-light border ms-1">{{vinculo}}</span></span>
+        <span>Fração {{fracao}} <span class="estado estado-neutro ms-1">{{vinculo}}</span></span>
         <span class="text-muted small">{{#if data_fim}}até {{formatDate data_fim}}{{else}}relação encerrada{{/if}}</span>
       </li>
       {{/each}}

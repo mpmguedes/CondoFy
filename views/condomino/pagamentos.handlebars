@@ -40,6 +40,6 @@
   </table>
 </div></div>
 {{else}}
-<div class="alert alert-light border small">Sem pagamentos registados para a sua fração.</div>
+{{> _empty-state icon="payments" titulo="Sem pagamentos registados" descricao="Ainda não há pagamentos registados para a sua fração. Aparecem aqui assim que a administração os registar."}}
 {{/if}}
 {{/if}}

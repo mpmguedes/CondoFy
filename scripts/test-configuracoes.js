@@ -245,6 +245,35 @@ const TAB5 = 'href="/admin/config/auditoria"';
   assert.ok(!r.corpo.includes('modalDesligarDrive'), 'config: sem modal do Drive no separador 1');
   assert.ok(!r.corpo.includes('Configurar automações'), 'config: botão antigo das automações removido');
 
+  // ── A14 §7 — a Configuração passou a ser SÍNTESE POR SECÇÕES ────────
+  // Cada secção é um formulário independente (`_modo-edicao`), mas o
+  // `POST /admin/config` grava TODOS os campos a partir do corpo: o que não
+  // vier fica NULO. Duas invariantes, e são elas que impedem a perda de dados:
+  //   1. cada formulário leva os 13 campos (os da secção visíveis, os das
+  //      outras como `hidden`) — falta um ⇒ guardar uma secção apaga o campo;
+  //   2. nenhum `name` aparece DUAS vezes no mesmo formulário — o corpo
+  //      passaria a ter um ARRAY e a gravação corrompia o valor.
+  const CAMPOS_CONFIG = [
+    'designacao', 'nif', 'morada', 'codigo_postal', 'localidade',
+    'administracao_nome', 'website', 'email', 'telefone',
+    'iban_principal', 'outros_meios_pagamento', 'dados_bancarios_adicionais',
+    'identidade_visual',
+  ];
+  const forms = [...r.corpo.matchAll(/<form[^>]*id="config-[^"]*"[^>]*>([\s\S]*?)<\/form>/g)];
+  assert.strictEqual(forms.length, 4, `config: 4 secções independentes (observado: ${forms.length})`);
+  for (const [, corpo] of forms) {
+    const faltam = CAMPOS_CONFIG.filter((c) => !corpo.includes(`name="${c}"`));
+    assert.deepStrictEqual(faltam, [], `config: o formulário leva os 13 campos (faltam: ${faltam.join(', ')})`);
+    const nomes = [...corpo.matchAll(/name="([^"]+)"/g)].map((m) => m[1]);
+    const duplicados = [...new Set(nomes.filter((n, i) => nomes.indexOf(n) !== i))];
+    assert.deepStrictEqual(duplicados, [], `config: sem "name" repetido no mesmo formulário (${duplicados.join(', ')})`);
+  }
+  // Em CONSULTA nenhuma secção tem controlos visíveis: nascem todas fechadas.
+  const consultas = [...r.corpo.matchAll(/<div class="me-consulta"[^>]*>([\s\S]*?)<\/div>\s*<form/g)];
+  assert.ok(consultas.length === 4, `config: as 4 secções têm região de consulta (observado: ${consultas.length})`);
+  assert.ok(consultas.every(([, c]) => !/<(input|select|textarea)\b/i.test(c)),
+    'config: a consulta de cada secção não tem um único controlo editável');
+
   // 2. Separador 2 — Armazenamento e Backups (serviços, principal e backups)
   r = await pedir('/admin/config/armazenamento');
   assert.strictEqual(r.status, 200, 'GET /admin/config/armazenamento responde 200');
@@ -523,7 +552,15 @@ const TAB5 = 'href="/admin/config/auditoria"';
   assert.ok(r.corpo.includes('Administrador') && r.corpo.includes('criar_quota'), 'auditoria: registos listados');
   assert.ok(r.corpo.includes('Sem registos de auditoria.') === false, 'auditoria: com registos não mostra estado vazio');
   const menu = r.corpo.split('\n').filter((l) => /sidebar-item/.test(l) && /(config|auditoria)/.test(l)).map((l) => l.trim()).join(' | ');
-  assert.ok(r.corpo.includes('class="sidebar-item active" href="/admin/config"'), 'auditoria: menu lateral mantém Configuração ativa', menu);
+  // A propriedade é «o item do menu cujo href é /admin/config está ativo» — não
+  // a ORDEM dos atributos. A A14 §14 inseriu `aria-current` entre a classe e o
+  // href; a asserção anterior (string exata) passou a falhar sem que nada
+  // tivesse mudado de comportamento. Olha-se para o ELEMENTO.
+  const itemConfig = r.corpo.match(/<a\b[^>]*href="\/admin\/config"[^>]*>/);
+  assert.ok(itemConfig && /\bclass="sidebar-item active"/.test(itemConfig[0]),
+    'auditoria: menu lateral mantém Configuração ativa', itemConfig ? itemConfig[0].trim() : menu);
+  assert.ok(itemConfig && /aria-current="page"/.test(itemConfig[0]),
+    'auditoria: o item ativo do menu é anunciado (aria-current)', itemConfig ? itemConfig[0].trim() : menu);
   assert.ok(!r.corpo.includes('href="/admin/auditoria"'), 'auditoria: entrada antiga do menu removida');
 
   // Estado vazio da auditoria

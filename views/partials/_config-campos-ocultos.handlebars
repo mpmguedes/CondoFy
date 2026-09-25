@@ -1,0 +1,42 @@
+{{!-- ══════════════════════════════════════════════════════════════════
+     A14 §7 — COMPATIBILIDADE com o `POST /admin/config` que já existe.
+
+     A rota constrói o objeto a gravar a partir de `req.body` e grava TODOS os
+     campos: o que não vier no corpo fica NULO. Ao dividir a Configuração em
+     secções independentes (cada uma com o seu `Editar`/`Guardar`), guardar
+     uma secção apagaria as outras — é exatamente a classe de defeito do
+     P54-4 («campo omitido apagava»), mas com dados reais do condomínio.
+
+     Este parcial resolve isso SEM tocar no servidor: os campos das OUTRAS
+     secções viajam como `hidden` com o valor atual gravado. A rota continua a
+     receber o corpo completo e a gravação é a mesma de hoje.
+
+     Uso:  {{> _config-campos-ocultos secao="dados"}}
+           secao: dados | administracao | pagamentos | identidade
+
+     ⛔ NUNCA incluir duas vezes o mesmo `name` no mesmo `<form>`: o corpo
+     passaria a ter um ARRAY e a gravação corrompia o valor. É por isso que
+     os campos da secção ficam de fora (`eq`) em vez de serem repetidos.
+     ══════════════════════════════════════════════════════════════════ --}}
+{{#unless (eq secao 'dados')}}
+<input type="hidden" name="designacao" value="{{condominio.designacao}}" />
+<input type="hidden" name="nif" value="{{condominio.nif}}" />
+<input type="hidden" name="morada" value="{{condominio.morada}}" />
+<input type="hidden" name="codigo_postal" value="{{condominio.codigo_postal}}" />
+<input type="hidden" name="localidade" value="{{condominio.localidade}}" />
+{{/unless}}
+
+{{#unless (eq secao 'administracao')}}
+<input type="hidden" name="administracao_nome" value="{{condominio.administracao_nome}}" />
+<input type="hidden" name="website" value="{{condominio.website}}" />
+<input type="hidden" name="email" value="{{condominio.email}}" />
+<input type="hidden" name="telefone" value="{{condominio.telefone}}" />
+{{/unless}}
+
+{{#unless (eq secao 'pagamentos')}}
+<input type="hidden" name="iban_principal" value="{{condominio.iban_principal}}" />
+<input type="hidden" name="outros_meios_pagamento" value="{{condominio.outros_meios_pagamento}}" />
+<input type="hidden" name="dados_bancarios_adicionais" value="{{condominio.dados_bancarios_adicionais}}" />
+{{/unless}}
+
+{{#unless (eq secao 'identidade')}}<input type="hidden" name="identidade_visual" value="{{condominio.identidade_visual}}" />{{/unless}}

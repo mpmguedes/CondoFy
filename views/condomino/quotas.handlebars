@@ -25,13 +25,13 @@
              tudo pago. «Tudo pago» só quando nada está por pagar no ano em causa
              (uma quota futura por vencer ainda não é «tudo pago»). --}}
         {{#if vencidas}}
-        <span class="badge text-bg-danger">{{vencidas}} quota(s) em atraso</span>
+        <span class="estado estado-erro">{{vencidas}} quota(s) em atraso</span>
         {{else if pendentes}}
-        <span class="badge text-bg-warning">Valores por regularizar</span>
+        <span class="estado estado-requer-config">Valores por regularizar</span>
         {{else if parciais}}
-        <span class="badge text-bg-info">Pagamento parcial</span>
+        <span class="estado estado-recomendado">Pagamento parcial</span>
         {{else}}
-        <span class="badge text-bg-success">Tudo pago</span>
+        <span class="estado estado-concluido">Tudo pago</span>
         {{/if}}
       </div>
 
@@ -106,11 +106,11 @@
   <li class="portal-quota {{#if (eq ano ../currentYear)}}{{#if (eq mes ../currentMonth)}}portal-quota-atual{{/if}}{{/if}}">
     <div class="portal-quota-topo">
       <span class="portal-quota-periodo">{{mesNome}} {{ano}}{{#if ../temVariasFracoes}} · {{fracaoDesignacao}}{{/if}}</span>
-      {{#if (eq estadoApresentado 'paga')}}<span class="badge text-bg-success">Paga</span>
-      {{else if (eq estadoApresentado 'parcialmente_paga')}}<span class="badge text-bg-info">Parcialmente paga</span>
-      {{else if (eq estadoApresentado 'vencida')}}<span class="badge text-bg-danger">Vencida</span>
-      {{else if (eq estadoApresentado 'anulada')}}<span class="badge text-bg-secondary">Anulada</span>
-      {{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}
+      {{#if (eq estadoApresentado 'paga')}}<span class="estado estado-concluido">Paga</span>
+      {{else if (eq estadoApresentado 'parcialmente_paga')}}<span class="estado estado-recomendado">Parcialmente paga</span>
+      {{else if (eq estadoApresentado 'vencida')}}<span class="estado estado-erro">Vencida</span>
+      {{else if (eq estadoApresentado 'anulada')}}<span class="estado estado-neutro">Anulada</span>
+      {{else}}<span class="estado estado-requer-config">Pendente</span>{{/if}}
     </div>
     <div class="portal-quota-valor">{{eur valor}}</div>
     <div class="portal-quota-meta">
@@ -138,11 +138,11 @@
         <td>{{eur valor}}</td>
         <td class="text-nowrap">{{formatDate data_vencimento}}</td>
         <td>
-          {{#if (eq estadoApresentado 'paga')}}<span class="badge text-bg-success">Paga</span>
-          {{else if (eq estadoApresentado 'parcialmente_paga')}}<span class="badge text-bg-info">Parcialmente paga</span>
-          {{else if (eq estadoApresentado 'vencida')}}<span class="badge text-bg-danger">Vencida</span>
-          {{else if (eq estadoApresentado 'anulada')}}<span class="badge text-bg-secondary">Anulada</span>
-          {{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}
+          {{#if (eq estadoApresentado 'paga')}}<span class="estado estado-concluido">Paga</span>
+          {{else if (eq estadoApresentado 'parcialmente_paga')}}<span class="estado estado-recomendado">Parcialmente paga</span>
+          {{else if (eq estadoApresentado 'vencida')}}<span class="estado estado-erro">Vencida</span>
+          {{else if (eq estadoApresentado 'anulada')}}<span class="estado estado-neutro">Anulada</span>
+          {{else}}<span class="estado estado-requer-config">Pendente</span>{{/if}}
         </td>
         <td>{{#if pago}}{{eur pago}}{{else}}—{{/if}}</td>
         <td class="text-nowrap">{{#if dataPagamento}}{{formatDate dataPagamento}}{{else}}—{{/if}}</td>
@@ -153,7 +153,7 @@
   </table>
 </div></div>
 {{else}}
-<div class="alert alert-light border small">Sem quotas com estes filtros.</div>
+{{> _empty-state tipo="filtro" titulo="Sem quotas com estes filtros" descricao="Experimente outro ano ou remova o filtro de estado." link="/condomino/quotas" linkTexto="Ver todas"}}
 {{/if}}
 
 {{!-- ── Quotas extraordinárias (separadas das quotas normais) ────────── --}}
@@ -166,12 +166,12 @@
   <li class="portal-quota">
     <div class="portal-quota-topo">
       <span class="portal-quota-periodo">{{designacao}}{{#if fracaoDesignacao}} · {{fracaoDesignacao}}{{/if}}</span>
-      {{#if (eq estado 'paga')}}<span class="badge text-bg-success">Paga</span>
-      {{else if (eq estado 'anulada')}}<span class="badge text-bg-dark">Anulada</span>
-      {{else if (eq estado 'cobrada')}}<span class="badge text-bg-info">Em cobrança</span>
-      {{else if (eq extraEstado 'pendente')}}<span class="badge text-bg-warning">Pendente de aprovação</span>
-      {{else if (eq extraEstado 'aprovada')}}<span class="badge text-bg-secondary">Aprovada (aguarda cobrança)</span>
-      {{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}
+      {{#if (eq estado 'paga')}}<span class="estado estado-concluido">Paga</span>
+      {{else if (eq estado 'anulada')}}<span class="estado estado-neutro">Anulada</span>
+      {{else if (eq estado 'cobrada')}}<span class="estado estado-recomendado">Em cobrança</span>
+      {{else if (eq extraEstado 'pendente')}}<span class="estado estado-requer-config">Pendente de aprovação</span>
+      {{else if (eq extraEstado 'aprovada')}}<span class="estado estado-neutro">Aprovada (aguarda cobrança)</span>
+      {{else}}<span class="estado estado-requer-config">Pendente</span>{{/if}}
     </div>
     <div class="portal-quota-valor">{{eur valor}}</div>
     <div class="portal-quota-meta">
@@ -192,12 +192,12 @@
       <tr>
         <td>{{designacao}}</td><td>{{fracaoDesignacao}}</td><td>{{parcela_numero}}</td>
         <td>{{eur valor}}</td><td class="text-nowrap">{{formatDate vencimento}}</td>
-        <td>{{#if (eq estado 'paga')}}<span class="badge text-bg-success">Paga</span>
-        {{else if (eq estado 'anulada')}}<span class="badge text-bg-dark">Anulada</span>
-        {{else if (eq estado 'cobrada')}}<span class="badge text-bg-info">Em cobrança</span>
-        {{else if (eq extraEstado 'pendente')}}<span class="badge text-bg-warning">Pendente de aprovação</span>
-        {{else if (eq extraEstado 'aprovada')}}<span class="badge text-bg-secondary">Aprovada (aguarda cobrança)</span>
-        {{else}}<span class="badge text-bg-warning">Pendente</span>{{/if}}</td>
+        <td>{{#if (eq estado 'paga')}}<span class="estado estado-concluido">Paga</span>
+        {{else if (eq estado 'anulada')}}<span class="estado estado-neutro">Anulada</span>
+        {{else if (eq estado 'cobrada')}}<span class="estado estado-recomendado">Em cobrança</span>
+        {{else if (eq extraEstado 'pendente')}}<span class="estado estado-requer-config">Pendente de aprovação</span>
+        {{else if (eq extraEstado 'aprovada')}}<span class="estado estado-neutro">Aprovada (aguarda cobrança)</span>
+        {{else}}<span class="estado estado-requer-config">Pendente</span>{{/if}}</td>
         <td>{{#if valorPago}}{{eur valorPago}}{{else}}—{{/if}}</td>
       </tr>
       {{/each}}

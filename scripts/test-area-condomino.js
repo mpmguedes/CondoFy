@@ -469,8 +469,8 @@ function testePaginaQuotas() {
   ], {});
   assert.ok(/1 quota\(s\) em atraso/.test(divida), 'quotas: assinala as quotas em atraso');
   assert.ok(/portal-hero-divida/.test(divida), 'quotas: cartão da fração assume o estado de atraso');
-  assert.ok(/Vencida/.test(divida) && /badge text-bg-danger">Vencida/.test(divida),
-    'quotas: a quota vencida mostra o emblema «Vencida»');
+  assert.ok(/Vencida/.test(divida) && /class="estado estado-erro">Vencida/.test(divida),
+    'quotas: a quota vencida mostra o emblema «Vencida» na linguagem de estado única (A14 §8)');
   assert.ok(/0 paga\(s\) · 1 pendente\(s\) · 1 em atraso/.test(divida),
     'quotas: contagem correta (atraso separado dos pendentes)');
 
@@ -478,9 +478,9 @@ function testePaginaQuotas() {
   const parcial = paginaQuotas([
     { id: 1, fracao_id: 5, fracaoDesignacao: '1.º Esq', ano: 2026, mes: 6, valor: 100, data_vencimento: '2026-06-10', estado: 'parcialmente_paga' },
   ], { 1: 50 });
-  assert.ok(/badge text-bg-info">Parcialmente paga/.test(parcial),
+  assert.ok(/class="estado estado-recomendado">Parcialmente paga/.test(parcial),
     'parcial: uma quota paga em parte aparece como «Parcialmente paga»');
-  assert.ok(!/badge text-bg-danger">Vencida/.test(parcial),
+  assert.ok(!/class="estado estado-erro">Vencida/.test(parcial),
     'parcial: NÃO é apresentada como «Vencida» apesar do vencimento ultrapassado');
   assert.ok(/Pago 50,00 €/.test(parcial), 'parcial: mostra o valor já pago');
   assert.ok(/1 parcialmente paga\(s\)/.test(parcial), 'parcial: contada à parte no resumo anual');
@@ -502,9 +502,9 @@ function testePaginaQuotas() {
     { id: 1, fracao_id: 5, fracaoDesignacao: '1.º Esq', ano: 2026, mes: 5, valor: 75, data_vencimento: '2026-05-10', estado: 'anulada' },
     { id: 2, fracao_id: 5, fracaoDesignacao: '1.º Esq', ano: 2026, mes: 6, valor: 75, data_vencimento: '2026-06-10', estado: 'paga' },
   ], { 2: 75 });
-  assert.ok(/badge text-bg-secondary">Anulada/.test(comAnulada), 'anuladas: apresentadas como «Anulada»');
+  assert.ok(/class="estado estado-neutro">Anulada/.test(comAnulada), 'anuladas: apresentadas como «Anulada»');
   assert.ok(/1 anulada\(s\)/.test(comAnulada), 'anuladas: contadas à parte, nunca como pendentes');
-  assert.ok(!/badge text-bg-warning">Pendente/.test(comAnulada), 'anuladas: nenhuma é apresentada como «Pendente»');
+  assert.ok(!/class="estado estado-requer-config">Pendente/.test(comAnulada), 'anuladas: nenhuma é apresentada como «Pendente»');
 
   // ── Várias frações: um resumo por fração, sem misturar valores ────
   const multi = paginaQuotas([
@@ -552,7 +552,7 @@ function testePaginaQuotas() {
   assert.ok(/Quotas extraordinárias/.test(comExtras), 'extras: secção própria mantida');
   assert.ok(/Elevador/.test(comExtras) && /Parcela 2/.test(comExtras),
     'extras: designação e parcela apresentadas');
-  assert.ok(/badge text-bg-info">Em cobrança/.test(comExtras), 'extras: estado apresentado em linguagem clara');
+  assert.ok(/class="estado estado-recomendado">Em cobrança/.test(comExtras), 'extras: estado apresentado em linguagem clara');
 }
 
 // ── 3c. Recibos: cartões, multi-fração e PDF ──────────────────────
@@ -573,7 +573,7 @@ function testePaginaRecibos() {
   assert.ok(/Emitido 21\/08\/2026/.test(um), 'recibos: data de emissão visível');
   assert.ok(/48,50 €/.test(um) && /165,00 €/.test(um), 'recibos: valor visível');
   assert.ok(/Novembro 2026/.test(um), 'recibos: período a que respeita');
-  assert.ok(/badge text-bg-success">Emitido/.test(um), 'recibos: estado apresentado');
+  assert.ok(/class="estado estado-concluido">Emitido/.test(um), 'recibos: estado apresentado');
   assert.ok(/Inclui quota extraordinária/.test(um), 'recibos: assinala o recibo de quota extraordinária');
   // Acesso ao PDF como CTA, para o recurso protegido.
   assert.strictEqual((um.match(/href="\/condomino\/recibos\/\d+\/pdf"/g) || []).length, 4,
@@ -603,8 +603,8 @@ function testePaginaRecibos() {
   const anulado = paginaRecibos([
     { id: 41, codigo: '2026/000301', data_emissao: '2026-07-01', valor: 75, estado: 'anulado', periodos: 'Julho 2026', fracaoDesignacao: '1.º Esq', temExtras: false },
   ]);
-  assert.ok(/badge text-bg-secondary">Anulado/.test(anulado), 'recibos: recibo anulado assinalado como tal');
-  assert.ok(!/badge text-bg-success">Emitido/.test(anulado), 'recibos: anulado não é apresentado como emitido');
+  assert.ok(/class="estado estado-neutro">Anulado/.test(anulado), 'recibos: recibo anulado assinalado como tal');
+  assert.ok(!/class="estado estado-concluido">Emitido/.test(anulado), 'recibos: anulado não é apresentado como emitido');
 
   // Sem recibos: mensagem neutra, sem sugerir problema.
   const vazio = paginaRecibos([]);
@@ -696,6 +696,7 @@ const baseAssembleias = { pessoa: { id: 10 }, titulo: 'Assembleias' };
 const assembleia = (over) => ({
   id: 4, numero: '2026/2', tipo: 'ordinaria', tipoRotulo: 'Ordinária', data: '2026-11-12', hora: '18:30',
   local: 'Sala comum', estado: 'convocada', estadoRotulo: 'Convocada', estadoClasse: 'text-bg-info',
+  estadoVariante: 'estado-requer-config',
   ordem_trabalhos: '1. Contas\n2. Obras', eFutura: true, ...over,
 });
 const paginaAssembleias = (ctx) => render('views/condomino/assembleias.handlebars', {
@@ -764,7 +765,7 @@ function testePaginaAvisos() {
 
 function testePaginaAssembleias() {
   const proxima = assembleia();
-  const passada = assembleia({ id: 3, numero: '2026/1', tipo: 'ordinaria', tipoRotulo: 'Ordinária', data: '2026-04-10', estado: 'realizada', estadoRotulo: 'Realizada', estadoClasse: 'text-bg-success', eFutura: false, ordem_trabalhos: null });
+  const passada = assembleia({ id: 3, numero: '2026/1', tipo: 'ordinaria', tipoRotulo: 'Ordinária', data: '2026-04-10', estado: 'realizada', estadoRotulo: 'Realizada', estadoClasse: 'text-bg-success', estadoVariante: 'estado-concluido', eFutura: false, ordem_trabalhos: null });
   const comTudo = paginaAssembleias({ assembleias: [proxima, passada], proxima, outrasFuturas: [], passadas: [passada] });
 
   assert.ok(/<h1>Assembleias<\/h1>/.test(comTudo), 'assembleias: cabeçalho');
@@ -772,7 +773,7 @@ function testePaginaAssembleias() {
   assert.ok(/portal-hero/.test(comTudo), 'assembleias: a próxima tem destaque');
   assert.ok(/12\/11\/2026/.test(comTudo) && /18:30/.test(comTudo) && /Sala comum/.test(comTudo),
     'assembleias: data, hora e local da próxima');
-  assert.ok(/badge text-bg-info">Convocada/.test(comTudo), 'assembleias: estado com o mesmo emblema do backoffice');
+  assert.ok(/class="estado estado-requer-config">Convocada/.test(comTudo), 'assembleias: estado na linguagem de estado única do portal (A14 §8)');
   assert.ok(/Ordinária/.test(comTudo), 'assembleias: tipo em PT-PT');
   assert.ok(/Quinta-feira/.test(comTudo) || /Quarta-feira|Terça-feira|Segunda-feira|Sexta-feira|Sábado|Domingo/.test(comTudo),
     'assembleias: dia da semana apresentado');
@@ -957,7 +958,13 @@ function testeIntegridade() {
   assert.ok(/sidebar-group-title">Início</.test(ramoSidebar), 'sidebar: grupo Início');
   assert.ok(/sidebar-group-title">A minha fração</.test(ramoSidebar), 'sidebar: grupo A minha fração');
   assert.ok(/sidebar-group-title">Condomínio</.test(ramoSidebar), 'sidebar: grupo Condomínio');
-  assert.ok(/href="\/condomino\/quotas"[\s\S]{0,300}href="\/condomino\/recibos"/.test(ramoSidebar),
+  // A propriedade é a ORDEM, não a distância: a janela de 300 caracteres
+  // passava a falhar só porque a A14 §14 acrescentou `aria-current` ao item
+  // (371 chars) — a ordem não mudou. Comparar ÍNDICES testa o que se quer
+  // (Quotas vem antes de Recibos) sem ficar refém do tamanho do markup.
+  const iQuotas = ramoSidebar.indexOf('href="/condomino/quotas"');
+  const iRecibos = ramoSidebar.indexOf('href="/condomino/recibos"');
+  assert.ok(iQuotas !== -1 && iRecibos !== -1 && iQuotas < iRecibos,
     'sidebar: Quotas antes de Recibos (área financeira agrupada)');
   assert.ok(!/href="\/condomino\/pagamentos"/.test(ramoSidebar),
     'sidebar: Pagamentos deixa de ser item próprio (passa a separador da área Quotas)');

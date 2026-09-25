@@ -26,7 +26,7 @@
 
 {{#unless permilagem.ok}}
 <div class="alert alert-warning d-flex align-items-center gap-2">
-  <span class="material-symbols-outlined">warning</span>
+  <span class="material-symbols-outlined" aria-hidden="true">warning</span>
   <span>A soma das permilagens das frações é <strong>{{permilagem.total}}‰</strong>. O valor recomendado é <strong>1000‰</strong>.</span>
 </div>
 {{/unless}}
@@ -162,22 +162,22 @@
           </td>
           {{#unless ../suporteDiagnostico}}
           <td class="text-end text-nowrap">
-            <a aria-label="Aviso PDF" href="/admin/quotas/{{id}}/aviso" target="_blank" class="btn btn-sm btn-outline-primary" title="Aviso PDF" data-ajuda="Abre o aviso de quota desta fração em PDF, numa nova aba." data-ajuda-titulo="Aviso de quota (PDF)"><span class="material-symbols-outlined">picture_as_pdf</span></a>
+            <a aria-label="Aviso PDF" href="/admin/quotas/{{id}}/aviso" target="_blank" class="btn btn-sm btn-outline-primary" title="Aviso PDF" data-ajuda="Abre o aviso de quota desta fração em PDF, numa nova aba." data-ajuda-titulo="Aviso de quota (PDF)"><span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span></a>
             {{#if ../driveLigado}}
             <form action="/admin/quotas/{{id}}/aviso/drive" method="POST" class="d-inline">
-              <button aria-label="Guardar aviso no Google Drive" class="btn btn-sm btn-outline-secondary" title="Guardar aviso no Google Drive" data-ajuda="Gera o aviso em PDF e guarda-o no serviço de armazenamento do condomínio." data-ajuda-titulo="Guardar aviso no armazenamento"><span class="material-symbols-outlined">cloud_upload</span></button>
+              <button aria-label="Guardar aviso no Google Drive" class="btn btn-sm btn-outline-secondary" title="Guardar aviso no Google Drive" data-ajuda="Gera o aviso em PDF e guarda-o no serviço de armazenamento do condomínio." data-ajuda-titulo="Guardar aviso no armazenamento"><span class="material-symbols-outlined" aria-hidden="true">cloud_upload</span></button>
             </form>
             {{/if}}
-            <a aria-label="Ver" href="/admin/quotas/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>
-            <a aria-label="Editar" href="/admin/quotas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
+            <a aria-label="Ver" href="/admin/quotas/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver"><span class="material-symbols-outlined" aria-hidden="true">visibility</span></a>
+            <a aria-label="Editar" href="/admin/quotas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined" aria-hidden="true">edit</span></a>
             <form action="/admin/quotas/{{id}}/anular" method="POST" class="d-inline" data-confirmar="Anular esta quota?" data-confirmar-perigo="1">
-              <button aria-label="Anular" class="btn btn-sm btn-outline-danger" title="Anular" data-ajuda="Anula esta quota: deixa de ser cobrada e mantém-se no histórico. Os pagamentos e recibos já registados não são alterados." data-ajuda-titulo="Anular quota"><span class="material-symbols-outlined">block</span></button>
+              <button aria-label="Anular" class="btn btn-sm btn-outline-danger" title="Anular" data-ajuda="Anula esta quota: deixa de ser cobrada e mantém-se no histórico. Os pagamentos e recibos já registados não são alterados." data-ajuda-titulo="Anular quota"><span class="material-symbols-outlined" aria-hidden="true">block</span></button>
             </form>
           </td>
           {{else}}
           {{!-- Suporte: único acesso de leitura — o detalhe (`/quotas/:id`). --}}
           <td class="text-end text-nowrap">
-            <a aria-label="Ver detalhe" href="/admin/quotas/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver detalhe"><span class="material-symbols-outlined">visibility</span></a>
+            <a aria-label="Ver detalhe" href="/admin/quotas/{{id}}" class="btn btn-sm btn-outline-secondary" title="Ver detalhe"><span class="material-symbols-outlined" aria-hidden="true">visibility</span></a>
           </td>
           {{/unless}}
         </tr>
@@ -187,5 +187,5 @@
   </div>
 </div>
 {{else}}
-{{> _empty-state icon="receipt_long" titulo="Sem quotas" descricao="Ainda não há quotas para os filtros selecionados."}}
+{{> _empty-state tipo="filtro" icon="receipt_long" titulo="Sem quotas" descricao="Ainda não há quotas para os filtros selecionados. Experimente outro período ou estado." link="/admin/quotas" linkTexto="Limpar filtros"}}
 {{/if}}

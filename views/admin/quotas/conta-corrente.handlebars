@@ -149,7 +149,7 @@
               <td class="text-nowrap small">{{#if dataISO}}{{formatDate dataISO}}{{else}}—{{/if}}</td>
               <td>
                 <div class="fw-semibold">
-                  {{#if (eq tipo 'pagamento')}}<span class="material-symbols-outlined align-middle me-1" style="font-size:1rem">payments</span>{{/if}}
+                  {{#if (eq tipo 'pagamento')}}<span class="material-symbols-outlined align-middle me-1" aria-hidden="true" style="font-size:1rem">payments</span>{{/if}}
                   {{rotulo}}
                 </div>
                 {{#if detalhe}}<div class="small text-muted">{{detalhe}}</div>{{/if}}
@@ -179,7 +179,7 @@
     {{else}}
     <div class="card">
       <div class="card-body text-center py-5">
-        <span class="material-symbols-outlined d-block mx-auto mb-2 text-muted" style="font-size:3rem">account_balance</span>
+        <span class="material-symbols-outlined d-block mx-auto mb-2 text-muted" aria-hidden="true" style="font-size:3rem">account_balance</span>
         <h2 class="fs-5 mb-1">Selecione uma fração</h2>
         <p class="text-muted small mb-0">
           Escolha a fração na coluna <strong>Frações</strong> para ver o saldo, o que lhe foi imputado

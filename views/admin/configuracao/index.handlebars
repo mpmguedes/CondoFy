@@ -1,5 +1,24 @@
 {{> _config-tabs ativo='condominio'}}
 
+{{!-- ══════════════════════════════════════════════════════════════════
+     A14 §7 — CONFIGURAÇÃO DO CONDOMÍNIO: SÍNTESE POR SECÇÕES
+     ══════════════════════════════════════════════════════════════════
+     Antes: um único formulário gigante permanentemente armado, com todos os
+     campos à espera de uma gravação acidental e um só «Guardar configuração»
+     no fundo.
+
+     Agora: cada secção nasce em CONSULTA — mostra o que está gravado (e o
+     traço «—» quando está em branco) — e tem o seu `[ Editar ]` no cabeçalho.
+     Ao clicar, só essa secção passa a edição e o par `[ Guardar ][ Cancelar ]`
+     aparece EXATAMENTE no lugar de `Editar` (A14 §4). Nada de formulários
+     abertos por omissão.
+
+     ⛔ NÃO há uma nova arquitetura de configuração: as quatro secções
+     continuam a gravar no `POST /admin/config` que já existe, com os MESMOS
+     nomes de campo. Como a rota grava todos os campos a partir do corpo, os
+     campos das outras secções viajam como `hidden` (`_config-campos-ocultos`)
+     — sem isso, guardar uma secção apagava as outras.
+     ══════════════════════════════════════════════════════════════════ --}}
 <div class="page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
     <h1>Configuração do Condomínio</h1>
@@ -9,87 +28,115 @@
 
 <div class="row g-4">
   <div class="col-12 col-lg-8">
-    <div class="card">
+
+    {{!-- ── Secção 1 — Dados do condomínio ─────────────────────────── --}}
+    <div class="card mb-4">
       <div class="card-body">
-        <form action="/admin/config" method="POST" enctype="multipart/form-data">
-          <h5 class="mb-3">Dados do condomínio</h5>
+        {{#> _modo-edicao id="config-dados" acao="/admin/config" titulo="Dados do condomínio"
+                          linhas=linhasDados rotuloEditar="Editar dados" rotuloGuardar="Guardar dados"}}
+          {{> _config-campos-ocultos secao="dados"}}
           <div class="mb-3">
-            <label class="form-label">Designação *</label>
-            <input type="text" class="form-control" name="designacao" value="{{condominio.designacao}}" required />
-          </div>
-          <h5 class="mt-3 mb-3">Administração de condomínio</h5>
-          <div class="mb-3">
-            <label class="form-label">Nome da administração / empresa</label>
-            <input type="text" class="form-control" name="administracao_nome" value="{{condominio.administracao_nome}}" placeholder="ex.: Gestão de Condomínios, Lda." />
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Website</label>
-            <input type="text" class="form-control" name="website" value="{{condominio.website}}" placeholder="ex.: www.administracao.pt" />
+            <label class="form-label" for="cfg-designacao">Designação *</label>
+            <input type="text" class="form-control" id="cfg-designacao" name="designacao" value="{{condominio.designacao}}" required />
           </div>
           <div class="row">
             <div class="col-md-4 mb-3">
-              <label class="form-label">NIF</label>
-              <input type="text" class="form-control" name="nif" value="{{condominio.nif}}" data-validar="nif" />
+              <label class="form-label" for="cfg-nif">NIF</label>
+              <input type="text" class="form-control" id="cfg-nif" name="nif" value="{{condominio.nif}}" data-validar="nif" />
             </div>
             <div class="col-md-8 mb-3">
-              <label class="form-label">Morada</label>
-              <input type="text" class="form-control" name="morada" value="{{condominio.morada}}" />
+              <label class="form-label" for="cfg-morada">Morada</label>
+              <input type="text" class="form-control" id="cfg-morada" name="morada" value="{{condominio.morada}}" />
             </div>
           </div>
           <div class="row">
             <div class="col-md-4 mb-3">
-              <label class="form-label">Código postal</label>
-              <input type="text" class="form-control" name="codigo_postal" value="{{condominio.codigo_postal}}" placeholder="0000-000" />
+              <label class="form-label" for="cfg-cp">Código postal</label>
+              <input type="text" class="form-control" id="cfg-cp" name="codigo_postal" value="{{condominio.codigo_postal}}" placeholder="0000-000" />
             </div>
             <div class="col-md-8 mb-3">
-              <label class="form-label">Localidade</label>
-              <input type="text" class="form-control" name="localidade" value="{{condominio.localidade}}" />
+              <label class="form-label" for="cfg-localidade">Localidade</label>
+              <input type="text" class="form-control" id="cfg-localidade" name="localidade" value="{{condominio.localidade}}" />
             </div>
+          </div>
+        {{/_modo-edicao}}
+      </div>
+    </div>
+
+    {{!-- ── Secção 2 — Administração de condomínio ─────────────────── --}}
+    <div class="card mb-4">
+      <div class="card-body">
+        {{#> _modo-edicao id="config-administracao" acao="/admin/config" titulo="Administração de condomínio"
+                          linhas=linhasAdministracao rotuloEditar="Editar administração" rotuloGuardar="Guardar administração"}}
+          {{> _config-campos-ocultos secao="administracao"}}
+          <div class="mb-3">
+            <label class="form-label" for="cfg-adm-nome">Nome da administração / empresa</label>
+            <input type="text" class="form-control" id="cfg-adm-nome" name="administracao_nome" value="{{condominio.administracao_nome}}" placeholder="ex.: Gestão de Condomínios, Lda." />
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="cfg-website">Website</label>
+            <input type="text" class="form-control" id="cfg-website" name="website" value="{{condominio.website}}" placeholder="ex.: www.administracao.pt" />
           </div>
           <div class="row">
             <div class="col-md-6 mb-3">
-              <label class="form-label">Email</label>
-              <input type="email" class="form-control" name="email" value="{{condominio.email}}" />
+              <label class="form-label" for="cfg-email">Email</label>
+              <input type="email" class="form-control" id="cfg-email" name="email" value="{{condominio.email}}" />
             </div>
             <div class="col-md-6 mb-3">
-              <label class="form-label">Telefone</label>
-              <input type="text" class="form-control" name="telefone" value="{{condominio.telefone}}" />
+              <label class="form-label" for="cfg-telefone">Telefone</label>
+              <input type="text" class="form-control" id="cfg-telefone" name="telefone" value="{{condominio.telefone}}" />
             </div>
           </div>
+        {{/_modo-edicao}}
+      </div>
+    </div>
 
-          <h5 class="mt-2 mb-3">Pagamentos</h5>
+    {{!-- ── Secção 3 — Pagamentos ──────────────────────────────────── --}}
+    <div class="card mb-4">
+      <div class="card-body">
+        {{#> _modo-edicao id="config-pagamentos" acao="/admin/config" titulo="Pagamentos"
+                          linhas=linhasPagamentos rotuloEditar="Editar pagamentos" rotuloGuardar="Guardar pagamentos"}}
+          {{> _config-campos-ocultos secao="pagamentos"}}
           <div class="mb-3">
-            <label class="form-label">IBAN principal</label>
-            <input type="text" class="form-control" name="iban_principal" value="{{condominio.iban_principal}}" placeholder="PT50 ..." data-validar="iban" />
+            <label class="form-label" for="cfg-iban">IBAN principal</label>
+            <input type="text" class="form-control" id="cfg-iban" name="iban_principal" value="{{condominio.iban_principal}}" placeholder="PT50 ..." data-validar="iban" />
           </div>
           <div class="mb-3">
-            <label class="form-label">Outros meios de pagamento</label>
-            <textarea class="form-control" name="outros_meios_pagamento" rows="2" placeholder="ex.: MB Way 912 345 678">{{condominio.outros_meios_pagamento}}</textarea>
+            <label class="form-label" for="cfg-outros-meios">Outros meios de pagamento</label>
+            <textarea class="form-control" id="cfg-outros-meios" name="outros_meios_pagamento" rows="2" placeholder="ex.: MB Way 912 345 678">{{condominio.outros_meios_pagamento}}</textarea>
           </div>
           <div class="mb-3">
-            <label class="form-label">Dados bancários / instruções adicionais</label>
-            <textarea class="form-control" name="dados_bancarios_adicionais" rows="2">{{condominio.dados_bancarios_adicionais}}</textarea>
+            <label class="form-label" for="cfg-dados-bancarios">Dados bancários / instruções adicionais</label>
+            <textarea class="form-control" id="cfg-dados-bancarios" name="dados_bancarios_adicionais" rows="2">{{condominio.dados_bancarios_adicionais}}</textarea>
           </div>
+        {{/_modo-edicao}}
+      </div>
+    </div>
 
-          <h5 class="mt-2 mb-3">Identidade visual</h5>
+    {{!-- ── Secção 4 — Identidade visual (tem ficheiro: `enctype`) ──── --}}
+    <div class="card mb-4">
+      <div class="card-body">
+        {{#> _modo-edicao id="config-identidade" acao="/admin/config" titulo="Identidade visual"
+                          linhas=linhasIdentidade enctype="multipart/form-data"
+                          rotuloEditar="Editar identidade" rotuloGuardar="Guardar identidade"}}
+          {{> _config-campos-ocultos secao="identidade"}}
           <div class="mb-3">
-            <label class="form-label">Modo</label>
-            <select class="form-select" name="identidade_visual">
+            <label class="form-label" for="cfg-identidade">Modo</label>
+            <select class="form-select" id="cfg-identidade" name="identidade_visual">
               <option value="logo" {{selected condominio.identidade_visual 'logo'}}>Usar logótipo personalizado</option>
               <option value="designacao" {{selected condominio.identidade_visual 'designacao'}}>Usar apenas a designação oficial</option>
             </select>
           </div>
           <div class="mb-3">
-            <label class="form-label">Logótipo (PNG/JPG, máx. 5 MB)</label>
-            <input type="file" class="form-control" name="logotipo" accept="image/png,image/jpeg" />
+            <label class="form-label" for="cfg-logotipo">Logótipo (PNG/JPG, máx. 5 MB)</label>
+            <input type="file" class="form-control" id="cfg-logotipo" name="logotipo" accept="image/png,image/jpeg" />
             {{#if condominio.logotipo}}
             <div class="form-text">Logótipo atual: <code>{{condominio.logotipo}}</code></div>
             {{/if}}
           </div>
-
-          <button type="submit" class="btn btn-primary" data-ajuda="Guarda os dados do condomínio (identificação, contactos e logótipo)." data-ajuda-titulo="Guardar configuração">Guardar configuração</button>
-        </form>
+        {{/_modo-edicao}}
       </div>
     </div>
+
   </div>
 </div>

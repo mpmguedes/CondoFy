@@ -38,6 +38,6 @@
   </form>
 </div>
 {{else}}
-<div class="alert alert-light border small">Não há Quotas Extra elegíveis para este mês (aprovadas, processadas, da mesma fração, ainda não cobradas e com vencimento neste mês).</div>
+{{> _empty-state tipo="indisponivel" icon="playlist_remove" titulo="Sem Quotas Extra elegíveis para este mês" descricao="Nenhuma Quota Extra cumpre os critérios (aprovada, processada, da mesma fração, ainda não cobrada e com vencimento neste mês)."}}
 <a href="/admin/quotas/{{quota.id}}/aviso" target="_blank" class="btn btn-outline-primary">Aviso apenas com a quota normal</a>
 {{/if}}

@@ -27,7 +27,23 @@ require.cache[modelsPath] = {
 };
 
 const dash = require('../helpers/dashboard');
-const { sinaisDeAtencao, orcamentoPorConcluir, atividadeRecente, ATIVIDADE } = dash;
+const { sinaisDoPainel, separarSinais, orcamentoPorConcluir, atividadeRecente, ATIVIDADE } = dash;
+
+// A14 §9 — a categoria declarada por cada sinal. É a ÚNICA coisa que decide em
+// que lista do painel o sinal aparece; se um sinal novo nascer sem categoria, o
+// helper lança e este teste apanha-o.
+const CATEGORIAS_ESPERADAS = {
+  quotas_vencidas: 'atencao',
+  comprovativos: 'atencao',
+  quotas_mes: 'atencao',
+  pagamentos_fornecedor: 'atencao',
+  documentos: 'atencao',
+  email_erros: 'atencao',
+  backup: 'atencao',
+  drive: 'preparacao',
+  smtp: 'preparacao',
+  orcamento: 'preparacao',
+};
 
 const porId = (sinais) => new Map(sinais.map((s) => [s.id, s]));
 const CALMO = {
@@ -48,10 +64,10 @@ const CALMO = {
 
 // ── 1. Sem nada a tratar: nenhum sinal ────────────────────────────
 function testeSemSinais() {
-  assert.deepStrictEqual(sinaisDeAtencao(CALMO), [], 'condomínio em ordem: nenhum sinal');
+  assert.deepStrictEqual(sinaisDoPainel(CALMO), [], 'condomínio em ordem: nenhum sinal');
   // Sem dados nenhuns não rebenta nem inventa sinais.
-  assert.deepStrictEqual(sinaisDeAtencao(), [], 'sem dados não inventa sinais');
-  assert.deepStrictEqual(sinaisDeAtencao({ nVencidas: 0, quotasMesEmitidas: 12, documentosLigado: true, backupEstado: 'local', smtp: true }), [],
+  assert.deepStrictEqual(sinaisDoPainel(), [], 'sem dados não inventa sinais');
+  assert.deepStrictEqual(sinaisDoPainel({ nVencidas: 0, quotasMesEmitidas: 12, documentosLigado: true, backupEstado: 'local', smtp: true }), [],
     'zeros, serviços ligados e um backup concluído não produzem sinais');
   console.log('  ✓ sem nada a tratar, a lista fica vazia (nenhum zero é «problema»)');
 }
@@ -71,7 +87,7 @@ function testeSinaisIndividuais() {
     ['smtp', { smtp: false }, '/admin/config/email', 0],
   ];
   for (const [id, extra, url, quantidade] of casos) {
-    const sinais = sinaisDeAtencao({ ...CALMO, ...extra });
+    const sinais = sinaisDoPainel({ ...CALMO, ...extra });
     const mapa = porId(sinais);
     assert.ok(mapa.has(id), `sinal «${id}» aparece quando a condição existe`);
     assert.strictEqual(mapa.get(id).destino.url, url, `sinal «${id}»: ligação direta para ${url}`);
@@ -79,34 +95,38 @@ function testeSinaisIndividuais() {
     assert.ok(mapa.get(id).texto && mapa.get(id).texto.length > 8, `sinal «${id}»: texto legível`);
     assert.strictEqual(mapa.get(id).quantidade, quantidade, `sinal «${id}»: quantidade correta`);
     assert.ok(['critico', 'atencao', 'info'].includes(mapa.get(id).gravidade), `sinal «${id}»: gravidade conhecida`);
+    // A14 §9 — a categoria decide em que lista do painel o sinal aparece.
+    assert.strictEqual(mapa.get(id).categoria, CATEGORIAS_ESPERADAS[id],
+      `sinal «${id}»: categoria «${CATEGORIAS_ESPERADAS[id]}» (A14 §9)`);
     // Só o sinal em causa.
     assert.strictEqual(sinais.length, 1, `sinal «${id}»: só ele aparece (${sinais.map((s) => s.id).join(', ')})`);
   }
-  // Orçamento e assembleia (as duas entradas que não são contagens).
-  const comOrcamento = porId(sinaisDeAtencao({ ...CALMO, ano: 2026, orcamentoEstadoAberto: 'rascunho', orcamentoEstadoRotulo: 'rascunho', orcamentoId: 12 }));
+  // Orçamento (a entrada que não é uma contagem).
+  const comOrcamento = porId(sinaisDoPainel({ ...CALMO, ano: 2026, orcamentoEstadoAberto: 'rascunho', orcamentoEstadoRotulo: 'rascunho', orcamentoId: 12 }));
   assert.ok(comOrcamento.has('orcamento'), 'orçamento por concluir aparece');
   assert.strictEqual(comOrcamento.get('orcamento').destino.url, '/admin/orcamento/12', 'orçamento: liga ao orçamento certo');
   assert.ok(/2026/.test(comOrcamento.get('orcamento').texto) && /rascunho/.test(comOrcamento.get('orcamento').texto),
     'orçamento: texto identifica o ano e o estado');
+  assert.strictEqual(comOrcamento.get('orcamento').categoria, 'preparacao', 'orçamento por concluir é PREPARAÇÃO, não um problema');
+  assert.ok(comOrcamento.get('orcamento').estadoRotulo, 'orçamento: traz rótulo de estado (A14 §8)');
 
-  const comAssembleia = porId(sinaisDeAtencao({ ...CALMO, proximasAssembleias: [{ id: 30, numero: '2/2026', data: '12/11/2026' }] }));
-  assert.ok(comAssembleia.has('assembleias'), 'próxima assembleia aparece');
-  assert.strictEqual(comAssembleia.get('assembleias').destino.url, '/admin/assembleias/30', 'assembleia: liga ao detalhe');
-  assert.ok(/12\/11\/2026/.test(comAssembleia.get('assembleias').texto), 'assembleia: texto mostra a data');
-  // Sem orçamento por abrir e sem assembleias futuras, nada destes dois.
-  const semExtras = sinaisDeAtencao({ ...CALMO, proximasAssembleias: [] });
-  assert.ok(!porId(semExtras).has('orcamento') && !porId(semExtras).has('assembleias'),
-    'sem orçamento por concluir e sem assembleias futuras, nada aparece');
-  console.log('  ✓ cada sinal aparece com a condição certa e a ligação certa');
+  // ⛔ A14 §9 — uma assembleia futura NÃO é sinal: já tem cartão próprio no
+  // painel, e não é nem um problema nem uma falta de configuração. Um sinal
+  // aqui repetia a informação.
+  const comAssembleia = sinaisDoPainel({ ...CALMO, proximasAssembleias: [{ id: 30, numero: '2/2026', data: '12/11/2026' }] });
+  assert.deepStrictEqual(comAssembleia, [], 'assembleia futura NÃO gera sinal (já apresentada no cartão próprio)');
+
+  const semExtras = sinaisDoPainel({ ...CALMO, proximasAssembleias: [] });
+  assert.ok(!porId(semExtras).has('orcamento'), 'sem orçamento por concluir, nada aparece');
+  console.log('  ✓ cada sinal aparece com a condição certa, a ligação certa e a categoria certa');
 }
 
 // ── 3. Prioridade e ordem ─────────────────────────────────────────
 function testePrioridade() {
-  const sinais = sinaisDeAtencao({
+  const sinais = sinaisDoPainel({
     nVencidas: 1, comprovativosPendentes: 1, quotasMesEmitidas: 0, pagamentosFornecedorPendentes: 1,
     documentosPorDisponibilizar: 1, filaErros: 1, documentosLigado: false, backupEstado: 'erro', smtp: false,
     ano: 2026, orcamentoEstadoAberto: 'aprovado', orcamentoEstadoRotulo: 'aprovado', orcamentoId: 3,
-    proximasAssembleias: [{ id: 1, data: '01/12/2026' }],
   });
   const ordem = sinais.map((s) => s.id);
   assert.strictEqual(ordem[0], 'quotas_vencidas', 'a dívida dos condóminos vem primeiro');
@@ -114,7 +134,7 @@ function testePrioridade() {
   assert.ok(ordem.indexOf('quotas_mes') < ordem.indexOf('drive'), 'trabalho do mês antes da configuração');
   assert.ok(ordem.indexOf('email_erros') < ordem.indexOf('backup'), 'um email falhado antes da cópia de segurança');
   assert.ok(ordem.indexOf('backup') < ordem.indexOf('drive'), 'a cópia de segurança antes do destino da cópia');
-  assert.ok(ordem.indexOf('email_erros') > ordem.indexOf('assembleias'), 'configuração depois do trabalho corrente');
+  assert.ok(ordem.indexOf('quotas_mes') < ordem.indexOf('orcamento'), 'trabalho corrente antes da preparação do ano');
   const prioridades = sinais.map((s) => s.prioridade);
   assert.deepStrictEqual(prioridades, [...prioridades].sort((a, b) => b - a), 'ordenados por prioridade decrescente');
   console.log(`  ✓ prioridade respeitada (${ordem.join(' > ')})`);
@@ -212,12 +232,21 @@ function testeIsolamento() {
   assert.ok(/attributes: \['id', 'nome'\], required: false/.test(blocoDashboard),
     'painel: da atividade só se lê o nome de quem fez a ação');
   assert.ok(!/attributes: \[[^\]]*'email'/.test(blocoDashboard), 'painel: não lê emails para a atividade');
-  assert.ok(blocoDashboard.includes('dashboardHelpers.sinaisDeAtencao(') && blocoDashboard.includes('dashboardHelpers.atividadeRecente('),
+  assert.ok(blocoDashboard.includes('dashboardHelpers.sinaisDoPainel(') && blocoDashboard.includes('dashboardHelpers.atividadeRecente('),
     'painel: a decisão dos sinais e da atividade é do ajudante');
+  // A14 §9 — as duas listas saem do handler SEPARADAS: a vista nunca volta a
+  // juntá-las, por isso o nome `sinais` (conjunto) não pode ser o único passado.
+  assert.ok(blocoDashboard.includes('dashboardHelpers.separarSinais(sinais)'),
+    'painel: os sinais são separados em atenção e preparação antes da vista');
+  assert.ok(blocoDashboard.includes('sinaisAtencao,') && blocoDashboard.includes('sinaisPreparacao,'),
+    'painel: a vista recebe as duas listas já separadas');
 
   // A vista não apresenta dívida individual de condóminos na secção nova.
   const vista = ler('views/admin/dashboard.handlebars');
-  const blocoAtencao = vista.slice(vista.indexOf('Precisa de atenção'), vista.indexOf('TOP DEVEDORES'));
+  // ⛔ O corte termina em «Preparação do condomínio»: se terminasse em «TOP
+  // DEVEDORES» englobaria o bloco de preparação e a asserção seguinte deixaria
+  // de ser sobre a lista de atenção.
+  const blocoAtencao = vista.slice(vista.indexOf('Precisa de atenção'), vista.indexOf('Preparação do condomínio'));
   assert.ok(blocoAtencao.length > 300, 'bloco «Precisa de atenção» localizado');
   assert.ok(!/fraç(ão|oes)|fracao_id|pessoa|condómino/i.test(blocoAtencao),
     'painel: os sinais não identificam frações nem condóminos');
@@ -253,9 +282,28 @@ function testeVista() {
   assert.ok(vista.includes('{{sistema.backups.cloud.rotulo}}'), 'vista: nomeia o serviço que recebe a cópia cloud');
   assert.ok(vista.includes('formatDate sistema.ultimoBackup.data'), 'vista: o último backup mostra a data');
   assert.ok(!/○ Desligado/.test(vista), 'vista: os backups nunca são apresentados como «Desligado»');
-  const blocoAtencaoVista = vista.slice(vista.indexOf('Precisa de atenção'), vista.indexOf('TOP DEVEDORES'));
+  const blocoAtencaoVista = vista.slice(vista.indexOf('Precisa de atenção'), vista.indexOf('Preparação do condomínio'));
   assert.ok(!/armazenamentoRotulo|sistema\.smtp/.test(blocoAtencaoVista),
     'vista: a secção de sinais não repete o estado dos serviços');
+
+  // ── A14 §9 — as DUAS listas existem e são independentes ─────────────
+  const blocoPreparacao = vista.slice(vista.indexOf('Preparação do condomínio'), vista.indexOf('SUGESTÕES'));
+  assert.ok(blocoPreparacao.length > 300, 'vista: bloco «Preparação do condomínio» localizado');
+  assert.ok(/\{\{#each sinaisPreparacao\}\}/.test(blocoPreparacao),
+    'vista: a preparação percorre a lista de preparação (e não a de atenção)');
+  assert.ok(/\{\{#each sinaisAtencao\}\}/.test(blocoAtencaoVista),
+    'vista: a atenção percorre a lista de atenção (e não a de preparação)');
+  assert.ok(!/sinaisPreparacao/.test(blocoAtencaoVista) && !/sinaisAtencao/.test(blocoPreparacao),
+    'vista: as duas listas nunca se misturam no mesmo bloco');
+  // «Ainda não configurou X» não pode aparecer como um erro: o bloco de
+  // preparação diz o que falta e apresenta um estado textual (A14 §8).
+  assert.ok(/estado estado-requer-config/.test(blocoPreparacao) && /\{\{estadoRotulo\}\}/.test(blocoPreparacao),
+    'vista: cada item de preparação tem ÍCONE + TEXTO + COR (não só um ponto colorido)');
+  assert.ok(blocoPreparacao.includes('O condomínio está configurado'),
+    'vista: sem nada em falta, a preparação afirma-o em vez de mostrar uma lista vazia');
+  // Não é um WIZARD: sem passos numerados nem sequência obrigatória.
+  assert.ok(!/wizard|passo \d|progresso|concluído \d de \d/i.test(blocoPreparacao),
+    'vista: a preparação não é um wizard (sem passos numerados nem progresso)');
   const css = ler('public/css/styles.css');
   for (const classe of ['.atencao-lista', '.atencao-sinal', '.atencao-critico', '.atencao-atencao', '.atencao-info', '.painel-linha']) {
     assert.ok(css.includes(classe), `css: classe ${classe} definida`);
@@ -265,6 +313,51 @@ function testeVista() {
   console.log('  ✓ vista e estilos com os dois blocos, estados vazios e alvos de 48px');
 }
 
+// ── 8. A14 §9 — as duas listas não se misturam ────────────────────
+// A separação é a Decisão da frente: «ainda não configurou X» nunca pode ser
+// apresentado como um problema. Testa-se o motor (quem decide) e o contrato
+// (nenhum sinal fica fora das duas listas).
+function testeSeparacao() {
+  // Só problemas ⇒ a preparação fica vazia e a atenção fica com tudo.
+  const soProblemas = sinaisDoPainel({
+    nVencidas: 3, comprovativosPendentes: 2, quotasMesEmitidas: 0,
+    pagamentosFornecedorPendentes: 1, documentosPorDisponibilizar: 4, filaErros: 6,
+    backupEstado: 'erro', documentosLigado: true, smtp: true,
+  });
+  const p1 = separarSinais(soProblemas);
+  assert.strictEqual(p1.preparacao.length, 0, 'só problemas: a preparação fica vazia');
+  assert.strictEqual(p1.atencao.length, soProblemas.length, 'só problemas: vão todos para a atenção');
+
+  // Só falta de configuração ⇒ a atenção fica vazia.
+  const soConfig = sinaisDoPainel({
+    ...CALMO, documentosLigado: false, smtp: false,
+    ano: 2026, orcamentoEstadoAberto: 'rascunho', orcamentoEstadoRotulo: 'rascunho', orcamentoId: 7,
+  });
+  const p2 = separarSinais(soConfig);
+  assert.strictEqual(p2.atencao.length, 0, 'só falta de configuração: a atenção fica vazia');
+  assert.deepStrictEqual(p2.preparacao.map((s) => s.id).sort(), ['drive', 'orcamento', 'smtp'],
+    'só falta de configuração: os três sinais de preparação');
+  // Cada um traz o rótulo textual do estado (A14 §8: nunca só uma cor).
+  for (const s of p2.preparacao) {
+    assert.ok(s.estadoRotulo && s.estadoRotulo.length > 3, `preparação «${s.id}»: rótulo de estado presente`);
+  }
+
+  // Mistura ⇒ cada sinal vai para a sua lista e NENHUM se perde.
+  const mistura = sinaisDoPainel({
+    ...CALMO, nVencidas: 2, documentosLigado: false, smtp: false, quotasMesEmitidas: 0,
+  });
+  const p3 = separarSinais(mistura);
+  assert.strictEqual(p3.atencao.length + p3.preparacao.length, mistura.length,
+    'separar não perde nem duplica nenhum sinal');
+  assert.ok(p3.atencao.every((s) => s.categoria === 'atencao'), 'na lista de atenção só há sinais de atenção');
+  assert.ok(p3.preparacao.every((s) => s.categoria === 'preparacao'), 'na lista de preparação só há sinais de preparação');
+
+  // Lista vazia não rebenta.
+  assert.deepStrictEqual(separarSinais([]), { atencao: [], preparacao: [] }, 'lista vazia: duas listas vazias');
+  assert.deepStrictEqual(separarSinais(), { atencao: [], preparacao: [] }, 'sem argumento: não rebenta');
+  console.log('  ✓ A14 §9: atenção e preparação separadas, sem perdas nem duplicações');
+}
+
 testeSemSinais();
 testeSinaisIndividuais();
 testePrioridade();
@@ -272,4 +365,5 @@ testeOrcamentoPorConcluir();
 testeAtividade();
 testeIsolamento();
 testeVista();
+testeSeparacao();
 console.log('✓ Testes do painel acionável passaram (sem base de dados).');

@@ -1,0 +1,102 @@
+{{!-- ══════════════════════════════════════════════════════════════════
+     A14 §6 — «Documentos e Automações»: a MESMA estrutura na CONSULTA e
+     na EDIÇÃO.
+
+     Antes a consulta era uma lista de 33 linhas soltas (`linhasAutomacoes`)
+     e a edição era um conjunto de cartões com tabelas de interruptores: duas
+     interfaces estruturalmente diferentes para a mesma verdade. Aqui há um
+     único esqueleto — os mesmos grupos, as mesmas linhas, as mesmas colunas
+     — e só muda a NATUREZA da célula:
+
+       · `editando=false` → pílulas de estado (A14 §8: ícone + texto + cor);
+       · `editando=true`  → o mesmo sítio passa a ter o interruptor.
+
+     A14 §3 — «Editar acrescenta interatividade; não deve acrescentar a
+     informação necessária para compreender»: quem consulta já vê tudo o que
+     a edição mostra, só não o pode mudar.
+
+     ── Parâmetros (todos explícitos: nada se procura em `@root`) ──────
+       grupos               array de { rotulo, tipos: [{ tipo, rotulo, drive,
+                            email, automatico }] }
+       editando             `true` na edição, `false` na consulta
+       armazenamentoRotulo  rótulo do armazenamento («Google Drive», …)
+       armazenamentoIcone   classe do ícone do armazenamento
+
+     ⛔ Com `editando=false` o resultado NÃO pode conter um único
+     `input`/`select`/`textarea`: a consulta é só leitura (P54-0). É a
+     falha para o lado SEGURO — sem JavaScript não há nada para submeter.
+     ══════════════════════════════════════════════════════════════════ --}}
+{{#each grupos}}
+<div class="card mb-4">
+  {{!-- ⛔ A14 §15: sem `bg-white` — essa classe parte o modo escuro. --}}
+  <div class="card-header fw-semibold">{{rotulo}}</div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th scope="col">Documento</th>
+          <th scope="col" style="width:180px"><i class="{{../armazenamentoIcone}} me-1" aria-hidden="true"></i>Guardar no {{../armazenamentoRotulo}}</th>
+          <th scope="col" style="width:180px"><i class="bi bi-send me-1" aria-hidden="true"></i>Disponível para email</th>
+          <th scope="col" style="width:180px"><i class="bi bi-lightning-charge me-1" aria-hidden="true"></i>Enviar automaticamente</th>
+          <th scope="col" style="width:150px">Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each tipos}}
+        <tr>
+          <td class="fw-semibold">{{rotulo}}</td>
+
+          {{!-- Guardar no armazenamento --}}
+          <td>
+            {{#if ../../editando}}
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" role="switch" id="auto_{{tipo}}_drive" name="auto_{{tipo}}_drive" value="on" {{#if drive}}checked{{/if}} />
+              <label class="form-check-label small" for="auto_{{tipo}}_drive">Guardar</label>
+            </div>
+            {{else}}
+            <span class="estado {{#if drive}}estado-concluido{{else}}estado-nao-utilizado{{/if}}">{{#if drive}}Guarda{{else}}Não guarda{{/if}}</span>
+            {{/if}}
+          </td>
+
+          {{!-- Disponível para email --}}
+          <td>
+            {{#if ../../editando}}
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" role="switch" id="auto_{{tipo}}_email" name="auto_{{tipo}}_email" value="on" {{#if email}}checked{{/if}} />
+              <label class="form-check-label small" for="auto_{{tipo}}_email">Email</label>
+            </div>
+            {{else}}
+            <span class="estado {{#if email}}estado-concluido{{else}}estado-nao-utilizado{{/if}}">{{#if email}}Disponível{{else}}Não disponível{{/if}}</span>
+            {{/if}}
+          </td>
+
+          {{!-- Enviar automaticamente --}}
+          <td>
+            {{#if ../../editando}}
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" role="switch" id="auto_{{tipo}}_automatico" name="auto_{{tipo}}_automatico" value="on" {{#if automatico}}checked{{/if}} />
+              <label class="form-check-label small" for="auto_{{tipo}}_automatico">Automático</label>
+            </div>
+            {{else}}
+            <span class="estado {{#if automatico}}estado-concluido{{else}}estado-nao-utilizado{{/if}}">{{#if automatico}}Automático{{else}}Manual{{/if}}</span>
+            {{/if}}
+          </td>
+
+          {{!-- Estado resultante: verde = ativo, azul = parcial, cinza = nada
+               (A14 §8: ícone + texto + cor, nunca só um ponto colorido). --}}
+          <td>
+            {{#if automatico}}
+            <span class="estado estado-concluido">Automático</span>
+            {{else if drive}}
+            <span class="estado estado-recomendado">Só guarda</span>
+            {{else}}
+            <span class="estado estado-nao-utilizado">Manual</span>
+            {{/if}}
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{/each}}

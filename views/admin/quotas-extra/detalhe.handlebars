@@ -104,7 +104,7 @@
           <td class="text-end text-nowrap">
             {{#if (eq estado 'paga')}}
             <form action="/admin/quotas-extra/parcelas/{{id}}/desfazer" method="POST" class="d-inline" data-confirmar="Reverter este pagamento? A parcela volta ao estado anterior." data-confirmar-perigo="1">
-              <button aria-label="Desfazer pagamento" class="btn btn-sm btn-outline-secondary" title="Desfazer pagamento" data-ajuda="Reverte o pagamento desta parcela. A parcela volta ao estado anterior e o valor deixa de contar como pago." data-ajuda-titulo="Desfazer pagamento"><span class="material-symbols-outlined">undo</span></button>
+              <button aria-label="Desfazer pagamento" class="btn btn-sm btn-outline-secondary" title="Desfazer pagamento" data-ajuda="Reverte o pagamento desta parcela. A parcela volta ao estado anterior e o valor deixa de contar como pago." data-ajuda-titulo="Desfazer pagamento"><span class="material-symbols-outlined" aria-hidden="true">undo</span></button>
             </form>
             {{else if (eq estado 'anulada')}}—
             {{else if (eq ../../extra.estado 'processada')}}
@@ -113,7 +113,7 @@
                 <option value="">Sem conta</option>
                 {{#each ../../contas}}<option value="{{id}}">{{nome}}</option>{{/each}}
               </select>
-              <button aria-label="Pagar parcela" class="btn btn-sm btn-outline-success" title="Pagar parcela" data-ajuda="Registra o pagamento desta parcela, com número de documento e movimento na conta escolhida." data-ajuda-titulo="Pagar parcela"><span class="material-symbols-outlined">check</span></button>
+              <button aria-label="Pagar parcela" class="btn btn-sm btn-outline-success" title="Pagar parcela" data-ajuda="Registra o pagamento desta parcela, com número de documento e movimento na conta escolhida." data-ajuda-titulo="Pagar parcela"><span class="material-symbols-outlined" aria-hidden="true">check</span></button>
             </form>
             {{else}}
             <span class="small text-muted">Aguarda aprovação/processamento</span>

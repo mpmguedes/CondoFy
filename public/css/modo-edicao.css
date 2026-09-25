@@ -101,13 +101,26 @@
 .me-form[hidden],
 .me-consulta[hidden] { display: none; }
 
+/* ── A14 §4 — o par de ações ocupa o LUGAR de `Editar` ───────────────
+   Vivem no cabeçalho, encostadas à mesma aresta direita: `Cancelar` fica
+   exatamente onde `Editar` estava e `Guardar` imediatamente à sua esquerda.
+   `margin-left: auto` garante a âncora à direita mesmo com o título a
+   ocupar a linha inteira (o cabeçalho é `flex-wrap`). */
 .me-acoes {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--me-espaco);
   flex-wrap: wrap;
-  margin-top: var(--sp-4, 16px);
+  margin-left: auto;
 }
+
+/* ⛔ Mesma garantia do formulário: `.me-btn` define `display`, e uma regra
+   com `display` anula o `[hidden]` do browser (especificidade baixa). Sem
+   isto, `Editar` continuaria visível em edição e o par de ações apareceria
+   em consulta. */
+.me-acoes[hidden],
+.me-btn[hidden] { display: none; }
 
 /* Botão do padrão: geometria PRÓPRIA (não estende `.btn`) para o componente
    ficar autónomo; as medidas vêm dos mesmos tokens, para não divergir. */
@@ -176,11 +189,36 @@
   cursor: not-allowed;
 }
 
+/* ── A14 §4 — «Cancelar» tem a MESMA caixa de «Editar» ────────────────
+   Com os rótulos por omissão («Editar»/«Cancelar») as duas caixas ficam
+   literalmente iguais; com rótulos próprios mais longos o que se mantém é a
+   ÂNCORA (mesma aresta direita, mesmo eixo vertical) — é o mesmo lugar. */
+.me-btn-editar,
+.me-btn-cancelar { min-width: 7.6em; }
+
+/* ── A14 §4 — em EDIÇÃO o cabeçalho acompanha o scroll ────────────────
+   «Guardar» e «Cancelar» nunca exigem procurar: num formulário comprido o
+   cabeçalho fica fixo logo abaixo do cabeçalho da aplicação. Só o bloco que
+   entrou em edição por último recebe `data-me-sticky` (dois fixos
+   sobrepunham-se). O `padding-bottom` substitui a margem, para o fundo
+   cobrir o espaço por onde o conteúdo passaria. */
+.me[data-me-sticky] .me-topo {
+  position: sticky;
+  top: var(--header-h, 56px);
+  z-index: 5;
+  margin-bottom: 0;
+  padding-bottom: var(--sp-3, 12px);
+  background: var(--c-surface, #ffffff);
+}
+
 /* ── Ecrã estreito: ações utilizáveis, empilhadas, alvo tátil ─────── */
 @media (max-width: 575.98px) {
   .me-topo { flex-direction: column; align-items: stretch; }
   .me-linha { flex-direction: column; gap: 2px; }
   .me-rotulo { min-width: 0; }
-  .me-acoes { flex-direction: column; align-items: stretch; }
+  /* ⛔ `margin-left: 0`: em coluna, uma margem automática desativa o
+     `align-items: stretch` do pai e o par encolhe ao conteúdo, em vez de
+     ocupar a largura toda (alvo tátil completo). */
+  .me-acoes { flex-direction: column; align-items: stretch; margin-left: 0; }
   .me-btn { width: 100%; min-height: var(--ctl-h-touch, 48px); }
 }

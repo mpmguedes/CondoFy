@@ -1,7 +1,7 @@
 {{!-- Conteúdo de um item das listas do Início (ícone + título + meta).
      Usado pela atividade recente e pelos próximos acontecimentos; o link (ou a
      ausência dele) é decidido por quem inclui este parcial. --}}
-<span class="portal-item-icone" aria-hidden="true"><span class="material-symbols-outlined">{{icone}}</span></span>
+<span class="portal-item-icone" aria-hidden="true"><span class="material-symbols-outlined" aria-hidden="true">{{icone}}</span></span>
 <span class="portal-item-texto">
   <span class="portal-item-titulo">{{titulo}}</span>
   <span class="portal-item-meta">{{#if detalhe}}{{detalhe}} · {{/if}}{{formatDate data}}</span>

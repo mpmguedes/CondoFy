@@ -22,8 +22,8 @@
   <li class="portal-quota">
     <div class="portal-quota-topo">
       <span class="portal-quota-periodo">Recibo {{codigo}}{{#if (and ../temVariasFracoes fracaoDesignacao)}} · {{fracaoDesignacao}}{{/if}}</span>
-      {{#if (eq estado 'anulado')}}<span class="badge text-bg-secondary">Anulado</span>
-      {{else}}<span class="badge text-bg-success">Emitido</span>{{/if}}
+      {{#if (eq estado 'anulado')}}<span class="estado estado-neutro">Anulado</span>
+      {{else}}<span class="estado estado-concluido">Emitido</span>{{/if}}
     </div>
     <div class="portal-quota-valor">{{eur valor}}</div>
     <div class="portal-quota-meta">
@@ -57,9 +57,9 @@
         <td class="fw-semibold">{{codigo}}</td>
         <td class="text-nowrap">{{formatDate data_emissao}}</td>
         {{#if ../temVariasFracoes}}<td>{{fracaoDesignacao}}</td>{{/if}}
-        <td class="small">{{periodos}}{{#if temExtras}} <span class="badge text-bg-light border">Extra</span>{{/if}}</td>
+        <td class="small">{{periodos}}{{#if temExtras}} <span class="estado estado-neutro">Extra</span>{{/if}}</td>
         <td>{{eur valor}}</td>
-        <td>{{#if (eq estado 'anulado')}}<span class="badge text-bg-secondary">Anulado</span>{{else}}<span class="badge text-bg-success">Emitido</span>{{/if}}</td>
+        <td>{{#if (eq estado 'anulado')}}<span class="estado estado-neutro">Anulado</span>{{else}}<span class="estado estado-concluido">Emitido</span>{{/if}}</td>
         <td class="text-end text-nowrap">
           <a href="/condomino/recibos/{{id}}/pdf" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" title="Ver recibo (PDF)" aria-label="Ver recibo {{codigo}} (PDF)">
             <span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>

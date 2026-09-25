@@ -760,12 +760,15 @@ function pessoaNomeDoUser(req) {
 // ── Assembleias (consulta) ──────────────────────────────────────────
 // Etiquetas em PT-PT para o estado e o tipo de assembleia. São dados que já
 // existem no modelo; aqui só são traduzidos para linguagem de condómino.
+// ⛔ DUPLICAÇÃO CONHECIDA: este mapa repete `helpers/calendario.js`. As duas
+// cópias têm de andar juntas — a variante do A14 §8 é a mesma linguagem de
+// estado. Registado no ROADMAP (§4) para unificação futura.
 const ESTADOS_ASSEMBLEIA = {
-  rascunho: { rotulo: 'Rascunho', classe: 'text-bg-secondary' },
-  agendada: { rotulo: 'Agendada', classe: 'text-bg-warning' },
-  convocada: { rotulo: 'Convocada', classe: 'text-bg-info' },
-  realizada: { rotulo: 'Realizada', classe: 'text-bg-success' },
-  cancelada: { rotulo: 'Cancelada', classe: 'text-bg-dark' },
+  rascunho: { rotulo: 'Rascunho', classe: 'text-bg-secondary', variante: 'estado-neutro' },
+  agendada: { rotulo: 'Agendada', classe: 'text-bg-warning', variante: 'estado-recomendado' },
+  convocada: { rotulo: 'Convocada', classe: 'text-bg-info', variante: 'estado-requer-config' },
+  realizada: { rotulo: 'Realizada', classe: 'text-bg-success', variante: 'estado-concluido' },
+  cancelada: { rotulo: 'Cancelada', classe: 'text-bg-dark', variante: 'estado-erro' },
 };
 const TIPOS_ASSEMBLEIA = {
   ordinaria: 'Ordinária',
@@ -775,7 +778,7 @@ const TIPOS_ASSEMBLEIA = {
 // Uma assembleia deixa de ser «próxima» quando a data já passou ou quando o
 // estado a encerrou. Não se inventa nenhum estado: só se usa o que existe.
 function estadoAssembleia(a) {
-  return ESTADOS_ASSEMBLEIA[a.estado] || { rotulo: a.estado || '—', classe: 'text-bg-light border' };
+  return ESTADOS_ASSEMBLEIA[a.estado] || { rotulo: a.estado || '—', classe: 'text-bg-light border', variante: 'estado-neutro' };
 }
 function assembleiaEncerrada(a) {
   return ['realizada', 'cancelada'].includes(String(a.estado || ''));
@@ -795,6 +798,7 @@ router.get('/assembleias', async (req, res) => {
       ...json,
       estadoRotulo: estadoAssembleia(json).rotulo,
       estadoClasse: estadoAssembleia(json).classe,
+      estadoVariante: estadoAssembleia(json).variante,
       tipoRotulo: TIPOS_ASSEMBLEIA[json.tipo] || null,
       // «Futura» = data ainda por chegar e não encerrada pela administração.
       eFutura: Boolean(dataISO) && dataISO >= hoje && !assembleiaEncerrada(json),
@@ -923,6 +927,7 @@ router.get('/calendario', async (req, res) => {
       local: a.local || null,
       detalhe: [a.hora, a.local].filter(Boolean).join(' · ') || null,
       estadoRotulo: estadoAssembleia(a).rotulo,
+      estadoVariante: estadoAssembleia(a).variante,
       link: `/condomino/assembleias/${a.id}`,
     })),
     ...avisos.map((a) => ({

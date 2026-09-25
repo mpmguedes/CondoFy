@@ -28,7 +28,7 @@
         <div class="d-flex align-items-center gap-1">
           {{#if reciboPdf}}<a href="{{reciboPdf}}" target="_blank" class="btn btn-sm btn-primary">Ver PDF</a>{{/if}}
           <div class="dropdown">
-            <button aria-label="Mais opções" class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="material-symbols-outlined">more_vert</span></button>
+            <button aria-label="Mais opções" class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="material-symbols-outlined" aria-hidden="true">more_vert</span></button>
             <ul class="dropdown-menu dropdown-menu-end">
               {{#if ficheiroInterno}}<li><a class="dropdown-item" href="{{ficheiroInterno}}" target="_blank" rel="noopener">Abrir ficheiro</a></li>{{/if}}
               {{#if urlExterna}}<li><a class="dropdown-item" href="{{urlExterna}}" target="_blank" rel="noopener noreferrer">Abrir referência externa</a></li>{{/if}}
@@ -48,5 +48,5 @@
   </ul>
 </div>
 {{else}}
-<div class="alert alert-light border small">Sem recibos de {{ano}}.</div>
+{{> _empty-state tipo="filtro" titulo="Sem recibos" ano=ano descricao="Escolha outro ano para consultar os recibos emitidos nesse período." link="/admin/documentos/recibos" linkTexto="Ver todos os anos"}}
 {{/if}}

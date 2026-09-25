@@ -52,7 +52,7 @@
   <div class="col-12 col-lg-6">
     <div class="card mb-3">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <span><span class="material-symbols-outlined me-2">badge</span>Titularidade</span>
+        <span><span class="material-symbols-outlined me-2" aria-hidden="true">badge</span>Titularidade</span>
         <span class="badge text-bg-light border">{{titulares.length}} titular(es) atual(ais)</span>
       </div>
       <div class="card-body">
@@ -148,7 +148,7 @@
     </div>
 
     <div class="card mb-3">
-      <div class="card-header"><span class="material-symbols-outlined me-2">history</span>Histórico de titularidade</div>
+      <div class="card-header"><span class="material-symbols-outlined me-2" aria-hidden="true">history</span>Histórico de titularidade</div>
       {{#if historico.length}}
       <div class="table-responsive">
         <table class="table table-sm align-middle mb-0">
@@ -178,7 +178,7 @@
     </div>
 
     <div class="card">
-      <div class="card-header"><span class="material-symbols-outlined me-2">link</span>Pessoas associadas</div>
+      <div class="card-header"><span class="material-symbols-outlined me-2" aria-hidden="true">link</span>Pessoas associadas</div>
       <div class="card-body">
         <p class="text-muted small">
           Lista usada para contactos e comunicações por fração (avisos, envio de quotas e recibos).
@@ -213,7 +213,7 @@
               <span class="badge text-bg-light border ms-2">{{this.FracaoPessoa.vinculo}}</span>
             </div>
             <form action="/admin/fracoes/{{../fracao.id}}/pessoas/{{this.FracaoPessoa.id}}/eliminar" method="POST" data-confirmar="Remover esta associação? A titularidade correspondente será encerrada com a data de hoje e mantém-se no histórico." data-confirmar-perigo="1">
-              <button aria-label="Remover associação" class="btn btn-sm btn-outline-danger" data-ajuda="Remove esta associação. A titularidade correspondente é encerrada com a data de hoje e mantém-se no histórico." data-ajuda-titulo="Remover associação"><span class="material-symbols-outlined">close</span></button>
+              <button aria-label="Remover associação" class="btn btn-sm btn-outline-danger" data-ajuda="Remove esta associação. A titularidade correspondente é encerrada com a data de hoje e mantém-se no histórico." data-ajuda-titulo="Remover associação"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
             </form>
           </li>
           {{else}}

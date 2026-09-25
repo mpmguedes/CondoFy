@@ -224,10 +224,45 @@ async function dadosArmazenamento(condominioId) {
 // ── Separador 1: Configuração do Condomínio ────────────────────────
 router.get('/config', async (req, res) => {
   const condominio = await getCondominio({ force: true, id: req.condominioId });
+  const c = condominio ? condominio.toJSON() : null;
+
+  // ── A14 §7 — síntese de CONSULTA por secções (padrão P54-0) ────────
+  // A Configuração deixou de ser um formulário gigante permanentemente
+  // aberto: cada secção nasce em consulta e mostra o que está gravado.
+  // As linhas são construídas AQUI (e não na vista) pelo mesmo motivo do
+  // `linhasSmtp` do P54-2: o Handlebars não compõe arrays.
+  //
+  // ⛔ Valor vazio é `null` — o parcial imprime «—» e o utilizador distingue
+  // «em branco» de «valor zero». Nenhuma linha é `sensivel`: nesta página não
+  // há segredos (o IBAN não é um segredo do sistema, é um dado do condomínio).
+  const v = (x) => (x === null || x === undefined || x === '' ? null : String(x));
 
   res.render('admin/configuracao/index', {
     titulo: 'Configuração do Condomínio',
-    condominio: condominio ? condominio.toJSON() : null,
+    condominio: c,
+    linhasDados: [
+      { rotulo: 'Designação', valor: v(c && c.designacao) },
+      { rotulo: 'NIF', valor: v(c && c.nif) },
+      { rotulo: 'Morada', valor: v(c && c.morada) },
+      { rotulo: 'Código postal', valor: v(c && c.codigo_postal) },
+      { rotulo: 'Localidade', valor: v(c && c.localidade) },
+      { rotulo: 'Estado', valor: c && c.estado === 'inativo' ? 'Inativo' : 'Ativo' },
+    ],
+    linhasAdministracao: [
+      { rotulo: 'Nome da administração', valor: v(c && c.administracao_nome) },
+      { rotulo: 'Website', valor: v(c && c.website) },
+      { rotulo: 'Email', valor: v(c && c.email) },
+      { rotulo: 'Telefone', valor: v(c && c.telefone) },
+    ],
+    linhasPagamentos: [
+      { rotulo: 'IBAN principal', valor: v(c && c.iban_principal) },
+      { rotulo: 'Outros meios de pagamento', valor: v(c && c.outros_meios_pagamento) },
+      { rotulo: 'Instruções adicionais', valor: v(c && c.dados_bancarios_adicionais) },
+    ],
+    linhasIdentidade: [
+      { rotulo: 'Modo', valor: c && c.identidade_visual === 'logo' ? 'Logótipo personalizado' : 'Apenas a designação oficial' },
+      { rotulo: 'Logótipo', valor: v(c && c.logotipo) },
+    ],
   });
 });
 

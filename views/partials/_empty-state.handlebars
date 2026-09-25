@@ -1,8 +1,46 @@
-<div class="empty-state">
-  <span class="material-symbols-outlined empty-state-icon">{{icon}}</span>
-  <h3 class="empty-state-title">{{titulo}}</h3>
+{{!-- Estado vazio — três casos distintos (A14 §13), com a mesma geometria.
+
+     `tipo` diz QUAL dos três é, e é o que muda o peso visual e o ícone por
+     omissão. A distinção importa: «ainda não há nada» pede uma ação de
+     arranque; «o filtro não deu nada» pede para aliviar o filtro; «não está
+     disponível» não pede ação nenhuma, e apresentá-lo como erro é enganador.
+
+       · inicial       (por omissão) — ainda não existem dados. Oferece o
+                                     primeiro passo (`link`/`linkTexto`).
+       · filtro                    — há dados, mas nenhum corresponde ao
+                                     filtro. Nunca oferece «criar».
+       · indisponivel              — não se aplica a este caso (sem
+                                     permissão, sem condomínio, ano sem
+                                     orçamento). Não é uma falha.
+
+     ⛔ Não usar `tipo="filtro"` com `link` de criação: seria dizer ao
+     utilizador para criar algo que já existe.
+
+     ⛔ `titulo` NÃO interpola expressões dentro da string: o Handlebars trata
+     um literal `"…"` como texto opaco, pelo que `titulo="Sem recibos de {{ano}}"`
+     saía LITERALMENTE («Sem recibos de {{ano}}»), não «… de 2026». Para
+     títulos que dependem de dados, passar `ano=<valor>` e deixar o parcial
+     compor o título — ou passar o título já composto pelo chamador. --}}
+{{#if (eq tipo 'filtro')}}
+<div class="empty-state empty-state-filtro" role="status">
+  <span class="material-symbols-outlined empty-state-icon" aria-hidden="true">{{#if icon}}{{icon}}{{else}}filter_alt_off{{/if}}</span>
+  <h3 class="empty-state-title">{{#if titulo}}{{titulo}}{{/if}}{{#if ano}} de {{ano}}{{/if}}</h3>
+  <p class="empty-state-text">{{descricao}}</p>
+  {{#if link}}<a href="{{link}}" class="btn btn-sm btn-outline-secondary">{{#if linkTexto}}{{linkTexto}}{{else}}Limpar filtros{{/if}}</a>{{/if}}
+</div>
+{{else if (eq tipo 'indisponivel')}}
+<div class="empty-state empty-state-indisponivel" role="status">
+  <span class="material-symbols-outlined empty-state-icon" aria-hidden="true">{{#if icon}}{{icon}}{{else}}info{{/if}}</span>
+  <h3 class="empty-state-title">{{#if titulo}}{{titulo}}{{/if}}{{#if ano}} de {{ano}}{{/if}}</h3>
+  <p class="empty-state-text">{{descricao}}</p>
+</div>
+{{else}}
+<div class="empty-state" role="status">
+  <span class="material-symbols-outlined empty-state-icon" aria-hidden="true">{{icon}}</span>
+  <h3 class="empty-state-title">{{#if titulo}}{{titulo}}{{/if}}{{#if ano}} de {{ano}}{{/if}}</h3>
   <p class="empty-state-text">{{descricao}}</p>
   {{#if link}}
   <a href="{{link}}" class="btn btn-primary">{{#if linkTexto}}{{linkTexto}}{{else}}Adicionar{{/if}}</a>
   {{/if}}
 </div>
+{{/if}}

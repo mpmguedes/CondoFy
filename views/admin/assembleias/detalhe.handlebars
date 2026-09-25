@@ -57,7 +57,7 @@
       <div class="card-body border-bottom">
         <form action="/admin/assembleias/{{assembleia.id}}/anexos" method="POST" enctype="multipart/form-data" class="d-flex gap-2">
           <input type="file" class="form-control" name="ficheiro" accept=".pdf,.jpg,.jpeg,.png,.webp" />
-          <button class="btn btn-outline-primary text-nowrap" {{#unless driveLigado}}disabled{{/unless}} aria-label="Carregar anexo" data-ajuda="Carrega o ficheiro escolhido como anexo desta assembleia. PDF, JPG, PNG ou WebP até 20 MB." data-ajuda-titulo="Carregar anexo"><span class="material-symbols-outlined">upload</span></button>
+          <button class="btn btn-outline-primary text-nowrap" {{#unless driveLigado}}disabled{{/unless}} aria-label="Carregar anexo" data-ajuda="Carrega o ficheiro escolhido como anexo desta assembleia. PDF, JPG, PNG ou WebP até 20 MB." data-ajuda-titulo="Carregar anexo"><span class="material-symbols-outlined" aria-hidden="true">upload</span></button>
         </form>
         <div class="form-text">PDF, JPG, PNG ou WebP até 20 MB.</div>
       </div>
@@ -65,14 +65,14 @@
         {{#each anexos}}
         <li class="list-group-item d-flex justify-content-between align-items-center">
           <div class="d-flex align-items-center gap-2">
-            <span class="material-symbols-outlined text-muted">attach_file</span>
+            <span class="material-symbols-outlined text-muted" aria-hidden="true">attach_file</span>
             <span class="fw-semibold">{{nome}}</span>
           </div>
           <div class="d-flex align-items-center gap-2">
-            {{#if (urlDocumento this 'gestao')}}<a aria-label="Ver" href="{{urlDocumento this 'gestao'}}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" title="Ver"><span class="material-symbols-outlined">visibility</span></a>{{/if}}
-            {{#if (urlDocumentoExterno this)}}<a aria-label="Link externo" href="{{urlDocumentoExterno this}}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary" title="Link externo"><span class="material-symbols-outlined">link</span></a>{{/if}}
+            {{#if (urlDocumento this 'gestao')}}<a aria-label="Ver" href="{{urlDocumento this 'gestao'}}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" title="Ver"><span class="material-symbols-outlined" aria-hidden="true">visibility</span></a>{{/if}}
+            {{#if (urlDocumentoExterno this)}}<a aria-label="Link externo" href="{{urlDocumentoExterno this}}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary" title="Link externo"><span class="material-symbols-outlined" aria-hidden="true">link</span></a>{{/if}}
             <form action="/admin/assembleias/{{../assembleia.id}}/anexos/{{id}}/eliminar" method="POST" data-confirmar="Eliminar este anexo?" data-confirmar-perigo="1">
-              <button class="btn btn-sm btn-outline-danger" title="Eliminar" aria-label="Eliminar anexo" data-ajuda="Remove o anexo desta assembleia. Não é possível desfazer." data-ajuda-titulo="Eliminar anexo"><span class="material-symbols-outlined">delete</span></button>
+              <button class="btn btn-sm btn-outline-danger" title="Eliminar" aria-label="Eliminar anexo" data-ajuda="Remove o anexo desta assembleia. Não é possível desfazer." data-ajuda-titulo="Eliminar anexo"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
             </form>
           </div>
         </li>
@@ -99,7 +99,7 @@
             </div>
           </div>
           <div class="col-md-1">
-            <button class="btn btn-primary" title="Adicionar" aria-label="Adicionar ponto à ordem de trabalhos" data-ajuda="Acrescenta um novo ponto à ordem de trabalhos da assembleia." data-ajuda-titulo="Adicionar ponto"><span class="material-symbols-outlined">add</span></button>
+            <button class="btn btn-primary" title="Adicionar" aria-label="Adicionar ponto à ordem de trabalhos" data-ajuda="Acrescenta um novo ponto à ordem de trabalhos da assembleia." data-ajuda-titulo="Adicionar ponto"><span class="material-symbols-outlined" aria-hidden="true">add</span></button>
           </div>
         </form>
       </div>
@@ -115,11 +115,11 @@
                   <input class="form-check-input" type="checkbox" name="sujeito_votacao" {{checked sujeito_votacao}} />
                   <label class="form-check-label small">Votação</label>
                 </div>
-                <button class="btn btn-sm btn-outline-primary" title="Guardar" aria-label="Guardar ponto" data-ajuda="Guarda a descrição deste ponto da ordem de trabalhos." data-ajuda-titulo="Guardar ponto"><span class="material-symbols-outlined">check</span></button>
+                <button class="btn btn-sm btn-outline-primary" title="Guardar" aria-label="Guardar ponto" data-ajuda="Guarda a descrição deste ponto da ordem de trabalhos." data-ajuda-titulo="Guardar ponto"><span class="material-symbols-outlined" aria-hidden="true">check</span></button>
               </form>
             </div>
             <form action="/admin/assembleias/{{../assembleia.id}}/agenda/{{id}}/eliminar" method="POST" data-confirmar="Remover este ponto?" data-confirmar-perigo="1">
-              <button class="btn btn-sm btn-outline-danger" title="Remover" aria-label="Remover ponto" data-ajuda="Remove este ponto da ordem de trabalhos. Não é possível desfazer." data-ajuda-titulo="Remover ponto"><span class="material-symbols-outlined">delete</span></button>
+              <button class="btn btn-sm btn-outline-danger" title="Remover" aria-label="Remover ponto" data-ajuda="Remove este ponto da ordem de trabalhos. Não é possível desfazer." data-ajuda-titulo="Remover ponto"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
             </form>
           </div>
 
@@ -200,7 +200,7 @@
             </div>
           </div>
           <div class="col-md-1">
-            <button class="btn btn-outline-primary" title="Adicionar" aria-label="Adicionar participante" data-ajuda="Regista um participante nesta assembleia, com a fração e a presença indicadas." data-ajuda-titulo="Adicionar participante"><i class="bi bi-plus-lg"></i></button>
+            <button class="btn btn-outline-primary" title="Adicionar" aria-label="Adicionar participante" data-ajuda="Regista um participante nesta assembleia, com a fração e a presença indicadas." data-ajuda-titulo="Adicionar participante"><i class="bi bi-plus-lg" aria-hidden="true"></i></button>
           </div>
         </form>
       </div>
@@ -215,7 +215,7 @@
           <div class="d-flex align-items-center gap-2">
             {{#if presente}}<span class="badge text-bg-success">Presente</span>{{else}}<span class="badge text-bg-secondary">Ausente</span>{{/if}}
             <form action="/admin/assembleias/{{../assembleia.id}}/participantes/{{id}}/eliminar" method="POST">
-              <button class="btn btn-sm btn-outline-danger" aria-label="Remover participante" data-ajuda="Retira este participante da lista da assembleia." data-ajuda-titulo="Remover participante"><i class="bi bi-x-lg"></i></button>
+              <button class="btn btn-sm btn-outline-danger" aria-label="Remover participante" data-ajuda="Retira este participante da lista da assembleia." data-ajuda-titulo="Remover participante"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
             </form>
           </div>
         </li>

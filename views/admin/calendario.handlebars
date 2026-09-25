@@ -93,7 +93,7 @@
         {{#if proximo.relevante}}<span class="badge text-bg-primary ms-1">Relevante</span>{{/if}}
         {{#if proximo.tituloDetalhe}}<span class="text-muted small ms-1">{{proximo.tituloDetalhe}}</span>{{/if}}
       </div>
-      {{#if proximo.estadoRotulo}}<span class="badge {{proximo.estadoClasse}}">{{proximo.estadoRotulo}}</span>{{/if}}
+      {{#if proximo.estadoRotulo}}<span class="estado {{#if proximo.estadoVariante}}{{proximo.estadoVariante}}{{else}}estado-neutro{{/if}}">{{proximo.estadoRotulo}}</span>{{/if}}
     </div>
 
     <div class="mt-2">
@@ -132,8 +132,8 @@
       </div>
     </div>
     <div class="text-nowrap">
-      {{#if estadoRotulo}}<span class="badge {{estadoClasse}} me-2">{{estadoRotulo}}</span>{{/if}}
-      {{#if link}}<a aria-label="{{#if editavel}}Editar evento{{else}}Ver detalhe{{/if}}" href="{{link}}" class="btn btn-sm btn-outline-secondary" title="{{#if editavel}}Editar evento{{else}}Ver detalhe{{/if}}"><span class="material-symbols-outlined">{{#if editavel}}edit{{else}}visibility{{/if}}</span></a>{{/if}}
+      {{#if estadoRotulo}}<span class="estado {{#if estadoVariante}}{{estadoVariante}}{{else}}estado-neutro{{/if}} me-2">{{estadoRotulo}}</span>{{/if}}
+      {{#if link}}<a aria-label="{{#if editavel}}Editar evento{{else}}Ver detalhe{{/if}}" href="{{link}}" class="btn btn-sm btn-outline-secondary" title="{{#if editavel}}Editar evento{{else}}Ver detalhe{{/if}}"><span class="material-symbols-outlined" aria-hidden="true">{{#if editavel}}edit{{else}}visibility{{/if}}</span></a>{{/if}}
     </div>
   </li>
   {{/unless}}
@@ -165,8 +165,8 @@
       </div>
     </div>
     <div class="text-nowrap">
-      {{#if estadoRotulo}}<span class="badge {{estadoClasse}} me-2">{{estadoRotulo}}</span>{{/if}}
-      {{#if link}}<a aria-label="{{#if editavel}}Editar evento{{else}}Ver detalhe{{/if}}" href="{{link}}" class="btn btn-sm btn-outline-secondary" title="{{#if editavel}}Editar evento{{else}}Ver detalhe{{/if}}"><span class="material-symbols-outlined">{{#if editavel}}edit{{else}}visibility{{/if}}</span></a>{{/if}}
+      {{#if estadoRotulo}}<span class="estado {{#if estadoVariante}}{{estadoVariante}}{{else}}estado-neutro{{/if}} me-2">{{estadoRotulo}}</span>{{/if}}
+      {{#if link}}<a aria-label="{{#if editavel}}Editar evento{{else}}Ver detalhe{{/if}}" href="{{link}}" class="btn btn-sm btn-outline-secondary" title="{{#if editavel}}Editar evento{{else}}Ver detalhe{{/if}}"><span class="material-symbols-outlined" aria-hidden="true">{{#if editavel}}edit{{else}}visibility{{/if}}</span></a>{{/if}}
     </div>
   </li>
   {{/each}}

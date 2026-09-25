@@ -54,9 +54,9 @@
           <td class="text-end fw-semibold">{{eur saldo}}</td>
           <td>{{#if ativa}}<span class="badge text-bg-success">Ativa</span>{{else}}<span class="badge text-bg-secondary">Inativa</span>{{/if}}</td>
           <td class="text-end">
-            <a aria-label="Editar" href="/admin/contas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined">edit</span></a>
+            <a aria-label="Editar" href="/admin/contas/{{id}}/editar" class="btn btn-sm btn-outline-secondary" title="Editar"><span class="material-symbols-outlined" aria-hidden="true">edit</span></a>
             <form action="/admin/contas/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Eliminar esta conta?" data-confirmar-perigo="1">
-              <button aria-label="Eliminar" class="btn btn-sm btn-outline-danger" title="Eliminar" data-ajuda="Elimina esta conta bancária. Se tiver movimentos associados, a eliminação é recusada — desative a conta para a tirar dos saldos sem perder o histórico." data-ajuda-titulo="Eliminar conta"><span class="material-symbols-outlined">delete</span></button>
+              <button aria-label="Eliminar" class="btn btn-sm btn-outline-danger" title="Eliminar" data-ajuda="Elimina esta conta bancária. Se tiver movimentos associados, a eliminação é recusada — desative a conta para a tirar dos saldos sem perder o histórico." data-ajuda-titulo="Eliminar conta"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
             </form>
           </td>
         </tr>

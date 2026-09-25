@@ -352,8 +352,13 @@ html = armazenamento({
 // encontrava o do bloco do armazenamento principal — que fica ANTES — deixando o
 // recorte vazio. O rótulo «Guardar destino» já não serve de âncora: aparece no
 // `data-confirmar-acao` do próprio `<form>`, também antes dos campos.
+// ⛔ A14 §4 (2026-09-24): as ações passaram para o CABEÇALHO, ou seja, para
+// ANTES dos campos — `data-me-guardar` deixou de poder fechar o recorte (um
+// `indexOf` a partir do início dos campos já não o encontra e devolve -1, o que
+// alargava o recorte até ao fim da página). O fecho natural do bloco é o
+// `</form>` que vem a seguir aos campos deste mesmo bloco.
 const inicioBackups = html.indexOf('name="provedor" value="nenhum"');
-const blocoBackups = html.slice(inicioBackups, html.indexOf('data-me-guardar', inicioBackups));
+const blocoBackups = html.slice(inicioBackups, html.indexOf('</form>', inicioBackups));
 assert.ok(/name="provedor" value="dropbox"/.test(blocoBackups), 'armazenamento: ligação de plataforma disponível para backups');
 assert.ok(blocoBackups.includes('conta da plataforma'), 'armazenamento: identifica a ligação de plataforma');
 assert.ok(!/value="google_drive"/.test(blocoBackups), 'armazenamento: serviço sem ligação nenhuma continua fora da escolha');
@@ -784,8 +789,12 @@ assert.ok(!html.includes('Google Drive não ligado'), 'convocatória: sem "Googl
 const fontePainel = ler('admin/dashboard.handlebars');
 assert.ok(fontePainel.includes('{{@root.armazenamentoRotulo}}'), 'painel: estado nomeia o serviço ativo');
 assert.ok(fontePainel.includes('{{@root.armazenamentoIcone}}'), 'painel: ícone do serviço ativo');
-assert.ok(fontePainel.includes('{{#if sinais.length}}') && fontePainel.includes('Precisa de atenção'),
-  'painel: secção «Precisa de atenção» com a lista de sinais');
+// A14 §9 — a lista de atenção deixou de ser `sinais` (conjunto) e passou a ser
+// `sinaisAtencao`; a `sinaisPreparacao` é o bloco de preparação, separado.
+assert.ok(fontePainel.includes('{{#if sinaisAtencao.length}}') && fontePainel.includes('Precisa de atenção'),
+  'painel: secção «Precisa de atenção» com a lista de atenção');
+assert.ok(fontePainel.includes('{{#if sinaisPreparacao.length}}') && fontePainel.includes('Preparação do condomínio'),
+  'painel: secção «Preparação do condomínio» com a lista de preparação');
 assert.ok(fontePainel.includes('href="{{destino.url}}"'),
   'painel: cada sinal é uma ligação para a ação (destino vindo do ajudante)');
 assert.ok(fontePainel.includes('{{#if proximasAssembleias.length}}') && fontePainel.includes('{{#if atividade.length}}'),
@@ -899,5 +908,78 @@ assert.ok(html.includes('/aceitar-convite/'), 'login: usa o fluxo de convite exi
 assert.ok(html.includes('Esqueci-me da palavra-passe'), 'login: recuperação mantida');
 assert.ok(html.includes('name="email"') && html.includes('name="password"') && html.includes('action="/login"'), 'login: autenticação intacta');
 assert.ok(!html.includes('Criar conta') && !html.includes('Registar-se') && !html.includes('Ainda não tem conta?'), 'login: sem registo de conta');
+
+// 21. Estados vazios — três casos distintos (A14 §13)
+// A distinção não é cosmética: «ainda não há nada» pede uma ação de arranque,
+// «o filtro não deu nada» pede para aliviar o filtro, e «não se aplica» não
+// pede ação nenhuma. Se os três voltarem a partilhar a mesma apresentação (o
+// `alert alert-light border small` de antes), este teste morde.
+const vazio = (ctx) => handlebars.compile(ler('partials/_empty-state.handlebars'))(ctx);
+
+// (a) inicial (por omissão): pede o primeiro passo, com ícone próprio.
+html = vazio({ titulo: 'Sem pagamentos registados', descricao: 'Ainda não há nada.', link: '/x/novo', linkTexto: 'Adicionar' });
+assert.ok(html.includes('class="empty-state"') && !html.includes('empty-state-filtro'),
+  'estado vazio inicial: usa o peso base, não o de filtro');
+assert.ok(html.includes('role="status"'), 'estado vazio inicial: anunciado como região de estado');
+assert.ok(html.includes('href="/x/novo"') && html.includes('Adicionar'),
+  'estado vazio inicial: oferece a ação de arranque');
+assert.ok(html.includes('aria-hidden="true"'),
+  'estado vazio: o ícone é decorativo (não duplica o título no leitor de ecrã)');
+
+// (b) filtro: mais leve, ícone próprio e NUNCA um convite a criar.
+html = vazio({ tipo: 'filtro', titulo: 'Sem recibos de 2026', descricao: 'Experimente outro ano.' });
+assert.ok(html.includes('empty-state empty-state-filtro'),
+  'estado vazio de filtro: tem classe própria (peso distinto do inicial)');
+assert.ok(html.includes('filter_alt_off'),
+  'estado vazio de filtro: ícone próprio por omissão');
+assert.ok(!html.includes('btn-primary') && !html.includes('Adicionar'),
+  'estado vazio de filtro: NÃO oferece criar (o registo pode existir, apenas filtrado)');
+
+// (c) indisponível: não é uma falha, logo não usa a linguagem de erro.
+html = vazio({ tipo: 'indisponivel', titulo: 'Não existe orçamento publicado para 2026', descricao: 'Ainda não foi publicado.' });
+assert.ok(html.includes('empty-state empty-state-indisponivel'),
+  'estado vazio indisponível: tem classe própria');
+assert.ok(html.includes('info'),
+  'estado vazio indisponível: ícone informativo por omissão (não um sinal de erro)');
+assert.ok(!html.includes('alert-danger') && !html.includes('text-danger'),
+  'estado vazio indisponível: não se apresenta como erro');
+
+// (d) Os três casos têm de ser DISTINGUÍVEIS entre si no HTML produzido.
+const classes = [
+  vazio({ titulo: 't', descricao: 'd' }),
+  vazio({ tipo: 'filtro', titulo: 't', descricao: 'd' }),
+  vazio({ tipo: 'indisponivel', titulo: 't', descricao: 'd' }),
+].map((h) => (h.match(/class="empty-state[^"]*"/) || [''])[0]);
+assert.strictEqual(new Set(classes).size, 3,
+  'os três casos de estado vazio têm de produzir classes distintas');
+
+// (e) O `ano` passa como ARGUMENTO (não interpolado dentro da string do
+// título): o Handlebars trata um literal `"…"` como texto opaco, pelo que
+// `titulo="Sem recibos de {{ano}}"` saía LITERALMENTE — um defeito real que
+// só se via no browser. O parcial compõe o título a partir de `titulo` + `ano`.
+html = handlebars.compile(ler('admin/documentos/recibos.handlebars'))({ ano: 2026, linhas: [], driveLigado: false });
+assert.ok(html.includes('Sem recibos de 2026') && !html.includes('{{ano}}'),
+  'estado vazio de filtro (recibos): o ano compõe-se no título, sem chavetas literais');
+assert.ok(html.includes('empty-state-filtro') && !html.includes('Adicionar'),
+  'estado vazio de filtro (recibos): caso de filtro, sem convite a criar');
+html = handlebars.compile(ler('admin/documentos/recibos-anos.handlebars'))({ anos: [], driveLigado: false });
+assert.ok(html.includes('class="empty-state"') && html.includes('Ainda não existem recibos nesta biblioteca'),
+  'estado vazio inicial (recibos por ano): caso de arranque');
+assert.ok(!html.includes('empty-state-filtro') && !html.includes('empty-state-indisponivel'),
+  'estado vazio inicial (recibos por ano): não é filtro nem indisponível');
+
+// (f) GUARDA TRANSVERSAL — nenhuma invocação de parcial pode ter `{{…}}` DENTRO
+// de um argumento literal `"…"`: o Handlebars não o interpola e o utilizador vê
+// as chavetas. Vale para todos os parciais, não só para `_empty-state`, porque
+// a armadilha é da linguagem e não deste parcial.
+for (const caminho of vistasHandlebar(ROOT)) {
+  const texto = fs.readFileSync(caminho, 'utf8');
+  for (const chamada of texto.matchAll(/\{\{>[\s\S]*?\}\}/g)) {
+    const literalComChavetas = chamada[0].match(/"[^"]*\{\{[^"]*"/g);
+    assert.ok(!literalComChavetas,
+      `${path.relative(ROOT, caminho)}: interpolação dentro de um argumento literal não renderiza — `
+      + `passar o valor como argumento próprio (ex.: ano=ano). Trecho: ${literalComChavetas && literalComChavetas[0]}`);
+  }
+}
 
 console.log('✓ Todas as vistas da convocatória renderizam corretamente.');

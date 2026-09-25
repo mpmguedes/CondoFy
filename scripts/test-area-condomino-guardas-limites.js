@@ -79,7 +79,7 @@ const PAGINAS = [
   { nome: 'pagamentos.handlebars', vista: 'views/condomino/pagamentos.handlebars', ctx: { linhas: [{ id: 1, valor: 10, data_pagamento: '2026-01-01' }] } },
   { nome: 'documentos.handlebars', vista: 'views/condomino/documentos.handlebars', ctx: { pastas: {}, anos: [], anoFiltro: null, nDocumentos: 1, documentos: [{ id: 1, nome: 'A.pdf', data: '2026-01-01' }], agrupados: [] } },
   { nome: 'avisos.handlebars', vista: 'views/condomino/avisos.handlebars', ctx: { avisos: [{ id: 1, assunto: 'Obras', createdAt: '2026-01-01', mensagem: 'x' }], nAvisos: 1, nPorPublicar: 0, filtroTipo: null } },
-  { nome: 'assembleias.handlebars', vista: 'views/condomino/assembleias.handlebars', ctx: { proxima: { id: 1, data: '2026-12-01', estadoRotulo: 'Convocada', estadoClasse: 'text-bg-info' }, outrasFuturas: [], passadas: [] } },
+  { nome: 'assembleias.handlebars', vista: 'views/condomino/assembleias.handlebars', ctx: { proxima: { id: 1, data: '2026-12-01', estadoRotulo: 'Convocada', estadoClasse: 'text-bg-info', estadoVariante: 'estado-requer-config' }, outrasFuturas: [], passadas: [] } },
   { nome: 'calendario.handlebars', vista: 'views/condomino/calendario.handlebars', ctx: { eventos: [{ data: '2026-12-01', tipo: 'assembleia', tipoRotulo: 'Assembleia', titulo: 'A', link: '/x' }], proximo: { data: '2026-12-01', tipo: 'assembleia', tipoRotulo: 'Assembleia', titulo: 'A', link: '/x' }, proximos: [], passados: [] } },
   { nome: 'quotas.handlebars', vista: 'views/condomino/quotas.handlebars', ctx: { resumoAno: [], extras: [], anos: [], filtros: {}, hoje: '2026-09-20', currentMonth: 9 } },
 ];

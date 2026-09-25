@@ -24,8 +24,8 @@
   --c-primary-light: #E4F3FB;
   --c-accent: var(--c-cyan-500);
   --c-accent-soft: var(--c-cyan-100);
-  --c-link: var(--c-blue-600);
-  --c-link-hover: var(--c-blue-700);
+  --c-link: #075B9B;                  /* A14 — medido: 6,66:1 sobre bg, 7,05:1 sobre surface. */
+  --c-link-hover: #064B82;
   --c-on-primary: #FFFFFF;
   --c-on-accent: var(--c-navy-950);
   --c-success: var(--c-green-600);
@@ -41,9 +41,9 @@
   --c-surface-2: #EDF4F8;
   --c-text: #102B46;
   --c-text-muted: #567086;
-  --c-text-subtle: #7B91A2;
-  --c-border: #D7E4ED;
-  --c-border-strong: #B9CEDD;
+  --c-text-subtle: #536E80;            /* A14 — medido: 4,67:1 sobre bg, 4,83:1 sobre surface-2. */
+  --c-border: #6B95B0;                 /* A14 — medido: 3,03:1 sobre bg, 3,21:1 sobre surface (objetos). */
+  --c-border-strong: #5783A2;          /* A14 — medido: 4,06:1 sobre surface (objetos). */
   --c-focus: #00A8D6;
   /* Tons de TEXTO dos estados (>= 4.5:1 sobre os fundos suaves e sobre branco).
      As cores de marca ficam para preenchimentos/bordas/icones. */
@@ -160,8 +160,8 @@
   --c-text: #F6FCFF;
   --c-text-muted: #B5D0E0;
   --c-text-subtle: #89ABC0;
-  --c-border: #24557E;
-  --c-border-strong: #3D7198;
+  --c-border: #458AB5;                 /* A14 — medido: 3,61:1 sobre surface (objetos). */
+  --c-border-strong: #4F93B6;          /* A14 — medido: 4,02:1 sobre surface (objetos). */
   --c-primary: var(--c-cyan-500);
   --c-primary-dark: var(--c-cyan-400);
   --c-primary-light: var(--c-navy-800);
@@ -231,6 +231,8 @@ body {
   color: var(--c-text);
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 0.95rem;
+  line-height: 1.5;            /* A14 — corpo: 1,5 dá respiro sem alargar as tabelas. */
+  font-feature-settings: "ss01", "cv11"; /* A14 — Inter: variantes mais legíveis. */
 }
 
 a { color: var(--c-primary); text-decoration: none; }
@@ -240,6 +242,18 @@ a:hover { color: var(--c-primary-dark); }
   font-size: calc(20px * var(--font-scale));
   vertical-align: middle;
   line-height: 1;
+  font-variation-settings: "opsz" 24, "wght" 400, "GRAD" 0;
+}
+
+/* A14 — números tabulares (alinhamento vertical entre linhas e em tabelas).
+   Aplicar a TODOS os resumos/valores financeiros que partilham a família Inter. */
+.eur, .strip-value, .painel-strip .strip-value, .stat-value,
+.mini-stat-value, .valor-resumo, .me-valor,
+[data-eur], .quick-action,
+.text-end.fw-semibold, .text-end.fw-bold,
+dd.text-end {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "ss01" 1, "cv11" 1;
 }
 
 /* ── Shell ───────────────────────────────────────────────────────── */
@@ -773,10 +787,23 @@ a.btn.disabled, fieldset:disabled a.btn { pointer-events: none; }
 }
 
 /* ── Empty state ─────────────────────────────────────────────────── */
+/* A14 §13 — três casos com a MESMA geometria e pesos diferentes:
+   · `inicial`      — página sem dados: ocupa espaço, oferece o 1.º passo.
+   · `filtro`       — há dados, o filtro não os apanhou: mais baixo e mais
+                      discreto, para não parecer «a página está vazia».
+   · `indisponivel` — não se aplica ao caso: sem ícone de alarme, sem ação.
+   O tipo `filtro`/`indisponivel` reduz o respiro vertical; o `inicial` mantém
+   o original. O ícone nunca fica sozinho a carregar o significado (§8). */
 .empty-state { text-align: center; padding: var(--sp-7) var(--sp-4); }
 .empty-state-icon { font-size: calc(52px * var(--font-scale)); color: var(--c-text-muted); opacity: 0.45; }
-.empty-state-title { font-size: 1.1rem; font-weight: 600; margin: var(--sp-3) 0 var(--sp-1); }
+.empty-state-title { font-size: var(--font-size-lg); font-weight: 600; margin: var(--sp-3) 0 var(--sp-1); }
 .empty-state-text { color: var(--c-text-muted); margin: 0 0 var(--sp-4); max-width: 420px; margin-left: auto; margin-right: auto; }
+.empty-state-filtro,
+.empty-state-indisponivel { padding: var(--sp-5) var(--sp-4); }
+.empty-state-filtro .empty-state-icon,
+.empty-state-indisponivel .empty-state-icon { font-size: calc(34px * var(--font-scale)); opacity: 0.55; }
+.empty-state-filtro .empty-state-title,
+.empty-state-indisponivel .empty-state-title { font-size: var(--font-size-md); margin-top: var(--sp-2); }
 
 /* ── Auth card ───────────────────────────────────────────────────── */
 .auth-wrap { min-height: 80vh; display: flex; align-items: center; justify-content: center; }
@@ -2081,8 +2108,8 @@ a.q-ind:hover { outline: 1px solid currentColor; outline-offset: 1px; }
 
 /* ===== Tipografia reutilizavel para resumos e descricoes =====
    (base para uniformizar valores globais / textos explicativos) */
-.valor-resumo { font-size: calc(18px * var(--font-scale)); font-family: Arial, Helvetica, sans-serif; }
-.texto-descricao { font-size: calc(14px * var(--font-scale)); font-family: Arial, Helvetica, sans-serif; }
+.valor-resumo { font-size: calc(18px * var(--font-scale)); }
+.texto-descricao { font-size: calc(14px * var(--font-scale)); }
 /* ============================================================
    Auth shell GesCondu — Login + "Os meus condominios"
    Fonte unica da composicao: logo topo-esquerda, slogan
@@ -2495,4 +2522,113 @@ hr { border-color: var(--c-border); opacity: 1; }
    dos botões só-ícone continua a funcionar e não bloqueia o clique. */
 @media (hover: none) {
   .gc-tooltip { display: none !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   A14 — LINGUAGEM DE ESTADOS (ícone + texto + cor)
+   ═══════════════════════════════════════════════════════════════════════════
+   Componente reutilizável: substitui as bolinhas coloridas por um SISTEMA em
+   que o significado está em TRÊS SINais (ícone + texto + cor), nunca na cor
+   sozinha. Cinco estados oficiais (A14 §8):
+
+     · Concluído          — verde
+     · Requer configuração — ciano (atenção não-urgente)
+     · Recomendado        — azul (orientação, sem alarme)
+     · Ainda não utilizado — cinza neutro
+     · Erro               — vermelho
+*/
+.estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.18rem 0.55rem;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  line-height: 1.4;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.estado::before {
+  font-family: "Material Symbols Outlined";
+  font-weight: 400;
+  font-style: normal;
+  font-size: 1rem;
+  line-height: 1;
+  -webkit-font-feature-settings: "liga";
+  -moz-font-feature-settings: "liga";
+  font-feature-settings: "liga";
+  flex-shrink: 0;
+}
+.estado-concluido           { color: var(--c-success-text); background: var(--c-success-bg); border-color: var(--c-success-bg); }
+.estado-concluido::before   { content: "check_circle"; }
+.estado-requer-config       { color: var(--c-info-text);    background: var(--c-info-bg);    border-color: var(--c-info-bg); }
+.estado-requer-config::before{ content: "build_circle"; }
+.estado-recomendado         { color: var(--c-primary);      background: var(--c-primary-light); border-color: var(--c-primary-light); }
+.estado-recomendado::before { content: "tips_and_updates"; }
+.estado-nao-utilizado       { color: var(--c-text-muted);   background: var(--c-surface-2);   border-color: var(--c-border); }
+.estado-nao-utilizado::before{content: "circle"; }
+.estado-erro                { color: var(--c-error-text);   background: var(--c-error-bg);    border-color: var(--c-error-bg); }
+.estado-erro::before        { content: "error"; }
+/* Estado sem conotação: «ainda não utilizado» / «informativo». Existe para as
+   vistas que hoje usam `badge text-bg-light|secondary` e que passam a usar a
+   mesma linguagem dos restantes estados. */
+.estado-neutro              { color: var(--c-text-muted);   background: var(--c-surface-2);   border-color: var(--c-border); }
+.estado-neutro::before      { content: "remove"; }
+/* Dentro de uma tabela o badge/estado encolhe um pouco, para não competir com
+   o texto da linha — já era o comportamento do `.table .badge`. */
+.table .estado { font-size: calc(11px * var(--font-scale)); }
+
+/* A14 — ícones Bootstrap (substituem Material Symbols na sidebar / bottom bar)
+   mantêm a mesma CAIXA de 20px e o mesmo alinhamento, sem destabilizar a
+   grelha existente. ⛔ A caixa acompanha a escala tipográfica: um ícone fixo
+   de 20px ao lado de uma etiqueta a 150% desalinha a linha. */
+.bi, .sidebar-item .bi, .mb-item .bi, .condominio-pill .bi {
+  font-size: calc(20px * var(--font-scale));
+  line-height: 1;
+  vertical-align: middle;
+}
+
+/* A14 — estado ATIVO da sidebar com três sinais: barra lateral à esquerda,
+   fundo diferenciado, texto E ícone com cor mais saturada. Não depende só da
+   cor (alinhamento + barra + peso tipográfico). */
+.sidebar-item.active {
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-active-text);
+  box-shadow: inset 3px 0 0 var(--sidebar-active-accent);
+  font-weight: 600;
+}
+.sidebar-item .bi,
+.sidebar-item .material-symbols-outlined {
+  color: var(--sidebar-text-muted);
+  transition: color 0.15s ease;
+}
+.sidebar-item:hover .bi,
+.sidebar-item:hover .material-symbols-outlined { color: var(--sidebar-text); }
+.sidebar-item.active .bi,
+.sidebar-item.active .material-symbols-outlined {
+  color: var(--sidebar-active-icon);
+  font-variation-settings: "opsz" 24, "wght" 600, "GRAD" 0;
+}
+
+/* A14 — largura da caixa de ícone na sidebar para alinhar rótulos com ou sem
+   bagde (o badge do contador já existia e mantinha-se alinhado por sorte). */
+.sidebar-item .si {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.sidebar-item .badge { margin-left: auto; }
+
+/* A14 — alinhamento da bottom-bar (mobile): mesma altura mínima que o botão
+   "Menu" tem; rótulos sempre alinhados na base. */
+.mb-item .si {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
 }

@@ -57,7 +57,7 @@
           </div>
           {{else}}
           {{#if fracaoSelecionada}}
-          <div class="alert alert-light border small mb-3">Não há obrigações em aberto para esta fração (quotas não anuladas com saldo ou Quotas Extra elegíveis).</div>
+          {{> _empty-state tipo="indisponivel" icon="check_circle" titulo="Sem obrigações em aberto para esta fração" descricao="Não há quotas não anuladas com saldo nem Quotas Extra elegíveis para esta fração."}}
           {{/if}}
           {{/if}}
 
@@ -117,7 +117,7 @@
   </div>
   <div class="col-12 col-lg-4">
     <div class="card">
-      <div class="card-header"><span class="material-symbols-outlined me-2">info</span>Como funciona</div>
+      <div class="card-header"><span class="material-symbols-outlined me-2" aria-hidden="true">info</span>Como funciona</div>
       <div class="card-body text-muted small">
         <p class="mb-2">Sem seleção, o valor é distribuído automaticamente pelas quotas em aberto da fração (da mais antiga para a mais recente).</p>
         <p class="mb-2">Com seleção, é registado <strong>um único pagamento</strong> que liquida as quotas e/ou Quotas Extra assinaladas (as parcelas só são pagas por inteiro; o remanescente fica como crédito).</p>

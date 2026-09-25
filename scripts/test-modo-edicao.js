@@ -105,9 +105,30 @@ ok('a máscara por omissão funciona sem configuração do consumidor');
 const corpoForm = (/<form[^>]*data-me-form[^>]*>([\s\S]*?)<\/form>/.exec(html) || [])[1] || '';
 exigir(/name="host"/.test(corpoForm), 'os campos do bloco do consumidor ficam dentro do formulário');
 exigir(/name="password"/.test(corpoForm), 'o campo de password do consumidor fica dentro do formulário');
-exigir(/data-me-guardar/.test(corpoForm) && /data-me-cancelar/.test(corpoForm),
-  'as ações (Guardar/Cancelar) ficam dentro do formulário, depois dos campos');
-ok('o bloco do consumidor é injetado dentro do `<form>`, antes das ações');
+// A14 §4: as ações já NÃO ficam no fundo do formulário — sairiam de vista.
+exigir(!/data-me-guardar/.test(corpoForm) && !/data-me-cancelar/.test(corpoForm),
+  'as ações NÃO ficam no fundo do formulário (A14 §4: nunca se procura o Guardar)');
+ok('o bloco do consumidor é injetado dentro do `<form>` — e sem ações enterradas no fundo');
+
+// ── A5b. A14 §4 — [Guardar][Cancelar] ocupam o LUGAR de [Editar] ────
+const iTopo = html.indexOf('<div class="me-topo"');
+const iConsulta = html.indexOf('<div class="me-consulta"');
+const corpoTopo = (iTopo >= 0 && iConsulta > iTopo) ? html.slice(iTopo, iConsulta) : '';
+exigir(corpoTopo.length > 0, 'a região do cabeçalho existe');
+exigir(/data-me-editar/.test(corpoTopo), 'o botão Editar está no cabeçalho');
+exigir(/data-me-acoes/.test(corpoTopo), 'o par de ações está no MESMO cabeçalho (mesmo lugar)');
+exigir(/\bhidden\b/.test((/<div[^>]*data-me-acoes[^>]*>/.exec(html) || [])[0] || ''),
+  'o par de ações nasce `hidden` (sem JavaScript não há edição — falha segura)');
+// ⛔ Fora do formulário, um `type="submit"` só submete se estiver ASSOCIADO.
+exigir(/form="smtp-form"/.test((/<button[^>]*data-me-guardar[^>]*>/.exec(html) || [])[0] || ''),
+  'o botão Guardar está associado ao formulário por `form="smtp-form"`');
+const iGuardarTopo = corpoTopo.indexOf('data-me-guardar');
+const iCancelarTopo = corpoTopo.indexOf('data-me-cancelar');
+exigir(iGuardarTopo > 0 && iCancelarTopo > iGuardarTopo,
+  'no cabeçalho `Guardar` vem ANTES de `Cancelar` (Cancelar encosta à direita, onde estava Editar)');
+exigir(html.indexOf('data-me-editar') < html.indexOf('data-me-acoes'),
+  '`Editar` vem antes do par: os dois ocupam o mesmo lugar do cabeçalho, um de cada vez');
+ok('A14 §4: [Guardar][Cancelar] no lugar de [Editar], Guardar à esquerda e associado ao formulário');
 
 // ── A6. `id` é obrigatório (o `aria-controls` depende dele) ─────────
 exigir(/^<div class="me" id="\{\{id\}\}"/m.test(fonteParcial.trim()) || /id="\{\{id\}\}"/.test(fonteParcial),
@@ -268,22 +289,28 @@ No.prototype.querySelector = function querySelector(sel) {
 };
 
 // ── C1. A árvore: o mesmo markup que o parcial produz ───────────────
+// ⛔ Fiel ao markup REAL (A14 §4): o botão `Editar` e o par de ações vivem no
+// `.me-topo`, FORA do formulário; `Guardar` liga-se a ele por `form=`.
 function construirBloco() {
   const bloco = new No('div', { 'data-modo-edicao': '', 'data-me-estado': 'consulta' });
-  const consulta = new No('div', { 'data-me-consulta': '' });
+  const topo = new No('div', { class: 'me-topo' });
   const editar = new No('button', { 'data-me-editar': '', 'aria-expanded': 'false', 'aria-controls': 'smtp-form' });
-  consulta.juntar(editar);
+  const acoes = new No('div', { 'data-me-acoes': '' });
+  acoes.hidden = true;
+  const guardar = new No('button', { 'data-me-guardar': '', type: 'submit', form: 'smtp-form' });
+  const cancelar = new No('button', { 'data-me-cancelar': '', type: 'button' });
+  acoes.juntar(guardar, cancelar);
+  topo.juntar(editar, acoes);
+  const consulta = new No('div', { 'data-me-consulta': '' });
   const form = new No('form', { 'data-me-form': '', id: 'smtp-form' });
   form.hidden = true;
   const host = new No('input', { name: 'host', type: 'text' });
   host.value = 'smtp.exemplo.pt';
   const tls = new No('input', { name: 'tls', type: 'checkbox' });
   tls.checked = true;
-  const guardar = new No('button', { 'data-me-guardar': '', type: 'submit' });
-  const cancelar = new No('button', { 'data-me-cancelar': '', type: 'button' });
-  form.juntar(host, tls, guardar, cancelar);
-  bloco.juntar(consulta, form);
-  return { bloco, consulta, editar, form, host, tls, guardar, cancelar };
+  form.juntar(host, tls);
+  bloco.juntar(topo, consulta, form);
+  return { bloco, topo, consulta, editar, acoes, form, host, tls, guardar, cancelar };
 }
 
 const documento = new No('#document');
@@ -335,9 +362,13 @@ async function main() {
   exigir(d.form.hidden === false, 'C4: o formulário fica visível');
   exigir(d.consulta.hidden === true, 'C4: a consulta fica oculta (nunca as duas ativas)');
   exigir(d.editar.getAttribute('aria-expanded') === 'true', 'C4: `aria-expanded` passa a `true`');
-  exigir(d.editar.disabled === true, 'C4: o botão Editar fica inerte em edição');
+  // A14 §4 — o par de ações toma o lugar de `Editar` no cabeçalho.
+  exigir(d.editar.hidden === true, 'C4: em edição `Editar` sai (o lugar passa a ser do par de ações)');
+  exigir(d.acoes.hidden === false, 'C4: o par [Guardar][Cancelar] aparece no cabeçalho');
+  exigir(d.bloco.getAttribute('data-me-sticky') === '1',
+    'C4: o bloco em edição fica com o cabeçalho fixo (o Guardar não se perde de vista)');
   exigir(d.host.focos === 1, 'C4: o foco vai para o primeiro campo editável');
-  ok('Editar: formulário visível, consulta oculta, aria-expanded=true, foco no 1.º campo');
+  ok('Editar: formulário visível, consulta oculta, aria-expanded=true, par de ações no lugar de Editar');
 
   // ── C5. Submeter em edição NÃO é travado ──────────────────────────
   ev = disparar(d.form, 'submit');
@@ -365,7 +396,9 @@ async function main() {
   exigir(d.host.value === 'smtp.exemplo.pt', 'C7: cancelar RESTAURA o valor original');
   exigir(d.bloco.getAttribute('data-me-estado') === 'consulta', 'C7: volta ao estado de consulta');
   exigir(d.form.hidden === true, 'C7: o formulário volta a ficar oculto');
-  exigir(d.editar.disabled === false, 'C7: o botão Editar volta a estar ativo');
+  exigir(d.editar.hidden === false, 'C7: o botão Editar volta ao seu lugar no cabeçalho');
+  exigir(d.acoes.hidden === true, 'C7: o par de ações volta a ficar oculto');
+  exigir(!d.bloco.hasAttribute('data-me-sticky'), 'C7: o cabeçalho deixa de estar fixo');
   exigir(d.editar.focos === 1, 'C7: o foco volta ao botão Editar');
   evSaida = disparar(documento, 'win:beforeunload');
   exigir(evSaida.travado === false, 'C7: o estado sujo é limpo ao cancelar');

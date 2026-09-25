@@ -20,7 +20,7 @@
 </div>
 
 {{#unless driveLigado}}
-<div class="alert alert-warning"><span class="material-symbols-outlined me-1">info</span>Sem serviço de armazenamento ligado — o upload de ficheiros fica indisponível até ligar um serviço em Configurações → Armazenamento e Backups.</div>
+<div class="alert alert-warning"><span class="material-symbols-outlined me-1" aria-hidden="true">info</span>Sem serviço de armazenamento ligado — o upload de ficheiros fica indisponível até ligar um serviço em Configurações → Armazenamento e Backups.</div>
 {{/unless}}
 
 <div class="card mb-3">
@@ -101,11 +101,11 @@
             </form>
           </td>
           <td class="text-end text-nowrap">
-            {{#if (urlDocumento this 'gestao')}}<a aria-label="Ver/Descarregar" href="{{urlDocumento this 'gestao'}}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" title="Ver/Descarregar"><span class="material-symbols-outlined">download</span></a>{{/if}}
-            {{#if (urlDocumentoExterno this)}}<a aria-label="Link externo indicado pela administração" href="{{urlDocumentoExterno this}}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary" title="Link externo indicado pela administração"><span class="material-symbols-outlined">link</span></a>{{/if}}
-            <a aria-label="Enviar por email" href="/admin/documentos/{{id}}/email" class="btn btn-sm btn-outline-secondary" title="Enviar por email"><span class="material-symbols-outlined">mail</span></a>
+            {{#if (urlDocumento this 'gestao')}}<a aria-label="Ver/Descarregar" href="{{urlDocumento this 'gestao'}}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" title="Ver/Descarregar"><span class="material-symbols-outlined" aria-hidden="true">download</span></a>{{/if}}
+            {{#if (urlDocumentoExterno this)}}<a aria-label="Link externo indicado pela administração" href="{{urlDocumentoExterno this}}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary" title="Link externo indicado pela administração"><span class="material-symbols-outlined" aria-hidden="true">link</span></a>{{/if}}
+            <a aria-label="Enviar por email" href="/admin/documentos/{{id}}/email" class="btn btn-sm btn-outline-secondary" title="Enviar por email"><span class="material-symbols-outlined" aria-hidden="true">mail</span></a>
             <form action="/admin/documentos/{{id}}/eliminar" method="POST" class="d-inline" data-confirmar="Eliminar este documento?" data-confirmar-perigo="1">
-              <button class="btn btn-sm btn-outline-danger" title="Eliminar" aria-label="Eliminar documento" data-ajuda="Elimina o registo do documento na aplicação. O ficheiro fica no armazenamento (Drive/Dropbox/OneDrive) e tem de ser apagado lá. Não é possível desfazer." data-ajuda-titulo="Eliminar documento"><span class="material-symbols-outlined">delete</span></button>
+              <button class="btn btn-sm btn-outline-danger" title="Eliminar" aria-label="Eliminar documento" data-ajuda="Elimina o registo do documento na aplicação. O ficheiro fica no armazenamento (Drive/Dropbox/OneDrive) e tem de ser apagado lá. Não é possível desfazer." data-ajuda-titulo="Eliminar documento"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
             </form>
           </td>
         </tr>

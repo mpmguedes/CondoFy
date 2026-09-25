@@ -28,7 +28,7 @@
         <div class="stat-label">{{proximo.tipoRotulo}}</div>
         {{#if proximo.data}}<div class="portal-hero-vinculo">{{diaSemana proximo.data}}</div>{{/if}}
       </div>
-      {{#if proximo.estadoRotulo}}<span class="badge text-bg-light border">{{proximo.estadoRotulo}}</span>{{/if}}
+      {{#if proximo.estadoRotulo}}<span class="estado {{#if proximo.estadoVariante}}{{proximo.estadoVariante}}{{else}}estado-neutro{{/if}}">{{proximo.estadoRotulo}}</span>{{/if}}
     </div>
 
     <div class="portal-hero-valor">{{formatDate proximo.data}}</div>

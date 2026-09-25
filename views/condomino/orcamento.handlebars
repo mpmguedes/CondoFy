@@ -31,7 +31,7 @@
 </div>
 
 {{#unless totais.orcamentado}}
-<div class="alert alert-light border small mb-3">O orçamento de {{ano}} está publicado mas ainda não tem rubricas com valor previsto. Os totais aparecem quando a administração preencher o orçamento.</div>
+{{> _empty-state tipo="indisponivel" icon="pending_actions" titulo="Orçamento ainda sem valores previstos" descricao="O orçamento deste ano está publicado mas ainda não tem rubricas com valor previsto. Os totais aparecem quando a administração preencher o orçamento."}}
 {{/unless}}
 
 <div class="card"><div class="table-responsive">
@@ -56,6 +56,6 @@
   </table>
 </div></div>
 {{else}}
-<div class="alert alert-light border small">Não existe orçamento publicado para o ano {{ano}}.</div>
+{{> _empty-state tipo="indisponivel" icon="event_busy" titulo="Não existe orçamento publicado" ano=ano descricao="O orçamento deste ano ainda não foi publicado pela administração. Assim que estiver disponível, aparece aqui automaticamente."}}
 {{/if}}
 {{/if}}
