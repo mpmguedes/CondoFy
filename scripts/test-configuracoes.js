@@ -275,7 +275,37 @@ const TAB5 = 'href="/admin/config/auditoria"';
     'config: a consulta de cada secção não tem um único controlo editável');
 
   // 2. Separador 2 — Armazenamento e Backups (serviços, principal e backups)
-  r = await pedir('/admin/config/armazenamento');
+  //
+  // ⛔ ESTE BLOCO TEM DE SER HERMÉTICO. As asserções abaixo descrevem o estado
+  // «a instalação ainda não tem as credenciais técnicas» (o contrato está em
+  // `docs/ARMAZENAMENTO.md`): é nesse ramo que a vista mostra a mensagem
+  // amigável. Mas `servicoDisponivel()` (`helpers/storage.js`) lê o AMBIENTE
+  // (`<PROVEDOR>_ENABLED` + `*_CLIENT_ID/_SECRET`, `DROPBOX_APP_KEY/_SECRET`):
+  // num clone de dev sem `.env` o ramo é exercido por acidente; numa instalação
+  // COM `.env` (produção) os três provedores ficam `disponivel=true`, a vista
+  // passa a mostrar «Associe uma conta…» e o teste falha — falso verde em dev,
+  // falso vermelho em produção. Aqui o ambiente é forçado, para o teste medir
+  // em qualquer máquina aquilo que declara medir.
+  const CHAVES_ARMAZENAMENTO = [
+    'GOOGLE_DRIVE_ENABLED', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET',
+    'DROPBOX_ENABLED', 'DROPBOX_APP_KEY', 'DROPBOX_APP_SECRET',
+    'ONEDRIVE_ENABLED', 'ONEDRIVE_CLIENT_ID', 'ONEDRIVE_CLIENT_SECRET',
+  ];
+  // `undefined` distingue «a variável não existia» de «existia com valor
+  // vazio» — o restauro tem de repor exatamente a mesma situação.
+  const semCredenciaisDeArmazenamento = async (fn) => {
+    const guardado = new Map(CHAVES_ARMAZENAMENTO.map((k) => [k, process.env[k]]));
+    for (const chave of CHAVES_ARMAZENAMENTO) delete process.env[chave];
+    try {
+      return await fn();
+    } finally {
+      for (const [chave, valor] of guardado) {
+        if (valor === undefined) delete process.env[chave]; else process.env[chave] = valor;
+      }
+    }
+  };
+
+  r = await semCredenciaisDeArmazenamento(() => pedir('/admin/config/armazenamento'));
   assert.strictEqual(r.status, 200, 'GET /admin/config/armazenamento responde 200');
   assert.ok(r.corpo.includes(`class="config-tab active" ${TAB2}`), 'armazenamento: separador 2 ativo');
   // Três serviços, cada um com o seu cartão e estado.
@@ -301,6 +331,14 @@ const TAB5 = 'href="/admin/config/auditoria"';
 
   // 2.1 Serviço disponível na instalação mas ainda não ligado: a página mostra
   // a ação de ligar (o fluxo OAuth é sempre iniciado pelo backend).
+  //
+  // ⛔ Também HERMÉTICO, pelo mesmo motivo do bloco 2: estas asserções afirmam
+  // que o Dropbox mostra «Ligar» (logo, tem credenciais na instalação) e que o
+  // OneDrive NÃO mostra (logo, não tem). Num `.env` de produção com o OneDrive
+  // configurado, a segunda metade inverte-se. Força-se o estado: nenhuma das 9
+  // variáveis de armazenamento, e só as três da Dropbox definidas.
+  const ambienteGuardado21 = new Map(CHAVES_ARMAZENAMENTO.map((k) => [k, process.env[k]]));
+  for (const chave of CHAVES_ARMAZENAMENTO) delete process.env[chave];
   process.env.DROPBOX_ENABLED = 'true';
   process.env.DROPBOX_APP_KEY = 'chave-de-teste';
   process.env.DROPBOX_APP_SECRET = 'segredo-de-teste';
@@ -329,9 +367,12 @@ const TAB5 = 'href="/admin/config/auditoria"';
     assert.ok(/await drive\.inicializar\(\)\.catch/.test(fonteRotas), 'armazenamento: testar do Drive recarrega o estado após falha');
     assert.ok(fonteRotas.includes('A ligação foi removida porque a autorização já não é válida'), 'armazenamento: explica que a ligação inválida foi removida');
   } finally {
-    delete process.env.DROPBOX_ENABLED;
-    delete process.env.DROPBOX_APP_KEY;
-    delete process.env.DROPBOX_APP_SECRET;
+    // Restaurar (não apagar): uma variável que existisse com valor vazio tem de
+    // continuar a existir com valor vazio, e uma que não existisse tem de
+    // continuar a não existir.
+    for (const [chave, valor] of ambienteGuardado21) {
+      if (valor === undefined) delete process.env[chave]; else process.env[chave] = valor;
+    }
   }
 
   // 3. Separador 3 — Documentos e Automações (área antes atrás de um botão)

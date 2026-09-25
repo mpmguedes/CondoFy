@@ -1141,6 +1141,65 @@ violava-o e foi corrigido para `calc(20px * var(--font-scale))` — provado: 21,
 
 ---
 
+### 4.13 Testes de armazenamento dependiam do `.env` · **CORRIGIDO** (2026-09-25)
+
+> **Não é bug funcional do produto.** É **robustez da suíte de testes**. O código de armazenamento
+> estava **correto** e **não foi alterado**: o defeito era o teste medir o ambiente da máquina em vez
+> de forçar o estado que declara medir.
+
+**(a) O sintoma.** No deploy de `8a8cab6`, `npm run test:offline` terminou com **rc=1** numa única
+asserção: `✗ armazenamento: mensagem amigável` (`scripts/test-configuracoes.js:296`).
+
+**(b) A causa.** `views/admin/configuracao/armazenamento.handlebars` mostra «Disponível após
+configuração pelo administrador do GesCondu.» apenas no ramo em que o serviço **não está ligado** e
+**não está disponível**. `disponivel` vem de `servicoDisponivel()` (`helpers/storage.js`), que lê o
+**AMBIENTE**:
+
+```text
+disponivel       = p.featureAtiva() && p.temCredenciais()
+featureAtiva()   = process.env.<PROVEDOR>_ENABLED === 'true'
+temCredenciais() = process.env.<PROVEDOR>_CLIENT_ID && ..._SECRET
+```
+
+- **Clone de dev, sem `.env`**: os três provedores ficam `disponivel=false` ⇒ a mensagem aparece ⇒ o
+  teste passava **por acidente**.
+- **Instalação com `.env`** (produção): os três ficam `disponivel=true` ⇒ a vista mostra «Associe uma
+  conta…» + botão **Ligar** ⇒ **a asserção falha**.
+
+Ou seja: **falso verde em dev, falso vermelho em produção** — o teste não era **hermético**.
+
+**(c) Prova.** Reproduzido com as **9** variáveis de armazenamento definidas ⇒ rc=1 com a mensagem
+exata do incidente; sem elas ⇒ rc=0. `servicoDisponivel` confirmado nos dois sentidos
+(`false/false/false` vs `true/true/true`).
+
+**(d) Atribuição — não é o A14.** O A14 **não tocou** em `armazenamento.handlebars` nem em
+`helpers/storage.js`; em `test-configuracoes.js` só **acrescentou** asserções da §7, e a linha 296
+**não foi alterada**. A mensagem e o ramo vêm de `9c90998`/`3579ec5`; `servicoDisponivel` de
+**`fae8f4b` (2026-09-21)** — 50 commits antes deste ciclo.
+
+**(e) O que foi corrigido** — **só testes**, em `scripts/test-configuracoes.js` (+45 −4):
+
+1. o bloco «Sem credenciais na instalação» passou a **forçar** o ambiente: guarda as **9** variáveis
+   num `Map`, **apaga-as**, corre o pedido e **restaura** no `finally` (helper
+   `semCredenciaisDeArmazenamento`). As **24 asserções seguintes ficaram intactas**;
+2. ⛔ **o mesmo defeito existia num segundo bloco**, que só ficou exposto ao tornar o primeiro
+   hermético: `armazenamento: OneDrive sem credenciais não mostra ligação` define apenas as variáveis
+   da Dropbox e afirma que o OneDrive **não** mostra «Ligar» — o que só é verdade se o OneDrive **não**
+   tiver credenciais. Corrigido com a mesma técnica;
+3. os `finally` passaram de `delete` (que **perdia** o valor original) a **restaurar**, distinguindo
+   `undefined` (a variável não existia) de `''` (existia com valor vazio).
+
+**(f) Validação.** `npm run test:offline` = **rc 0 · 1303 ✓**, em **duas** passagens: com o ambiente
+limpo e com as **9 variáveis** definidas. `git diff --check` = rc 0. O ramo complementar (serviço
+disponível ⇒ botão «Ligar») continua coberto.
+
+**(g) Regra que fica.** ⛔ **Um teste que faz asserções sobre uma página cujo conteúdo depende do
+ambiente tem de forçar esse ambiente** (guardar + apagar + restaurar em `finally`), nunca presumir o
+`.env` da máquina. Páginas afetadas: **armazenamento, SMTP/email, Drive, OneDrive, Dropbox**.
+*(Procedimento em `.workbuddy-ai/skills/condofy-testes-ambiente-hermetico`.)*
+
+---
+
 ## 5. Em desenvolvimento / trabalho recente
 
 ### 5.1 Working tree — o que ficou FORA do ciclo A1–A8 (medido em 2026-09-22)
